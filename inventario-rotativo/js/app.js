@@ -88,7 +88,18 @@ function irFmtDate(s){
 }
 /* Ano do ciclo, derivado da data de abertura — usado pra não confundir
    "Ciclo 1" de anos diferentes (mesmo número, ciclos distintos). */
-function irCicloAno(c){ const d = new Date(c.dataAbertura); return isNaN(d.getTime()) ? null : d.getFullYear(); }
+/* O ano sai do próprio texto da data, não de um Date. "2026-01-01" passado pro
+   Date é lido como meia-noite em UTC — que em Brasília (UTC−3) é 31/12/2025 às
+   21h. Todo ciclo aberto em 1º de janeiro virava ciclo do ano anterior: o ciclo
+   1/2026 aparecia como "Ciclo 1/2025", entrava na acurácia do ano errado e caía
+   fora do ano corrente no seletor. */
+function irCicloAno(c){
+  const s = c && c.dataAbertura;
+  if(!s) return null;
+  const m = /^(\d{4})-\d{2}-\d{2}/.exec(String(s).trim());
+  if(m) return +m[1];
+  const d = new Date(s); return isNaN(d.getTime()) ? null : d.getFullYear();
+}
 function irCicloLabel(c){ const ano = irCicloAno(c); return `Ciclo ${c.numero}${ano?'/'+ano:''}`; }
 // Ordem cronológica de um ciclo: ano e número juntos num número só, pra comparar.
 function irCicloOrdem(c){ return (irCicloAno(c)||0) * 10 + (c.numero||0); }
@@ -695,7 +706,7 @@ async function irProcessar(){
 
   // Ciclo é identificado por número + ano (não só o número) — evita que
   // "Ciclo 1" de um ano novo sobrescreva o "Ciclo 1" de um ano anterior.
-  const anoNovo = new Date(dataAbertura).getFullYear();
+  const anoNovo = irCicloAno({dataAbertura});
   const existente = IR.ciclos.find(c=>c.numero===numero && irCicloAno(c)===anoNovo);
   const cicloId = existente ? existente.id : 'ciclo-'+numero+'-'+anoNovo+'-'+Date.now().toString(36);
   const ciclo = {
@@ -791,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v153';
+const IR_APP_VERSION = 'v154';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
