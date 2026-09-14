@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 16;
+const IR_INDICADORES_VERSION = 9;
 
 function parseNumber(v){
   if(v===undefined || v===null || v==='') return 0;
@@ -87,28 +87,9 @@ function validateColumns(resolved, required, label){
   if(missing.length) throw new Error(`${label}: colunas obrigatórias não encontradas: ${missing.join(', ')}`);
 }
 
-/* QRY0390 — estoque atual. A extração virou automática (Snowflake) e trocou de
-   layout: nomes em maiúsculo com underscore, item separado em pai e filho, e
-   colunas que antes não existiam (descrição do endereço, EAN, valor unitário,
-   LOG, curva, prédio). Os nomes antigos continuam na lista pra que uma extração
-   velha ainda seja lida sem erro. */
 const ALIAS_390 = {
-  item: ['ID_ITEM_FILHO','Item'], itemPai: ['ITEM_PAI'],
-  descricao: ['NOME_ITEM_FILHO','NOME_ITEM_PAI','Descrição','Descricao'],
-  codTerceiro: ['Cod Terceiro'],
-  local: ['ID_LOCAL','Local'],
-  // Descrição do endereço: fecha a lacuna que fazia a auditoria imprimir o código
-  // do local sem dizer onde ele fica.
-  descLocal: ['DESC_LOCAL'],
-  situacao: ['Situação','Situacao'],
-  quantidade: ['QTDE','Quantidade'],
-  qtdeDisp: ['QTDE_DISP'], qtdeRom: ['QTDE_ROM'],
-  classeSku: ['CURVA_ABC','Classe Sku'],
-  ean: ['EAN','Ean','Código de Barras','Codigo de Barras','Cod Barras','Cód.Barras','Cod.Barras'],
-  valoriza: ['VALORIZA'], valorUnitario: ['VALOR_UNITARIO'],
-  log: ['LOG_ITEM'], x1: ['X1'], x2: ['X2'], predio: ['PREDIO'], classeLocal: ['CLAL'],
-  setor: ['NM_SETOR'], familia: ['NM_FAMILIA'], marca: ['NM_MARCA'],
-  atualizadoEm: ['ULTIMA_ATUALIZACAO']
+  item: ['Item'], descricao: ['Descrição','Descricao'], codTerceiro: ['Cod Terceiro'],
+  local: ['Local'], situacao: ['Situação','Situacao'], quantidade: ['Quantidade'], classeSku: ['Classe Sku']
 };
 const ALIAS_843 = {
   inventario: ['Inventario','Inventário'], local: ['Local'], descricaoLocal: ['Descrição Local'],
@@ -154,264 +135,9 @@ self.onmessage = async (e)=>{
   } else if(msg.type === 'process410'){
     try{ await runPipeline410(msg); }
     catch(err){ self.postMessage({type:'error410', message: err.message||String(err)}); }
-  } else if(msg.type === 'process390'){
-    try{ await runPipeline390(msg); }
-    catch(err){ self.postMessage({type:'error390', message: err.message||String(err)}); }
-  } else if(msg.type === 'process160'){
-    try{ await runPipeline160(msg); }
-    catch(err){ self.postMessage({type:'error160', message: err.message||String(err)}); }
-  } else if(msg.type === 'detect843'){
-    try{ self.postMessage({type:'done843detect', ...detectarCiclo843(msg.bufs843)}); }
-    catch(err){ self.postMessage({type:'done843detect', erro: err.message||String(err)}); }
   }
 };
-
-/* Lê a QRY0843 anexada e diz de qual ciclo ela é, pra não depender do usuário
-   lembrar de trocar o número na mão (e gravar por cima do ciclo errado).
-
-   Duas fontes, nessa ordem:
-     1. A Obs Inventário, que costuma trazer o ciclo por extenso ("AIR 3 CICLO
-        2026", "AIR CICLO 2/2026"). É a fonte forte: é o que o WMS gravou.
-     2. O trimestre da mediana das datas de contagem. Os ciclos são trimestrais,
-        então Q1 = ciclo 1 e assim por diante. Vale quando a Obs não diz nada.
-
-   As datas de abertura e término vêm sempre da menor e da maior data de
-   contagem do arquivo — é o que o ciclo de fato ocupou. */
-function detectarCiclo843(bufs){
-  let rows = [];
-  for(const buf of (bufs||[])){
-    const wb = XLSX.read(buf, {type:'array', cellDates:true});
-    rows = rows.concat(sheetToRows(wb));
-  }
-  if(!rows.length) return {erro:'QRY0843: planilha vazia.'};
-  const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_843);
-  const datas = [];
-  const votos = new Map();      // número do ciclo -> quantas linhas o apontam
-  const anos = new Map();
-  let amostraObs = '';
-  for(const row of rows){
-    const d = parseDateVal(getVal(row, r.dataSituacao)) || parseDateVal(getVal(row, r.dataFimContagem))
-           || parseDateVal(getVal(row, r.dataInicioContagem));
-    if(d && !isNaN(d.getTime())) datas.push(d);
-    const obs = String(getVal(row, r.obsInventario) ?? '').trim();
-    if(!obs) continue;
-    if(!amostraObs) amostraObs = obs;
-    // "3 CICLO", "3º CICLO", "CICLO 3", "CICLO 3/2026" — um dígito colado ao rótulo.
-    const m = obs.toUpperCase().match(/(\d)\s*[ºO°]?\s*CICLO|CICLO\s*[:\/-]?\s*(\d)/);
-    if(m){
-      const n = parseInt(m[1] || m[2], 10);
-      if(n>=1 && n<=4) votos.set(n, (votos.get(n)||0)+1);
-    }
-    const ma = obs.match(/(20\d{2})/);
-    if(ma) anos.set(ma[1], (anos.get(ma[1])||0)+1);
-  }
-  if(!datas.length) return {erro:'QRY0843: nenhuma data de contagem utilizável.'};
-  datas.sort((a,b)=>a-b);
-  const iso = d => d.toISOString().slice(0,10);
-  const dataAbertura = iso(datas[0]);
-  const dataPrevistaTermino = iso(datas[datas.length-1]);
-  const mediana = datas[Math.floor(datas.length/2)];
-  const trimestre = Math.floor(mediana.getUTCMonth()/3) + 1;
-
-  let numero = trimestre, origem = 'trimestre';
-  if(votos.size){
-    // Empate é decidido pelo trimestre — arquivo com linhas de dois ciclos existe.
-    const [top] = Array.from(votos.entries()).sort((a,b)=>b[1]-a[1] || (a[0]===trimestre?-1:1));
-    numero = top[0]; origem = 'obs';
-  }
-  return {
-    numero, dataAbertura, dataPrevistaTermino, origem,
-    linhas: rows.length, amostraObs,
-    votos: Array.from(votos.entries()).map(([n,q])=>({numero:n, linhas:q})).sort((a,b)=>b.linhas-a.linhas),
-    trimestre, ano: mediana.getUTCFullYear()
-  };
-}
 function post(type, data){ self.postMessage({type, ...data}); }
-
-/* QRY0160 — estoque por restrição. Mesma foto da 390, mas com DATA MOVIMENTO por
-   item x endereço x unidade de estoque: é a única base que diz HÁ QUANTO TEMPO o
-   saldo está ali, e sem isso não existe pendência de movimentação (D0, D+1, D+4).
-   O que ela não tem — valor unitário e LOG — vem da ficha do item da 390. */
-const ALIAS_160 = {
-  item: ['Item'], descricao: ['Descrição item','Descricao item'], ean: ['EAN','Ean'],
-  local: ['Local'], endereco: ['Endereço','Endereco'],
-  x1: ['X1'], x2: ['X2'], x3: ['X3'], x4: ['X4'],
-  restricao: ['Restrição','Restricao'], qtd: ['Qt'], qtdRom: ['Qt Rom'],
-  operador: ['Operador'], dataMovimento: ['Data Movimento'], dataLimite: ['Data Limite'],
-  numEstoque: ['Num. Estoque','Num Estoque']
-};
-async function runPipeline160({buf160}){
-  post('progress', {stage:'Lendo QRY0160...', pct:5});
-  const wb = XLSX.read(buf160, {type:'array', cellDates:true});
-  const rows = sheetToRows(wb);
-  if(!rows.length) throw new Error('QRY0160: planilha vazia.');
-  const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_160);
-  validateColumns(r, ['item','local','qtd','dataMovimento'], 'QRY0160');
-
-  post('progress', {stage:'Lendo as fichas da QRY0390...', pct:12});
-  const ficha = new Map((await irGetItemInfoTodos()).map(f=>[f.item, f]));
-  const fichaLocal = new Map((await irGetLocalInfoTodos()).map(f=>[f.local, f]));
-
-  post('progress', {stage:'Agregando '+rows.length+' linha(s) por endereço...', pct:20});
-  const porLocal = new Map();
-  let valorTotal = 0, pecasTotal = 0, semFicha = 0, semClasse = 0, n = 0;
-  const itensVistos = new Set();
-  for(const row of rows){
-    if(++n % 20000 === 0) post('progress', {stage:'Linha '+n+' de '+rows.length+'...', pct:20+Math.round(n/rows.length*60)});
-    const local = irNormItemKey(getVal(row, r.local));
-    if(!local) continue;
-    const item = irNormItemKey(getVal(row, r.item));
-    const qtd = parseNumber(getVal(row, r.qtd));
-    const f = item ? ficha.get(item) : null;
-    if(item && !f) semFicha++;
-    const valor = qtd * ((f && f.valorUnitario) || 0);
-    const d = parseDateVal(getVal(row, r.dataMovimento));
-    const dia = d && !isNaN(d.getTime()) ? isoDateTime(d).slice(0,10) : '';
-    let g = porLocal.get(local);
-    if(!g){
-      const fl = fichaLocal.get(local) || {};
-      g = {local,
-        desc: String(getVal(row, r.endereco) ?? '').trim() || fl.desc || '',
-        x1: String(getVal(row, r.x1) ?? '').trim() || fl.x1 || '',
-        x2: String(getVal(row, r.x2) ?? '').trim() || fl.x2 || '',
-        clal: fl.clal || '', predio: fl.predio || '', log:'',
-        // porDia guarda peças E valor: o gráfico de acúmulo por idade é em reais,
-        // e sem o valor por dia não dá pra montar sem reprocessar tudo de novo.
-        qtd:0, valor:0, itens:0, porLog:{}, porDia:{}, porDiaValor:{}, _itens:new Set()};
-      porLocal.set(local, g);
-    }
-    g.qtd += qtd; g.valor += valor;
-    if(dia){
-      g.porDia[dia] = (g.porDia[dia] || 0) + qtd;
-      g.porDiaValor[dia] = (g.porDiaValor[dia] || 0) + valor;
-    }
-    const lg = (f && f.log) || 'S/CAD';
-    g.porLog[lg] = (g.porLog[lg] || 0) + qtd;
-    if(!g.log) g.log = lg;
-    if(item){ g._itens.add(item); itensVistos.add(item); }
-    valorTotal += valor; pecasTotal += qtd;
-  }
-  const linhas = Array.from(porLocal.values()).map(g=>{ g.itens = g._itens.size; delete g._itens; return g; });
-  for(const l of linhas) if(!l.clal) semClasse++;
-
-  post('progress', {stage:'Gravando estoque no IndexedDB...', pct:88});
-  await irSalvarEstoqueLocais(linhas, {
-    fonte:'160', semClasse, importadoEm: new Date().toISOString(),
-    linhas: rows.length, locais: linhas.length, itens: itensVistos.size,
-    valorTotal, pecasTotal, semFicha
-  });
-  post('progress', {stage:'Concluído.', pct:100});
-  self.postMessage({type:'done160', locais: linhas.length, valorTotal, pecasTotal, semFicha, semClasse, itens: itensVistos.size});
-}
-
-/* ---------- QRY0390 — ESTOQUE ATUAL POR ENDEREÇO ----------
-   A extração virou automática (Snowflake) e não depende mais de ciclo: é a foto
-   do CD agora. Aqui ela é agregada por ENDEREÇO — 98 mil linhas de item x local
-   viram 45 mil endereços — porque as duas perguntas que ela responde (o que está
-   parado em transitório e quanto vale o estoque) são por endereço, não por linha.
-   O detalhe item a item continua saindo do processamento do ciclo. */
-async function runPipeline390({buf390}){
-  post('progress', {stage:'Lendo QRY0390...', pct:5});
-  const wb = XLSX.read(buf390, {type:'array', cellDates:true});
-  const rows = sheetToRows(wb);
-  if(!rows.length) throw new Error('QRY0390: planilha vazia.');
-  const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_390);
-  validateColumns(r, ['item','local','quantidade'], 'QRY0390');
-
-  post('progress', {stage:'Agregando '+rows.length+' linha(s) por endereço...', pct:20});
-  const porLocal = new Map();
-  // Ficha do item: EAN e descrição. Gravada aqui porque a QRY0390 é a única base
-  // com código de barras, e ela é atualizada sozinha — assim a auditoria tem EAN
-  // sem depender de reprocessar ciclo nenhum.
-  const porItem = new Map();
-  let valorTotal = 0, pecasTotal = 0, atualizadoEm = '';
-  let n = 0;
-  for(const row of rows){
-    if(++n % 20000 === 0) post('progress', {stage:'Linha '+n+' de '+rows.length+'...', pct:20+Math.round(n/rows.length*60)});
-    const local = irNormItemKey(getVal(row, r.local));
-    if(!local) continue;
-    const item = irNormItemKey(getVal(row, r.item));
-    if(item && !porItem.has(item)){
-      porItem.set(item, {item,
-        ean: String(getVal(row, r.ean) ?? '').trim(),
-        descricao: String(getVal(row, r.descricao) ?? '').trim(),
-        // Preço unitário da 390: terceira fonte de valor, depois da 410 e da 278.
-        // VALORIZA diz se o item carrega valor — componente marcado como não
-        // valorizado tem preço zero por regra, não por falta de dado.
-        valorUnitario: parseNumber(getVal(row, r.valorUnitario)),
-        valoriza: String(getVal(row, r.valoriza) ?? '').trim().toUpperCase(),
-        log: String(getVal(row, r.log) ?? '').trim(),
-        // Endereços onde o item tem saldo HOJE. Guardado aqui, e não só no
-        // processamento do ciclo, pra auditoria enxergar o estoque atual sem
-        // depender de quando o ciclo foi processado nem de a 390 ter sido anexada.
-        locais: []});
-    }
-    const qtd = parseNumber(getVal(row, r.quantidade));
-    // VALOR_ITEM_LOCAL não está no alias porque só existe no layout novo; quando
-    // falta, o valor sai de quantidade x valor unitário.
-    const vUnit = parseNumber(getVal(row, r.valorUnitario));
-    const valor = parseNumber(getVal(row, 'VALOR_ITEM_LOCAL')) || (qtd * vUnit);
-    let g = porLocal.get(local);
-    if(!g){
-      g = {local,
-        desc: String(getVal(row, r.descLocal) ?? '').trim(),
-        x1: String(getVal(row, r.x1) ?? '').trim(),
-        x2: String(getVal(row, r.x2) ?? '').trim(),
-        clal: String(getVal(row, r.classeLocal) ?? '').trim(),
-        predio: String(getVal(row, r.predio) ?? '').trim(),
-        log: String(getVal(row, r.log) ?? '').trim(),
-        // Peças por LOG dentro do mesmo endereço: um transitório recebe carga de
-        // mais de um LOG, e o relatório de pendência abre justamente por LOG.
-        qtd:0, valor:0, itens:0, porLog:{}, _itens:new Set()};
-      porLocal.set(local, g);
-    }
-    g.qtd += qtd;
-    g.valor += valor;
-    if(item && qtd){
-      const gi = porItem.get(item);
-      gi.locais.push({local, qtd, desc: String(getVal(row, r.descLocal) ?? '').trim()});
-    }
-    const lg = String(getVal(row, r.log) ?? '').trim() || 'S/CAD';
-    g.porLog[lg] = (g.porLog[lg] || 0) + qtd;
-    if(item) g._itens.add(item);
-    valorTotal += valor; pecasTotal += qtd;
-    if(!atualizadoEm){
-      const d = parseDateVal(getVal(row, r.atualizadoEm));
-      if(d && !isNaN(d.getTime())) atualizadoEm = isoDateTime(d);
-    }
-  }
-  const linhas = Array.from(porLocal.values()).map(g=>{
-    g.itens = g._itens.size; delete g._itens; return g;
-  });
-
-  post('progress', {stage:'Gravando estoque no IndexedDB...', pct:88});
-  // Agrega o saldo por endereço dentro do item (o mesmo item pode aparecer em
-  // várias linhas do mesmo local, por lote) e ordena do maior saldo pro menor.
-  const fichas = Array.from(porItem.values()).map(g=>{
-    const m = new Map();
-    for(const l of g.locais){
-      if(!m.has(l.local)) m.set(l.local, {local:l.local, qtd:0, desc:l.desc});
-      const x = m.get(l.local); x.qtd += l.qtd; if(!x.desc && l.desc) x.desc = l.desc;
-    }
-    g.locais = Array.from(m.values()).filter(x=>x.qtd!==0).sort((a,b)=>b.qtd-a.qtd);
-    return g;
-  });
-  await irSalvarItemInfo(fichas);
-  // Ficha do endereço: é daqui que sai a CLASSE LOCAL, que define o setor dono do
-  // transitório. A QRY0160 não tem essa coluna, então ela consulta este dicionário.
-  await irSalvarLocalInfo(linhas.map(l=>({
-    local:l.local, desc:l.desc, x1:l.x1, x2:l.x2, clal:l.clal, predio:l.predio, log:l.log
-  })));
-  // A QRY0390 grava só as FICHAS (item e endereço). O agregado por endereço é da
-  // QRY0160, que tem a data de movimento — se as duas escrevessem no mesmo lugar,
-  // reimportar a 390 apagaria as datas e a tabela de transitórios voltava a zero.
-  await irSetConfig('estoque390-ficha', {
-    atualizadoEm, importadoEm: new Date().toISOString(),
-    linhas: rows.length, locais: linhas.length, itens: porItem.size, valorTotal, pecasTotal
-  });
-  post('progress', {stage:'Concluído.', pct:100});
-  self.postMessage({type:'done390', locais: linhas.length, itens: porItem.size, valorTotal, pecasTotal});
-}
 
 // Lê e concatena vários arquivos da mesma planilha, deduplicando linhas por uma chave
 // composta (keyFields, nomes canônicos já resolvidos pelo alias). Usado nos slots que
@@ -484,18 +210,12 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // contados no ciclo — sem isso só dá pra apontar onde já se sabe que divergiu.
   post('progress', {stage:'Indexando estoque atual (QRY0390)...', pct:10});
   const estoquePorItemLocal = new Map(); // item -> Map(local -> qtd)
-  const eanPorItem = new Map();          // item -> EAN (vem da QRY0390)
-  const descLocal390 = new Map();        // local -> descrição (vem da QRY0390)
   if(r390){
     for(const row of rows390){
       const item = irNormItemKey(getVal(row, r390.item));
       const local = irNormItemKey(getVal(row, r390.local));
       if(!item || !local) continue;
       const qtd = parseNumber(getVal(row, r390.quantidade));
-      const ean = String(getVal(row, r390.ean) ?? '').trim();
-      if(ean && !eanPorItem.has(item)) eanPorItem.set(item, ean);
-      const dl = String(getVal(row, r390.descLocal) ?? '').trim();
-      if(dl && !descLocal390.has(local)) descLocal390.set(local, dl);
       if(!estoquePorItemLocal.has(item)) estoquePorItemLocal.set(item, new Map());
       const porLocal = estoquePorItemLocal.get(item);
       porLocal.set(local, (porLocal.get(local)||0) + qtd);
@@ -562,14 +282,12 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // específico dela — a coluna "Inventário?" é usada pelo usuário para outra finalidade.
 
   post('progress', {stage:'Processando contagens (QRY0843)...', pct:35});
-  // Legenda de motivos — a mesma da QRY410, editável em Configurações.
-  const legendaMotivos = await irSeedNet410LegendaIfEmpty();
   const contagens = [];
   let idx843 = 0, linhasSemDataDescartadas = 0;
   // Diagnostico da ingestao da 843 — sem isso o usuario nao tem como saber POR QUE uma
   // linha nao entrou (janela do ciclo? nao-AIR? nao liquidada?), e o numero "congela"
   // sem explicacao quando a janela do ciclo ja passou.
-  let linhasForaDaJanela = 0, linhasForaDoNet = 0, linhasNaoLiquidadas = 0;
+  let linhasForaDaJanela = 0, linhasNaoAir = 0, linhasNaoLiquidadas = 0;
   let dataMaisRecenteAceita = '', dataMaisRecenteForaDaJanela = '';
   for(const row of rows843){
     idx843++;
@@ -582,12 +300,9 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
     // "Id Item" vem vazio quando o local foi contado e confirmado SEM nenhum item (local
     // vazio) — isso ainda é um local válido e contado, só não gera uma linha de item.
     if(!local) continue;
-    // Todo motivo de ajuste entra, menos os que a legenda marca como fora do NET
-    // (baixa de insumo, quebra, EPI, nota fiscal, pallets...). É a MESMA legenda
-    // editável em Configurações que classifica a QRY410, então os dois lados do
-    // app passam a concordar sobre o que é ajuste de estoque. Antes só "AIR"
-    // entrava, e divergência real lançada com outro motivo sumia da aba.
-    if(!irClassificarMotivo410(obsInventario, legendaMotivos).considerarNet){ linhasForaDoNet++; continue; }
+    // Só eventos de Ajuste Inventário Rotativo (Obs começando em "AIR") entram no ciclo —
+    // outras tratativas na mesma planilha (ex.: "ADE - Ajuste Auditoria de Estoque") não são deste módulo.
+    if(!/^AIR/i.test(obsInventario)){ linhasNaoAir++; continue; }
     // "Contado" de verdade só quando o local E o inventário foram liquidados — sessões
     // Canceladas (ex.: reabertas depois) não contam como contagem válida.
     if(situacaoLocal!=='Liquidado' || situacaoInventario!=='Liquidado'){ linhasNaoLiquidadas++; continue; }
@@ -622,7 +337,6 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
       descricaoLocal: String(getVal(row, r843.descricaoLocal) ?? '').trim(),
       dataSituacao, dataInicioContagem, dataFimContagem,
       obsInventario, situacaoInventario, situacaoLocal,
-      motivo: irClassificarMotivo410(obsInventario, legendaMotivos).id,
       usuario: String(getVal(row, r843.usuario) ?? '').trim(),
       idConferencia, item, itemNome: String(getVal(row, r843.itemNome) ?? '').trim(),
       qtFis: parseNumber(getVal(row, r843.qtFis))
@@ -643,7 +357,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
     const local = irNormItemKey(getVal(row, r843.local));
     if(!local) continue;
     const obsInventario = String(getVal(row, r843.obsInventario) ?? '').trim();
-    if(!irClassificarMotivo410(obsInventario, legendaMotivos).considerarNet) continue;
+    if(!/^AIR/i.test(obsInventario)) continue;
     const situacaoInventario = String(getVal(row, r843.situacaoInventario) ?? '').trim();
     const situacaoLocal = String(getVal(row, r843.situacaoLocal) ?? '').trim();
     if(situacaoLocal!=='Cancelado' && situacaoInventario!=='Cancelado') continue;
@@ -778,20 +492,13 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   const divergencias = [];
   for(const [chave, lista] of porVisitaBruto){
     const local = localDaVisita.get(chave);
-    // A rodada final é a da VISITA, não a última em que cada item apareceu. Sem isso,
-    // um item lançado por engano numa rodada intermediária ficava valendo mesmo depois
-    // de a recontagem provar que ele não está ali: o contador copiava o conteúdo do
-    // endereço vizinho, a rodada seguinte corrigia, e o dash continuava contando a
-    // sobra fantasma. Item que não aparece na rodada final tem físico 0.
-    let rodadaFinalVisita = -1;
-    for(const c of lista) if(c.idConferencia > rodadaFinalVisita) rodadaFinalVisita = c.idConferencia;
-    const porItem = new Map(); // item -> {sistema, final, itemNome}
+    const porItem = new Map(); // item -> {sistema, final, rodadaFinal, itemNome}
     for(const c of lista){
       if(!c.item) continue; // local vazio, sem item nesta linha
       let g = porItem.get(c.item);
-      if(!g){ g = {sistema:null, final:0, itemNome:c.itemNome}; porItem.set(c.item, g); }
+      if(!g){ g = {sistema:null, final:0, rodadaFinal:-1, itemNome:c.itemNome}; porItem.set(c.item, g); }
       if(c.idConferencia===1) g.sistema = c.qtFis;
-      if(c.idConferencia===rodadaFinalVisita) g.final = c.qtFis;
+      if(c.idConferencia>=g.rodadaFinal){ g.final = c.qtFis; g.rodadaFinal = c.idConferencia; }
       if(c.itemNome) g.itemNome = c.itemNome;
     }
     let totalFisico = 0;
@@ -803,10 +510,6 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
     for(const c of lista){
       if(c.idConferencia>=rodadaTopo && c.dataSituacao){ rodadaTopo = c.idConferencia; diaFechamento = c.dataSituacao.slice(0,10); }
     }
-    // Motivo do ajuste (AIR, ADE, AIN...), gravado na divergência pra que a tela
-    // possa filtrar por ele sem reler a planilha. Uma visita tem um motivo só —
-    // é o mesmo inventário — então basta o da primeira linha que o trouxer.
-    const motivoVisita = (lista.find(c=>c.motivo)||{}).motivo || '';
     for(const [item, g] of porItem){
       totalFisico += g.final;
       // REGRA: Rodada 1 é sempre a quantidade sistêmica, a última rodada é a física,
@@ -825,11 +528,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
       const componenteSemValor = (valoracaoPorComponente.get(item)||{}).inInterface==='N';
       divergencias.push({
         id: cicloId+'|'+chave+'|'+item,
-        // O Id Inventário fica em campo próprio: dois inventários do MESMO local são
-        // eventos diferentes, e sem isso o mesmo item aparece sobrando num e faltando
-        // no outro, virando um "par trocado" que não existe.
-        cicloId, local, inventario: String(chave).split('|')[1] || '', item, itemNome,
-        ean: eanPorItem.get(item) || '', motivo: motivoVisita,
+        cicloId, local, item, itemNome,
         qtdeSistema: sistema, qtdeFisica: g.final, diferenca,
         precoUnitario, vlFisico: g.final*precoUnitario, vlDivergencia: diferenca*precoUnitario,
         statusLocal: st.status, rodadasLocal: st.rodadas, diaFechamento,
@@ -885,7 +584,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
       id: cicloId+'|'+item, cicloId, item,
       locais: Array.from(porLocal.entries())
         .filter(([,q])=>q!==0)
-        .map(([local, qtd])=>({local, qtd, desc: descLocal390.get(local) || ''}))
+        .map(([local, qtd])=>({local, qtd}))
         .sort((a,b)=>b.qtd-a.qtd)
     });
   }
@@ -906,14 +605,10 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
     totalContagens: contagens.length,
     totalDivergencias: divergencias.filter(d=>d.diferenca!==0).length,
     linhasSemDataDescartadas, visitasSemContagemFisica,
-    totalLinhas843: rows843.length, linhasForaDaJanela, linhasForaDoNet, linhasNaoLiquidadas,
+    totalLinhas843: rows843.length, linhasForaDaJanela, linhasNaoAir, linhasNaoLiquidadas,
     dataMaisRecenteAceita, dataMaisRecenteForaDaJanela,
     janelaAbertura: dataAbertura || '', janelaTermino: dataPrevistaTermino || '',
-    itensComEstoque390: estoqueRows.length, temQry390: !!r390,
-    // Versão do motor que gerou estes números. Sem isso, um worker servido do cache
-    // do navegador reprocessava com o código antigo e o resultado não mudava, sem
-    // nenhum sinal na tela de que a correção não tinha rodado.
-    motor: IR_INDICADORES_VERSION
+    itensComEstoque390: estoqueRows.length, temQry390: !!r390
   });
 
   post('progress', {stage:'Concluído.', pct:100});

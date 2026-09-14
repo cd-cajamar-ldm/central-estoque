@@ -338,18 +338,6 @@ await pagina.getByText('Reendereçamento do mezanino').first().click();
 await pagina.waitForTimeout(700);
 await pagina.screenshot({ path: 'verificacao-detalhe.png', fullPage: true });
 
-/* O numero do chamado se preenche na propria melhoria: quem esta dentro
-   dela nao devia ter de voltar para a lista para anotar. */
-const campoDoChamado = pagina.getByPlaceholder('Nº do chamado').first();
-if (!(await campoDoChamado.count())) {
-  console.error('FALHOU: a melhoria aberta não oferece o campo do chamado.');
-  process.exitCode = 1;
-} else {
-  await campoDoChamado.fill('987654');
-  await campoDoChamado.blur();
-  await pagina.waitForTimeout(600);
-}
-
 /* Exportar Excel: o arquivo tem de chegar com conteudo. Planilha vazia
    parece defeito do Excel e some com a confianca no relatorio. */
 const [baixado] = await Promise.all([
@@ -616,6 +604,28 @@ if (!linhaDaMelhoria.includes('25%')) {
   process.exitCode = 1;
 }
 
+/* Chamado e de cada atividade: o projeto que agrupa nao tem o campo,
+   e a melhoria de dentro tem. */
+if (await pagina.getByPlaceholder('Nº do chamado').count()) {
+  console.error('FALHOU: o projeto guarda-chuva não deveria oferecer o campo de chamado.');
+  process.exitCode = 1;
+}
+await pagina.getByText('Entrada massiva').first().click();
+await pagina.waitForTimeout(800);
+const campoDoChamado = pagina.getByPlaceholder('Nº do chamado').first();
+if (!(await campoDoChamado.count())) {
+  console.error('FALHOU: a melhoria aberta deveria oferecer o campo do chamado.');
+  process.exitCode = 1;
+} else {
+  await campoDoChamado.fill('987654');
+  await campoDoChamado.blur();
+  await pagina.waitForTimeout(600);
+}
+/* Volta para o guarda-chuva pelo caminho de cima, e nao pelo "Voltar",
+   que leva para a carteira inteira. */
+await pagina.getByRole('button', { name: 'Melhoria Sistêmica Bseller', exact: true }).first().click();
+await pagina.waitForTimeout(800);
+
 const textoDoGrupo = (await pagina.textContent('body')) ?? '';
 if (!textoDoGrupo.includes('Entrada massiva') || !textoDoGrupo.includes('concluídas')) {
   console.error('FALHOU: a lista de melhorias não montou.');
@@ -707,7 +717,29 @@ if (!rolagem.limite.endsWith('px')) {
   console.error(`FALHOU: o quadro deveria ter altura limitada — max-height "${rolagem.limite}".`);
   process.exitCode = 1;
 }
+/* Recolher coluna: vira uma faixa fina, e a escolha fica guardada. Com
+   muitas situacoes e o que evita a rolagem lateral. */
+const primeiraColuna = pagina.locator('[data-quadro="colunas"] .w-64').first();
+const larguraAberta = (await primeiraColuna.boundingBox())?.width ?? 0;
+await pagina.getByTitle(/^Recolher /).first().click();
+await pagina.waitForTimeout(400);
+const faixa = pagina.locator('[data-quadro="colunas"] .w-10').first();
+const larguraRecolhida = (await faixa.boundingBox())?.width ?? 0;
+if (!(larguraRecolhida > 0 && larguraRecolhida < larguraAberta)) {
+  console.error(`FALHOU: recolher a coluna não encolheu nada (${larguraAberta} → ${larguraRecolhida}).`);
+  process.exitCode = 1;
+}
+if (!(await pagina.evaluate(() => (localStorage.getItem('projetos.colunas-recolhidas') ?? '').length > 2))) {
+  console.error('FALHOU: a coluna recolhida deveria ser lembrada no navegador.');
+  process.exitCode = 1;
+}
 await pagina.screenshot({ path: 'verificacao-quadro.png', fullPage: true });
+await faixa.click();
+await pagina.waitForTimeout(300);
+if (!(await pagina.locator('[data-quadro="colunas"] .w-10').count() === 0)) {
+  console.error('FALHOU: clicar na faixa deveria abrir a coluna de novo.');
+  process.exitCode = 1;
+}
 await pagina.getByRole('button', { name: 'Lista', exact: true }).first().click();
 await pagina.waitForTimeout(300);
 

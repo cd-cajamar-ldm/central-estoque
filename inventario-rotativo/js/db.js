@@ -3,7 +3,7 @@
    100% client-side. Nenhum servidor, nenhuma API.
    ============================================================ */
 const IR_DB_NAME = 'inventario_rotativo_v1';
-const IR_DB_VERSION = 9;
+const IR_DB_VERSION = 6;
 
 const IR_STORES = {
   ciclos: 'ciclos',
@@ -20,19 +20,7 @@ const IR_STORES = {
   // divergiram no ciclo — é o que a auditoria de validação precisa pra mandar o
   // auditor conferir também os locais onde o item tem saldo e não foi contado.
   estoqueItem: 'estoque_item',
-  net410PadroesIgnorados: 'net410_padroes_ignorados', // trecho da Observação WMS (ex.: "SALDO") que oculta qualquer item que o carregue, sem precisar ignorar item por item
-  // Estoque atual agregado por ENDEREÇO (QRY0390). Independente de ciclo: a
-  // extração virou automática e é atualizada sozinha, então ela é a base do
-  // controle de transitórios e da foto de estoque pra diretoria.
-  estoqueLocal: 'estoque_local',
-  // Ficha do item vinda da QRY0390 (EAN e descrição), por ITEM. Fica separada do
-  // ciclo de propósito: o EAN não muda de ciclo pra ciclo, e assim a auditoria
-  // tem código de barras sem exigir reprocessamento.
-  itemInfo: 'item_info',
-  // Ficha do ENDEREÇO vinda da QRY0390 (classe local, prédio, prefixos). A
-  // QRY0160 não traz classe local, e é ela que diz de qual setor é o endereço —
-  // então a 390 alimenta esse dicionário e a 160 consulta.
-  localInfo: 'local_info'
+  net410PadroesIgnorados: 'net410_padroes_ignorados' // trecho da Observação WMS (ex.: "SALDO") que oculta qualquer item que o carregue, sem precisar ignorar item por item
 };
 
 function irOpenDB(){
@@ -84,16 +72,6 @@ function irOpenDB(){
       }
       if(!db.objectStoreNames.contains(IR_STORES.net410PadroesIgnorados)){
         db.createObjectStore(IR_STORES.net410PadroesIgnorados, {keyPath:'id'});
-      }
-      if(!db.objectStoreNames.contains(IR_STORES.estoqueLocal)){
-        const s = db.createObjectStore(IR_STORES.estoqueLocal, {keyPath:'local'});
-        s.createIndex('x1', 'x1', {unique:false});
-      }
-      if(!db.objectStoreNames.contains(IR_STORES.itemInfo)){
-        db.createObjectStore(IR_STORES.itemInfo, {keyPath:'item'});
-      }
-      if(!db.objectStoreNames.contains(IR_STORES.localInfo)){
-        db.createObjectStore(IR_STORES.localInfo, {keyPath:'local'});
       }
     };
     req.onsuccess = ()=>resolve(req.result);
@@ -353,43 +331,17 @@ async function irDeleteNet410LegendaItem(id){
 // Semeia a legenda com os padrões de fábrica (IR_410_LEGENDA, de rules.js) na
 // primeira vez que alguém abre a tela — depois disso, o que está no IndexedDB
 // manda, o usuário pode editar/adicionar/remover à vontade.
-/* Versão da semente da legenda. Quando um motivo novo entra no padrão de fábrica,
-   sobe um número aqui e ele é acrescentado UMA VEZ às legendas que já existem —
-   quem já usa o dash não ficaria sabendo de outro jeito, porque a semente só
-   roda em banco vazio. Só uma vez porque o usuário pode apagar um motivo de
-   propósito, e ressuscitá-lo a cada carregamento seria pior do que não ter
-   acrescentado. */
-const IR_410_LEGENDA_V = 2;
 async function irSeedNet410LegendaIfEmpty(){
   const existing = await irGetNet410LegendaAll();
-  if(!existing.length){
-    const store = await irTx(IR_STORES.net410Legenda, 'readwrite');
-    await new Promise((resolve, reject)=>{
-      IR_410_LEGENDA.forEach(l=>store.put({...l}));
-      const tx = store.transaction;
-      tx.oncomplete = ()=>resolve();
-      tx.onerror = ()=>reject(tx.error);
-    });
-    await irSetConfig('net410-legenda-v', IR_410_LEGENDA_V);
-    return irGetNet410LegendaAll();
-  }
-  const versao = await irGetConfig('net410-legenda-v');
-  if((versao||0) < IR_410_LEGENDA_V){
-    const tem = new Set(existing.map(l=>String(l.id).toUpperCase()));
-    const faltando = IR_410_LEGENDA.filter(l=>!tem.has(String(l.id).toUpperCase()));
-    if(faltando.length){
-      const store = await irTx(IR_STORES.net410Legenda, 'readwrite');
-      await new Promise((resolve, reject)=>{
-        faltando.forEach(l=>store.put({...l}));
-        const tx = store.transaction;
-        tx.oncomplete = ()=>resolve();
-        tx.onerror = ()=>reject(tx.error);
-      });
-    }
-    await irSetConfig('net410-legenda-v', IR_410_LEGENDA_V);
-    return irGetNet410LegendaAll();
-  }
-  return existing;
+  if(existing.length) return existing;
+  const store = await irTx(IR_STORES.net410Legenda, 'readwrite');
+  await new Promise((resolve, reject)=>{
+    IR_410_LEGENDA.forEach(l=>store.put({...l}));
+    const tx = store.transaction;
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+  return irGetNet410LegendaAll();
 }
 
 /* ---------- Itens ignorados na análise de distorção do NET ---------- */
@@ -460,47 +412,4 @@ async function irSeedNet410PadroesIgnoradosIfEmpty(){
   if(existing.length) return existing;
   await irSaveNet410PadraoIgnorado('SALDO');
   return irGetNet410PadroesIgnoradosAll();
-}
-
-/* ---------- ESTOQUE ATUAL POR ENDEREÇO (QRY0390) ---------- */
-async function irSalvarEstoqueLocais(linhas, meta){
-  const store = await irTx(IR_STORES.estoqueLocal, 'readwrite');
-  await new Promise((res, rej)=>{ const r = store.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
-  const CHUNK = 1500;
-  for(let i=0;i<linhas.length;i+=CHUNK) await irBulkPut(IR_STORES.estoqueLocal, linhas.slice(i,i+CHUNK));
-  await irSetConfig('estoque390-meta', meta);
-}
-async function irGetEstoqueLocais(){
-  const store = await irTx(IR_STORES.estoqueLocal, 'readonly');
-  return new Promise((res, rej)=>{ const r = store.getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); });
-}
-async function irGetEstoqueMeta(){ return irGetConfig('estoque390-meta'); }
-async function irSalvarItemInfo(linhas){
-  const store = await irTx(IR_STORES.itemInfo, 'readwrite');
-  await new Promise((res, rej)=>{ const r = store.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
-  const CHUNK = 1500;
-  for(let i=0;i<linhas.length;i+=CHUNK) await irBulkPut(IR_STORES.itemInfo, linhas.slice(i,i+CHUNK));
-}
-async function irSalvarLocalInfo(linhas){
-  const store = await irTx(IR_STORES.localInfo, 'readwrite');
-  await new Promise((res, rej)=>{ const r = store.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
-  const CHUNK = 1500;
-  for(let i=0;i<linhas.length;i+=CHUNK) await irBulkPut(IR_STORES.localInfo, linhas.slice(i,i+CHUNK));
-}
-async function irGetLocalInfoTodos(){
-  const store = await irTx(IR_STORES.localInfo, 'readonly');
-  return new Promise((res, rej)=>{ const r = store.getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); });
-}
-async function irGetItemInfoTodos(){
-  const store = await irTx(IR_STORES.itemInfo, 'readonly');
-  return new Promise((res, rej)=>{ const r = store.getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); });
-}
-/* Config genérica (usa o store de prioridade, que já é chave/valor). */
-async function irSetConfig(key, valor){
-  const store = await irTx(IR_STORES.prioridadeConfig, 'readwrite');
-  return new Promise((res, rej)=>{ const r = store.put({key, valor}); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
-}
-async function irGetConfig(key){
-  const store = await irTx(IR_STORES.prioridadeConfig, 'readonly');
-  return new Promise((res, rej)=>{ const r = store.get(key); r.onsuccess=()=>res(r.result ? r.result.valor : null); r.onerror=()=>rej(r.error); });
 }

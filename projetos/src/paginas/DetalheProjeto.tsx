@@ -171,7 +171,12 @@ export default function DetalheProjeto({
           {/* O numero do chamado se descobre depois de abrir a melhoria,
               e e aqui que a pessoa esta quando ele chega: o campo fica na
               propria tela, sem precisar voltar para a lista nem abrir o
-              formulario inteiro. */}
+              formulario inteiro.
+
+              Projeto que agrupa outros nao tem chamado proprio: quem
+              pede e cada atividade de dentro. No guarda-chuva o campo so
+              ocupava espaco e convidava a preencher no lugar errado. */}
+          {!grupo && (
           <div>
             <p className="rotulo">Chamado</p>
             {podeMexer ? (
@@ -202,6 +207,7 @@ export default function DetalheProjeto({
               </span>
             )}
           </div>
+          )}
         </div>
 
         <div className="mt-4">

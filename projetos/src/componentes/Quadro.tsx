@@ -31,11 +31,29 @@ interface Props<T extends CartaoDoQuadro> {
 
    No celular nao ha arrastar - por isso todo cartao tambem tem o seletor
    de situacao na propria lista, que continua sendo o caminho garantido. */
+const CHAVE_RECOLHIDAS = 'projetos.colunas-recolhidas';
+
 export default function Quadro<T extends CartaoDoQuadro>({
   colunas, itens, aoMover, aoAbrir, cartao, rodape, aoReordenar,
 }: Props<T>) {
   const [arrastado, setArrastado] = useState<string | null>(null);
   const [alvo, setAlvo] = useState<string | null>(null);
+  /* Coluna recolhida vira uma faixa fina com o nome em pe e a contagem.
+     Com muitas situacoes, encolher "Cancelado" e "Concluido" e o que
+     faz as colunas do meio caberem na tela sem rolagem lateral. A
+     escolha e de quem esta olhando, entao fica no navegador. */
+  const [recolhidas, setRecolhidas] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CHAVE_RECOLHIDAS) ?? '[]') as string[]; }
+    catch { return []; }
+  });
+
+  function alternarRecolhida(id: string) {
+    setRecolhidas((atual) => {
+      const nova = atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id];
+      try { localStorage.setItem(CHAVE_RECOLHIDAS, JSON.stringify(nova)); } catch { /* só não lembra */ }
+      return nova;
+    });
+  }
 
   return (
     /* A altura da caixa e limitada de proposito: com o quadro inteiro
@@ -47,6 +65,40 @@ export default function Quadro<T extends CartaoDoQuadro>({
       <div className="flex min-w-max gap-3 p-3">
         {colunas.map((coluna, indice) => {
           const daColuna = itens.filter((i) => i.coluna === coluna.id);
+          const recolhida = recolhidas.includes(coluna.id);
+
+          /* Recolhida, a coluna continua aceitando cartao arrastado: e
+             comum querer jogar algo em "Concluido" sem precisar abrir a
+             coluna de novo. */
+          if (recolhida) {
+            return (
+              <div
+                key={coluna.id}
+                onDragOver={(e) => { e.preventDefault(); setAlvo(coluna.id); }}
+                onDragLeave={() => setAlvo((atual) => (atual === coluna.id ? null : atual))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setAlvo(null);
+                  const item = itens.find((i) => i.id === arrastado);
+                  setArrastado(null);
+                  if (item && item.coluna !== coluna.id) void aoMover(item, coluna.id);
+                }}
+                onClick={() => alternarRecolhida(coluna.id)}
+                title={`Abrir ${coluna.rotulo}`}
+                className={`flex w-10 shrink-0 cursor-pointer flex-col items-center gap-2 rounded-xl border py-2 transition ${
+                  alvo === coluna.id ? 'border-roxo bg-roxo-suave' : 'border-linha bg-papel hover:border-roxo-claro'
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coluna.cor }} />
+                <span className="text-[11px] font-bold text-tinta-suave">{daColuna.length}</span>
+                <span className="flex-1 text-[11px] font-extrabold uppercase tracking-wider text-tinta-suave [writing-mode:vertical-rl]">
+                  {coluna.rotulo}
+                </span>
+                <span className="text-[11px] font-bold text-tinta-suave" aria-hidden>»</span>
+              </div>
+            );
+          }
+
           return (
             <div
               key={coluna.id}
@@ -72,6 +124,11 @@ export default function Quadro<T extends CartaoDoQuadro>({
                   {coluna.rotulo}
                 </span>
                 <span className="ml-auto text-[11px] font-bold text-tinta-suave">{daColuna.length}</span>
+                <button
+                  className="rounded px-1 text-xs font-bold text-tinta-suave hover:bg-white hover:text-roxo-escuro"
+                  onClick={() => alternarRecolhida(coluna.id)}
+                  title={`Recolher ${coluna.rotulo}`}
+                >«</button>
                 {aoReordenar && (
                   <span className="flex items-center gap-0.5">
                     <button
