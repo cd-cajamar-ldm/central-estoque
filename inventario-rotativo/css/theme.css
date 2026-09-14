@@ -415,7 +415,11 @@ button{ font-family:inherit; cursor:pointer; }
    as colunas esticam pra ocupar o espaço todo (sem sobrar vazio); quando não cabem,
    elas nunca encolhem além de 48px — o excesso vira rolagem horizontal em vez de
    cortar/espremer as barras. */
-.bi-vbars-scroll .bi-vbar-col{ flex:1 0 48px; width:auto; }
+/* min-width:max-content faz a coluna nunca ficar mais estreita que o próprio
+   rótulo. Sem isso um valor largo ("R$ 79.650,00" mede bem mais que os 48px da
+   base) vazava por cima da coluna vizinha e os dois números se sobrepunham. O
+   recuo lateral garante um respiro entre rótulos de colunas seguidas. */
+.bi-vbars-scroll .bi-vbar-col{ flex:1 0 48px; width:auto; min-width:max-content; padding-inline:5px; }
 
 /* Status do Inventário (rosca + estatísticas) */
 .status-donut-row{ display:flex; align-items:center; gap:28px; flex-wrap:wrap; }
