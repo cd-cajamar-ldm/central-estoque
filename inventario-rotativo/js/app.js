@@ -750,7 +750,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v149';
+const IR_APP_VERSION = 'v150';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -1019,6 +1019,11 @@ function irItensSemPrecoResumo(){
   const total = ind.itensSemPrecoTotal || (ind.itensSemPreco||[]).length || 0;
   return total > 0 ? total : null;
 }
+/* Meta diária de posições contadas. Usada no gráfico de Contados por Dia (linha
+   da meta) e no calendário. Estava logo antes do calendário e foi removida sem
+   querer junto com a tabela de itens sem preço na v148 — como os dois painéis só
+   tocam nela quando existe contagem por dia, a falta só aparecia com dado real. */
+const IR_META_DIARIA = 962;
 function irRenderCalendarioPanel(ind){
   const rows = ind.contadosPorDia||[];
   if(!rows.length) return '';
