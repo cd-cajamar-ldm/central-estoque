@@ -274,7 +274,14 @@ function irRenderCycleBadge(){
   // nada" quando o segundo ciclo for processado.
   // Ordena por ano E número: só pelo número, "Ciclo 4/2025" subia acima do
   // "Ciclo 3/2026" e o ciclo em curso aparecia no meio da lista.
-  const ordenados = IR.ciclos.slice().sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a));
+  // Só os ciclos do ano corrente (o ano do ciclo mais novo). Ciclo de ano fechado
+  // não é mais operação, é histórico — e continua acessível na aba Histórico. Se o
+  // ciclo ativo for de um ano anterior (o usuário veio do Histórico), ele entra na
+  // lista pra não sumir o item selecionado.
+  const anoAtual = irCicloAno(irCicloMaisNovo(IR.ciclos));
+  const ordenados = IR.ciclos
+    .filter(c => irCicloAno(c) === anoAtual || (IR.cicloAtivo && c.id === IR.cicloAtivo.id))
+    .sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a));
   badge.innerHTML = `<select id="cycleFilterSelect" onchange="irFiltrarCiclo(this.value)" title="Filtrar por ciclo">
     ${ordenados.map(c=>`<option value="${c.id}" ${IR.cicloAtivo && c.id===IR.cicloAtivo.id ? 'selected' : ''}>${irCicloLabel(c)} — ${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</option>`).join('')}
   </select>`;
@@ -750,7 +757,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v151';
+const IR_APP_VERSION = 'v152';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -822,7 +829,6 @@ function irRenderDashboard(){
     ${irRenderPorLogPanel(ind)}
     ${irRenderContadosPorDiaPanel(ind)}
     ${irRenderDivergentesPorDiaPanel(ind)}
-    ${irRenderCancelamentoImpactoPanel(ind)}
     ${irRenderLogTablePanel(ind)}
     ${irRenderComparativoCiclosPanel(ind)}
     ${irRenderEvolucaoMensalPanel(ind)}
@@ -1527,7 +1533,12 @@ function irAcuraciaDoAno(ano){
     ano, ciclos: pares.length,
     pecas:  pc>0 ? 1-pd/pc : null,
     locais: lc>0 ? 1-ld/lc : null,
-    valor:  (temValor && vc>0) ? 1-vd/vc : null
+    valor:  (temValor && vc>0) ? 1-vd/vc : null,
+    // Totais que geraram cada percentual — o painel mostra contado x divergente
+    // lado a lado, pra que o número possa ser conferido sem abrir outra tela.
+    pecasContadas: pc, pecasDivergentes: pd,
+    locaisContados: lc, locaisDivergentes: ld,
+    valorContado: temValor ? vc : null, valorDivergente: vd
   };
 }
 /* Acurácia anual num painel próprio, no lugar do medidor de Saúde do Estoque —
@@ -1538,8 +1549,10 @@ function irRenderAcuraciaAnualPanel(){
   const ano = irCicloAno(IR.cicloAtivo);
   const ac = irAcuraciaDoAno(ano);
   if(!ac) return '';
-  const linha = (rot, v, cor) => `<div class="acan-row">
+  const linha = (rot, v, cor, contado, divergente) => `<div class="acan-row">
     <div class="acan-label">${irEsc(rot)}</div>
+    <div class="acan-qt"><span class="k">Contado</span><span class="n mono">${contado}</span></div>
+    <div class="acan-qt"><span class="k">Divergente</span><span class="n mono bad">${divergente}</span></div>
     <div class="acan-track">
       <div class="acan-fill" style="width:${v==null?0:Math.round(Math.max(0,Math.min(1,v))*100)}%;background:${cor};"></div>
       <div class="acan-meta" style="left:${Math.round(IR_META_ACURACIA*100)}%;"></div>
@@ -1548,9 +1561,9 @@ function irRenderAcuraciaAnualPanel(){
   </div>`;
   return `<div class="panel">
     <h3>Acurácia Anual</h3>
-    ${linha('Peças',  ac.pecas,  '#FA4616')}
-    ${linha('Locais', ac.locais, '#001A72')}
-    ${linha('Valor',  ac.valor,  '#1D1F2A')}
+    ${linha('Peças',  ac.pecas,  '#FA4616', irFmtInt(ac.pecasContadas), irFmtInt(ac.pecasDivergentes))}
+    ${linha('Locais', ac.locais, '#001A72', irFmtInt(ac.locaisContados), irFmtInt(ac.locaisDivergentes))}
+    ${linha('Valor',  ac.valor,  '#1D1F2A', ac.valorContado==null?'—':irFmtMoneyCompact(ac.valorContado), irFmtMoneyCompact(ac.valorDivergente))}
     <p class="field-hint acan-pe">${irEsc(String(ano))} · ${irFmtInt(ac.ciclos)} ciclo(s) · meta ${irFmtPct(IR_META_ACURACIA)}</p>
   </div>`;
 }
@@ -1571,8 +1584,30 @@ function irRenderStatusInventarioPanel(ind){
         <div class="status-donut-stat"><div class="n mono good">${irFmtInt(concluidos)}</div><div class="l">Locais concluídos</div></div>
         <div class="status-donut-stat"><div class="n mono bad">${irFmtInt(total-concluidos)}</div><div class="l">Ainda não concluídos</div></div>
       </div>
-
+      ${irRenderPioresRuas(ind)}
     </div>
+  </div>`;
+}
+/* Top 5 ruas com a pior acurácia de peças, no espaço que sobrava ao lado do donut.
+   Só entra rua que já tem peça contada: rua ainda não contada fica em 100% (ou 0%)
+   por falta de base e ocuparia o ranking sem significar nada. */
+function irRenderPioresRuas(ind){
+  const rows = (ind.porRua||[])
+    .filter(r => r.chave!=='(sem rua)' && (r.pecasContadas||0) > 0)
+    .slice().sort((a,b)=> a.acuraciaPecas - b.acuraciaPecas).slice(0,5);
+  if(!rows.length) return '';
+  // A barra mede o ERRO, não a acurácia, e é normalizada pela pior rua: barra de
+  // acurácia deixaria as cinco quase cheias (74% e 99% pareceriam iguais) e o
+  // ranking não se leria de relance. O percentual ao lado continua sendo a acurácia.
+  const piorErro = Math.max(...rows.map(r => 1-r.acuraciaPecas), 0.0001);
+  return `<div class="pior-ruas">
+    <div class="pior-ruas-h">Top 5 ruas · pior acurácia</div>
+    ${rows.map(r=>`<div class="pior-rua">
+      <div class="pr-nome">${irEsc(r.chave)}</div>
+      <div class="pr-track"><div class="pr-fill" style="width:${Math.round(Math.max(0,Math.min(1,(1-r.acuraciaPecas)/piorErro))*100)}%;"></div></div>
+      <div class="pr-val mono ${r.acuraciaPecas>=IR_META_ACURACIA?'good':'bad'}">${irFmtPct(r.acuraciaPecas)}</div>
+      <div class="pr-sub">${irFmtInt(r.pecasDivergentes)} de ${irFmtInt(r.pecasContadas)} pç</div>
+    </div>`).join('')}
   </div>`;
 }
 function irShowLogTooltip(ev, chave){
@@ -1602,7 +1637,8 @@ function irRenderContadosPorDiaPanel(ind){
     <h3>Contados por Dia</h3>
     <div class="bi-vbars-scroll">
       <div class="bi-vbars bi-vbars-meta">
-        <div class="bi-vbar-meta-line" style="bottom:${metaPct}%;"><span>Meta ${irFmtInt(IR_META_DIARIA)}</span></div>
+        <div class="bi-vbar-meta-line" style="bottom:${metaPct}%;"></div>
+        <div class="bi-vbar-meta-tag" style="bottom:${metaPct}%;">Meta ${irFmtInt(IR_META_DIARIA)}</div>
         ${rows.map(r=>`<div class="bi-vbar-col" onmouseenter="irShowDiaTooltip(event,'${r.dia}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
           <div class="bi-vbar-val">${irFmtInt(r.total)}</div>
           <div class="bi-vbar orange" style="height:${Math.round(r.total/max*100)}%;"></div>
