@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v155';
+const IR_APP_VERSION = 'v156';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -5649,7 +5649,10 @@ function irExportarLocaisPendentesCsv(rua){
 const IR_TRANS_SETORES = ['TSF','C.E','INB','OUT','TRP','REV','IGN'];
 const IR_TRANS_SETOR_NOME = {
   'C.E':'Controle de Estoque', INB:'Inbound', OUT:'Outbound',
-  TRP:'Transporte', REV:'Reversa', TSF:'Transferência', IGN:'Desconsiderado'
+  TRP:'Transporte', REV:'Reversa', TSF:'Transferência', IGN:'Desconsiderado',
+  // Não é classe do WMS: é o rótulo do que ficou sem classe cadastrada, usado no
+  // boletim pra esse saldo não sumir do relatório.
+  SEM:'Sem classe cadastrada'
 };
 /* O setor dono do endereço vem da CLASSE LOCAL do WMS: TSF, C.E, INB, OUT, TRP e
    REV são os códigos que a operação cadastra. Endereço novo com a classe certa
@@ -5658,9 +5661,16 @@ const IR_TRANS_SETOR_NOME = {
    O mapa por prefixo continua como rede de segurança, pro endereço antigo que
    ainda não tem classe. Quando nem um nem outro resolvem, o endereço cai em "não
    classificado" — que é o sinal de que falta classe no cadastro. */
+/* A classe vinha comparada letra a letra com a lista, então só "C.E" exato
+   entrava em Controle de Estoque: "CE", "C.E." ou "C E" — tudo a mesma classe pra
+   quem cadastra no WMS — caíam em "não classificado" e o setor inteiro sumia do
+   relatório. A comparação passa a ignorar ponto, espaço e hífen. */
+const IR_TRANS_CLASSE_MAPA = IR_TRANS_SETORES.reduce((m,s)=>{
+  m[s.replace(/[^A-Z0-9]/gi,'').toUpperCase()] = s; return m;
+}, {});
 function irTransSetorDe(l){
-  const clal = String(l.clal||'').trim().toUpperCase();
-  if(IR_TRANS_SETORES.includes(clal)) return clal;
+  const clal = IR_TRANS_CLASSE_MAPA[String(l.clal||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase()];
+  if(clal) return clal;
   // Sem classe cadastrada não há setor. O palpite por prefixo saiu: ele colocava
   // endereço no setor errado (RES caía em Controle de Estoque sem ser C.E) e
   // escondia justamente o que precisa ser corrigido no cadastro do WMS. O ajuste
@@ -6325,6 +6335,11 @@ async function irBaixarBoletimTransitorios(){
     </div>
     <div class="rp-body">
       ${setores.map(g=>irTransPainelSetor(g, logs, true)).join('')}
+      ${(()=>{ const nc = c.lista.find(g=>!g.setor);
+        // O não classificado ficava só na tela e sumia do boletim. Saldo parado
+        // some do relatório sem ninguém saber que sumiu — pior que aparecer sem
+        // setor. Entra por último, com o nome do que é.
+        return nc ? irTransPainelSetor(Object.assign({}, nc, {setor:'SEM'}), logs, true) : ''; })()}
       <p class="rp-footer">Prazo do transitório: ${IR_TRANS_PRAZO_H}h — verde está no prazo, laranja passou. D+${IR_TRANS_FAIXA_MAX} é acumulativo: sete dias ou mais.<br>"Prov. duplicidade" é o saldo de itens que fecharam o ano com ganho no NET da QRY410 — movimentar resolve, procurar não.<br>Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · Controle de Transitórios.</p>
     </div>
   </div>`;
