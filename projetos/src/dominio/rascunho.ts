@@ -75,7 +75,7 @@ export function montarRascunho(
   if (!r.impactos.length) {
     const linhas: Par[] = [];
     if (temToBe) linhas.push({ a: 'Operação no CD', b: primeiraFrase(r.to_be) });
-    if (temDor) linhas.push({ a: 'Retrabalho', b: `Deixa de existir o retrabalho de quando ${encaixar(primeiraFrase(r.dor))}.` });
+    if (temDor) linhas.push({ a: 'Retrabalho', b: `Deixa de existir o retrabalho de hoje: ${primeiraFrase(r.dor)}` });
     linhas.push({ a: 'Rastreabilidade', b: 'O que foi feito fica registrado no acompanhamento do projeto.' });
     r.impactos = linhas;
   }
@@ -125,7 +125,10 @@ export function montarRascunho(
   }
 
   if (vazio(r.roi_fechamento) && temObjetivo) {
-    r.roi_fechamento = `O retorno aparece já no primeiro mês de uso, porque ${encaixar(primeiraFrase(r.objetivo))}.`;
+    /* Sem costurar a frase de quem escreveu no meio da nossa: o pedido
+       costuma vir em primeira pessoa ("solicito a inclusao..."), e
+       colado depois de "porque" virava frase quebrada. */
+    r.roi_fechamento = 'O retorno aparece já no primeiro mês de uso, com o ganho medido pelos indicadores desta proposta.';
   }
 
   if (vazio(r.esforco_justificativa)) {
@@ -158,9 +161,9 @@ export function montarRascunho(
   if (vazio(r.resumo_executivo)) {
     r.resumo_executivo = [
       `Esta proposta trata de ${encaixar(r.titulo || projeto.nome)}.`,
-      temDor ? `Hoje, ${encaixar(primeiraFrase(r.dor))}.` : '',
-      temToBe ? `A melhoria propõe que ${encaixar(primeiraFrase(r.to_be))}.` : '',
-      temObjetivo ? `O objetivo é ${encaixar(primeiraFrase(r.objetivo))}.` : '',
+      temDor ? `Situação de hoje: ${primeiraFrase(r.dor)}` : '',
+      temToBe ? `A melhoria propõe o seguinte: ${primeiraFrase(r.to_be)}` : '',
+      temObjetivo ? `Objetivo: ${primeiraFrase(r.objetivo)}` : '',
       `A prioridade é ${r.prioridade.toLowerCase()} e o esforço está classificado como ${r.esforco.toLowerCase()}.`,
       'O documento detalha o cenário atual, a proposta, as regras de negócio, os riscos, os critérios de aceite e os indicadores de sucesso.',
     ].filter(Boolean).join(' ');

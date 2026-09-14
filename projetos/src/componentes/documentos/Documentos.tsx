@@ -173,6 +173,7 @@ function Formulario({
   const [textoColado, setTextoColado] = useState('');
   const [textoDoPedido, setTextoDoPedido] = useState('');
   const [mapaDoTexto, setMapaDoTexto] = useState<{ titulo: string; destino: string }[]>([]);
+  const [faltandoNoTexto, setFaltandoNoTexto] = useState<string[]>([]);
 
   /* Rascunho no proprio navegador.
 
@@ -311,15 +312,22 @@ function Formulario({
   function aplicarTexto(): DadosDoDocumento | null {
     try {
       const { dados: lido, mapa } = lerTextoCorrido(textoDoPedido, dados!);
+      /* O que o texto nao deu sai no Word como "a definir". Avisar aqui
+         e o que evita descobrir isso so depois de abrir o arquivo. */
+      const faltando = faltamCamposParaRascunho(lido);
       const completo = montarRascunho(lido, { projeto, marcos, tarefas });
       setDados(completo);
       setMapaDoTexto(mapa);
       setErro(null);
-      setAviso('Documento preenchido a partir do texto. Confira as seções abaixo antes de gerar.');
+      setFaltandoNoTexto(faltando);
+      setAviso(faltando.length
+        ? null
+        : 'Documento preenchido a partir do texto. Confira as seções abaixo antes de gerar.');
       return completo;
     } catch (falha) {
       setErro(mensagemDeErro(falha));
       setAviso(null);
+      setFaltandoNoTexto([]);
       return null;
     }
   }
@@ -533,6 +541,13 @@ function Formulario({
           </div>
         </div>
 
+        {faltandoNoTexto.length > 0 && (
+          <Aviso tipo="atencao">
+            Preenchido, mas o texto não trouxe <strong>{faltandoNoTexto.join(', ')}</strong>.
+            Essas seções saem como “a definir” no Word. Escreva nos campos abaixo, ou cole o texto
+            de novo usando os títulos (<em>Objetivo, Comportamento atual, Comportamento esperado</em>).
+          </Aviso>
+        )}
         {aviso && <Aviso tipo="sucesso">{aviso}</Aviso>}
         {erro && <Aviso>{erro}</Aviso>}
 

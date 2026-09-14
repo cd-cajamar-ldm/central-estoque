@@ -220,6 +220,29 @@ export interface LeituraDeTexto {
   mapa: { titulo: string; destino: string }[];
 }
 
+/* Pedido escrito sem titulo nenhum, que e como a maioria das pessoas
+   escreve: "solicito tal coisa / hoje acontece assim / com isso passa a
+   funcionar assado". A ordem dos paragrafos ja conta essa historia,
+   entao o primeiro vira o objetivo, o ultimo vira o que muda e o que
+   estiver no meio vira a dor de hoje.
+
+   Sem isso, o texto inteiro caia num campo so e o documento saia com
+   metade das secoes escritas como "a definir" — que foi o que
+   aconteceu na primeira proposta escrita assim. */
+function distribuirTextoSemTitulo(r: DadosDoDocumento): string[] {
+  const partes = r.objetivo.split('\n\n').map((t) => t.trim()).filter(Boolean);
+  if (partes.length < 2) return [];
+
+  r.objetivo = partes[0];
+  if (partes.length === 2) {
+    r.dor = partes[1];
+    return ['Objetivo', 'Dor atual (AS IS)'];
+  }
+  r.dor = partes.slice(1, -1).join('\n\n');
+  r.to_be = partes[partes.length - 1];
+  return ['Objetivo', 'Dor atual (AS IS)', 'O que muda (TO BE)'];
+}
+
 export function lerTextoCorrido(bruto: string, base: DadosDoDocumento): LeituraDeTexto {
   if (!bruto.trim()) throw new Error('Cole o texto do pedido antes de preencher.');
 
@@ -286,6 +309,17 @@ export function lerTextoCorrido(bruto: string, base: DadosDoDocumento): LeituraD
         return par.a ? par : { a: i, b: 'Meta a definir' };
       })); break;
       default: r[destino].push(...todos); break;
+    }
+  }
+
+  /* So quando a leitura por titulo nao achou nem a dor nem o TO BE: se
+     a pessoa escreveu os titulos, manda o que ela escreveu. */
+  if (!r.dor.trim() && !r.to_be.trim()) {
+    const destinos = distribuirTextoSemTitulo(r);
+    if (destinos.length) {
+      const semAbertura = mapa.filter((m) => m.titulo !== 'Abertura');
+      mapa.length = 0;
+      mapa.push({ titulo: 'Abertura', destino: destinos.join(', ') }, ...semAbertura);
     }
   }
 

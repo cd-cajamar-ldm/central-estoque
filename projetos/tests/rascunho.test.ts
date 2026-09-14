@@ -48,7 +48,10 @@ describe('montarRascunho', () => {
   it('escreve o resumo executivo com as palavras da própria pessoa', () => {
     const r = montarRascunho(preenchido(), contexto);
     expect(r.resumo_executivo).toContain('Esta proposta trata de abertura automática de inventário.');
-    expect(r.resumo_executivo).toContain('a contagem só começa quando alguém percebe a divergência');
+    /* A frase de quem escreveu entra inteira, depois de dois pontos: o
+       pedido costuma vir em primeira pessoa e costurar no meio da nossa
+       frase quebrava o texto. */
+    expect(r.resumo_executivo).toContain('Situação de hoje: A contagem só começa quando alguém percebe a divergência.');
     expect(r.resumo_executivo).toContain('prioridade é média');
   });
 
