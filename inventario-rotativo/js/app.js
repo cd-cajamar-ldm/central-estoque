@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v156';
+const IR_APP_VERSION = 'v157';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -6139,7 +6139,15 @@ function irRenderTransitorios(){
     ${c.lista.filter(g=>g.setor && g.setor!=='IGN').map(g=>irTransPainelSetor(g, logs)).join('')}
     ${naoClass ? `<div class="panel"><div class="ofe-head">
       <h3>Não classificado</h3>
-      <span class="field-hint">${irFmtMoney(naoClass.valor)} · ${irFmtInt(naoClass.locais.length)} endereços · ${irFmtInt(naoClass.prefixos.size)} transitórios. Cadastre a classe local (TSF, C.E, INB, OUT, TRP, REV) no WMS e eles entram sozinhos; até lá, dá pra apontar o setor aqui.</span>
+      <span class="field-hint">${irFmtMoney(naoClass.valor)} · ${irFmtInt(naoClass.locais.length)} endereços · ${irFmtInt(naoClass.prefixos.size)} transitórios. ${
+        // A classe local não vem na QRY0160: ela é lida da QRY0390 e casada pelo
+        // endereço. Endereço que a 390 não trouxe fica sem classe e cai aqui — a
+        // causa mais comum é 390 desatualizada, não cadastro errado no WMS. Sem
+        // dizer isso, o usuário vai procurar no lugar errado.
+        m.fonte==='160' && m.semClasse
+          ? 'A classe local vem da QRY0390, não da QRY0160: '+irFmtInt(m.semClasse)+' endereço(s) da 160 não foram encontrados na 390 importada. Reimportar a QRY0390 atualizada costuma resolver.'
+          : 'Cadastre a classe local (TSF, C.E, INB, OUT, TRP, REV) no WMS e eles entram sozinhos; até lá, dá pra apontar o setor aqui.'
+      }</span>
     </div>${irTransTabelaPrefixos(naoClass)}</div>` : ''}
     <p class="field-hint">Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · ${irFmtInt(m.locais||0)} endereços no CD · ${irFmtMoney(m.valorTotal||0)} no total.
     ${irTransTemData() ? 'Idade do saldo contada da Data Movimento da QRY0160 até hoje.' : 'Importe a QRY0160 na aba Importação para abrir as colunas por idade do saldo — a QRY0390 não traz data de movimento.'}</p>
