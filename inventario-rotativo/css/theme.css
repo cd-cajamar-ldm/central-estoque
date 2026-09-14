@@ -122,14 +122,37 @@ button{ font-family:inherit; cursor:pointer; }
   overflow:hidden;
 }
 .sidebar.collapsed{ width:56px; }
-.sidebar .brand{ display:flex; align-items:center; gap:8px; padding:14px; border-bottom:1px solid rgba(255,255,255,.12); flex-shrink:0; }
+/* Menu leva a logo VERTICAL e a barra do topo a horizontal. A mesma arte
+   repetida duas vezes na mesma tela lia como erro de montagem, e cada formato
+   cabe melhor no seu espaço: a vertical na coluna estreita, a horizontal na
+   faixa larga. */
+.sidebar .brand{ display:flex; align-items:center; gap:8px; padding:16px 14px; border-bottom:1px solid rgba(255,255,255,.12); flex-shrink:0; }
 .brand-text{ min-width:0; flex:1; }
 .sidebar.collapsed .brand-text{ display:none; }
-.brand-logo-chip{ background:#fff; border-radius:8px; padding:4px 6px; display:flex; align-items:center; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,.15); }
-.brand-logo-img{ height:24px; width:auto; display:block; }
+/* Logo branca direto no azul, sem caixa. A caixa branca era um retângulo
+   estranho dentro de um menu azul, e a versão branca do logo é a mesma arte
+   monocromática — só troca a tinta. Os arquivos brancos são gerados em 4x pra
+   a redução no navegador sair nítida também em tela HiDPI. */
+.brand-logo-img{ height:104px; width:auto; display:block; margin:0 auto; }
+.sidebar.collapsed .brand-logo-img{ display:none; }
 .sidebar .brand-name{ font-weight:700; font-size:12px; line-height:1.25; white-space:normal; overflow-wrap:break-word; color:rgba(255,255,255,.9); min-width:0; flex:1; }
 .sidebar .brand-sub{ font-size:10px; color:rgba(255,255,255,.6); white-space:nowrap; }
-.sidebar.collapsed .brand-logo-chip{ display:none; }
+
+/* Recolhido, o menu só escondia o texto por overflow:hidden — os rótulos saíam
+   cortados no meio da palavra e o ícone continuava encostado na esquerda. Aqui o
+   texto some de fato e sobra o ícone, centralizado. */
+.sidebar.collapsed .nav-item span,
+.sidebar.collapsed .theme-toggle span{ display:none; }
+.sidebar.collapsed .nav-item{ justify-content:center; gap:0; padding:10px 0; border-left-width:2px; }
+.sidebar.collapsed .theme-toggle{ justify-content:center; padding:7px 0; }
+.sidebar.collapsed .sidebar-footer{ padding:10px 8px; }
+.sidebar.collapsed .brand{ justify-content:center; padding:14px 0; }
+.sidebar.collapsed .sidebar-toggle{ margin:0; }
+/* O rótulo da seção vira um filete: sem ele os grupos ficam indistinguíveis. */
+.sidebar.collapsed .nav-section-label{
+  height:0; padding:0; margin:10px 14px; overflow:hidden;
+  border-top:1px solid rgba(255,255,255,.16);
+}
 .sidebar-toggle{ background:none; border:none; color:#fff; opacity:.7; padding:4px; margin-left:auto; }
 .sidebar-toggle:hover{ opacity:1; }
 .sidebar-nav{ flex:1; overflow-y:auto; padding:8px 0; }
@@ -146,35 +169,49 @@ button{ font-family:inherit; cursor:pointer; }
 .theme-toggle{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.08); border:none; color:#fff; padding:7px 10px; border-radius:6px; width:100%; font-size:12px; }
 
 .content{ flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--paper); }
+/* Barra em degradê da marca. A faixa branca antes emendava mal com o menu azul
+   e deixava o topo sem hierarquia nenhuma. O degradê é fixo nos dois temas: é
+   cor de marca, não superfície — por isso tudo que fica em cima dela declara a
+   própria cor, sem depender do token de tinta do tema. */
 .topbar{
-  display:flex; align-items:center; gap:16px; padding:14px 24px; background:var(--surface);
-  border-bottom:1px solid var(--line); flex-shrink:0; flex-wrap:wrap;
+  display:flex; align-items:center; gap:16px; padding:16px 24px;
+  background:linear-gradient(100deg, var(--blue) 0%, #062A9E 55%, #0B3ACB 100%);
+  flex-shrink:0; flex-wrap:wrap;
 }
-.topbar-logo{ height:38px; width:auto; flex-shrink:0; }
 .topbar-titles{ min-width:0; }
-.topbar h1{ font-size:17px; font-weight:700; color:var(--ink); }
-.topbar p{ font-size:11px; color:var(--ink-soft); margin-top:1px; }
+.topbar h1{ font-size:19px; font-weight:800; color:#fff; letter-spacing:-.01em; }
+/* A frase descritiva sai da barra: o eyebrow diz onde se está e de que ciclo são
+   os números, que é o que se procura no topo. O elemento fica pra quem lê tela. */
+.topbar p{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .global-search{
-  border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-size:12.5px;
-  background:var(--paper); color:var(--ink); width:260px; flex:0 1 260px; min-width:150px; margin-left:auto;
+  border:1px solid rgba(255,255,255,.22); border-radius:8px; padding:8px 12px; font-size:12.5px;
+  background:rgba(255,255,255,.12); color:#fff; width:260px; flex:0 1 260px; min-width:150px;
+  margin-left:auto; align-self:center;
 }
+.global-search::placeholder{ color:rgba(255,255,255,.62); }
+.global-search:focus{ outline:none; border-color:var(--orange); background:rgba(255,255,255,.18); }
 /* Barra de filtros no estilo "slicer" de BI: cada filtro é uma caixinha com o
    rótulo em cima e o valor/seletor embaixo, agrupadas do lado direito do topbar —
    junta Ciclo (já existia como pill solto) e Mês (novo) no mesmo visual. */
-.topbar-filters{ display:flex; align-items:stretch; gap:10px; flex-shrink:0; }
+.topbar-filters{ display:flex; align-items:stretch; gap:10px; flex-shrink:0; align-self:center; }
+/* O display:flex acima ganha do [hidden] do navegador, que é regra de elemento —
+   sem isto o hidden do JS não escondia nada. */
+.topbar-filters[hidden]{ display:none; }
+/* Cartões brancos elevados sobre o degradê — cor fixa pelo mesmo motivo da
+   barra: são controles em cima de uma superfície de marca, não do tema. */
 .tb-filter{
   display:flex; flex-direction:column; justify-content:center; gap:2px;
-  background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:6px 14px; min-width:110px;
+  background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.18);
+  border-radius:10px; padding:6px 14px; min-width:110px;
 }
-.tb-filter label{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); }
+.tb-filter label{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6B7280; }
 .tb-filter #cycleBadge, .tb-filter select{
-  background:transparent; border:none; color:var(--ink); font-size:12.5px; font-weight:700; font-family:inherit;
+  background:transparent; border:none; color:#001A72; font-size:12.5px; font-weight:800; font-family:inherit;
   cursor:pointer; padding:0; margin:0;
 }
 .tb-filter select:focus, .tb-filter #cycleFilterSelect:focus{ outline:none; }
-#cycleFilterSelect{ background:transparent; border:none; color:inherit; font-size:12.5px; font-weight:700; font-family:inherit; cursor:pointer; padding:0; }
+#cycleFilterSelect{ background:transparent; border:none; color:inherit; font-size:12.5px; font-weight:800; font-family:inherit; cursor:pointer; padding:0; }
 @media(max-width:900px){
-  .topbar-logo{ height:30px; }
   .topbar-filters{ width:100%; margin-left:0; }
   .tb-filter{ flex:1; min-width:0; }
 }
@@ -185,7 +222,7 @@ button{ font-family:inherit; cursor:pointer; }
 .zoom-ctrl-float{ position:fixed; right:16px; bottom:16px; z-index:70; box-shadow:0 6px 18px rgba(0,0,0,.18); }
 .page-scroll{ flex:1; overflow-y:auto; padding:20px 24px; }
 
-.mobile-menu-btn{ display:none; background:none; border:none; color:var(--ink); padding:6px; margin-right:2px; }
+.mobile-menu-btn{ display:none; background:none; border:none; color:#fff; padding:6px; margin-right:2px; align-self:center; }
 .sidebar-backdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:39; }
 /* Breakpoint baixo de propósito (celular, não "janela de desktop estreita") — uma
    janela de desktop redimensionada continua com o menu normal (230px / 56px
@@ -578,20 +615,186 @@ table.prod-rank td{ white-space:nowrap; }
 .tag-blue{ color:var(--blue); background:var(--blue-light); }
 .tag-orange{ color:var(--orange); background:var(--orange-light); }
 
-/* ---------- ABA DIVERGÊNCIAS — distorção do NET e auditoria ---------- */
-.div-acoes{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.div-acoes input[type=number]{ border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:12px; background:var(--surface); color:var(--ink); font-family:'SFMono-Regular',Consolas,monospace; }
-table.div-net-table td{ vertical-align:middle; }
-table.div-net-table tr.div-sel{ background:var(--orange-light); }
-.div-acum-track{ height:6px; border-radius:100px; background:var(--surface2); overflow:hidden; min-width:70px; }
-.div-acum-fill{ height:100%; border-radius:100px; background:var(--orange); }
-/* Colunas do ano ficam num fundo próprio — é o contraponto ao escopo escolhido. */
-table.div-net-table th.div-col-ano, table.div-net-table td.div-col-ano{ background:var(--surface2); }
-:root[data-theme="dark"] table.div-net-table th.div-col-ano,
-:root[data-theme="dark"] table.div-net-table td.div-col-ano{ background:rgba(255,255,255,.04); }
-tr.div-aud-saldo{ background:var(--blue-light); }
-:root[data-theme="dark"] table.div-net-table tr.div-sel{ background:rgba(250,70,22,.16); }
-:root[data-theme="dark"] tr.div-aud-saldo{ background:rgba(90,131,214,.14); }
+/* ---------- ABA DIVERGÊNCIAS — ofensores do NET ----------
+   Tela de trabalho: filtro numa linha, cinco números, uma tabela. Sem card
+   decorativo — o auditor lê a tabela, marca, gera e imprime. */
+.ofe-filtros{ display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; padding:12px 18px; margin-bottom:12px; }
+.ofe-filtro{ display:flex; flex-direction:column; gap:3px; }
+.ofe-filtro label{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); }
+.ofe-filtro select, .ofe-filtro input{
+  border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-size:12.5px; font-weight:600;
+  background:var(--surface); color:var(--ink); font-family:inherit; min-width:150px;
+}
+.ofe-filtro-busca input{ min-width:230px; font-weight:400; }
+.ofe-check{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); cursor:pointer; margin-bottom:7px; }
+.ofe-check input{ width:auto; }
+
+.ofe-resumo{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:0; padding:0; overflow:hidden; margin-bottom:12px; }
+.ofe-num{ padding:14px 18px; border-right:1px solid var(--line); }
+.ofe-num:last-child{ border-right:none; }
+.ofe-num-lbl{ display:block; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+.ofe-num strong{ display:block; font-size:22px; font-weight:800; color:var(--ink); line-height:1.2; margin-top:4px; letter-spacing:-.01em; }
+.ofe-num-sub{ display:block; font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+.ofe-num.neg strong{ color:var(--danger); }
+.ofe-num.pos strong{ color:var(--success); }
+
+.ofe-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.ofe-head h3{ margin:0; }
+.ofe-acoes{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+table.ofe-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+table.ofe-table th{
+  position:sticky; top:0; z-index:1; background:var(--surface2); color:var(--ink-soft);
+  font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+  padding:9px 10px; text-align:left; cursor:pointer; user-select:none; white-space:nowrap;
+  border-bottom:1px solid var(--line);
+}
+table.ofe-table th:hover{ color:var(--ink); }
+table.ofe-table th.num{ text-align:right; }
+table.ofe-table td{ padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+table.ofe-table td.mono{ text-align:right; }
+table.ofe-table td:nth-child(2), table.ofe-table td:nth-child(3){ text-align:left; }
+table.ofe-table tr.sel{ background:var(--orange-light); }
+table.ofe-table tr.comp{ opacity:.62; }
+table.ofe-table .neg{ color:var(--danger); font-weight:700; }
+table.ofe-table .pos{ color:var(--success); font-weight:700; }
+/* Colunas do ano num fundo próprio: é o contraponto ao período escolhido. */
+table.ofe-table th.ofe-ano, table.ofe-table td.ofe-ano{ background:var(--surface2); }
+:root[data-theme="dark"] table.ofe-table th.ofe-ano,
+:root[data-theme="dark"] table.ofe-table td.ofe-ano{ background:rgba(255,255,255,.04); }
+:root[data-theme="dark"] table.ofe-table tr.sel{ background:rgba(250,70,22,.16); }
+
+.ofe-tag{ font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; padding:2px 8px; border-radius:100px; white-space:nowrap; }
+.ofe-tag.perda{ color:var(--danger); background:var(--danger-light); }
+.ofe-tag.ganho{ color:var(--success); background:var(--success-light); }
+.ofe-tag.comp{ color:var(--ink-soft); background:var(--surface2); }
+
+tr.ofe-detalhe > td{ background:var(--surface2); padding:0 10px 10px; }
+table.ofe-sub{ width:100%; border-collapse:collapse; font-size:11.5px; }
+table.ofe-sub th{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); padding:6px 8px; text-align:left; }
+table.ofe-sub td{ padding:5px 8px; border-top:1px solid var(--line); }
+table.ofe-sub td.mono{ text-align:right; }
+table.ofe-sub td:nth-child(2){ text-align:left; }
+
+.ofe-tag.ok{ color:var(--success); background:var(--success-light); }
+.ofe-tag.alerta{ color:var(--orange); background:var(--orange-light); }
+.ofe-tag.info{ color:var(--blue); background:var(--blue-light); }
+
+.sim-filtros{ display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-bottom:12px; }
+table.sim-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+table.sim-table th{
+  position:sticky; top:0; z-index:1; background:var(--surface2); color:var(--ink-soft);
+  font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+  padding:9px 10px; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line);
+}
+table.sim-table th{ cursor:pointer; user-select:none; }
+table.sim-table th:hover{ color:var(--ink); }
+table.sim-table th.num{ text-align:right; }
+table.sim-table td{ padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+table.sim-table td.mono{ text-align:right; white-space:nowrap; }
+table.sim-table td:first-child{ text-align:left; }
+.sim-desc{ display:block; font-size:10.5px; color:var(--ink-soft); margin-top:1px; }
+table.sim-table .neg{ color:var(--danger); font-weight:700; }
+table.sim-table .pos{ color:var(--success); font-weight:700; }
+
+/* Chips de filtro (sentido, base). */
+
+.conc-chips{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.conc-chip{ border:1px solid var(--line); background:var(--paper); color:var(--ink-soft);
+  font-size:11.5px; font-weight:700; padding:5px 12px; border-radius:100px; cursor:pointer;
+  transition:background .15s, color .15s, border-color .15s; }
+.conc-chip:hover{ color:var(--ink); border-color:var(--ink-soft); }
+.conc-chip.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+.conc-chip b{ font-variant-numeric:tabular-nums; }
+
+.aud-cab{ display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; margin-bottom:12px; }
+table.aud-table{ width:100%; border-collapse:collapse; font-size:12px; }
+table.aud-table th{
+  position:sticky; top:0; z-index:1;
+  background:var(--blue); color:#fff; font-size:11px; font-weight:800;
+  text-transform:uppercase; letter-spacing:.05em; padding:9px 10px; text-align:left;
+  white-space:nowrap; border-bottom:none;
+}
+table.aud-table th.num{ text-align:right; }
+table.aud-table td{ padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+table.aud-table tbody tr:nth-child(even){ background:var(--surface2); }
+table.aud-table tbody tr:hover{ background:var(--orange-light); }
+table.aud-table td.mono{ text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+table.aud-table td:nth-child(1), table.aud-table td:nth-child(2){ text-align:left; }
+table.aud-table .neg{ color:var(--danger); font-weight:700; }
+table.aud-table .pos{ color:var(--success); font-weight:700; }
+.aud-ult{ font-size:10.5px; color:var(--ink-soft); }
+.aud-vazio{ min-width:120px; border-bottom:1px solid var(--line); background:var(--paper); }
+.aud-alerta{
+  font-size:11px; font-weight:700; color:var(--danger); background:var(--danger-light);
+  padding:5px 10px; border-radius:6px;
+}
+
+/* Descrição do item vai completa na auditoria — o auditor precisa reconhecer a
+   peça na prateleira, e o resumo "primeira … última palavra" não serve pra isso. */
+.aud-desc{ min-width:220px; }
+
+/* Impressão da auditoria: uma folha de largura, sempre.
+
+   A tabela vai com table-layout fixed e larguras em porcentagem porque o auditor
+   imprime numa folha só — antes as colunas tinham largura mínima e nowrap, a
+   tabela ficava mais larga que o papel e o Chrome cortava a metade da direita. Com
+   as colunas fixas, o que não cabe QUEBRA A LINHA em vez de vazar, e o transbordo
+   acontece só pra baixo, em páginas novas.
+
+   Paisagem por causa das nove a onze colunas, e o cabeçalho vira table-header-group
+   pra se repetir no topo de cada página — sem isso, da segunda folha em diante o
+   auditor fica com uma tabela de números sem saber qual coluna é qual. */
+@page{ size: A4 landscape; margin: 8mm; }
+@media print{
+  html, body{ width:auto !important; margin:0 !important; padding:0 !important; background:#FFF !important; }
+  .sidebar, .topbar, .ofe-filtros, .ofe-resumo, .ofe-acoes, .zoom-ctrl, .toast{ display:none !important; }
+  .panel:not(.aud-panel){ display:none !important; }
+  .content, .aud-panel{ margin:0 !important; padding:0 !important; }
+  .aud-panel{ box-shadow:none; border:none; width:100%; }
+  .aud-panel .table-wrap, .aud-panel .table-scroll{ max-height:none !important; overflow:visible !important; }
+
+  table.aud-table{ width:100%; table-layout:fixed; font-size:8.5px; border-collapse:collapse; }
+  table.aud-table thead{ display:table-header-group; }
+  table.aud-table tr{ break-inside:avoid; page-break-inside:avoid; }
+  table.aud-table th, table.aud-table td{
+    border-bottom:1px solid #999 !important; padding:3px 4px;
+    white-space:normal; overflow-wrap:anywhere; word-break:break-word; vertical-align:top;
+  }
+  table.aud-table th{ background:#EEE !important; color:#000 !important; font-size:7.5px;
+    position:static; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  table.aud-table tbody tr:nth-child(even){ background:#FFF !important; }
+  table.aud-table .neg, table.aud-table .pos{ color:#000 !important; }
+  .aud-alerta{ display:none !important; }
+  .aud-ult{ font-size:7.5px; }
+  .aud-desc{ min-width:0; }
+  .aud-vazio{ border-bottom:1px solid #000 !important; min-width:0; }
+
+  /* Item · EAN · Descrição · Local · Desc. Local · Qtde · Qtde Div. · Valor Div. · Contagem */
+  table.aud-t-item th:nth-child(1),  table.aud-t-item td:nth-child(1){ width:6%; }
+  table.aud-t-item th:nth-child(2),  table.aud-t-item td:nth-child(2){ width:9%; }
+  table.aud-t-item th:nth-child(3),  table.aud-t-item td:nth-child(3){ width:22%; }
+  table.aud-t-item th:nth-child(4),  table.aud-t-item td:nth-child(4){ width:6%; }
+  table.aud-t-item th:nth-child(5),  table.aud-t-item td:nth-child(5){ width:11%; }
+  table.aud-t-item th:nth-child(6),  table.aud-t-item td:nth-child(6){ width:5%; }
+  table.aud-t-item th:nth-child(7),  table.aud-t-item td:nth-child(7){ width:6%; }
+  table.aud-t-item th:nth-child(8),  table.aud-t-item td:nth-child(8){ width:9%; }
+  table.aud-t-item th:nth-child(9),  table.aud-t-item td:nth-child(9){ width:15%; }
+  table.aud-t-item th:nth-child(10), table.aud-t-item td:nth-child(10){ width:11%; }
+
+  /* Dia · Local · Desc. Local · Inv. · Sobrou · Descrição · Faltou · Descrição · Qtde · Desequil. · Confere */
+  table.aud-t-sim th:nth-child(1),  table.aud-t-sim td:nth-child(1){ width:7%; }
+  table.aud-t-sim th:nth-child(2),  table.aud-t-sim td:nth-child(2){ width:6%; }
+  table.aud-t-sim th:nth-child(3),  table.aud-t-sim td:nth-child(3){ width:11%; }
+  table.aud-t-sim th:nth-child(4),  table.aud-t-sim td:nth-child(4){ width:6%; }
+  table.aud-t-sim th:nth-child(5),  table.aud-t-sim td:nth-child(5){ width:7%; }
+  table.aud-t-sim th:nth-child(6),  table.aud-t-sim td:nth-child(6){ width:17%; }
+  table.aud-t-sim th:nth-child(7),  table.aud-t-sim td:nth-child(7){ width:7%; }
+  table.aud-t-sim th:nth-child(8),  table.aud-t-sim td:nth-child(8){ width:17%; }
+  table.aud-t-sim th:nth-child(9),  table.aud-t-sim td:nth-child(9){ width:5%; }
+  table.aud-t-sim th:nth-child(10), table.aud-t-sim td:nth-child(10){ width:8%; }
+  table.aud-t-sim th:nth-child(11), table.aud-t-sim td:nth-child(11){ width:9%; }
+}
 .tag-good{ color:var(--success); background:var(--success-light); }
 .tag-bad{ color:var(--danger); background:var(--danger-light); }
 .tag-muted{ color:var(--ink-soft); background:var(--surface2); }
@@ -669,6 +872,32 @@ tr.div-aud-saldo{ background:var(--blue-light); }
 .rp-page .podio-nome, .rp-page .podio-num{ color:#1D1F2A; }
 .rp-page .podio-lbl, .rp-page .podio-sub{ color:#6B7280; }
 
+/* O boletim de transitórios reaproveita os painéis da tela. Duas coisas precisam
+   ser fixadas aqui: a paleta (a captura tem de sair clara mesmo com o app no
+   modo escuro) e a largura, porque o html2canvas recalcula as media queries pela
+   largura da folha — a .tg-wrap caía no fallback de uma coluna e os três
+   gráficos saíam empilhados. */
+.rp-page.rp-page-wide{ width:1660px; max-width:1660px;
+  --paper:#F4F5F7; --surface:#FFFFFF; --surface2:#EEF0F4;
+  --ink:#1D1F2A; --ink-soft:#6B7280; --line:#D5D8E0;
+  --blue-light:#E8ECF7; --orange-light:#FFEDE7; }
+.rp-page.rp-page-wide .panel{ background:#fff; border:1px solid #C9CEDB; box-shadow:0 3px 10px rgba(16,24,40,.10);
+  margin-bottom:18px; }
+.rp-page.rp-page-wide .panel:last-of-type{ margin-bottom:6px; }
+/* Sem isto o media query de 1100px do dash empilha os três cards na captura. */
+.rp-page.rp-page-wide .tg-wrap{ grid-template-columns:1.15fr 1.15fr minmax(180px,.54fr); }
+/* No boletim o SVG sai no tamanho natural (o do viewBox), sem escalar. Escalado,
+   a caixa CSS cresce mas o html2canvas desenha na altura do atributo width/height
+   — o eixo com os rótulos de dia caía fora do recorte e a curva parecia
+   empurrada pra baixo. Em tamanho natural não há o que dar errado. */
+.rp-page.rp-page-wide .tg-svg{ width:100%; height:auto; }
+.rp-page.rp-page-wide .tg-rosca svg,
+.rp-page.rp-page-wide .tg-rosca img{ width:auto; height:auto; max-width:100%; margin-inline:auto; }
+.rp-page.rp-page-wide .tg-card{ align-items:center; }
+.rp-page.rp-page-wide .tg-head{ width:100%; }
+.rp-page.rp-page-wide .table-wrap{ overflow:visible; }
+.rp-page.rp-page-wide .trans-table{ min-width:0; }
+
 /* ---------- HEATMAP ---------- */
 .heatmap{ display:grid; gap:3px; }
 .heatmap-cell{ aspect-ratio:1; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:9px; color:#fff; }
@@ -740,7 +969,10 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-hero{ background:#001A72; color:#fff; padding:34px 40px 26px; position:relative; }
 .rp-hero::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:4px; background:linear-gradient(90deg,#FA4616,#FF7A4D,#FA4616); }
 .rp-hero-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
-.rp-hero-logo{ display:block; height:42px; width:auto; filter:brightness(0) invert(1); }
+/* Arquivo branco de verdade em vez de filter: o html2canvas, que gera a imagem
+   do boletim, não aplica filtros CSS — a logo saía laranja no e-mail e branca na
+   tela. */
+.rp-hero-logo{ display:block; height:48px; width:auto; }
 .rp-hero-status{ font-size:10px; font-weight:700; letter-spacing:.04em; color:#D7DEEC; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18); padding:4px 10px; border-radius:100px; }
 .rp-hero-badge{ display:inline-block; color:#FF7A4D; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-bottom:12px; }
 .rp-hero h1{ font-size:24px; font-weight:700; letter-spacing:-.01em; line-height:1.2; }
@@ -877,3 +1109,272 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .tema-projetos input, .tema-projetos select{ border-radius:10px; }
 .tema-projetos .tag{ border-radius:999px; font-weight:700; }
 .tema-projetos .div-acum-fill{ background:var(--blue); }
+
+/* Funil de diagnóstico dos similares — aparece só quando a tabela sai vazia. */
+.sim-funil{ margin:6px 0 0; padding-left:18px; font-size:12px; color:var(--ink-soft); line-height:1.7; }
+.sim-funil b{ color:var(--ink); font-variant-numeric:tabular-nums; }
+.conc-chip.perda.on{ background:var(--danger); border-color:var(--danger); }
+.conc-chip.ganho.on{ background:var(--success); border-color:var(--success); }
+
+/* Ciclo lido da 843 na Importação. */
+.det-ciclo{ display:flex; flex-direction:column; gap:2px; margin:6px 0 4px; padding:10px 14px;
+  border:1px solid var(--line); border-left:3px solid var(--success); border-radius:8px; background:var(--surface2); }
+.det-ciclo.regrava{ border-left-color:var(--orange); }
+.det-ciclo strong{ font-size:14px; }
+.det-ciclo span{ font-size:11.5px; color:var(--ink-soft); }
+/* Linhas do ano que estão fora do período filtrado — visíveis, mas em segundo plano. */
+table.ofe-sub tr.ofe-fora{ opacity:.55; }
+
+/* ---------- IMPORTAÇÃO COMPACTA ---------- */
+.imp-drop{
+  display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center;
+  border:2px dashed var(--line); border-radius:12px; padding:22px 18px; margin-bottom:12px;
+  background:var(--surface2); cursor:pointer; transition:border-color .15s, background .15s;
+}
+.imp-drop:hover{ border-color:var(--orange); background:var(--orange-light); }
+.imp-drop-icone{ font-size:26px; line-height:1; }
+.imp-drop strong{ font-size:14px; }
+.imp-drop span:last-child{ font-size:11.5px; color:var(--ink-soft); max-width:52ch; }
+.imp-faltando{ color:var(--danger); font-weight:700; margin-bottom:10px; }
+.imp-pronto{ color:var(--success); font-weight:700; margin-bottom:10px; }
+
+.imp-lista{ border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.imp-linha{
+  display:grid; grid-template-columns:22px 120px minmax(0,1fr) minmax(0,1.3fr) auto;
+  align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--line);
+  font-size:12.5px;
+}
+.imp-linha:last-child{ border-bottom:none; }
+.imp-status{ font-weight:800; text-align:center; }
+.imp-linha.ok .imp-status{ color:var(--success); }
+.imp-linha.falta .imp-status{ color:var(--danger); }
+.imp-linha.opt .imp-status{ color:var(--ink-soft); }
+.imp-label{ font-weight:800; }
+.imp-desc{ color:var(--ink-soft); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.imp-arquivo{ display:flex; align-items:center; min-width:0; }
+.imp-nome{ font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.imp-partes{ font-size:10.5px; font-weight:700; color:var(--ink-soft); margin-left:6px; white-space:nowrap; }
+.imp-vazio{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+.imp-acoes{ display:flex; gap:10px; white-space:nowrap; }
+.imp-partes-lista{ padding:10px 14px 14px 46px; background:var(--surface2); border-bottom:1px solid var(--line); }
+@media (max-width:900px){
+  .imp-linha{ grid-template-columns:22px 1fr auto; }
+  .imp-desc{ display:none; }
+  .imp-arquivo{ grid-column:2; }
+}
+
+/* Estado de carga da aba Divergências. */
+.div-carregando{ display:flex; align-items:center; gap:10px; color:var(--ink-soft); font-size:13px; }
+.div-spinner{
+  width:16px; height:16px; border-radius:50%; flex:none;
+  border:2px solid var(--line); border-top-color:var(--orange);
+  animation:div-gira .7s linear infinite;
+}
+@keyframes div-gira{ to{ transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce){ .div-spinner{ animation-duration:2.4s; } }
+
+/* Versão do app no rodapé do menu — é por ela que se confere, sem abrir nada,
+   se o navegador já pegou a build nova. */
+.sidebar-versao{
+  margin-top:8px; padding:0 10px; font-size:10px; letter-spacing:.03em;
+  color:var(--sidebar-ink-soft, rgba(255,255,255,.45)); font-variant-numeric:tabular-nums;
+}
+.sidebar.collapsed .sidebar-versao{ display:none; }
+
+/* ---------- TRANSITÓRIOS ----------
+   Azul e laranja da marca: o cabeçalho é o azul institucional, o total repete o
+   azul mais claro, e o laranja marca a coluna do que está parado há mais de uma
+   semana — é o único número da tabela que pede ação. */
+.trans-kpis{ margin-bottom:12px; }
+.trans-kpis .ofe-num strong{ color:var(--blue); }
+.trans-kpis .ofe-num.trans-kpi-dup strong{ color:var(--danger); }
+table.trans-table{ width:100%; border-collapse:collapse; font-size:14.5px; }
+table.trans-table thead th{
+  background:var(--blue); color:#fff; font-size:11px; font-weight:800;
+  text-transform:uppercase; letter-spacing:.05em; padding:8px 9px; text-align:left;
+  border-bottom:none; vertical-align:middle;
+  /* Com grade fixa o título tem de caber na coluna, não empurrar a vizinha. */
+  white-space:normal; overflow-wrap:anywhere; line-height:1.25;
+}
+table.trans-table thead tr:first-child th{ border-bottom:1px solid rgba(255,255,255,.22); }
+table.trans-table th.num{ text-align:right; }
+table.trans-table td{ padding:6px 7px; border-bottom:1px solid var(--line); }
+table.trans-table tbody tr:nth-child(even){ background:var(--surface2); }
+table.trans-table tbody tr:hover{ background:var(--orange-light); }
+table.trans-table td.mono{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* Número centrado na coluna, com o cabeçalho junto. Alinhado à direita, o
+   título encostava numa borda e o valor na outra em toda coluna larga — vem
+   depois de td.mono de propósito, senão o alinhamento à direita ganha. */
+table.trans-table th.tt-dia, table.trans-table td.tt-c-dia,
+table.trans-table th.tt-valor, table.trans-table td.tt-c-num,
+table.trans-table th.tt-dup{ text-align:center; }
+/* Código e descrição do transitório à esquerda; só os números vão pra direita. */
+table.trans-table td:nth-child(1), table.trans-table th:nth-child(1),
+table.trans-table td:nth-child(2), table.trans-table th:nth-child(2){ text-align:left; }
+table.trans-table td:nth-child(1){ font-weight:800; }
+/* Grade fixa em porcentagem. Com largura automática o navegador jogava toda a
+   sobra numa coluna só — era o vazio entre Descrição e D0. Aqui cada coluna
+   recebe a fatia que o conteúdo dela pede, e o total fecha em 100%. */
+/* Largura mínima dimensionada pelo valor por extenso: "R$ 39.567,69" pede ~95px
+   por coluna de dia. Abaixo disso o .table-wrap rola na horizontal, que é
+   melhor do que espremer o número até ele quebrar. */
+table.trans-table{ table-layout:fixed; min-width:1500px; }
+table.trans-table th.tt-local{ width:8%; }
+table.trans-table th.tt-desc{ width:12.5%; }
+table.trans-table th.tt-dia{ width:7.5%; }
+table.trans-table th.tt-valor{ width:11.5%; }
+table.trans-table th.tt-dup{ width:8%; }
+/* A coluna de dia carrega o valor por extenso; cada pixel de recuo aqui é
+   pixel a menos pro número. */
+table.trans-table td.tt-c-dia, table.trans-table th.tt-dia{ padding-inline:5px; }
+.trans-cel-val{ display:block; font-size:13.5px; font-weight:700; color:var(--ink-soft); }
+table.trans-table td:last-child{ font-weight:700; color:var(--blue); }
+table.trans-table tfoot td{
+  background:var(--blue-light); color:var(--blue);
+  border-top:2px solid var(--blue); border-bottom:none; font-weight:800;
+}
+/* D+ é o saldo que ninguém foi buscar há mais de uma semana. */
+table.trans-table td.trans-velho{ color:var(--orange); font-weight:800; }
+:root[data-theme="dark"] table.trans-table thead th{ color:#fff; }
+:root[data-theme="dark"] table.trans-table tfoot td{ color:var(--ink); }
+/* Saldo em transitório que pertence a item já com ganho no NET: movimentar
+   resolve, procurar não. */
+/* Duplicidade provável não é notícia boa: é saldo que pode estar contado duas
+   vezes. Em verde lia como meta batida — vai no vermelho de alerta, que também
+   não se confunde com o laranja do estouro de prazo das colunas de dia. */
+table.trans-table td.trans-ganho{ color:var(--danger); font-weight:800; }
+table.trans-table td.trans-ganho .trans-pct{ color:var(--danger); opacity:.75; }
+.trans-pct{ display:block; font-size:13.5px; font-weight:700; color:var(--ink-soft); }
+
+/* Três leituras pequenas lado a lado: peças por idade, valor por idade e a rosca
+   do prazo. Cada linha na sua escala — num eixo só, a de menor magnitude vira
+   uma reta colada no chão. */
+/* A rosca precisa de bem menos largura que as linhas: sobrava vazio na lateral
+   dela e faltava respiro nos rótulos dos gráficos. align-items:stretch deixa os
+   três cards com a mesma altura. */
+.tg-wrap{ display:grid; grid-template-columns:1.15fr 1.15fr minmax(172px,.52fr); gap:10px;
+  align-items:stretch; margin:2px 0 14px; }
+.tg-card{ background:var(--surface2); border:1px solid var(--line); border-radius:10px; padding:9px 11px 6px; min-width:0;
+  display:flex; flex-direction:column; }
+.tg-card .tg-svg{ margin-block:auto; }
+.tg-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:2px; }
+.tg-head span{ font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
+.tg-head strong{ font-size:13px; color:var(--blue); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.tg-head strong.atraso{ color:var(--orange); }
+/* height:auto + viewBox com proporção fixa: o SVG escala inteiro, sem esticar
+   traço nem texto na horizontal. Nada de overflow:visible: o desenho todo cabe
+   dentro do viewBox, e o html2canvas (que gera o boletim em imagem) recorta o
+   SVG pela caixa dele — o que vazasse sairia cortado no e-mail. */
+.tg-svg{ display:block; width:100%; height:auto; overflow:hidden; }
+.tg-card-rosca{ padding-bottom:10px; display:flex; flex-direction:column; }
+/* Anel em cima, legenda embaixo em duas colunas: lado a lado a legenda disputava
+   largura com o anel e as duas coisas ficavam apertadas. */
+.tg-rosca{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px; flex:1; }
+.tg-rosca svg{ width:150px; max-width:100%; height:auto; aspect-ratio:1; flex:none; }
+.tg-leg{ list-style:none; margin:0; padding:0; display:flex; width:100%; }
+.tg-leg li{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:3px; }
+.tg-leg li + li{ border-left:1px solid var(--line); }
+.tg-leg li span{ display:flex; align-items:center; gap:5px; font-size:9.5px; font-weight:800;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); white-space:nowrap; }
+.tg-leg i{ width:9px; height:9px; border-radius:50%; flex:none; }
+.tg-leg i.prazo{ background:var(--blue); }
+.tg-leg i.atraso{ background:var(--orange); }
+.tg-leg b{ font-size:13.5px; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.tg-leg b.atraso{ color:var(--orange); }
+@media (max-width:1100px){ .tg-wrap{ grid-template-columns:1fr; } }
+
+table.trans-table th.tg-th-ok{ background:var(--success); }
+table.trans-table th.tg-th-atraso{ background:var(--orange); }
+table.trans-table td.trans-ok{ color:var(--success); font-weight:700; }
+table.trans-table td.trans-atraso{ color:var(--orange); font-weight:800; }
+.trans-nome{
+  width:100%; min-width:120px; border:1px solid transparent; background:transparent;
+  color:var(--ink); font:inherit; font-size:12px; padding:2px 4px; border-radius:5px;
+}
+.trans-nome:hover{ border-color:var(--line); }
+.trans-nome:focus{ border-color:var(--orange); background:var(--surface); outline:none; }
+
+
+/* ---------- PASTA CONECTADA (aba Importação) ---------- */
+.pasta-panel .field-hint{ margin-bottom:10px; }
+.pasta-erro{ font-size:12px; color:var(--danger); background:var(--danger-light);
+  border-radius:6px; padding:8px 10px; margin:8px 0; }
+table.pasta-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+/* O thead global pinta de laranja; aqui a tabela é uma lista de conferência,
+   não um destaque — cabeçalho discreto sobre a própria superfície do painel. */
+table.pasta-table thead th{ background:transparent; font-size:9.5px; font-weight:800;
+  text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); text-align:left;
+  padding:7px 9px; border-bottom:1px solid var(--line); cursor:default; }
+table.pasta-table td{ padding:8px 9px; border-bottom:1px solid var(--line); vertical-align:middle; }
+table.pasta-table tr:last-child td{ border-bottom:none; }
+table.pasta-table td.mono{ font-variant-numeric:tabular-nums; font-size:11.5px; color:var(--ink); }
+table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
+.pasta-desc{ display:block; font-size:10.5px; font-weight:500; color:var(--ink-soft); margin-top:1px; }
+/* Caminho de onde o arquivo veio: é o que denuncia uma escolha errada quando a
+   mesma base existe em duas pastas. */
+.pasta-caminho{ display:block; font-size:10.5px; font-weight:500; color:var(--ink-soft);
+  margin-top:2px; white-space:normal; word-break:break-word; }
+.pasta-falta{ color:var(--ink-soft); font-style:italic; }
+.pasta-tag{ display:inline-block; font-size:9.5px; font-weight:800; text-transform:uppercase;
+  letter-spacing:.05em; padding:2px 8px; border-radius:20px; }
+.pasta-tag.nova{ background:var(--orange-light); color:#C83812; }
+.pasta-tag.ok{ background:var(--blue-light); color:var(--blue-soft); }
+
+
+/* ---------- BASES FORA DO CICLO (aba Importação) ---------- */
+/* Três cartões iguais, na ordem de importação. Antes eram três painéis
+   inteiros com títulos e parágrafos diferentes pra fazer a mesma coisa. */
+.av-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+@media (max-width:900px){ .av-grid{ grid-template-columns:1fr; } }
+.av-card{ border:1px solid var(--line); border-radius:10px; background:var(--surface2);
+  padding:13px 14px; display:flex; flex-direction:column; gap:9px; min-width:0; }
+.av-card.has-file{ border-color:var(--orange); background:var(--orange-light); }
+.av-top{ display:flex; align-items:center; gap:9px; }
+.av-icone{ font-size:20px; line-height:1; }
+.av-nome{ min-width:0; }
+.av-nome strong{ display:block; font-size:13.5px; }
+.av-nome span{ display:block; font-size:11px; color:var(--ink-soft); }
+.av-estado{ font-size:11px; color:var(--ink-soft); font-variant-numeric:tabular-nums;
+  border-top:1px solid var(--line); padding-top:8px; }
+.av-arquivo{ font-size:11px; color:var(--ink); word-break:break-all; }
+.av-acoes{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:auto; }
+.av-acoes .btn{ font-size:12px; padding:7px 14px; }
+.av-prog{ margin:0; }
+.av-aviso{ font-size:11px; color:var(--danger); margin:0; }
+.imp-secao{ margin-top:18px; padding-top:14px; border-top:1px solid var(--line); }
+.imp-secao strong{ font-size:10.5px; font-weight:800; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--ink-soft); }
+.pasta-copias{ font-style:normal; color:var(--orange); font-weight:700; }
+
+/* ---------- DESTINATÁRIOS DO REPORT (Transitórios) ---------- */
+.trans-dest{ margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+.trans-dest-form{ background:var(--surface2); border:1px solid var(--line); border-radius:10px;
+  padding:12px 14px; margin:0 0 14px; display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+.trans-dest-form > div:nth-child(3){ grid-column:1 / -1; }
+.trans-dest-form .form-actions{ grid-column:1 / -1; margin:0; }
+.trans-dest-form label{ margin:0 0 3px; }
+@media (max-width:900px){ .trans-dest-form{ grid-template-columns:1fr; } }
+
+/* ---------- ACURÁCIA ANUAL (painel próprio da home) ---------- */
+/* Barra por métrica com o traço da meta em cima: dá pra ver de relance qual das
+   três está fora, que é o que a média única do medidor antigo escondia. */
+.acan-row{ display:grid; grid-template-columns:58px 1fr 58px; align-items:center; gap:10px; margin:12px 0; }
+.acan-label{ font-size:12.5px; color:var(--ink-soft); font-weight:700; }
+.acan-track{ position:relative; height:14px; border-radius:8px; background:var(--surface2); }
+.acan-fill{ height:100%; border-radius:8px; }
+.acan-meta{ position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink-soft); opacity:.55; }
+.acan-val{ font-size:15px; font-weight:800; text-align:right; font-variant-numeric:tabular-nums; }
+.acan-val.good{ color:var(--success); }
+.acan-val.bad{ color:var(--danger); }
+.acan-pe{ margin-top:14px; }
+.imp-sem-preco{ color:var(--danger); margin-top:10px; }
+
+/* ---------- AVISO DE VERSÃO NOVA ---------- */
+/* Aparece só quando o app atualiza com a aba já aberta. Recarregar sozinho nesse
+   momento poderia interromper uma importação em andamento. */
+.atualiza-bar{ position:fixed; left:50%; transform:translateX(-50%); bottom:18px; z-index:9998;
+  display:flex; align-items:center; gap:12px; background:var(--blue); color:#fff;
+  padding:10px 14px; border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,.28); font-size:12.5px; }
+.atualiza-bar[hidden]{ display:none; }
+.atualiza-bar button{ background:var(--orange); color:#fff; border:none; border-radius:7px;
+  padding:6px 12px; font-size:12px; font-weight:800; font-family:inherit; cursor:pointer; }

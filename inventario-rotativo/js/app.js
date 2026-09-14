@@ -17,22 +17,38 @@ const IR = {
   files:{f390:null, f843:[null,null,null,null], fCong:[null,null,null,null], f278:[null,null,null,null], f051:[null,null,null,null]},
   processing:false, progress:{stage:'', pct:0},
   divergencias:[], locais:[], contagens:[],
-  divFilters:{search:'', local:''},
-  divEscopo:{tipo:'ciclo'}, divEscopoDados:null, divSelecionados:null,
-  divMostrarAnulados:false, divAuditoria:null,
-  auditFilters:{minPrioridade:0},
+  divEscopo:{tipo:'ciclo'}, divEscopoDados:null, divAnoCache:null, divSelecionados:null,
+  divCorte:null, divCorteQtd:null, divBusca:'', divExpandido:null,
+  // Base do corte (o que define ofensor) e sentidos ligados na tabela — multi-seleção.
+  divBase:'valor', divSentidos:['perda','ganho'],
+  // Cache da QRY410 do(s) ano(s) do escopo — é dela que sai o preço congelado.
+  div410Cache:null,
+  divSimExigeDesc:true,
+  divOrdem:{col:'netValor', dir:'desc'}, divAuditoria:null,
+  divSimFiltro:{de:'', ate:''},
+  divSimOrdem:{col:'dia', dir:'desc'},
   prodFilters:{de:'', ate:'', usuario:'', setor:''},
   prodSort:{col:'locaisHora', dir:'desc'},
   prodMeta:null,
   dashFilters:{applyProdDate:true},
   compararA:null, compararB:null,
-  novoCiclo:false,
+  novoCiclo:false, cicloParaExcluir:null, importExpandido:null,
+  // Ciclo lido da própria QRY0843 anexada (número + janela de datas).
+  cicloDetectado:null, detectandoCiclo:false,
   _porDiaRua:{},
   // Escopo dos painéis "Itens mais Divergentes" — por padrão soma só o ciclo ativo
   // (igual antes), mas dá pra expandir pra um ano inteiro (todos os ciclos abertos
   // naquele ano) ou todos os ciclos já processados. itemDivSaldo é o resultado já
   // calculado pro escopo atual (populado por irAtualizarItemDivSaldo).
   itemDivFiltro:{tipo:'ciclo'}, itemDivSaldo:null,
+  // Estoque atual (QRY0390) — independente do ciclo, é a foto do CD agora.
+  est390File:null, est390Processing:false, est390Progress:{stage:'', pct:0},
+  transEmail:null, transEmailAberto:false,
+  pastaHandle:null, pastaArquivos:null, pastaUltimo:null, pastaPerm:null,
+  pastaProcessando:false, pastaVarridoEm:null, pastaErro:null,
+  est390Meta:null, est390Ficha:null, est390Locais:null, transSetores:null, transExpandido:null,
+  est160File:null, est160Processing:false, est160Progress:{stage:'', pct:0},
+  audIgnorarVirtuais:true, audPrefixos:null, transNomes:null,
   // Perdas e Ganhos (QRY410) — independente do ciclo, por ano.
   net410Anos:[], net410AnoSel:null, net410MesSel:null, net410Data:null, net410File:null,
   net410Processing:false, net410Progress:{stage:'', pct:0},
@@ -59,11 +75,39 @@ function irFmtMoneyCompact(n){
 // Valor cheio, sem centavos — usado no hint, onde cabe texto maior.
 function irFmtMoneyInt(n){ return (n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:0,maximumFractionDigits:0}); }
 function irFmtPct(n){ return ((n||0)*100).toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})+'%'; }
-function irFmtDate(s){ if(!s) return '—'; const d = new Date(s); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR'); }
+/* Data só com dia (YYYY-MM-DD) é formatada na mão de propósito: new Date('2026-09-04')
+   é interpretado como meia-noite UTC, e em fuso negativo (Brasil, UTC-3) o
+   toLocaleDateString devolvia o dia ANTERIOR — a tela inteira mostrava tudo um dia
+   atrás do que estava no filtro e no banco. Com hora junto, o Date é confiável. */
+function irFmtDate(s){
+  if(!s) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim());
+  if(m) return m[3]+'/'+m[2]+'/'+m[1];
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR');
+}
 /* Ano do ciclo, derivado da data de abertura — usado pra não confundir
    "Ciclo 1" de anos diferentes (mesmo número, ciclos distintos). */
 function irCicloAno(c){ const d = new Date(c.dataAbertura); return isNaN(d.getTime()) ? null : d.getFullYear(); }
 function irCicloLabel(c){ const ano = irCicloAno(c); return `Ciclo ${c.numero}${ano?'/'+ano:''}`; }
+// Ordem cronológica de um ciclo: ano e número juntos num número só, pra comparar.
+function irCicloOrdem(c){ return (irCicloAno(c)||0) * 10 + (c.numero||0); }
+/* Status do ciclo, derivado em vez de lido cru do registro. Todo ciclo era
+   gravado como "aberto" e só fechava se alguém clicasse em "Encerrar" — então
+   os ciclos 1 e 2 continuavam aparecendo como abertos depois do 3 começar, que
+   não descreve a realidade: os ciclos são trimestrais e sequenciais, começar um
+   é fechar o anterior. Existindo ciclo mais novo, este está encerrado; o mais
+   novo é o único cujo status gravado ainda vale (dá pra encerrar à mão quando
+   ele termina e o seguinte ainda não começou). */
+function irCicloStatus(c){
+  if(!c) return 'encerrado';
+  const ordem = irCicloOrdem(c);
+  const temMaisNovo = (IR.ciclos||[]).some(o => irCicloOrdem(o) > ordem);
+  return temMaisNovo ? 'encerrado' : (c.status || 'aberto');
+}
+function irCicloMaisNovo(lista){
+  return (lista||[]).slice().sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a))[0] || null;
+}
 function irShowToast(msg, isError){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -95,9 +139,17 @@ async function irInit(){
     IR.net410Padroes = await irSeedNet410PadroesIgnoradosIfEmpty();
     IR.ciclos = await irGetAllCiclos();
     if(IR.ciclos.length){
-      IR.cicloAtivo = IR.ciclos.find(c=>c.status==='aberto') || IR.ciclos[0];
+      IR.cicloAtivo = IR.ciclos.find(c=>irCicloStatus(c)==='aberto') || irCicloMaisNovo(IR.ciclos) || IR.ciclos[0];
       await irLoadCicloData(IR.cicloAtivo.id);
     }
+    IR.est390Meta = await irGetEstoqueMeta();
+    IR.est390Ficha = await irGetConfig('estoque390-ficha');
+    IR.transSetores = await irSeedTransSetoresIfEmpty();
+    const ign = await irGetConfig('auditoria-ignorar-virtuais');
+    if(ign!=null) IR.audIgnorarVirtuais = ign;
+    IR.audPrefixos = await irGetConfig('auditoria-prefixos');
+    IR.transNomes = await irGetConfig('transitorio-nomes') || {};
+    IR.transEmail = await irGetConfig('transitorio-email');
     IR.net410Anos = await irGetAllNet410Anos();
     if(IR.net410Anos.length){
       IR.net410AnoSel = IR.net410Anos[0];
@@ -105,7 +157,12 @@ async function irInit(){
       irSetNet410MesDefault();
     }
   }catch(e){ console.error('Falha ao iniciar', e); }
+  irMostrarVersao();
   irSwitchTab('dashboard');
+  // Fora do try acima e sem await: se a pasta conectada falhar (permissão
+  // revogada, política nova, arquivo só na nuvem), isso não pode impedir o app
+  // de abrir — é conveniência, não dependência.
+  irPastaCarregar().catch(()=>{});
 }
 async function irLoadCicloData(cicloId){
   IR.indicadores = await irGetIndicadores(cicloId);
@@ -183,19 +240,28 @@ const IR_TAB_LABELS = {
   produtividade:['Produtividade','Ritmo, meta, qualidade e capacidade da equipe.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
-  auditoria:['Auditoria Inteligente','Fila priorizada automaticamente para conferência.'],
+  transitorios:['Transitórios','Controle de transitórios.'],
   historico:['Histórico','Linha do tempo de todos os ciclos.'],
   comparativo:['Comparativo entre Ciclos','Compare acurácia, produtividade e tendências.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
   configuracoes:['Configurações','Pesos do Índice de Prioridade de Auditoria.']
 };
+/* Abas que não são do ciclo rotativo. Transitórios lê o estoque de hoje pela
+   QRY0160 — não tem ciclo, não tem contagem, então o filtro de ciclo e mês não
+   aparece lá. */
+const IR_TAB_SEM_CICLO = new Set(['transitorios']);
 function irSwitchTab(tab){
   IR.currentTab = tab;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   const [title, sub] = IR_TAB_LABELS[tab] || [tab, ''];
   document.getElementById('tabTitle').textContent = title;
   document.getElementById('tabSubtitle').textContent = sub;
+  // Filtro de ciclo e mês só faz sentido onde existe ciclo. Em Transitórios ele
+  // ficava no topo sem efeito nenhum sobre a tela, sugerindo um recorte que a
+  // aba não faz.
+  const filtros = document.getElementById('topbarFilters');
+  if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab);
   irRenderCycleBadge();
   irRenderView();
   irCloseSidebarMobile();
@@ -206,9 +272,11 @@ function irRenderCycleBadge(){
   if(!IR.ciclos.length){ badge.innerHTML = 'Nenhum ciclo ativo'; return; }
   // Sempre em dropdown, mesmo com um único ciclo — assim o seletor não "aparece do
   // nada" quando o segundo ciclo for processado.
-  const ordenados = IR.ciclos.slice().sort((a,b)=>b.numero-a.numero);
+  // Ordena por ano E número: só pelo número, "Ciclo 4/2025" subia acima do
+  // "Ciclo 3/2026" e o ciclo em curso aparecia no meio da lista.
+  const ordenados = IR.ciclos.slice().sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a));
   badge.innerHTML = `<select id="cycleFilterSelect" onchange="irFiltrarCiclo(this.value)" title="Filtrar por ciclo">
-    ${ordenados.map(c=>`<option value="${c.id}" ${IR.cicloAtivo && c.id===IR.cicloAtivo.id ? 'selected' : ''}>${irCicloLabel(c)} — ${c.status==='aberto'?'Aberto':'Encerrado'}</option>`).join('')}
+    ${ordenados.map(c=>`<option value="${c.id}" ${IR.cicloAtivo && c.id===IR.cicloAtivo.id ? 'selected' : ''}>${irCicloLabel(c)} — ${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</option>`).join('')}
   </select>`;
   irRenderMonthFilter();
 }
@@ -253,7 +321,10 @@ function irRenderView(){
      de qualquer saida da funcao para valer tambem no aviso de "nenhum
      ciclo importado". */
   if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias');
-  const needsCiclo = IR.currentTab!=='importacao' && IR.currentTab!=='configuracoes' && IR.currentTab!=='historico';
+  // Transitórios não depende de ciclo importado: é um controle próprio, não uma
+  // leitura da contagem.
+  const SEM_CICLO = new Set(['importacao','configuracoes','historico','transitorios']);
+  const needsCiclo = !SEM_CICLO.has(IR.currentTab);
   if(needsCiclo && !IR.cicloAtivo){
     root.innerHTML = irEmptyState('Nenhum ciclo importado ainda', 'Importe as planilhas na aba Importação para abrir o primeiro ciclo.', "irSwitchTab('importacao')", 'Ir para Importação');
     return;
@@ -261,13 +332,11 @@ function irRenderView(){
   const renderers = {
     dashboard: irRenderDashboard, ciclo: irRenderGestaoCiclo, produtividade: irRenderProdutividade,
     setores: irRenderSetores,
-    divergencias: irRenderDivergencias, auditoria: irRenderAuditoria, historico: irRenderHistorico,
+    divergencias: irRenderDivergencias, transitorios: irRenderTransitorios, historico: irRenderHistorico,
     comparativo: irRenderComparativo, indicadores: irRenderIndicadores,
     importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes
   };
   root.innerHTML = (renderers[IR.currentTab] || (()=>''))();
-  if(IR.currentTab==='divergencias') irMountDivergenciasScroll();
-  if(IR.currentTab==='auditoria') irMountAuditoriaScroll();
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
   irFitKpiNumbers();
 }
@@ -306,14 +375,31 @@ function irScrollVBarsToEnd(){
 /* ============================================================
    IMPORTAÇÃO
    ============================================================ */
+/* Como cada base é reconhecida pelo NOME do arquivo. Um lugar só, usado pelo
+   import manual e pela pasta conectada — dois lugares seria dois lugares pra
+   esquecer de atualizar quando alguém renomeia uma extração.
+
+   Os padrões são frouxos de propósito: o nome que sai do Snowflake é editado por
+   quem baixa. "QRY0390" vira "QRY390 - Estoque Atual" e a 410 vira "NET - Livro
+   Fiscal", sem número nenhum — por isso o apelido entra no padrão junto do
+   código. */
+const IR_PAT = {
+  p390:  /0?390/i,
+  p160:  /0?160/i,
+  p410:  /(^|[^0-9])410([^0-9]|$)|livro\s*fiscal|\bnet\b/i,
+  p843:  /0?843/i,
+  pCong: /congelad|espelho/i,
+  p278:  /278/i,
+  p051:  /0?051|zbiq/i
+};
 const IR_FILE_TYPES = [
   // QRY0390 é opcional: o estoque é rotativo (vivo) e hoje não entra em nenhum cálculo
   // de indicador — não faz sentido travar o processamento do ciclo esperando por ela.
-  {key:'f390', label:'QRY0390', desc:'Estoque por Local (opcional)', pattern:/0390/i, optional:true},
-  {key:'f843', label:'QRY0843', desc:'Produtividade (peças, locais, itens e divergências)', pattern:/0843/i},
-  {key:'fCong', label:'Base Congelada', desc:'Locais congelados do ciclo (planilha manual)', pattern:/congelad|espelho/i},
-  {key:'f278', label:'SIGEQ278', desc:'Preço de custo/compra por item', pattern:/278/i},
-  {key:'f051', label:'ZBIQ0051', desc:'Item pai x componente (kits/múltiplos), S/N de valoração', pattern:/0051|zbiq/i}
+  {key:'f390', label:'QRY0390', desc:'Estoque por Local (opcional)', pattern:IR_PAT.p390, optional:true},
+  {key:'f843', label:'QRY0843', desc:'Produtividade (peças, locais, itens e divergências)', pattern:IR_PAT.p843},
+  {key:'fCong', label:'Base Congelada', desc:'Locais congelados do ciclo (planilha manual)', pattern:IR_PAT.pCong},
+  {key:'f278', label:'SIGEQ278', desc:'Preço de custo/compra por item', pattern:IR_PAT.p278},
+  {key:'f051', label:'ZBIQ0051', desc:'Item pai x componente (kits/múltiplos), S/N de valoração', pattern:IR_PAT.p051}
 ];
 // Slots que aceitam vários arquivos dentro do MESMO ciclo (concatenados e deduplicados
 // no worker) — úteis quando a extração de origem tem limite de linhas/tempo e precisa
@@ -327,59 +413,86 @@ function irRenderImportacao(){
   const f = IR.files;
   const filled = (k)=> IR_MULTI_KEYS.has(k) ? (f[k]||[]).some(Boolean) : !!f[k];
   const allSelected = IR_FILE_TYPES.every(t=>t.optional || filled(t.key));
-  const dz = (t)=>{
-    if(IR_MULTI_KEYS.has(t.key)){
-      const slots = f[t.key]||[];
-      return `<div class="dropzone dz-multi ${slots.some(Boolean)?'has-file':''}" ondragover="event.preventDefault()" ondrop="irOnDropMultiKey(event,'${t.key}')">
-        <div class="dz-icon">📄</div>
-        <div class="dz-title">${t.label}</div>
-        <div class="dz-desc">${t.desc}</div>
-        <p class="field-hint" style="margin:2px 0 8px;">Se a extração não sai tudo de uma vez, divida em partes aqui — todas pertencem a este mesmo ciclo. Se um relatório mudar, reimporte na mesma parte pra substituir.</p>
-        <div class="dz-period-list">
-          ${slots.map((file,i)=>`<div class="dz-period-row ${file?'has-file':''}">
-            <span class="dz-period-label">Parte ${i+1}</span>
-            <input type="file" id="ir-file-${t.key}-${i}" accept=".xlsx,.xls" style="display:none" onchange="irSetSlotFile('${t.key}', ${i}, this.files[0])">
-            ${file
-              ? `<span class="dz-file mono">${irEsc(file.name)}</span>
-                 <button class="btn-link" onclick="document.getElementById('ir-file-${t.key}-${i}').click()">Trocar</button>
-                 <button class="btn-link" onclick="irRemoveSlot('${t.key}', ${i})">Remover</button>`
-              : `<button class="btn-link" onclick="document.getElementById('ir-file-${t.key}-${i}').click()">Selecionar</button>`}
-          </div>`).join('')}
-        </div>
+  const faltando = IR_FILE_TYPES.filter(t=>!t.optional && !filled(t.key));
+  /* Uma LINHA por planilha, não um card. Com cinco cards abertos e quatro partes
+     cada, a tela de importação passava de oitocentos pixels pra mostrar quatro
+     nomes de arquivo. As partes ficam escondidas até serem necessárias — quem
+     divide extração em pedaços é a exceção, não a regra. */
+  const linha = (t)=>{
+    const multi = IR_MULTI_KEYS.has(t.key);
+    const slots = multi ? (f[t.key]||[]) : [];
+    const arquivos = multi ? slots.filter(Boolean) : (f[t.key] ? [f[t.key]] : []);
+    const ok = arquivos.length>0;
+    const aberto = IR.importExpandido === t.key;
+    // Um único filho na coluna do arquivo: nome e contagem de partes juntos, senão
+    // o grid ganha uma célula extra e as ações caem pra linha de baixo.
+    const resumo = !ok
+      ? `<span class="imp-arquivo"><span class="imp-vazio">${t.optional?'opcional':'faltando'}</span></span>`
+      : `<span class="imp-arquivo">
+           <span class="imp-nome mono" title="${irEsc(arquivos.map(a=>a.name).join(' · '))}">${irEsc(arquivos[0].name)}</span>
+           ${arquivos.length>1 ? `<span class="imp-partes">+${arquivos.length-1} parte${arquivos.length>2?'s':''}</span>` : ''}
+         </span>`;
+    const acoes = multi
+      ? `<button class="btn-link" onclick="irImportToggle('${t.key}')">${aberto?'Fechar':'Partes'} ${aberto?'▾':'▸'}</button>`
+      : (ok ? `<button class="btn-link" onclick="document.getElementById('ir-file-${t.key}').click()">Trocar</button>
+              <button class="btn-link" onclick="irRemoveFile('${t.key}')">Remover</button>`
+            : `<button class="btn-link" onclick="document.getElementById('ir-file-${t.key}').click()">Selecionar</button>`);
+    let html = `<div class="imp-linha ${ok?'ok':(t.optional?'opt':'falta')}"
+        ondragover="event.preventDefault()" ondrop="${multi?`irOnDropMultiKey(event,'${t.key}')`:`irOnDropSingle(event,'${t.key}')`}">
+      <span class="imp-status">${ok?'✓':(t.optional?'·':'!')}</span>
+      <span class="imp-label">${irEsc(t.label)}</span>
+      <span class="imp-desc">${irEsc(t.desc)}</span>
+      ${resumo}
+      <span class="imp-acoes">${acoes}</span>
+    </div>`;
+    if(!multi) html = `<input type="file" id="ir-file-${t.key}" accept=".xlsx,.xls" style="display:none" onchange="irOnFile('${t.key}', this.files[0])">` + html;
+    if(multi && aberto){
+      html += `<div class="imp-partes-lista">
+        <p class="field-hint">Extração que não sai de uma vez pode ser dividida aqui — todas as partes são do mesmo ciclo. Reimportar na mesma parte substitui o arquivo.</p>
+        ${slots.map((file,i)=>`<div class="dz-period-row ${file?'has-file':''}">
+          <span class="dz-period-label">Parte ${i+1}</span>
+          <input type="file" id="ir-file-${t.key}-${i}" accept=".xlsx,.xls" style="display:none" onchange="irSetSlotFile('${t.key}', ${i}, this.files[0])">
+          ${file
+            ? `<span class="dz-file mono">${irEsc(file.name)}</span>
+               <button class="btn-link" onclick="document.getElementById('ir-file-${t.key}-${i}').click()">Trocar</button>
+               <button class="btn-link" onclick="irRemoveSlot('${t.key}', ${i})">Remover</button>`
+            : `<button class="btn-link" onclick="document.getElementById('ir-file-${t.key}-${i}').click()">Selecionar</button>`}
+        </div>`).join('')}
         <button class="btn-link" onclick="irAddSlot('${t.key}')">+ Adicionar parte</button>
       </div>`;
     }
-    const file = f[t.key];
-    return `<div class="dropzone ${file?'has-file':''}" ondragover="event.preventDefault()" ondrop="irOnDropSingle(event,'${t.key}')">
-      <input type="file" id="ir-file-${t.key}" accept=".xlsx,.xls" style="display:none" onchange="irOnFile('${t.key}', this.files[0])">
-      <div class="dz-icon">📄</div>
-      <div class="dz-title">${t.label}</div>
-      <div class="dz-desc">${t.desc}</div>
-      ${file ? `<div class="dz-file mono">${irEsc(file.name)}</div><button class="btn-link" onclick="irRemoveFile('${t.key}')">Remover</button>`
-             : `<button class="btn btn-secondary" onclick="document.getElementById('ir-file-${t.key}').click()">Selecionar</button>`}
-    </div>`;
+    return html;
   };
   return `
+    ${irRenderAvisoJanela()}
+    ${irRenderPastaPanel()}
     <div class="panel" ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)">
-      <h3>Importar planilhas</h3>
-      <p class="field-hint" style="margin-bottom:10px;">Arraste as planilhas de uma vez aqui em cima (o sistema identifica cada uma pelo nome do arquivo), ou selecione individualmente abaixo. QRY0843, Base Congelada, SIGEQ278 e ZBIQ0051 aceitam várias partes (para quando os dados de um mesmo ciclo vêm em pedaços).</p>
+      <h3>Ciclo rotativo</h3>
       <input type="file" id="ir-file-all" accept=".xlsx,.xls" multiple style="display:none" onchange="irOnPickMultiAll(this.files)">
-      <div class="form-actions" style="margin:0 0 14px;">
-        <button class="btn btn-secondary" onclick="document.getElementById('ir-file-all').click()">📂 Selecionar todos de uma vez</button>
+      <div class="imp-drop" ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)"
+           onclick="document.getElementById('ir-file-all').click()">
+        <span class="imp-drop-icone">📂</span>
+        <strong>Arraste todas as planilhas de uma vez</strong>
+        <span>Cada arquivo é reconhecido pelo nome e vai pro lugar certo, inclusive quando vem em partes. Ou clique pra escolher.</span>
       </div>
-      <div class="dz-grid">${IR_FILE_TYPES.map(dz).join('')}</div>
-      <p class="field-hint" style="margin-top:16px;"><strong>Ciclo e ano deste processamento</strong> — pra importar outro ciclo/ano (ex: 2027), volte aqui depois e processe de novo com os campos abaixo trocados; cada combinação número + data de abertura vira um ciclo separado no Histórico.</p>
+      ${faltando.length ? '' : `<p class="field-hint imp-pronto">Todas as planilhas obrigatórias estão aqui.</p>`}
+      <div class="imp-lista">${IR_FILE_TYPES.map(linha).join('')}</div>
+      ${irRenderCicloDetectado()}
       <div class="two-col" style="margin-top:4px;">
         <div><label>Número do ciclo</label><input type="number" id="ir-inp-ciclo" min="1" value="${(()=>{
+          const det = IR.cicloDetectado;
+          if(det && det.numero) return det.numero;
           if(IR.cicloAtivo) return IR.cicloAtivo.numero;
           const anoAtual = new Date().getFullYear();
           const doAno = IR.ciclos.filter(c=>irCicloAno(c)===anoAtual);
           return doAno.length ? Math.max(...doAno.map(c=>c.numero))+1 : 1;
         })()}"></div>
-        <div><label>Data de abertura</label><input type="date" id="ir-inp-abertura" value="${IR.cicloAtivo ? IR.cicloAtivo.dataAbertura : new Date().toISOString().slice(0,10)}"></div>
+        <div><label>Data de abertura</label><input type="date" id="ir-inp-abertura" value="${
+          (IR.cicloDetectado && IR.cicloDetectado.dataAbertura) || (IR.cicloAtivo ? IR.cicloAtivo.dataAbertura : new Date().toISOString().slice(0,10))}"></div>
       </div>
       <div class="two-col">
-        <div><label>Data prevista de término</label><input type="date" id="ir-inp-termino" value="${IR.cicloAtivo ? (IR.cicloAtivo.dataPrevistaTermino||'') : ''}"></div>
+        <div><label>Data prevista de término</label><input type="date" id="ir-inp-termino" value="${
+          (IR.cicloDetectado && IR.cicloDetectado.dataPrevistaTermino) || (IR.cicloAtivo ? (IR.cicloAtivo.dataPrevistaTermino||'') : '')}"></div>
         <div></div>
       </div>
       ${IR.processing ? `
@@ -388,61 +501,57 @@ function irRenderImportacao(){
           <div class="progress-track"><div class="progress-fill orange" style="width:${IR.progress.pct}%"></div></div>
         </div>` : allSelected
           ? `<div class="form-actions"><button class="btn btn-primary" style="font-size:14px;padding:11px 28px;" onclick="irProcessar()">PROCESSAR CICLO</button></div>`
-          : `<p class="field-hint" style="margin-top:14px;">Selecione as planilhas obrigatórias (QRY0843, Base Congelada, SIGEQ278, ZBIQ0051) para habilitar o processamento — a QRY0390 é opcional.</p>`
+          : `<p class="field-hint" style="margin-top:14px;">Faltam ${faltando.map(t=>irEsc(t.label)).join(', ')} pra liberar o processamento.</p>`
       }
     </div>
-    ${IR.importMeta ? irRenderUltimoProcessamento() : ''}
-    ${irRenderNet410ImportPanel()}
+    ${irRenderBasesAvulsas()}
+    ${(()=>{ const n = irItensSemPrecoResumo();
+      return n ? `<p class="field-hint imp-sem-preco">⚠️ ${irFmtInt(n)} itens divergiram em peça e ficaram sem preço — o valor divergente deles sai R$ 0,00 até a valoração ser corrigida na SIGEQ278 ou na ZBIQ0051.</p>` : ''; })()}
   `;
 }
-function irRenderUltimoProcessamento(){
+/* O painel de "último processamento" saiu da tela: KPIs e o diagnóstico linha a
+   linha da 843 são coisa de investigação, não de rotina. O que ficou é o único
+   pedaço que não era diagnóstico — o aviso de que a janela do ciclo está
+   descartando contagem. Sem ele o número simplesmente congela a cada nova
+   importação, sem nenhuma pista do porquê, que foi exatamente o que levou a
+   criar esse bloco. */
+function irRenderAvisoJanela(){
   const m = IR.importMeta;
-  return `<div class="panel"><h3>Último processamento — ${irCicloLabel(IR.cicloAtivo)}</h3>
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="num mono">${irFmtInt(m.totalLocaisCongelados)}</div><div class="label">Locais congelados</div></div>
-      <div class="kpi-card orange"><div class="num mono">${irFmtInt(m.totalDivergencias)}</div><div class="label">Itens divergentes</div></div>
-      <div class="kpi-card"><div class="num mono">${irFmtInt(m.totalContagens)}</div><div class="label">Contagens processadas</div></div>
-    </div>
-    <p class="field-hint">Processado em ${new Date(m.processedAt).toLocaleString('pt-BR')}</p>
-    ${irRenderDiagnosticoIngestao(m)}
-  </div>`;
-}
-/* Mostra o que a 843 trouxe e o que foi descartado, linha a linha de motivo. Existe
-   porque, sem isso, quando a janela do ciclo já passou o número simplesmente "congela"
-   a cada nova importação, sem nenhuma pista do porquê — foi exatamente o que aconteceu
-   ao investigar os locais pendentes que não atualizavam. */
-function irRenderDiagnosticoIngestao(m){
-  if(m.totalLinhas843==null) return '<p class="field-hint" style="color:var(--orange);">Diagnóstico da 843 indisponível — reprocesse o ciclo para gerá-lo.</p>';
+  if(!m || m.totalLinhas843 == null) return '';
   const hoje = new Date().toISOString().slice(0,10);
   const janelaVencida = m.janelaTermino && m.janelaTermino < hoje;
   const perdendoContagem = m.dataMaisRecenteForaDaJanela && m.dataMaisRecenteAceita &&
                            m.dataMaisRecenteForaDaJanela > m.dataMaisRecenteAceita;
-  const linha = (rot, val, alerta) => `<tr><td>${rot}</td><td class="mono" style="text-align:right;${alerta?'color:var(--danger);font-weight:700;':''}">${val}</td></tr>`;
+  if(!janelaVencida && !perdendoContagem) return '';
   const d = s => s ? irFmtDate(s) : '—';
-  return `
-    ${(janelaVencida || perdendoContagem) ? `<div class="callout callout-warn">
-      <strong>⚠️ A janela deste ciclo está barrando contagens.</strong>
-      O ciclo vai de <b>${d(m.janelaAbertura)}</b> até <b>${d(m.janelaTermino)}</b>, e a 843 traz contagem
-      de até <b>${d(m.dataMaisRecenteForaDaJanela)}</b> que ficou de fora por estar depois do término previsto.
-      Tudo que for contado a partir de agora vai continuar sendo ignorado e os números não vão mudar.
-      <b>Corrija o Término Previsto do ciclo</b> na tela de ciclos e reprocesse.
-    </div>` : ''}
-    <div class="table-wrap" style="margin-top:10px;"><table class="table-dense">
-      <thead><tr><th>Diagnóstico da QRY0843</th><th style="text-align:right;">Valor</th></tr></thead>
-      <tbody>
-        ${linha('Janela do ciclo', d(m.janelaAbertura)+' → '+d(m.janelaTermino), janelaVencida)}
-        ${linha('Linhas lidas na planilha', irFmtInt(m.totalLinhas843))}
-        ${linha('Contagens aceitas', irFmtInt(m.totalContagens))}
-        ${linha('Descartadas — fora da janela do ciclo', irFmtInt(m.linhasForaDaJanela||0), perdendoContagem)}
-        ${linha('Descartadas — não são AIR', irFmtInt(m.linhasNaoAir||0))}
-        ${linha('Descartadas — não liquidadas', irFmtInt(m.linhasNaoLiquidadas||0))}
-        ${linha('Descartadas — sem data utilizável', irFmtInt(m.linhasSemDataDescartadas||0))}
-        ${linha('Locais só com Rodada 1 (sem contagem física)', irFmtInt(m.visitasSemContagemFisica||0))}
-        ${linha('Contagem mais recente ACEITA', d(m.dataMaisRecenteAceita))}
-        ${linha('Contagem mais recente DESCARTADA por data', d(m.dataMaisRecenteForaDaJanela), perdendoContagem)}
-      </tbody>
-    </table></div>`;
+  return `<div class="callout callout-warn">
+    <strong>⚠️ A janela deste ciclo está barrando contagens.</strong>
+    O ciclo vai de <b>${d(m.janelaAbertura)}</b> até <b>${d(m.janelaTermino)}</b>, e a 843 traz contagem
+    de até <b>${d(m.dataMaisRecenteForaDaJanela)}</b> que ficou de fora por estar depois do término previsto.
+    Tudo que for contado a partir de agora vai continuar sendo ignorado e os números não vão mudar.
+    <b>Corrija o Término Previsto do ciclo</b> na tela de ciclos e reprocesse.
+  </div>`;
 }
+/* Aviso do ciclo lido da 843. Diz de onde veio a leitura e se ela vai criar um
+   ciclo novo ou regravar um que já existe — regravar por engano era o risco de
+   deixar o número no chute do usuário. */
+function irRenderCicloDetectado(){
+  const cabecalho = '<p class="field-hint imp-secao"><strong>Ciclo deste processamento</strong></p>';
+  if(IR.detectandoCiclo) return cabecalho+'<p class="field-hint">Lendo a QRY0843 pra identificar o ciclo...</p>';
+  const d = IR.cicloDetectado;
+  if(!d) return cabecalho;
+  if(d.erro) return cabecalho+`<p class="field-hint neg">Não deu pra identificar o ciclo: ${irEsc(d.erro)} — preencha à mão.</p>`;
+  const existente = IR.ciclos.find(c=>c.numero===d.numero && irCicloAno(c)===d.ano);
+  const fonte = d.origem==='obs'
+    ? `Obs Inventário (${irFmtInt((d.votos[0]||{}).linhas||0)} de ${irFmtInt(d.linhas)} linhas)`
+    : `trimestre das contagens (Q${d.trimestre})`;
+  return cabecalho+`<div class="det-ciclo ${existente?'regrava':''}">
+    <strong>Ciclo ${d.numero}/${d.ano}</strong>
+    <span>${irFmtDate(d.dataAbertura)} a ${irFmtDate(d.dataPrevistaTermino)} · identificado pela ${irEsc(fonte)}</span>
+    <span>${existente ? 'Já existe — processar vai <strong>regravar</strong> esse ciclo.' : 'Ciclo novo — será criado no Histórico.'}</span>
+  </div>`;
+}
+function irImportToggle(key){ IR.importExpandido = IR.importExpandido===key ? null : key; irRenderView(); }
 function irClassifyFile(file){
   const t = IR_FILE_TYPES.find(t=>t.pattern.test(file.name));
   return t ? t.key : null;
@@ -456,11 +565,32 @@ function irSetSlotFile(key, index, file){
   if(!IR.files[key]) IR.files[key] = [];
   IR.files[key][index] = file;
   irRenderView();
+  if(key==='f843') irDetectarCiclo843();
+}
+/* Lê a 843 anexada num worker e pré-preenche o ciclo. O usuário continua podendo
+   trocar na mão — a detecção é sugestão, não trava. */
+function irDetectarCiclo843(){
+  const bufsPromise = IR.files.f843.filter(Boolean).map(f=>f.arrayBuffer());
+  if(!bufsPromise.length){ IR.cicloDetectado = null; irRenderView(); return; }
+  IR.detectandoCiclo = true; IR.cicloDetectado = null; irRenderView();
+  Promise.all(bufsPromise).then(bufs=>{
+    const worker = irNovoWorker();
+    worker.onmessage = ev=>{
+      if(ev.data.type!=='done843detect') return;
+      worker.terminate();
+      IR.detectandoCiclo = false;
+      IR.cicloDetectado = ev.data.erro ? {erro:ev.data.erro} : ev.data;
+      irRenderView();
+    };
+    worker.onerror = ()=>{ worker.terminate(); IR.detectandoCiclo=false; irRenderView(); };
+    worker.postMessage({type:'detect843', bufs843:bufs}, bufs);
+  }).catch(()=>{ IR.detectandoCiclo=false; irRenderView(); });
 }
 function irRemoveSlot(key, index){
   IR.files[key].splice(index, 1);
   if(!IR.files[key].length) IR.files[key].push(null);
   irRenderView();
+  if(key==='f843') irDetectarCiclo843();
 }
 function irAddSlot(key){
   IR.files[key].push(null);
@@ -543,7 +673,7 @@ async function irProcessar(){
       Promise.all(files278.map(file=>file.arrayBuffer())),
       Promise.all(files051.map(file=>file.arrayBuffer()))
     ]);
-    const worker = new Worker('js/worker.js');
+    const worker = irNovoWorker();
     worker.onmessage = async (e)=>{
       const msg = e.data;
       if(msg.type==='progress'){ IR.progress = {stage:msg.stage, pct:msg.pct}; irUpdateProgressUI(); }
@@ -553,6 +683,16 @@ async function irProcessar(){
       } else if(msg.type==='done'){
         IR.processing = false; worker.terminate();
         await irSaveCiclo(ciclo);
+        // Processar um ciclo fecha os anteriores no registro, não só na exibição.
+        // A data de encerramento vira a abertura deste, que é o que de fato
+        // aconteceu: o ciclo anterior acabou quando o novo começou.
+        const ordemNovo = irCicloOrdem(ciclo);
+        for(const velho of IR.ciclos){
+          if(irCicloOrdem(velho) >= ordemNovo || velho.status === 'encerrado') continue;
+          velho.status = 'encerrado';
+          if(!velho.dataEncerramento) velho.dataEncerramento = ciclo.dataAbertura;
+          await irSaveCiclo(velho);
+        }
         IR.files = {f390:null, f843:[null,null,null,null], fCong:[null,null,null,null], f278:[null,null,null,null], f051:[null,null,null,null]};
         IR.ciclos = await irGetAllCiclos();
         IR.cicloAtivo = IR.ciclos.find(c=>c.id===cicloId);
@@ -604,7 +744,20 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <div class="kpi-block-body">${tilesHtml}</div>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 9; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
+/* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
+   Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
+   depois de um deploy, a página já vinha nova e o Worker continuava sendo o
+   antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
+   Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
+const IR_APP_VERSION = 'v149';
+function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
+// Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
+// navegador está com a build nova depois de um deploy.
+function irMostrarVersao(){
+  const el = document.getElementById('sidebarVersao');
+  if(el) el.textContent = IR_APP_VERSION + ' · motor ' + IR_INDICADORES_VERSION;
+}
 // Filtro de data — só afeta a Produtividade, por isso fica logo acima do gráfico
 // dela em vez de junto com o seletor de Ciclo (que é global pro Dashboard inteiro).
 function irRenderDashDateFilterBar(){
@@ -625,8 +778,6 @@ function irRenderDashDateFilterBar(){
 function irRenderDashboard(){
   const ind = IR.indicadores;
   if(!ind) return irEmptyState('Sem indicadores', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
-  if(!IR.itemDivSaldo) IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
-  const itemSaldo = IR.itemDivSaldo;
   if(IR.comparativoCiclos===null) irCarregarComparativoCiclos(); // async — re-renderiza quando chegar
   // Cada bloco tem sempre 3 bullets, no mesmo formato: ícone + acurácia (com meta),
   // + volume principal, + divergência/pendência. Os demais indicadores (itens
@@ -665,25 +816,16 @@ function irRenderDashboard(){
       ${blocoPecas}${blocoLocais}${blocoValor}${blocoCiclo}
     </div>
     <div class="bi-grid-2">
-      ${irRenderSaudeEstoquePanel(ind)}
+      ${irRenderAcuraciaAnualPanel()}
       ${irRenderStatusInventarioPanel(ind)}
     </div>
-    ${irRenderDashDateFilterBar()}
-    ${irRenderDashProdutividade()}
     ${irRenderPorLogPanel(ind)}
     ${irRenderContadosPorDiaPanel(ind)}
     ${irRenderDivergentesPorDiaPanel(ind)}
-    ${irRenderItensSemPrecoPanel(ind)}
     ${irRenderCancelamentoImpactoPanel(ind)}
-    ${irRenderItemDivEscopoBar()}
-    <div class="bi-grid-2">
-      ${irRenderTopItensPanel(itemSaldo, 'pecas')}
-      ${irRenderTopItensPanel(itemSaldo, 'valor')}
-    </div>
     ${irRenderLogTablePanel(ind)}
     ${irRenderComparativoCiclosPanel(ind)}
     ${irRenderEvolucaoMensalPanel(ind)}
-    ${irRenderCalendarioPanel(ind)}
   `;
 }
 /* ============================================================
@@ -771,12 +913,36 @@ function irEvolucaoMensalBloco(rows, cfg, fmtVal){
     ${irBuildEvolucaoMensalSvg(rows, cfg, fmtVal)}
   </div>`;
 }
+/* Une o porMes de todos os ciclos do ano. Cada ciclo cobre um trimestre, então
+   na prática é concatenação — mas soma por mês mesmo assim, pra um mês que caia
+   na virada de dois ciclos não aparecer duas vezes. A acurácia é recalculada do
+   total somado, não herdada do ciclo. */
+function irPorMesDoAno(ano){
+  const pares = (IR.comparativoCiclos||[]).filter(({ciclo}) => irCicloAno(ciclo) === ano);
+  const acc = new Map();
+  for(const {ind} of pares){
+    for(const m of ((ind&&ind.porMes)||[])){
+      if(!acc.has(m.mes)) acc.set(m.mes, {mes:m.mes, pecasContadas:0, pecasDivergentes:0,
+        locaisContados:0, locaisDivergentes:0, valorContado:0, valorDivergente:0});
+      const a = acc.get(m.mes);
+      a.pecasContadas += m.pecasContadas||0;   a.pecasDivergentes += m.pecasDivergentes||0;
+      a.locaisContados += m.locaisContados||0; a.locaisDivergentes += m.locaisDivergentes||0;
+      a.valorContado += m.valorContado||0;     a.valorDivergente += m.valorDivergente||0;
+    }
+  }
+  return Array.from(acc.values()).sort((x,y)=>x.mes.localeCompare(y.mes)).map(a=>({
+    ...a,
+    acuraciaPecas:  a.pecasContadas>0  ? 1-a.pecasDivergentes/a.pecasContadas   : 0,
+    acuraciaLocal:  a.locaisContados>0 ? 1-a.locaisDivergentes/a.locaisContados : 0,
+    acuraciaValor:  a.valorContado>0   ? 1-a.valorDivergente/a.valorContado     : 0
+  }));
+}
 function irRenderEvolucaoMensalPanel(ind){
-  const meses = (ind && ind.porMes) || [];
+  const meses = irPorMesDoAno(irCicloAno(IR.cicloAtivo));
   if(!meses.length){
     return `<div class="panel">
-      <h3>📅 Acurácia mensal</h3>
-      <p class="field-hint">Reprocesse o ciclo na Importação para habilitar a quebra por mês.</p>
+      <h3>Acurácia mensal</h3>
+      <p class="field-hint">Reprocesse os ciclos na Importação para habilitar a quebra por mês.</p>
     </div>`;
   }
   const linhas = m => ({
@@ -799,8 +965,7 @@ function irRenderEvolucaoMensalPanel(ind){
     </table></div>
   </details>`;
   return `<div class="panel">
-    <h3>📅 Acurácia mensal — Peças, Locais e Valor</h3>
-    <p class="panel-sub">Cada mês tem a coluna do que foi contado e a do que divergiu (mesma escala), com a acurácia do mês na faixa abaixo. O mês de um local é o do fechamento da última rodada — mesma regra dos KPIs do topo (Peças e Valor só com locais concluídos; Locais com todos os contados).</p>
+    <h3>Acurácia mensal</h3>
     ${irEvolucaoMensalBloco(dados.map(d=>d.pecas),  IR_MES_SERIES.pecas,  irFmtInt)}
     ${irEvolucaoMensalBloco(dados.map(d=>d.locais), IR_MES_SERIES.locais, irFmtInt)}
     ${irEvolucaoMensalBloco(dados.map(d=>d.valor),  IR_MES_SERIES.valor,  irFmtMoneyCompact)}
@@ -827,58 +992,33 @@ function irRenderCancelamentoImpactoPanel(ind){
   const diasDecorridos = (c && c.dataAbertura)
     ? irDiasUteisEntre(new Date(c.dataAbertura+'T12:00:00'), hoje) : null;
   const pessoasEquivalentes = (diasDecorridos>0) ? diasPerdidos/diasDecorridos : null;
+  // Quatro números, não doze. Os outros — tentativas, média por tentativa, sem
+  // horário, cobertura da medição, pessoas equivalentes — são aferição do próprio
+  // indicador, não o indicador: interessam quando se duvida do número, e aí se
+  // olha na aba Indicadores.
   return `<div class="panel">
-    <h3>⏱️ Impacto de cancelamentos (recontagem por interrupção)</h3>
-    <p class="panel-sub">Locais em que a contagem foi iniciada em campo mas a rodada terminou cancelada — não fechou porque foi interrompida (ex.: precisava coletar). Essas rodadas não entram em nenhum outro indicador de acurácia; aqui é só o custo da interrupção em si.</p>
+    <h3>Impacto de cancelamentos</h3>
     <div class="kpi-blocks">
-      ${irKpiBlock('black','⏳','Cancelamentos',
-        irKpiTile('📍', irFmtInt(ind.locaisComCancelamento||0), 'Locais Afetados', '', 'com ≥1 cancelamento') +
-        irKpiTile('🔁', irFmtInt(tentativas), 'Tentativas Canceladas', '', 'sessões com início de campo') +
-        irKpiTile('📊', irFmtPct(ind.taxaCancelamento||0), 'Taxa', '', 'sobre locais orçados do ciclo')
-      )}
-      ${irKpiBlock('black','🚧','Como foi cancelado',
-        irKpiTile('✋', irFmtInt(ind.locaisCanceladosInterrompidos||0), 'Interrompidos no Meio', '', 'começou a contar, cancelou antes de bater') +
-        irKpiTile('💥', irFmtInt(bateram), 'Bateram e Cancelamos', 'bad', 'contagem pronta, jogada fora') +
-        irKpiTile('♻️', afetados>0?irFmtPct(bateram/afetados):'—', 'Trabalho Jogado Fora', bateram>0?'bad':'', 'dos locais afetados')
-      )}
-      ${irKpiBlock('black','⏱️','Tempo Perdido',
-        irKpiTile('⏱️', ind.horasPerdidasCancelamento?irFmtNum(ind.horasPerdidasCancelamento,1)+'h':'—', 'Horas Perdidas', '', comHorario+' de '+tentativas+' com início e fim registrados') +
-        irKpiTile('📐', (comHorario && ind.horasPerdidasCancelamento)?irFmtNum((ind.horasPerdidasCancelamento*60)/comHorario,0)+' min':'—', 'Média por Tentativa', '', 'entre as com horário completo') +
-        irKpiTile('❓', irFmtInt(tentativas-comHorario), 'Sem Horário Completo', '', 'sem Data Fim Contagem')
-      )}
-      ${irKpiBlock('black','🧑','Custo em Pessoas',
-        irKpiTile('📅', horas?irFmtNum(diasPerdidos,1)+' dias':'—', 'Dias de Produtividade Perdidos', '', 'jornada de 8h/dia') +
-        irKpiTile('🧑\u200d🏭', pessoasEquivalentes!=null?irFmtNum(pessoasEquivalentes,1):'—', 'Pessoas Equivalentes', '', diasDecorridos!=null?'em '+irFmtInt(diasDecorridos)+' dias úteis do ciclo':'ciclo sem data de abertura') +
-        irKpiTile('🔎', tentativas>0?irFmtPct(comHorario/tentativas):'—', 'Cobertura da Medição', comHorario/tentativas<0.5?'bad':'', 'o tempo perdido real é maior')
+      ${irKpiBlock('black','⏱️','Recontagem por interrupção',
+        irKpiTile('📍', irFmtInt(ind.locaisComCancelamento||0), 'Locais Afetados', '', '') +
+        irKpiTile('📊', irFmtPct(ind.taxaCancelamento||0), 'Taxa', (ind.taxaCancelamento||0)>0.1?'bad':'', 'sobre os locais do ciclo') +
+        irKpiTile('💥', irFmtInt(bateram), 'Contagem Jogada Fora', bateram>0?'bad':'', 'bateu e foi cancelada') +
+        irKpiTile('📅', horas?irFmtNum(diasPerdidos,1)+' dias':'—', 'Produtividade Perdida', '', 'jornada de 8h')
       )}
     </div>
   </div>`;
 }
-// Itens que divergiram em peça mas não tiveram preço encontrado na SIGEQ278/ZBIQ0051 —
-// o valor divergente desses fica R$ 0,00 mesmo com peça/local realmente divergente.
-// Diagnóstico direto pro usuário ir corrigir a valoração na origem, em vez de ficar
-// perguntando por que um dia com contagem aparece zerado no gráfico de valor.
-function irRenderItensSemPrecoPanel(ind){
-  const itens = ind.itensSemPreco||[];
-  if(!itens.length) return '';
-  return `<div class="panel">
-    <h3>⚠️ Itens divergentes sem preço encontrado</h3>
-    <p class="panel-sub">${irFmtInt(ind.itensSemPrecoTotal||itens.length)} itens divergiram em peça mas não têm preço encontrado (nem próprio na SIGEQ278, nem do item pai via ZBIQ0051) — o valor divergente desses fica R$ 0,00 até corrigir a valoração na origem. Componentes "N" da 051 não entram aqui (são zerados por design, não é lacuna de dado). Mostrando os ${itens.length} com mais peças divergentes.</p>
-    <div class="table-wrap table-scroll" style="max-height:320px;"><table class="table-dense">
-      <thead><tr><th>Item</th><th>Descrição</th><th>Peças Divergentes</th><th>Locais</th></tr></thead>
-      <tbody>${itens.map(i=>`<tr>
-        <td class="mono">${irEsc(i.item)}</td>
-        <td>${irEsc(i.nome||'—')}</td>
-        <td class="mono">${irFmtInt(i.pecasDivergentes)}</td>
-        <td class="mono">${irFmtInt(i.locais)}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>
-  </div>`;
+
+/* Quantos itens divergiram em peça sem preço encontrado. Era uma tabela inteira
+   no Dashboard; virou uma linha na Importação, que é onde se resolve — o
+   problema é de base (SIGEQ278/ZBIQ0051), não de inventário. Componentes "N" da
+   051 não entram: são zerados por design, não é lacuna de dado. */
+function irItensSemPrecoResumo(){
+  const ind = IR.indicadores;
+  if(!ind) return null;
+  const total = ind.itensSemPrecoTotal || (ind.itensSemPreco||[]).length || 0;
+  return total > 0 ? total : null;
 }
-// Quebra da Acurácia Peças por status do local — diagnóstico pra separar divergência
-// real (local já convergido/fechado) de instabilidade temporária (local ainda em
-// contagem, que muda de rodada a cada reprocessamento e ainda não é o número final).
-const IR_META_DIARIA = 962;
 function irRenderCalendarioPanel(ind){
   const rows = ind.contadosPorDia||[];
   if(!rows.length) return '';
@@ -949,7 +1089,7 @@ function irRenderLogTablePanel(ind){
   const meta = ind.meta;
   return `<div class="panel">
     <h3>Acurácia por Log</h3>
-    <p class="panel-sub">Locais orçados x contados (Grupo Classe da base congelada), peças e acurácias por log — só locais CONCLUÍDOS (mesma regra do KPI "Acurácia Peças/Valor" do topo). Só LOG 1, 2, 3 e 6 — os demais ainda têm base congelada pra corrigir.</p>
+    <p class="panel-sub">Locais orçados x contados (Grupo Classe da base congelada), peças e acurácias por log — só locais CONCLUÍDOS (mesma regra do KPI "Acurácia Peças/Valor" do topo).</p>
     <div class="table-wrap"><table>
       <thead><tr>
         <th>Log</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Pendentes</th><th>Locais Divergentes</th>
@@ -1064,7 +1204,6 @@ function irRenderPorLogPanel(ind){
   IR._porLogMap = new Map(rowsComTotal.map(r=>[r.chave, r]));
   return `<div class="panel">
     <h3>Acurácias por Log</h3>
-    <p class="panel-sub">Só LOG 1, 2, 3 e 6 — os demais logs ainda têm base congelada pra corrigir.</p>
     <div class="bi-vbars bi-vbars-grouped">
       ${rowsComTotal.map(r=>`<div class="bi-vbar-col${r.isTotal?' bi-vbar-col-total':''}" onmouseenter="irShowLogTooltip(event,'${irEsc(r.chave)}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
         <div class="bi-cluster" style="height:100px;">
@@ -1242,8 +1381,12 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${metaLine}${bars}${labels}${xLabels}</svg>`;
 }
 function irRenderComparativoCiclosPanel(){
-  const pares = IR.comparativoCiclos;
-  if(!pares || pares.length<1) return '';
+  // Só os ciclos do ano em curso. Misturar 2025 com 2026 numa barra ao lado da
+  // outra sugere comparação que não existe: mudam meta, escopo e equipe entre um
+  // ano e outro, e o ciclo velho só empurrava os do ano pra fora da tela.
+  const ano = irCicloAno(IR.cicloAtivo);
+  const pares = (IR.comparativoCiclos||[]).filter(({ciclo}) => irCicloAno(ciclo) === ano);
+  if(!pares.length) return '';
   const rows = pares.map(({ciclo,ind})=>({
     label: irCicloLabel(ciclo),
     pecas: ind?ind.acuraciaPecas:null, locais: ind?ind.acuraciaLocal:null, valor: ind?ind.acuraciaValor:null
@@ -1263,8 +1406,8 @@ function irRenderComparativoCiclosPanel(){
     valorDivergente += ind.valorDivergenteAbsoluto||0;
   }
   return `<div class="panel">
-    <h3>Comparativo de Acurácias entre Ciclos</h3>
-    <p class="panel-sub">Peças, Locais e Valor de cada ciclo já processado, com a meta de ${irFmtPct(IR_META_ACURACIA)}.</p>
+    <h3>Comparativo de Acurácias entre Ciclos — ${irEsc(String(ano))}</h3>
+    <p class="panel-sub">Peças, Locais e Valor de cada ciclo de ${irEsc(String(ano))}, com a meta de ${irFmtPct(IR_META_ACURACIA)}.</p>
     ${irBuildAcuraciaCiclosSvg(rows, {meta:IR_META_ACURACIA})}
     <div class="cmp-legend">
       <span><span class="cmp-dot" style="background:#FA4616;"></span>Peças</span>
@@ -1273,12 +1416,12 @@ function irRenderComparativoCiclosPanel(){
     </div>
     <div class="kpi-blocks" style="margin-top:14px;">
       ${irKpiBlock('orange','📦','Peças',
-        irKpiTile('🎯', pecasContadas>0?irFmtPct(1-pecasDivergentes/pecasContadas):'—', 'Acurácia Geral', '', 'todos os ciclos') +
-        irKpiTile('📦', irFmtInt(pecasContadas), 'Contadas', '', 'todos os ciclos') +
+        irKpiTile('🎯', pecasContadas>0?irFmtPct(1-pecasDivergentes/pecasContadas):'—', 'Acurácia Geral', '', 'ciclos de '+ano) +
+        irKpiTile('📦', irFmtInt(pecasContadas), 'Contadas', '', 'ciclos de '+ano) +
         irKpiTile('⚠️', irFmtInt(pecasDivergentes), 'Divergentes', 'bad', ''))}
       ${irKpiBlock('blue','📍','Locais',
-        irKpiTile('🎯', locaisContados>0?irFmtPct(1-locaisDivergentes/locaisContados):'—', 'Acurácia Geral', '', 'todos os ciclos') +
-        irKpiTile('📍', irFmtInt(locaisContados), 'Contados', '', 'todos os ciclos') +
+        irKpiTile('🎯', locaisContados>0?irFmtPct(1-locaisDivergentes/locaisContados):'—', 'Acurácia Geral', '', 'ciclos de '+ano) +
+        irKpiTile('📍', irFmtInt(locaisContados), 'Contados', '', 'ciclos de '+ano) +
         irKpiTile('⚠️', irFmtInt(locaisDivergentes), 'Divergentes', 'bad', ''))}
       ${irKpiBlock('black','💰','Valor',
         irKpiTile('🎯', temValorContado&&valorContado>0?irFmtPct(1-valorDivergente/valorContado):'—', 'Acurácia Geral', '', temValorContado?'todos os ciclos':'reprocesse o ciclo pra habilitar') +
@@ -1357,14 +1500,62 @@ function irAgruparContadosPorMes(rows, dataAbertura){
     return {mes, label: nomeRaw.charAt(0).toUpperCase()+nomeRaw.slice(1), total};
   });
 }
+/* Acurácia do ANO, somando todos os ciclos daquele ano. Não é média das
+   acurácias dos ciclos: um ciclo pequeno pesaria igual a um grande. Recalcula a
+   partir dos totais — divergente sobre contado — que é a mesma conta do ciclo,
+   só com a base maior. */
+function irAcuraciaDoAno(ano){
+  const pares = (IR.comparativoCiclos||[]).filter(({ciclo}) => irCicloAno(ciclo) === ano);
+  if(!pares.length) return null;
+  let pc=0, pd=0, lc=0, ld=0, vc=0, vd=0, temValor=false;
+  for(const {ind} of pares){
+    if(!ind) continue;
+    pc += ind.pecasContadas||0; pd += ind.pecasDivergentes||0;
+    lc += ind.locaisContadosTotal||0;
+    // locaisDivergentes é campo novo — ciclo antigo cai no equivalente que já existia.
+    ld += ind.locaisDivergentes!=null ? ind.locaisDivergentes
+        : (ind.divergentesPorDia||[]).reduce((x,d)=>x+(d.locais||0),0);
+    if(ind.valorFisicoTotal!=null){ temValor = true; vc += ind.valorFisicoTotal; }
+    vd += ind.valorDivergenteAbsoluto||0;
+  }
+  return {
+    ano, ciclos: pares.length,
+    pecas:  pc>0 ? 1-pd/pc : null,
+    locais: lc>0 ? 1-ld/lc : null,
+    valor:  (temValor && vc>0) ? 1-vd/vc : null
+  };
+}
+/* Acurácia anual num painel próprio, no lugar do medidor de Saúde do Estoque —
+   que era média das três e escondia qual delas estava fora da meta. O título não
+   leva o ano: ele muda sozinho todo janeiro, e carimbá-lo obrigaria a lembrar
+   disso. O ano aparece como dado, no rodapé. */
+function irRenderAcuraciaAnualPanel(){
+  const ano = irCicloAno(IR.cicloAtivo);
+  const ac = irAcuraciaDoAno(ano);
+  if(!ac) return '';
+  const linha = (rot, v, cor) => `<div class="acan-row">
+    <div class="acan-label">${irEsc(rot)}</div>
+    <div class="acan-track">
+      <div class="acan-fill" style="width:${v==null?0:Math.round(Math.max(0,Math.min(1,v))*100)}%;background:${cor};"></div>
+      <div class="acan-meta" style="left:${Math.round(IR_META_ACURACIA*100)}%;"></div>
+    </div>
+    <div class="acan-val mono ${v!=null && v>=IR_META_ACURACIA ? 'good':'bad'}">${v==null?'—':irFmtPct(v)}</div>
+  </div>`;
+  return `<div class="panel">
+    <h3>Acurácia Anual</h3>
+    ${linha('Peças',  ac.pecas,  '#FA4616')}
+    ${linha('Locais', ac.locais, '#001A72')}
+    ${linha('Valor',  ac.valor,  '#1D1F2A')}
+    <p class="field-hint acan-pe">${irEsc(String(ano))} · ${irFmtInt(ac.ciclos)} ciclo(s) · meta ${irFmtPct(IR_META_ACURACIA)}</p>
+  </div>`;
+}
 function irRenderStatusInventarioPanel(ind){
   // Mesma base do KPI "Andamento" (locaisConcluidos ÷ locaisCongelados) — antes esse
   // donut usava locaisContadosTotal (inclui locais ainda "em contagem", não fechados),
   // o que fazia o % daqui não bater com o card de Andamento do Ciclo.
   const total = ind.locaisCongelados||0, concluidos = ind.locaisConcluidos||0;
   const pct = total>0 ? concluidos/total : 0;
-  const porMes = irAgruparContadosPorMes(ind.contadosPorDia, IR.cicloAtivo && IR.cicloAtivo.dataAbertura);
-  const maxMes = Math.max(1, ...porMes.map(m=>m.total));
+
   return `<div class="panel">
     <h3>Status do Inventário</h3>
     <p class="panel-sub">Percentual de locais concluídos em relação ao total orçado do ciclo.</p>
@@ -1375,14 +1566,7 @@ function irRenderStatusInventarioPanel(ind){
         <div class="status-donut-stat"><div class="n mono good">${irFmtInt(concluidos)}</div><div class="l">Locais concluídos</div></div>
         <div class="status-donut-stat"><div class="n mono bad">${irFmtInt(total-concluidos)}</div><div class="l">Ainda não concluídos</div></div>
       </div>
-      ${porMes.length ? `<div class="status-month-list">
-        <div class="status-month-title">Locais contados por mês</div>
-        ${porMes.map(m=>`<div class="status-month-row">
-          <div class="status-month-label">${irEsc(m.label)}</div>
-          <div class="status-month-track"><div class="status-month-fill" style="width:${Math.round(m.total/maxMes*100)}%;"></div></div>
-          <div class="status-month-val mono">${irFmtInt(m.total)}</div>
-        </div>`).join('')}
-      </div>` : ''}
+
     </div>
   </div>`;
 }
@@ -1693,8 +1877,8 @@ function irGerarRelatorioEmail(){
   const html = `<div class="rp-page">
     <div class="rp-hero">
       <div class="rp-hero-top">
-        <img src="brand/Logo_LDM_hor_2.png" alt="Loja do Mecânico" class="rp-hero-logo">
-        <div class="rp-hero-status">${c.status==='aberto'?'Ciclo em andamento':'Ciclo encerrado'}</div>
+        <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="rp-hero-logo">
+        <div class="rp-hero-status">${irCicloStatus(c)==='aberto'?'Ciclo em andamento':'Ciclo encerrado'}</div>
       </div>
       <div class="rp-hero-badge">Boletim de Inventário</div>
       <h1>Andamento do ${irCicloLabel(c)}</h1>
@@ -1790,7 +1974,52 @@ function irGerarRelatorioEmail(){
   </div>`;
   irBaixarBoletimImagem(html, `Boletim_Ciclo_${c.numero}_${new Date().toISOString().slice(0,10)}.png`);
 }
-async function irBaixarBoletimImagem(html, nomeArquivo){
+/* Converte cada SVG de um bloco em <img> PNG antes da captura.
+
+   O html2canvas desenha SVG inline pela conta dele e erra a escala quando o
+   viewBox não bate com a caixa: no boletim as curvas saíam comprimidas num canto
+   e o eixo com os dias sumia — a rosca, que é quadrada e bate com o viewBox,
+   saía certa. Rasterizar aqui tira o SVG do caminho dele: o que chega é uma
+   imagem comum, que ele sabe desenhar.
+
+   Serializar exige um SVG que se baste sozinho: dentro de um data: URI não há
+   folha de estilo nem variável CSS. Por isso os gráficos são desenhados com
+   atributos literais (fill, font-size, stroke), sem class e sem var(). */
+async function irRasterizarSVGs(raiz, escala){
+  const svgs = Array.from(raiz.querySelectorAll('svg'));
+  for(const svg of svgs){
+    const vb = (svg.getAttribute('viewBox')||'').split(/\s+/).map(Number);
+    const w = Number(svg.getAttribute('width')) || vb[2] || svg.clientWidth;
+    const h = Number(svg.getAttribute('height')) || vb[3] || svg.clientHeight;
+    if(!w || !h) continue;
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', w); clone.setAttribute('height', h);
+    const texto = new XMLSerializer().serializeToString(clone);
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(texto);
+    try{
+      const img = await new Promise((ok, falhou)=>{
+        const i = new Image();
+        i.onload = ()=>ok(i); i.onerror = falhou;
+        i.src = url;
+      });
+      const cv = document.createElement('canvas');
+      cv.width = w * escala; cv.height = h * escala;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      const saida = document.createElement('img');
+      saida.src = cv.toDataURL('image/png');
+      saida.width = w; saida.height = h;
+      // Herda a classe do SVG pra o CSS da folha continuar mandando no tamanho.
+      // Escalar agora é seguro: é PNG a 3x, não mais um SVG pra ele interpretar.
+      saida.className = svg.getAttribute('class') || '';
+      saida.style.cssText = svg.getAttribute('style') || '';
+      saida.style.display = 'block';
+      svg.replaceWith(saida);
+    }catch(err){ /* falhou a rasterização: deixa o SVG como está */ }
+  }
+}
+async function irBaixarBoletimImagem(html, nomeArquivo, email){
   if(typeof html2canvas==='undefined'){ irShowToast('Não consegui carregar o gerador de imagem (sem internet?).', true); return; }
   const area = document.getElementById('irPrintArea');
   area.innerHTML = html;
@@ -1812,6 +2041,7 @@ async function irBaixarBoletimImagem(html, nomeArquivo){
   try{
     await new Promise(r=>setTimeout(r, 60)); // deixa o layout assentar antes de capturar
     const alvo = area.querySelector('.rp-page');
+    await irRasterizarSVGs(alvo, 3);
     const canvas = await html2canvas(alvo, {
       backgroundColor:'#F6F7FA', scale:3, useCORS:true,
       width: alvo.scrollWidth, height: alvo.scrollHeight,
@@ -1825,8 +2055,26 @@ async function irBaixarBoletimImagem(html, nomeArquivo){
     URL.revokeObjectURL(url);
 
     const numero = IR.cicloAtivo ? IR.cicloAtivo.numero : '';
-    const assunto = `Boletim Inventário — Ciclo ${numero}`;
+    const assunto = (email && email.assunto) || `Boletim Inventário — Ciclo ${numero}`;
     let compartilhou = false;
+    /* Com destinatários configurados o mailto ganha da folha de compartilhamento:
+       ela anexa a imagem sozinha, mas não deixa preencher quem recebe — e o
+       pedido aqui é justamente não redigitar os responsáveis todo dia. Anexar
+       fica manual; o corpo leva os números em texto pra o e-mail já valer alguma
+       coisa mesmo antes de anexar. */
+    if(email && (email.para || email.cc)){
+      // RFC 6068 separa endereços por vírgula; o usuário digita com ponto e
+      // vírgula, que é o que o Outlook mostra. Normaliza pra vírgula.
+      const lista = v => (v||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean).join(',');
+      const q = [];
+      if(email.cc) q.push('cc='+encodeURIComponent(lista(email.cc)));
+      q.push('subject='+encodeURIComponent(assunto));
+      q.push('body='+encodeURIComponent((email.corpo||'')+
+        `\n\n— Anexe a imagem "${nomeArquivo}", baixada agora na sua pasta de downloads.`));
+      window.open('mailto:'+encodeURIComponent(lista(email.para))+'?'+q.join('&'), '_blank');
+      irShowToast('✓ Boletim baixado e e-mail aberto — anexe a imagem e envie.');
+      return;
+    }
     // Se o navegador suportar compartilhar arquivo (Web Share API), abre direto
     // a folha de compartilhamento nativa — o usuário escolhe o e-mail e já
     // manda com a imagem anexada, só falta escolher os destinatários.
@@ -1883,61 +2131,489 @@ function irSetNet410MesDefault(){
 }
 function irSetNet410Mes(mes){ IR.net410MesSel = mes; irRenderView(); }
 function irProcessar410(){
-  if(IR.net410Processing || !IR.net410File) return;
+  if(IR.net410Processing || !IR.net410File) return Promise.resolve(false);
   IR.net410Processing = true; IR.net410Progress = {stage:'Lendo arquivo...', pct:0};
   irRenderView();
   const file = IR.net410File;
+  let _fim; const _p = new Promise(r=>{ _fim = r; });
   file.arrayBuffer().then(buf410=>{
-    const worker = new Worker('js/worker.js');
+    const worker = irNovoWorker();
     worker.onmessage = async (e)=>{
       const msg = e.data;
       if(msg.type==='progress'){ IR.net410Progress = {stage:msg.stage, pct:msg.pct}; irUpdateProgressUI410(); }
       else if(msg.type==='error410'){
         IR.net410Processing=false; worker.terminate();
-        irShowToast('Erro no processamento da QRY410: '+msg.message, true); irRenderView();
+        irShowToast('Erro no processamento da QRY410: '+msg.message, true); irRenderView(); _fim(false);
       } else if(msg.type==='done410'){
         IR.net410Processing = false; worker.terminate();
         for(const ano of msg.anos) await irSaveNet410(ano, msg.resumos[ano]);
+        // Tudo que foi derivado da 410 antiga precisa cair aqui. Faltava: quem
+        // abrisse Transitórios antes de importar guardava um div410Cache marcado
+        // "vazio" e um _transGanhos vazio, e o irTransCarregarGanhos devolvia na
+        // primeira linha por já ter os dois preenchidos — a prov. duplicidade
+        // ficava zerada mesmo depois da importação, até dar F5 na página.
+        IR.div410Cache = null;
+        IR._transGanhos = null; IR._transGanhoLocal = null; IR._transGanhosDiag = null;
+        IR.est390Meta = await irGetEstoqueMeta();
+        IR.est390Ficha = await irGetConfig('estoque390-ficha');
+        IR.transSetores = await irSeedTransSetoresIfEmpty();
+        const ign = await irGetConfig('auditoria-ignorar-virtuais');
+        if(ign!=null) IR.audIgnorarVirtuais = ign;
+        IR.audPrefixos = await irGetConfig('auditoria-prefixos');
+        IR.transNomes = await irGetConfig('transitorio-nomes') || {};
         IR.net410Anos = await irGetAllNet410Anos();
         IR.net410File = null;
         IR.net410AnoSel = msg.anos[0];
         IR.net410Data = await irGetNet410(IR.net410AnoSel);
         irSetNet410MesDefault();
         irShowToast('✓ QRY410 processada: '+msg.anos.map(a=>a+'').join(', ')+'.');
-        irRenderView();
+        irRenderView(); _fim(true);
       }
     };
-    worker.onerror = (err)=>{ IR.net410Processing=false; irShowToast('Erro no worker (QRY410): '+err.message, true); irRenderView(); };
+    worker.onerror = (err)=>{ IR.net410Processing=false; irShowToast('Erro no worker (QRY410): '+err.message, true); irRenderView(); _fim(false); };
     worker.postMessage({type:'process410', buf410}, [buf410]);
   }).catch(err=>{
-    IR.net410Processing=false; irShowToast('Erro ao ler arquivo: '+err.message, true); irRenderView();
+    IR.net410Processing=false; irShowToast('Erro ao ler arquivo: '+err.message, true); irRenderView(); _fim(false);
   });
+  return _p;
 }
 /* Painel de importação da QRY410 — fica na aba Importação (não na NET) pra não mexer
    no layout do Dashboard/NET com mais um dropzone. Processamento independente do
    'PROCESSAR CICLO' (ver irProcessar410). */
-function irRenderNet410ImportPanel(){
-  const dz = `<div class="dropzone ${IR.net410File?'has-file':''}" ondragover="event.preventDefault()" ondrop="irOnDropFile410(event)">
-    <input type="file" id="ir-file-410" accept=".xlsx,.xls" style="display:none" onchange="irOnFile410(this.files[0])">
-    <div class="dz-icon">📄</div>
-    <div class="dz-title">QRY410</div>
-    <div class="dz-desc">Perdas e ganhos no CD</div>
-    ${IR.net410File
-      ? `<div class="dz-file mono">${irEsc(IR.net410File.name)}</div><button class="btn-link" onclick="irRemoveFile410()">Remover</button>`
-      : `<button class="btn btn-secondary" onclick="document.getElementById('ir-file-410').click()">Selecionar</button>`}
-  </div>`;
+/* ---------- IMPORTAÇÃO DA QRY0390 (ESTOQUE ATUAL) ---------- */
+function irOnFile390Est(f){ if(!f) return; IR.est390File = f; irRenderView(); }
+function irOnDropFile390Est(e){ e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) irOnFile390Est(f); }
+function irRemoveFile390Est(){ IR.est390File = null; irRenderView(); }
+/* Devolve uma promessa que resolve quando o worker termina (ou falha). Sem isso
+   não dá pra encadear 390 -> 160 -> 410 na ordem certa: as três são assíncronas
+   e disparar as três de uma vez faria a 160 ler fichas que a 390 ainda não
+   gravou. Resolve também no erro — quem encadeia decide se segue. */
+function irProcessarEst390(){
+  if(IR.est390Processing || !IR.est390File) return Promise.resolve(false);
+  IR.est390Processing = true; IR.est390Progress = {stage:'Lendo arquivo...', pct:0};
+  irRenderView();
+  let _fim; const _p = new Promise(r=>{ _fim = r; });
+  IR.est390File.arrayBuffer().then(buf=>{
+    const worker = irNovoWorker();
+    worker.onmessage = async ev=>{
+      const msg = ev.data;
+      if(msg.type==='progress'){ IR.est390Progress = {stage:msg.stage, pct:msg.pct}; irUpdateProgressUI390(); }
+      else if(msg.type==='error390'){
+        IR.est390Processing = false; worker.terminate();
+        irShowToast('Erro na QRY0390: '+msg.message, true); irRenderView(); _fim(false);
+      } else if(msg.type==='done390'){
+        IR.est390Processing = false; worker.terminate();
+        IR.est390Ficha = await irGetConfig('estoque390-ficha');
+        IR._itemInfo = null; IR._descLocalTodosCiclos = null; IR._descLocal = null;
+        IR._transGanhos = null; IR._transGanhoLocal = null; IR._transGanhosDiag = null;
+        IR.est390File = null;
+        irShowToast(irFmtInt(msg.itens)+' itens e '+irFmtInt(msg.locais)+' endereços fichados.');
+        irRenderView(); _fim(true);
+      }
+    };
+    worker.onerror = ()=>{ worker.terminate(); IR.est390Processing=false; irShowToast('Falha no processamento da QRY0390.', true); irRenderView(); _fim(false); };
+    worker.postMessage({type:'process390', buf390:buf}, [buf]);
+  }).catch(err=>{ IR.est390Processing=false; irShowToast('Erro ao ler a QRY0390: '+err.message, true); irRenderView(); _fim(false); });
+  return _p;
+}
+function irUpdateProgressUI390(){
+  const st = document.getElementById('ir-390-stage'), fi = document.getElementById('ir-390-fill');
+  if(st && fi){ st.textContent = IR.est390Progress.stage; fi.style.width = IR.est390Progress.pct+'%'; }
+}
+
+/* As três bases que não pertencem a ciclo nenhum, num painel só. Antes eram três
+   painéis inteiros, cada um com título, parágrafo explicativo e dropzone — três
+   maneiras visualmente diferentes de fazer a mesma coisa, empilhadas embaixo do
+   bloco do ciclo. Aqui viram três cartões iguais, na ordem em que precisam ser
+   importadas, cada um mostrando o que já tem carregado. */
+const IR_AVULSAS = [
+  {id:'390', icone:'📦', titulo:'QRY0390', sub:'Estoque por endereço', input:'ir-file-390-est',
+   onFile:'irOnFile390Est', onDrop:'irOnDropFile390Est', remove:'irRemoveFile390Est',
+   processa:'irProcessarEst390', botao:'Processar estoque', arquivo:()=>IR.est390File,
+   rodando:()=>IR.est390Processing, prog:()=>IR.est390Progress, idStage:'ir-390-stage', idFill:'ir-390-fill'},
+  {id:'160', icone:'⏱️', titulo:'QRY0160', sub:'Data de movimento', input:'ir-file-160',
+   onFile:'irOnFile160', onDrop:'irOnDropFile160', remove:'irRemoveFile160',
+   processa:'irProcessar160', botao:'Processar pendência', arquivo:()=>IR.est160File,
+   rodando:()=>IR.est160Processing, prog:()=>IR.est160Progress, idStage:'ir-160-stage', idFill:'ir-160-fill'},
+  {id:'410', icone:'📄', titulo:'QRY410', sub:'Perdas e ganhos', input:'ir-file-410',
+   onFile:'irOnFile410', onDrop:'irOnDropFile410', remove:'irRemoveFile410',
+   processa:'irProcessar410', botao:'Processar QRY410', arquivo:()=>IR.net410File,
+   rodando:()=>IR.net410Processing, prog:()=>IR.net410Progress, idStage:'ir-410-stage', idFill:'ir-410-fill'}
+];
+// O que cada base já tem no banco — uma linha, para saber se vale reimportar.
+function irAvulsaEstado(id){
+  if(id==='390'){
+    const f = IR.est390Ficha;
+    return f ? irFmtInt(f.locais)+' endereços · '+irFmtInt(f.itens)+' itens · '+irFmtDate(f.importadoEm) : 'nunca importada';
+  }
+  if(id==='160'){
+    const m = IR.est390Meta;
+    return (m && m.fonte==='160')
+      ? irFmtInt(m.locais)+' endereços · '+irFmtInt(m.pecasTotal)+' peças · '+irFmtDate(m.importadoEm)
+      : 'nunca importada';
+  }
+  const anos = IR.net410Anos || [];
+  if(!anos.length) return 'nunca importada';
+  // Linhas lidas e hora da importação. É o que responde "reimportei e o número não
+  // mudou": se o total de linhas sai igual duas vezes seguidas, o arquivo é o
+  // mesmo — a planilha atualizou a consulta mas não foi salva, ou a extração não
+  // trouxe nada novo. Sem esse número, não dá pra separar isso de um bug na tela.
+  const d = IR.net410Data;
+  const partes = ['anos: '+anos.join(', ')];
+  if(d && d.totalLinhas != null) partes.push(irFmtInt(d.totalLinhas)+' linhas em '+d.ano);
+  // Data do movimento mais recente DENTRO do arquivo. É o que responde de vez
+  // "reimportei e não mudou": a 410 vem de um dataflow com atualização própria,
+  // então o arquivo pode estar salvo hoje e mesmo assim não ter movimento novo.
+  // Sem esse dado, a única saída era abrir a planilha e procurar a última data.
+  const ultimo = irNet410UltimoMovimento(d);
+  if(ultimo) partes.push('movimento até '+irFmtDate(ultimo));
+  if(d && d.processedAt) partes.push('lida '+irFmtDataHora(d.processedAt));
+  return partes.join(' · ');
+}
+function irNet410UltimoMovimento(d){
+  const dias = (d && d.porDia) || [];
+  return dias.length ? dias[dias.length-1].dia : null;
+}
+// Data e hora curtas, pra comparar duas importações seguidas.
+function irFmtDataHora(s){
+  const dt = new Date(s);
+  if(isNaN(dt.getTime())) return '—';
+  return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+function irRenderBasesAvulsas(){
+  const temFicha = !!(IR._itemInfo && IR._itemInfo.size);
+  const cartao = b=>{
+    const arq = b.arquivo(), rodando = b.rodando(), prog = b.prog();
+    return `<div class="av-card ${arq?'has-file':''}">
+      <div class="av-top">
+        <span class="av-icone">${b.icone}</span>
+        <div class="av-nome"><strong>${irEsc(b.titulo)}</strong><span>${irEsc(b.sub)}</span></div>
+      </div>
+      <div class="av-estado">${irEsc(irAvulsaEstado(b.id))}</div>
+      <input type="file" id="${b.input}" accept=".xlsx,.xls" style="display:none" onchange="${b.onFile}(this.files[0])">
+      ${rodando ? `
+        <div class="progress-wrap av-prog">
+          <div class="progress-stage" id="${b.idStage}">${irEsc(prog.stage)}</div>
+          <div class="progress-track"><div class="progress-fill orange" id="${b.idFill}" style="width:${prog.pct}%"></div></div>
+        </div>`
+      : arq ? `
+        <div class="av-arquivo mono">${irEsc(arq.name)}</div>
+        <div class="av-acoes">
+          <button class="btn btn-primary" onclick="${b.processa}()">${irEsc(b.botao)}</button>
+          <button class="btn-link" onclick="${b.remove}()">Remover</button>
+        </div>`
+      : `<div class="av-acoes"><button class="btn btn-secondary" onclick="document.getElementById('${b.input}').click()">Selecionar</button></div>`}
+      ${b.id==='160' && !temFicha ? `<p class="av-aviso">Importe a QRY0390 antes: o valor e o LOG saem de lá.</p>` : ''}
+    </div>`;
+  };
   return `<div class="panel">
-    <h3>Perdas e Ganhos no CD (QRY410)</h3>
-    <p class="field-hint" style="margin-bottom:14px;">Independente do ciclo rotativo — organizado por ano, a partir da Data do Movimento. Não precisa esperar processar um ciclo: importe aqui quando quiser atualizar. O resultado aparece na aba NET.</p>
-    <div class="dz-grid" style="grid-template-columns:1fr;max-width:340px;">${dz}</div>
-    ${IR.net410Processing ? `
-      <div class="progress-wrap">
-        <div class="progress-stage">${irEsc(IR.net410Progress.stage)}</div>
-        <div class="progress-track"><div class="progress-fill orange" style="width:${IR.net410Progress.pct}%"></div></div>
-      </div>` : IR.net410File ? `<div class="form-actions"><button class="btn btn-primary" onclick="irProcessar410()">PROCESSAR QRY410</button></div>` : ''
-    }
-    ${IR.net410Anos.length ? `<p class="field-hint" style="margin-top:12px;">Anos já processados: ${IR.net410Anos.join(', ')} — <a href="#" onclick="irSwitchTab('ciclo');return false;">ver na aba NET</a>.</p>` : ''}
+    <div class="ofe-head"><h3>Bases fora do ciclo</h3></div>
+    <div class="av-grid" ondragover="event.preventDefault()">${IR_AVULSAS.map(cartao).join('')}</div>
   </div>`;
+}
+
+/* ============================================================
+   PASTA CONECTADA (File System Access API)
+   ============================================================
+   O import manual continua sendo o caminho oficial. Isto aqui só tira do
+   usuário a parte chata: achar sete arquivos em duas pastas, toda semana, na
+   ordem certa. Ele autoriza a pasta uma vez, o navegador guarda a permissão e
+   o dash passa a ler os arquivos sozinho.
+
+   Só existe em navegador baseado em Chromium (Chrome/Edge no desktop) e pode
+   ser desligado por política de grupo. Por isso NADA aqui é obrigatório: se a
+   API não existe, o botão não aparece e a tela de importação segue igual. */
+const IR_PASTA_SUPORTA = typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
+/* Cada base e como reconhecê-la pelo nome do arquivo. Os padrões do bloco do
+   ciclo são os mesmos do IR_FILE_TYPES de propósito — um só lugar pra errar. */
+const IR_PASTA_BASES = [
+  {id:'390', label:'QRY0390', desc:'Estoque por endereço', pattern:IR_PAT.p390, auto:true},
+  {id:'160', label:'QRY0160', desc:'Data de movimento',    pattern:IR_PAT.p160, auto:true},
+  {id:'410', label:'QRY410',  desc:'Perdas e ganhos',      pattern:IR_PAT.p410, auto:true},
+  {id:'843', label:'QRY0843', desc:'Ajustes do ciclo',     pattern:IR_PAT.p843, slot:'f843'},
+  {id:'cong',label:'Base Congelada', desc:'Locais do ciclo', pattern:IR_PAT.pCong, slot:'fCong'},
+  {id:'278', label:'SIGEQ278', desc:'Custo médio',         pattern:IR_PAT.p278, slot:'f278'},
+  {id:'051', label:'ZBIQ0051', desc:'Item pai × componente', pattern:IR_PAT.p051, slot:'f051'}
+];
+function irPastaBaseDe(nome){
+  if(!/\.xlsx?$/i.test(nome)) return null;
+  const b = IR_PASTA_BASES.find(x=>x.pattern.test(nome));
+  return b ? b.id : null;
+}
+/* Autorização da pasta. O handle sobrevive a fechar o navegador, mas a
+   permissão pode voltar pra "prompt" — e reconceder exige clique do usuário,
+   não dá pra fazer sozinho no carregamento da página. */
+async function irPastaPermissao(handle, pedir){
+  if(!handle || !handle.queryPermission) return 'granted';
+  let st = await handle.queryPermission({mode:'read'});
+  if(st !== 'granted' && pedir) st = await handle.requestPermission({mode:'read'});
+  return st;
+}
+async function irPastaCarregar(){
+  if(!IR_PASTA_SUPORTA) return;
+  try{
+    const h = await irGetConfig('pasta-handle');
+    if(!h) return;
+    IR.pastaHandle = h;
+    IR.pastaUltimo = await irGetConfig('pasta-ultimo') || {};
+    IR.pastaPerm = await irPastaPermissao(h, false);
+    if(IR.pastaPerm === 'granted') await irPastaVarrer();
+  }catch(err){ IR.pastaErro = String(err && err.message || err); }
+}
+async function irPastaConectar(){
+  if(!IR_PASTA_SUPORTA) return;
+  try{
+    const h = await window.showDirectoryPicker({mode:'read', id:'inv-bases'});
+    IR.pastaHandle = h; IR.pastaPerm = 'granted'; IR.pastaErro = null;
+    await irSetConfig('pasta-handle', h);
+    await irPastaVarrer();
+    irShowToast('Pasta conectada: '+h.name);
+  }catch(err){
+    // Cancelar o seletor é AbortError e não é erro nenhum.
+    if(err && err.name === 'AbortError') return;
+    IR.pastaErro = 'Não consegui abrir a pasta ('+(err && err.name || 'erro')+'). Se a mensagem falar em política, o TI desligou esse recurso no Edge.';
+    irRenderView();
+  }
+}
+async function irPastaReautorizar(){
+  if(!IR.pastaHandle) return;
+  IR.pastaPerm = await irPastaPermissao(IR.pastaHandle, true);
+  if(IR.pastaPerm === 'granted') await irPastaVarrer(); else irRenderView();
+}
+async function irPastaDesconectar(){
+  IR.pastaHandle = null; IR.pastaArquivos = null; IR.pastaErro = null;
+  await irSetConfig('pasta-handle', null);
+  irRenderView();
+}
+/* Varre a pasta escolhida e as subpastas de primeiro nível — é o formato
+   recomendado (_Atual + uma pasta por ciclo) sem obrigar ninguém a ele: quem
+   deixar tudo solto na raiz também funciona.
+
+   Quando a mesma base aparece em dois lugares, vence a MAIS RECENTE. É o que
+   resolve a pasta do ciclo fechado esquecida ao lado da do ciclo aberto. */
+/* Varre a pasta escolhida e as subpastas até IR_PASTA_NIVEIS de profundidade.
+   Não dá pra assumir uma estrutura: cada área organiza do seu jeito — por
+   finalidade ("01. Inventário Rotativo", "02. Endereços Transitórios", "03.
+   Net"), por ciclo, ou tudo solto. Varrer fundo cobre todas, e o limite de
+   pastas visitadas evita passear por uma árvore gigante do OneDrive.
+
+   Quando a mesma base aparece em mais de um lugar, vence a MAIS RECENTE — é o
+   que resolve o ciclo fechado ao lado do aberto. Por isso a tabela mostra o
+   caminho de cada arquivo: é ali que se enxerga uma escolha errada. */
+const IR_PASTA_NIVEIS = 4;
+const IR_PASTA_MAX_DIRS = 600;
+async function irPastaVarrer(){
+  const h = IR.pastaHandle;
+  if(!h) return;
+  const achados = {};
+  let visitadas = 0, estourou = false;
+  const guardar = (base, file, caminho)=>{
+    const atual = achados[base];
+    if(!atual){ achados[base] = {file, pasta:caminho, copias:1}; return; }
+    achados[base].copias++;
+    if(file.lastModified > atual.file.lastModified){ achados[base].file = file; achados[base].pasta = caminho; return; }
+    if(file.lastModified < atual.file.lastModified) return;
+    // Empate de data: é o mesmo arquivo copiado pra mais de uma pasta de ciclo.
+    // Sem critério, ficava a primeira alfabética — "Ciclo 1" ganhava do "Ciclo 3"
+    // e o caminho exibido apontava a pasta errada. Compara numérico, então
+    // "Ciclo 3" > "Ciclo 10" > "Ciclo 1" e o caminho bate com o ciclo em curso.
+    if(caminho.localeCompare(atual.pasta, 'pt-BR', {numeric:true}) > 0){
+      achados[base].file = file; achados[base].pasta = caminho;
+    }
+  };
+  const lerDir = async (dir, caminho, profundidade)=>{
+    if(visitadas++ > IR_PASTA_MAX_DIRS){ estourou = true; return; }
+    const subs = [];
+    for await (const entry of dir.values()){
+      if(entry.kind === 'file'){
+        const base = irPastaBaseDe(entry.name);
+        if(!base) continue;
+        // Arquivo temporário do Excel (~$algo.xlsx) não é planilha de verdade.
+        if(entry.name.startsWith('~$')) continue;
+        try{ guardar(base, await entry.getFile(), caminho); }catch(err){ /* só na nuvem ou sem permissão */ }
+      } else if(entry.kind === 'directory' && profundidade > 0
+                && !entry.name.startsWith('.') && !entry.name.startsWith('~')){
+        subs.push(entry);
+      }
+    }
+    for(const sub of subs) await lerDir(sub, caminho + ' › ' + sub.name, profundidade - 1);
+  };
+  try{
+    await lerDir(h, h.name, IR_PASTA_NIVEIS);
+    IR.pastaArquivos = achados;
+    IR.pastaVarridoEm = new Date().toISOString();
+    IR.pastaErro = estourou
+      ? 'A pasta tem muitas subpastas; parei em '+IR_PASTA_MAX_DIRS+'. Se faltar alguma base, conecte uma pasta mais específica.'
+      : null;
+  }catch(err){
+    IR.pastaErro = 'Não consegui ler a pasta: '+(err && err.message || err);
+  }
+  irRenderView();
+}
+// Novo = nunca importado por aqui, ou com data de modificação diferente da última vez.
+function irPastaNovo(baseId){
+  const a = (IR.pastaArquivos||{})[baseId];
+  if(!a) return false;
+  const u = (IR.pastaUltimo||{})[baseId];
+  return !u || u.modificadoEm !== a.file.lastModified || u.nome !== a.file.name;
+}
+function irPastaPendentes(){
+  return IR_PASTA_BASES.filter(b=>irPastaNovo(b.id));
+}
+async function irPastaMarcar(baseId){
+  const a = (IR.pastaArquivos||{})[baseId];
+  if(!a) return;
+  IR.pastaUltimo = Object.assign({}, IR.pastaUltimo||{}, {
+    [baseId]: {nome:a.file.name, modificadoEm:a.file.lastModified, importadoEm:new Date().toISOString()}
+  });
+  await irSetConfig('pasta-ultimo', IR.pastaUltimo);
+}
+/* Processa o que mudou, na ordem 390 -> 160 -> 410, uma de cada vez. A ordem
+   não é estética: a 160 lê as fichas que a 390 grava, e disparar as duas juntas
+   faria a 160 subir sem preço e sem classe local.
+
+   O bloco do ciclo NÃO é processado sozinho de propósito: ele depende do número
+   do ciclo e da data de abertura, que são decisão de quem importa. O que dá pra
+   automatizar é encher os campos de arquivo — o usuário confere e clica. */
+async function irPastaAtualizar(forcar){
+  if(IR.pastaProcessando) return;
+  const pend = irPastaPendentes();
+  if(!forcar && !pend.length){ irShowToast('Nenhuma base nova na pasta.'); return; }
+  IR.pastaProcessando = true; irRenderView();
+  const feitas = [];
+  try{
+    for(const base of IR_PASTA_BASES){
+      if(!base.auto) continue;
+      // "Reimportar tudo" ignora a data do arquivo. A checagem por data economiza
+      // processamento, mas cria um beco: se a planilha atualizou a consulta sem
+      // salvar, a data não muda, a base fica "em dia" e não há como forçar —
+      // exatamente a situação de reimportar três vezes e o número não mudar.
+      if(!forcar && !irPastaNovo(base.id)) continue;
+      if(!IR.pastaArquivos[base.id]) continue;
+      const arq = IR.pastaArquivos[base.id];
+      let ok = false;
+      if(base.id === '390'){ IR.est390File = arq.file; ok = await irProcessarEst390(); }
+      else if(base.id === '160'){ IR.est160File = arq.file; ok = await irProcessar160(); }
+      else if(base.id === '410'){ IR.net410File = arq.file; ok = await irProcessar410(); }
+      if(ok){ await irPastaMarcar(base.id); feitas.push(base.label); }
+      else break; // uma base que falhou derruba as seguintes, que dependem dela
+    }
+    // Bloco do ciclo: só preenche os campos.
+    let slots = 0;
+    for(const base of IR_PASTA_BASES){
+      if(base.auto || !base.slot) continue;
+      const arq = (IR.pastaArquivos||{})[base.id];
+      if(!arq) continue;
+      if(IR_MULTI_KEYS.has(base.slot)) irAssignFilesToSlots(base.slot, [arq.file]);
+      else IR.files[base.slot] = arq.file;
+      slots++;
+    }
+    if(feitas.length) irShowToast('Atualizado: '+feitas.join(', ')+'.');
+    if(slots) irShowToast(slots+' arquivo(s) do ciclo prontos — confira o número do ciclo e clique em PROCESSAR CICLO.');
+  } finally {
+    IR.pastaProcessando = false; irRenderView();
+  }
+}
+function irPastaQuando(baseId){
+  const a = (IR.pastaArquivos||{})[baseId];
+  if(!a) return '';
+  const d = new Date(a.file.lastModified);
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+function irRenderPastaPanel(){
+  if(!IR_PASTA_SUPORTA) return '';
+  if(!IR.pastaHandle){
+    return `<div class="panel pasta-panel">
+      <div class="ofe-head"><h3>Pasta conectada</h3></div>
+      <p class="field-hint">Autorize a pasta das planilhas uma vez e o dash passa a buscar os arquivos sozinho — sem procurar arquivo a cada importação.</p>
+      ${IR.pastaErro ? `<p class="pasta-erro">${irEsc(IR.pastaErro)}</p>` : ''}
+      <div class="form-actions"><button class="btn btn-primary" onclick="irPastaConectar()">Conectar pasta</button></div>
+    </div>`;
+  }
+  if(IR.pastaPerm !== 'granted'){
+    return `<div class="panel pasta-panel">
+      <div class="ofe-head"><h3>Pasta conectada</h3></div>
+      <p class="field-hint">O navegador precisa que você confirme o acesso a <strong>${irEsc(IR.pastaHandle.name)}</strong> nesta sessão.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="irPastaReautorizar()">Permitir acesso</button>
+        <button class="btn btn-secondary" onclick="irPastaDesconectar()">Desconectar</button>
+      </div>
+    </div>`;
+  }
+  const pend = irPastaPendentes();
+  const linha = b=>{
+    const arq = (IR.pastaArquivos||{})[b.id];
+    const novo = irPastaNovo(b.id);
+    return `<tr class="${novo?'pasta-novo':''}">
+      <td><strong>${irEsc(b.label)}</strong><span class="pasta-desc">${irEsc(b.desc)}</span></td>
+      <td class="mono">${arq
+        ? irEsc(arq.file.name) + '<span class="pasta-caminho">' + irEsc(arq.pasta)
+          + (arq.copias > 1 ? ` <em class="pasta-copias">+${arq.copias-1} em outra pasta</em>` : '') + '</span>'
+        : '<span class="pasta-falta">não encontrado</span>'}</td>
+      <td class="mono">${arq ? irEsc(irPastaQuando(b.id)) : '—'}</td>
+      <td>${!arq ? '—' : novo
+        ? `<span class="pasta-tag nova">${b.auto ? 'atualiza' : 'preenche'}</span>`
+        : '<span class="pasta-tag ok">em dia</span>'}</td>
+    </tr>`;
+  };
+  return `<div class="panel pasta-panel">
+    <div class="ofe-head">
+      <h3>Pasta conectada</h3>
+      <div class="ofe-acoes">
+        <button class="btn btn-secondary" onclick="irPastaVarrer()">Reler pasta</button>
+        <button class="btn btn-secondary" onclick="irPastaDesconectar()">Desconectar</button>
+      </div>
+    </div>
+    <p class="field-hint"><strong class="mono">${irEsc(IR.pastaHandle.name)}</strong>${
+      IR.pastaVarridoEm ? ' · lida às '+irEsc(new Date(IR.pastaVarridoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})) : ''}</p>
+    ${IR.pastaErro ? `<p class="pasta-erro">${irEsc(IR.pastaErro)}</p>` : ''}
+    <div class="table-wrap"><table class="pasta-table">
+      <thead><tr><th>Base</th><th>Arquivo na pasta</th><th>Modificado em</th><th>Situação</th></tr></thead>
+      <tbody>${IR_PASTA_BASES.map(linha).join('')}</tbody>
+    </table></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="irPastaAtualizar()" ${IR.pastaProcessando||!pend.length?'disabled':''}>${
+        IR.pastaProcessando ? 'Atualizando...' : pend.length ? 'Atualizar '+pend.length+' base(s)' : 'Tudo em dia'}</button>
+      <button class="btn btn-secondary" onclick="irPastaAtualizar(true)" ${IR.pastaProcessando?'disabled':''}
+        title="Reprocessa 390, 160 e 410 mesmo que a data do arquivo não tenha mudado">Reimportar tudo</button>
+    </div>
+  </div>`;
+}
+
+/* ---------- IMPORTAÇÃO DA QRY0160 (PENDÊNCIA DE MOVIMENTAÇÃO) ---------- */
+function irOnFile160(f){ if(!f) return; IR.est160File = f; irRenderView(); }
+function irOnDropFile160(e){ e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) irOnFile160(f); }
+function irRemoveFile160(){ IR.est160File = null; irRenderView(); }
+function irProcessar160(){
+  if(IR.est160Processing || !IR.est160File) return Promise.resolve(false);
+  IR.est160Processing = true; IR.est160Progress = {stage:'Lendo arquivo...', pct:0};
+  irRenderView();
+  let _fim; const _p = new Promise(r=>{ _fim = r; });
+  IR.est160File.arrayBuffer().then(buf=>{
+    const worker = irNovoWorker();
+    worker.onmessage = async ev=>{
+      const msg = ev.data;
+      if(msg.type==='progress'){ IR.est160Progress = {stage:msg.stage, pct:msg.pct}; irUpdateProgressUI160(); }
+      else if(msg.type==='error160'){
+        IR.est160Processing = false; worker.terminate();
+        irShowToast('Erro na QRY0160: '+msg.message, true); irRenderView(); _fim(false);
+      } else if(msg.type==='done160'){
+        IR.est160Processing = false; worker.terminate();
+        IR.est390Meta = await irGetEstoqueMeta();
+        IR.est390Locais = null; IR.est160File = null;
+        IR._transGanhos = null; IR._transGanhoLocal = null; IR._transGanhosDiag = null;
+        irShowToast(irFmtInt(msg.locais)+' endereços com data de movimento.');
+        irRenderView(); _fim(true);
+      }
+    };
+    worker.onerror = ()=>{ worker.terminate(); IR.est160Processing=false; irShowToast('Falha no processamento da QRY0160.', true); irRenderView(); _fim(false); };
+    worker.postMessage({type:'process160', buf160:buf}, [buf]);
+  }).catch(err=>{ IR.est160Processing=false; irShowToast('Erro ao ler a QRY0160: '+err.message, true); irRenderView(); _fim(false); });
+  return _p;
+}
+function irUpdateProgressUI160(){
+  const st = document.getElementById('ir-160-stage'), fi = document.getElementById('ir-160-fill');
+  if(st && fi){ st.textContent = IR.est160Progress.stage; fi.style.width = IR.est160Progress.pct+'%'; }
 }
 function irRenderNet410Panel(){
   const d = IR.net410Data;
@@ -2113,11 +2789,11 @@ function irRenderGestaoCiclo(){
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <div>
-          <h3 style="margin-bottom:4px;">${irCicloLabel(c)} — ${c.status==='aberto'?'Aberto':'Encerrado'}</h3>
+          <h3 style="margin-bottom:4px;">${irCicloLabel(c)} — ${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</h3>
           <p class="field-hint">Abertura: ${irFmtDate(c.dataAbertura)} · Término previsto: ${irFmtDate(c.dataPrevistaTermino)}${c.dataEncerramento?' · Encerrado em: '+irFmtDate(c.dataEncerramento):''}</p>
         </div>
         <div class="form-actions" style="margin:0;">
-          ${c.status==='aberto' ? `<button class="btn btn-secondary" onclick="irEncerrarCiclo()">Encerrar ciclo</button>` : ''}
+          ${irCicloStatus(c)==='aberto' ? `<button class="btn btn-secondary" onclick="irEncerrarCiclo()">Encerrar ciclo</button>` : ''}
           <button class="btn btn-primary" onclick="irSwitchTab('importacao')">Atualizar dados do ciclo</button>
         </div>
       </div>
@@ -2149,6 +2825,7 @@ function irRenderGestaoCiclo(){
       </table></div>
     </div>` : ''}
     ${irRenderNet410Panel()}
+    ${irRenderNetDistorcaoPanel()}
   `;
 }
 async function irEncerrarCiclo(){
@@ -3094,7 +3771,7 @@ function irExportarRankingImagem(){
   const html = `<div class="rp-page">
     <div class="rp-hero">
       <div class="rp-hero-top">
-        <img src="brand/Logo_LDM_hor_2.png" alt="Loja do Mecânico" class="rp-hero-logo">
+        <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="rp-hero-logo">
         <div class="rp-hero-status">${irEsc(periodoTxt)}</div>
       </div>
       <div class="rp-hero-badge">Ranking da Equipe</div>
@@ -3165,7 +3842,7 @@ function irCompartilharProdutividade(){
   const html = `<div class="rp-page">
     <div class="rp-hero">
       <div class="rp-hero-top">
-        <img src="brand/Logo_LDM_hor_2.png" alt="Loja do Mecânico" class="rp-hero-logo">
+        <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="rp-hero-logo">
         <div class="rp-hero-status">${irEsc(periodoTxt)}</div>
       </div>
       <div class="rp-hero-badge">Produtividade da Equipe</div>
@@ -3197,20 +3874,6 @@ function irCompartilharProdutividade(){
 /* ============================================================
    DIVERGÊNCIAS
    ============================================================ */
-const IR_DIV_ROW_H = 32;
-function irDivergenciasFiltered(){
-  const f = IR.divFilters;
-  const search = f.search.trim().toLowerCase();
-  return IR.divergencias.filter(d=>{
-    if(d.diferenca===0) return false;
-    if(f.local && d.local!==f.local) return false;
-    if(search){
-      const hay = (d.item+' '+d.itemNome+' '+d.local).toLowerCase();
-      if(!hay.includes(search)) return false;
-    }
-    return true;
-  }).sort((a,b)=>Math.abs(b.vlDivergencia)-Math.abs(a.vlDivergencia));
-}
 // Descrição completa só cabe truncada — junta palavras do início até ~42 caracteres
 // (o suficiente pra identificar o item na maioria dos casos, sem quebrar a linha) e
 // fecha com a última palavra; o texto completo fica no title (tooltip ao passar o
@@ -3331,7 +3994,7 @@ async function irBaixarAuditoriaNetImagem(){
   const html = `<div class="rp-page">
     <div class="rp-hero">
       <div class="rp-hero-top">
-        <img src="brand/Logo_LDM_hor_2.png" alt="Loja do Mecânico" class="rp-hero-logo">
+        <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="rp-hero-logo">
       </div>
       <div class="rp-hero-badge">Auditoria Direcionada</div>
       <h1>Top ${g.n} itens de ${irEsc(g.mesLabel)}</h1>
@@ -3598,88 +4261,178 @@ function irRenderNetDistorcaoPanel(){
   </div>`;
 }
 /* ============================================================
-   DIVERGÊNCIAS — quem está distorcendo o NET, e a auditoria de validação
+   DIVERGÊNCIAS — ofensores do NET
 
-   A pergunta da aba: das peças divergentes do período, quais ITENS puxam o NET
-   e por onde começar. Item que perdeu num local e ganhou em outro fecha o NET
-   perto de zero — não precisa auditoria, e some do topo da lista.
+   A tela responde uma coisa só: o NET do período está em X; quais itens
+   causaram isso. Uma linha por ITEM.
 
-   Da lista o usuário marca os itens e gera a auditoria de validação, que sai em
-   dois blocos por item:
-     • LOCAIS DIVERGENTES — onde a diferença apareceu no ciclo.
-     • LOCAIS COM SALDO   — onde o item tem estoque hoje (QRY0390), inclusive
-       posições que ninguém contou. Cada linha aponta os locais divergentes do
-       mesmo item, pra o auditor saber de onde a suspeita veio.
+   Um item só é OFENSOR quando a perda (ou a sobra) sobrevive ao ano. Perder
+   R$ 5.000 no mês e ganhar os mesmos R$ 5.000 em outro ciclo do ano deixa o
+   ano em zero — houve erro de contagem, mas não houve perda: o item vira
+   COMPENSADO e sai da lista.
+
+   Rotina do auditor: abre a tela, lê os ofensores de perda e de ganho, marca,
+   gera a auditoria e imprime. A auditoria lista os locais onde o item TEM
+   SALDO hoje (QRY0390) — é onde ele vai conferir.
    ============================================================ */
-const IR_DIV_AUTOANULA_LIM = 0.25; // |NET| < 25% do ABS => sobra e falta se anularam
+const IR_DIV_CORTE_PADRAO = 1000;   // |NET R$| mínimo para o item ser ofensor
+const IR_DIV_CORTE_QTD_PADRAO = 10; // |NET peças| mínimo quando o corte é por quantidade
+// Corte vigente e o campo do item ao qual ele se aplica. Trocar a base troca as
+// duas coisas de uma vez: o que é ofensor e o que a tabela ordena por padrão.
+function irDivBase(){
+  return (IR.divBase==='qtd')
+    ? {campo:'netQtd', campoAno:'netQtdAno', corte: IR.divCorteQtd==null?IR_DIV_CORTE_QTD_PADRAO:IR.divCorteQtd,
+       lbl:'peças', fmt:irFmtInt, passo:1}
+    : {campo:'netValor', campoAno:'netValorAno', corte: IR.divCorte==null?IR_DIV_CORTE_PADRAO:IR.divCorte,
+       lbl:'R$', fmt:irFmtMoney, passo:100};
+}
+function irDivSetBase(base){
+  IR.divBase = base;
+  IR.divOrdem = {col: base==='qtd'?'netQtd':'netValor', dir:'desc'};
+  irRenderView();
+}
+// Chips de sentido: clicar liga/desliga. Nunca deixa a tabela sem nenhum ligado —
+// desligar o último volta a ligar todos, senão a tela some sem explicação.
+function irDivToggleSentido(s){
+  const atual = new Set(IR.divSentidos || ['perda','ganho']);
+  if(atual.has(s)) atual.delete(s); else atual.add(s);
+  IR.divSentidos = atual.size ? Array.from(atual) : ['perda','ganho','compensado'];
+  irRenderView();
+}
 
 function irDivSetEscopo(value){
   IR.divEscopo = value.startsWith('ano:') ? {tipo:'ano', ano:value.slice(4)}
               : value.startsWith('mes:') ? {tipo:'mes', mes:value.slice(4)}
               : value.startsWith('ciclo:') ? {tipo:'ciclo', cicloId:value.slice(6)}
-              : value==='dia' ? {tipo:'dia', dia:IR.divEscopo.dia || ''}
+              : value==='ciclos' ? {tipo:'ciclos', cicloIds:(IR.divEscopo.cicloIds && IR.divEscopo.cicloIds.length)
+                    ? IR.divEscopo.cicloIds
+                    : [IR.divEscopo.cicloId || (IR.cicloAtivo||{}).id].filter(Boolean)}
+              : value==='periodo' ? {tipo:'periodo', de:IR.divEscopo.de || '', ate:IR.divEscopo.ate || ''}
               : {tipo:'ciclo'};
-  IR.divEscopoDados = null;
-  IR.divSelecionados = new Set();
-  IR.divAuditoria = null;
+  IR.divEscopoDados = null; IR.divSelecionados = new Set(); IR.divAuditoria = null;
+  irRenderView(); // o render dispara a carga do novo escopo e desenha quando estiver pronto
+}
+// Intervalo livre de datas. Vazio de um lado é aberto daquele lado: só "até"
+// pega tudo desde o começo, só "de" pega dali em diante.
+/* Liga e desliga um ciclo na seleção múltipla. Nunca deixa vazio: desmarcar o
+   último volta a marcar o ciclo ativo, senão a tela some sem explicação. */
+function irDivToggleCiclo(id){
+  const atual = new Set(IR.divEscopo.cicloIds || []);
+  if(atual.has(id)) atual.delete(id); else atual.add(id);
+  const ids = atual.size ? Array.from(atual) : [(IR.cicloAtivo||{}).id].filter(Boolean);
+  IR.divEscopo = {tipo:'ciclos', cicloIds: ids};
+  IR.divEscopoDados = null; IR.divSelecionados = new Set(); IR.divAuditoria = null;
   irRenderView();
-  irCarregarDivEscopo();
 }
-function irDivSetDia(dia){
-  IR.divEscopo = {tipo:'dia', dia};
-  IR.divSelecionados = new Set();
-  IR.divAuditoria = null;
-  irCarregarDivEscopo();
+function irDivSetPeriodo(campo, valor){
+  const e = IR.divEscopo;
+  IR.divEscopo = {tipo:'periodo', de: e.de||'', ate: e.ate||'', [campo]: valor};
+  IR.divSelecionados = new Set(); IR.divAuditoria = null;
+  IR.divEscopoDados = null;
+  irRenderView();
 }
-/* Ano do escopo — é o recorte da coluna "NET ano", que fica visível em qualquer
-   filtro: pode ter ganhado 42 peças no ciclo 3 e perdido as mesmas 42 no ciclo 1. */
+function irDivSetCorte(v){
+  const n = parseFloat(String(v).replace(/\./g,'').replace(',','.'));
+  const val = isNaN(n) ? 0 : Math.max(0, n);
+  if(IR.divBase==='qtd') IR.divCorteQtd = val; else IR.divCorte = val;
+  irRenderView();
+}
+function irDivSetBusca(v){ IR.divBusca = String(v||'').trim(); irRenderView(); }
+/* Cabeçalho clicável: 1º clique ordena decrescente, 2º inverte. */
+function irDivOrdenar(col){
+  const o = IR.divOrdem || {col:'netValor', dir:'desc'};
+  IR.divOrdem = (o.col===col) ? {col, dir: o.dir==='desc'?'asc':'desc'} : {col, dir:'desc'};
+  irRenderView();
+}
 function irDivAnoDoEscopo(){
   const e = IR.divEscopo;
   if(e.tipo==='ano') return String(e.ano);
   if(e.tipo==='mes') return String(e.mes).slice(0,4);
-  if(e.tipo==='dia' && e.dia) return String(e.dia).slice(0,4);
+  if(e.tipo==='periodo' && (e.de || e.ate)) return String(e.de || e.ate).slice(0,4);
+  if(e.tipo==='ciclos'){
+    const cs = irDivCiclosSelecionados();
+    if(cs.length) return String(irCicloAno(cs[0])||'');
+  }
   const c = e.cicloId ? IR.ciclos.find(x=>x.id===e.cicloId) : IR.cicloAtivo;
   return String((c||{}).dataAbertura||'').slice(0,4);
 }
 function irDivCiclosDoAno(ano){
   return IR.ciclos.filter(c=>String(c.dataAbertura||'').slice(0,4)===String(ano));
 }
-/* Carrega as divergências do escopo E as do ANO inteiro (uma vez por ano, em
-   cache) — a coluna do ano precisa de todos os ciclos, não só do escopo. */
+/* Anos que o escopo toca. Um intervalo de datas pode atravessar o ano e uma
+   seleção de ciclos também — o cache precisa carregar todos, senão a metade de
+   fora some sem aviso. */
+function irDivAnosDoEscopo(){
+  const e = IR.divEscopo;
+  if(e.tipo==='periodo' && (e.de || e.ate))
+    return Array.from(new Set([e.de, e.ate].filter(Boolean).map(d=>String(d).slice(0,4)))).sort();
+  if(e.tipo==='ciclos')
+    return Array.from(new Set(irDivCiclosSelecionados().map(c=>String(irCicloAno(c)||'')).filter(Boolean))).sort();
+  const a = irDivAnoDoEscopo();
+  return a ? [a] : [];
+}
+function irDivCiclosSelecionados(){
+  const ids = new Set(IR.divEscopo.cicloIds || []);
+  return (IR.ciclos||[]).filter(c=>ids.has(c.id));
+}
 async function irCarregarDivEscopo(){
   const e = IR.divEscopo;
-  const ano = irDivAnoDoEscopo();
-  if(ano && (!IR.divAnoCache || IR.divAnoCache.ano!==ano)){
-    const listas = await Promise.all(irDivCiclosDoAno(ano).map(c=>irGetByCiclo(IR_STORES.divergencias, c.id)));
-    IR.divAnoCache = {ano, divs: listas.flat()};
+  const anos = irDivAnosDoEscopo();
+  const chave = anos.join(',');
+  if(chave && (!IR.divAnoCache || IR.divAnoCache.ano!==chave)){
+    const ciclos = anos.flatMap(a=>irDivCiclosDoAno(a));
+    const listas = await Promise.all(ciclos.map(c=>irGetByCiclo(IR_STORES.divergencias, c.id)));
+    IR.divAnoCache = {ano: chave, divs: listas.flat()};
   }
-  if(e.tipo==='ciclo' && (!e.cicloId || e.cicloId===(IR.cicloAtivo||{}).id)){
-    IR.divEscopoDados = IR.divergencias;
-  } else if(e.tipo==='ciclo'){
-    IR.divEscopoDados = await irGetByCiclo(IR_STORES.divergencias, e.cicloId);
-  } else {
-    IR.divEscopoDados = (IR.divAnoCache||{}).divs || [];
+  if(e.tipo==='ciclos'){
+    const ids = new Set(e.cicloIds || []);
+    IR.divEscopoDados = ((IR.divAnoCache||{}).divs || []).filter(d=>ids.has(d.cicloId));
   }
-  irRenderView();
+  else if(e.tipo==='ciclo' && (!e.cicloId || e.cicloId===(IR.cicloAtivo||{}).id)) IR.divEscopoDados = IR.divergencias;
+  else if(e.tipo==='ciclo') IR.divEscopoDados = await irGetByCiclo(IR_STORES.divergencias, e.cicloId);
+  else IR.divEscopoDados = (IR.divAnoCache||{}).divs || [];
+  // A 410 do(s) mesmo(s) ano(s) — é dela que sai o preço congelado. Esperada aqui
+  // dentro, e não em paralelo: quem carregava depois fazia a tela desenhar com o
+  // preço da 278, e dois segundos mais tarde trocar tudo com o preço da 410.
+  const anos410 = Array.from(new Set(anos.concat([String(new Date().getFullYear())])));
+  const falta410 = anos410.filter(a=>!(IR.div410Cache||{})[a]);
+  if(falta410.length) await irDivCarregar410(falta410);
+  // A ficha da 390 entra aqui, e não só na hora de gerar a auditoria: ela é a
+  // terceira fonte de preço, então sem ela a lista mostrava R$ 0,00 num item que
+  // a auditoria, gerada depois, já valorava — dois números diferentes na mesma tela.
+  await irCarregarItemInfo();
 }
-/* Dia em que a divergência fechou. Ciclos processados antes do campo existir caem
-   no fallback pelas contagens do ciclo carregado. */
+/* A aba só desenha quando os dois caches estão prontos: as divergências do escopo
+   e a QRY410 dos anos que ele toca. Antes ela desenhava na hora com o que tinha em
+   memória (só o ciclo ativo, valorado pela 278) e se redesenhava sozinha quando o
+   resto chegava — o número piscava e trocava na frente do usuário. */
+function irDivEscopoPronto(){
+  if(!IR.divAnoCache || IR.divEscopoDados===null || !IR._itemInfo) return false;
+  const anos = irDivAnosDoEscopo();
+  if(IR.divAnoCache.ano !== anos.join(',')) return false;
+  const anos410 = Array.from(new Set(anos.concat([String(new Date().getFullYear())])));
+  return anos410.every(a=>!!(IR.div410Cache||{})[a]);
+}
+function irDivCarregando(){
+  return `<div class="panel div-carregando"><span class="div-spinner"></span>Carregando divergências e preços do período...</div>`;
+}
+/* Dia do fechamento da visita. Ciclos processados antes do campo existir caem no
+   fallback pelas contagens do ciclo carregado. */
 function irDivDiaDa(d){
   if(d.diaFechamento) return d.diaFechamento;
   return irDivDiaPorLocalLegado().get(d.local) || '';
 }
 function irDivDiaPorLocalLegado(){
   if(IR._divDiaLegado && IR._divDiaLegadoCiclo===(IR.cicloAtivo||{}).id) return IR._divDiaLegado;
-  const finalPorLocal = new Map();
+  const fim = new Map();
   for(const c of (IR.contagens||[])){
     if(c.idConferencia<2 || !c.dataSituacao) continue;
-    const atual = finalPorLocal.get(c.local);
-    if(!atual || c.idConferencia>atual.rodada) finalPorLocal.set(c.local, {rodada:c.idConferencia, dia:c.dataSituacao.slice(0,10)});
+    const a = fim.get(c.local);
+    if(!a || c.idConferencia>a.rodada) fim.set(c.local, {rodada:c.idConferencia, dia:c.dataSituacao.slice(0,10)});
   }
   const m = new Map();
-  for(const [local, v] of finalPorLocal) m.set(local, v.dia);
-  IR._divDiaLegado = m;
-  IR._divDiaLegadoCiclo = (IR.cicloAtivo||{}).id;
+  for(const [local, v] of fim) m.set(local, v.dia);
+  IR._divDiaLegado = m; IR._divDiaLegadoCiclo = (IR.cicloAtivo||{}).id;
   return m;
 }
 function irDivMesesDisponiveis(){
@@ -3690,393 +4443,1053 @@ function irDivDiasDisponiveis(){
   const base = (IR.divAnoCache||{}).divs || IR.divergencias || [];
   return Array.from(new Set(base.map(d=>irDivDiaDa(d)).filter(Boolean))).sort();
 }
-/* Agrega por item uma lista de divergências: NET e ABS, em peças e valor. */
+/* ---------- PREÇO UNITÁRIO DA DIVERGÊNCIA ----------
+   A SIGEQ278 é custo MÉDIO: quando o item zera no CD o preço some, e a
+   divergência daquele item vira R$ 0 — some justo o que mais interessa. A QRY410
+   congela o preço no momento do lançamento, então ela é a fonte boa.
+
+   Preço implícito da 410 = |valor lançado| ÷ |quantidade lançada| no item/mês.
+   A cascata, do mais específico pro mais genérico:
+     1. preço da 410 no MÊS em que o local fechou;
+     2. último preço da 410 no ano antes desse mês;
+     3. preço da 278 que veio no processamento;
+     4. zero (componente de kit que não valora).
+   Cada divergência guarda de onde veio o preço, pra tabela poder mostrar. */
+/* Descrição do endereço, com duas fontes. A Base Congelada só tem os locais DESTE
+   ciclo; a auditoria, porém, lista todo endereço onde o item tem saldo hoje
+   (QRY0390), e boa parte deles não foi congelada — apareciam com um traço, como se
+   o local estivesse faltando. A QRY0843 traz a descrição de tudo que foi contado,
+   então serve de segunda fonte; o que sobra é rotulado, não deixado em branco. */
+function irDescLocalMapa(){
+  if(IR._descLocal && IR._descLocalCiclo===(IR.cicloAtivo||{}).id) return IR._descLocal;
+  const m = new Map(IR._descLocalTodosCiclos || []);
+  for(const c of (IR.contagens||[])) if(c.local && c.descricaoLocal && !m.has(c.local)) m.set(c.local, c.descricaoLocal);
+  for(const l of (IR.locais||[])) if(l.idLocal && l.descricao) m.set(l.idLocal, l.descricao);
+  IR._descLocal = m; IR._descLocalCiclo = (IR.cicloAtivo||{}).id;
+  return m;
+}
+/* Terceira fonte: a Base Congelada de TODOS os ciclos já importados. Um endereço
+   que não entrou no ciclo atual quase sempre entrou em algum anterior, e a
+   descrição dele serve igual. Roda uma vez, sob demanda. */
+async function irCarregarDescLocaisTodosCiclos(){
+  if(IR._descLocalTodosCiclos || IR._descLocalCarregando) return;
+  IR._descLocalCarregando = true;
+  try{
+    const m = new Map();
+    for(const c of (IR.ciclos||[])){
+      const ls = await irGetByCiclo(IR_STORES.locais, c.id);
+      for(const l of ls) if(l.idLocal && l.descricao && !m.has(l.idLocal)) m.set(l.idLocal, l.descricao);
+    }
+    IR._descLocalTodosCiclos = m;
+    IR._descLocal = null; // força remontar o mapa com a fonte nova
+  }catch(err){ IR._descLocalTodosCiclos = new Map(); }
+  finally{ IR._descLocalCarregando = false; }
+}
+function irDescLocal(local){ return irDescLocalMapa().get(local) || ''; }
+/* EAN e descrição do item, vindos da QRY0390 importada à parte. É a única base com
+   código de barras, e como ela não depende de ciclo, a auditoria passa a ter EAN
+   mesmo em ciclo processado antes disso existir. */
+async function irCarregarItemInfo(){
+  if(IR._itemInfo || IR._itemInfoLoading) return;
+  IR._itemInfoLoading = true;
+  try{
+    const linhas = await irGetItemInfoTodos();
+    IR._itemInfo = new Map(linhas.map(l=>[l.item, l]));
+  }catch(err){ IR._itemInfo = new Map(); }
+  finally{ IR._itemInfoLoading = false; }
+}
+function irItemInfo(item){ return (IR._itemInfo && IR._itemInfo.get(irDivNormItem(item))) || null; }
+function irDivNormItem(v){
+  const s = String(v ?? '').trim();
+  if(s==='') return '';
+  const n = Number(s);
+  return (Number.isFinite(n) && Number.isInteger(n)) ? String(n) : s;
+}
+async function irDivCarregar410(anos){
+  if(IR._div410Loading) return;
+  IR._div410Loading = true;
+  try{
+    const cache = Object.assign({}, IR.div410Cache||{});
+    for(const ano of anos) cache[ano] = (await irGetNet410(Number(ano))) || {vazio:true};
+    IR.div410Cache = cache;
+  }catch(err){
+    IR.div410Cache = Object.assign({}, IR.div410Cache||{}, {erro:String(err)});
+  }finally{
+    IR._div410Loading = false;
+  }
+}
+// item -> {porMes: Map(mes -> preço), meses: [mes ordenado]}
+function irDivPrecos410(){
+  const anos = Object.keys(IR.div410Cache||{}).filter(k=>/^\d{4}$/.test(k));
+  const chave = anos.sort().join(',');
+  if(IR._precos410 && IR._precos410Chave===chave) return IR._precos410;
+  const mapa = new Map();
+  for(const ano of anos){
+    const dados = (IR.div410Cache||{})[ano];
+    for(const linha of ((dados||{}).porMes || [])){
+      for(const i of (linha.topItensPositivos||[]).concat(linha.topItensNegativos||[])){
+        const k = irDivNormItem(i.item);
+        const qtd = Math.abs(i.saldoQtd||0);
+        if(!k || qtd < 0.005) continue;
+        const preco = Math.abs(i.saldoValor||0) / qtd;
+        if(!(preco > 0)) continue;
+        if(!mapa.has(k)) mapa.set(k, {porMes:new Map(), meses:[]});
+        mapa.get(k).porMes.set(linha.mes, preco);
+      }
+    }
+  }
+  for(const g of mapa.values()) g.meses = Array.from(g.porMes.keys()).sort();
+  IR._precos410 = mapa; IR._precos410Chave = chave;
+  return mapa;
+}
+// Preço a usar numa linha de divergência, com a origem junto.
+function irDivPrecoDa(d){
+  const g = irDivPrecos410().get(irDivNormItem(d.item));
+  if(g){
+    const mes = irDivDiaDa(d).slice(0,7);
+    if(g.porMes.has(mes)) return {preco: g.porMes.get(mes), origem:'410'};
+    // Último preço lançado ANTES do fechamento — o item pode ter zerado depois.
+    let anterior = null;
+    for(const m of g.meses){ if(m <= mes) anterior = m; else break; }
+    if(anterior) return {preco: g.porMes.get(anterior), origem:'410 ant.'};
+  }
+  if(d.precoUnitario) return {preco: d.precoUnitario, origem:'278'};
+  // Terceira fonte: o preço unitário da QRY0390, que é o custo de hoje e existe
+  // pra praticamente todo item com saldo. Sem ela, item fora da 410 e sem preço
+  // na 278 aparecia divergindo R$ 0,00 — e um item de valor zero era tratado
+  // como se não tivesse divergência de dinheiro nenhuma.
+  const info = irItemInfo(d.item);
+  if(info && info.valorUnitario) return {preco: info.valorUnitario, origem:'390'};
+  return {preco: 0, origem: (info && info.valoriza==='N') ? 'não valora' : 'sem preço'};
+}
+function irDivValorDa(d){
+  const {preco, origem} = irDivPrecoDa(d);
+  return {valor: d.diferenca * preco, preco, origem};
+}
+
+/* Todas as linhas de um item no ANO, valoradas e marcadas se estão dentro ou fora
+   do período filtrado. É o que responde "cadê a contrapartida" sem trocar o filtro. */
+function irDivLinhasDoAno(item){
+  const noPeriodo = new Set(irDivDivsDoEscopo().map(d=>d.id));
+  return irDivLinhasValidas((IR.divAnoCache||{}).divs || IR.divergencias)
+    .filter(d=>d.item===item)
+    .map(d=>{
+      const v = irDivValorDa(d);
+      return Object.assign({}, d, {vlDivergencia:v.valor, precoUsado:v.preco, precoOrigem:v.origem,
+        foraDoPeriodo: !noPeriodo.has(d.id)});
+    })
+    .sort((a,b)=>String(b.diaFechamento||'').localeCompare(String(a.diaFechamento||''))
+                 || Math.abs(b.vlDivergencia)-Math.abs(a.vlDivergencia));
+}
 function irDivAgruparPorItem(divs){
   const map = new Map();
   for(const d of divs){
     let g = map.get(d.item);
-    if(!g){ g = {item:d.item, descricao:d.itemNome, netQtd:0, netValor:0, absQtd:0, absValor:0, locais:[]}; map.set(d.item, g); }
+    if(!g){ g = {item:d.item, descricao:d.itemNome, ean:d.ean||'', netQtd:0, netValor:0, locais:[], origens:new Set()}; map.set(d.item, g); }
+    const v = irDivValorDa(d);
     g.netQtd += d.diferenca;
-    g.netValor += d.vlDivergencia;
-    g.absQtd += Math.abs(d.diferenca);
-    g.absValor += Math.abs(d.vlDivergencia);
-    g.locais.push(d);
+    g.netValor += v.valor;
+    g.locais.push(Object.assign({}, d, {vlDivergencia: v.valor, precoUsado: v.preco, precoOrigem: v.origem}));
+    g.origens.add(v.origem);
     if(!g.descricao && d.itemNome) g.descricao = d.itemNome;
+    if(!g.ean && d.ean) g.ean = d.ean;
   }
   return map;
 }
-/* Consolida o escopo selecionado e cruza com o NET do ano inteiro. */
-function irDivCalcItens(){
+/* Núcleo: NET do escopo + NET do ano, e a classificação em ofensor/compensado. */
+/* Motivo que não conta pro NET (ANF de nota fiscal, BAI de insumo, QBR de quebra,
+   EPI, INP de pallets) não é divergência de estoque e não pode aparecer na aba. O
+   worker já barra na importação, mas a checagem também roda aqui: ciclo processado
+   antes dessa regra continua no banco com essas linhas, e reprocessar é decisão do
+   usuário. A legenda é a mesma editável em Configurações. */
+function irDivMotivoConta(d){
+  if(!d.motivo) return true; // divergência antiga, gravada antes do motivo existir
+  const m = (IR.net410Legenda||[]).find(x=>x.id===d.motivo);
+  return !m || m.considerarNet !== false;
+}
+function irDivLinhasValidas(lista){
+  return irSoLocaisConcluidos(lista || []).filter(d=>d.diferenca!==0 && irDivMotivoConta(d));
+}
+// Divergências do período escolhido no filtro do topo. Isolado porque a
+// conciliação com a QRY410 precisa exatamente do mesmo recorte.
+function irDivDivsDoEscopo(){
   const e = IR.divEscopo;
-  const base = IR.divEscopoDados || IR.divergencias || [];
-  let divs = irSoLocaisConcluidos(base).filter(d=>d.diferenca!==0);
+  let divs = irDivLinhasValidas(IR.divEscopoDados || IR.divergencias);
   if(e.tipo==='mes') divs = divs.filter(d=>irDivDiaDa(d).slice(0,7)===e.mes);
-  if(e.tipo==='dia') divs = e.dia ? divs.filter(d=>irDivDiaDa(d)===e.dia) : [];
-  const map = irDivAgruparPorItem(divs);
-  const anoMap = irDivAgruparPorItem(irSoLocaisConcluidos((IR.divAnoCache||{}).divs || []).filter(d=>d.diferenca!==0));
-  const itens = Array.from(map.values()).map(g=>{
-    const a = anoMap.get(g.item);
+  if(e.tipo==='periodo'){
+    if(e.de)  divs = divs.filter(d=>irDivDiaDa(d) >= e.de);
+    if(e.ate) divs = divs.filter(d=>irDivDiaDa(d) <= e.ate);
+  }
+  return divs;
+}
+function irDivCalcItens(){
+  // O corte pode ser em R$ ou em peças — é a base escolhida nos chips que decide
+  // qual dos dois define quem é ofensor.
+  const base = irDivBase();
+  const corte = base.corte;
+  const divs = irDivDivsDoEscopo();
+  const noEscopo = irDivAgruparPorItem(divs);
+  const noAno = irDivAgruparPorItem(irDivLinhasValidas((IR.divAnoCache||{}).divs));
+  const busca = (IR.divBusca||'').toLowerCase();
+  const itens = Array.from(noEscopo.values()).map(g=>{
+    const a = noAno.get(g.item) || {netQtd:g.netQtd, netValor:g.netValor};
+    const noPeriodo = base.campo==='netQtd' ? g.netQtd : g.netValor;
+    const noAnoBase = base.campo==='netQtd' ? a.netQtd : a.netValor;
+    const relevante = Math.abs(noPeriodo) >= corte;
+    /* Compensado = pesou no escopo, mas o ano desmancha. Erro de contagem houve;
+       perda não. Não é ofensor.
+
+       A conta é pelo VALOR: item que ganhou 15 mil num ciclo e perdeu 15 mil em
+       outro fecha o ano em zero e sai da lista, mesmo que as peças não batam.
+
+       Mas item que não tem preço em fonte nenhuma vale zero SEMPRE, no período e
+       no ano — pelo valor ele seria "compensado" por construção, e sumia da
+       auditoria mesmo tendo peça divergente de verdade. Quando não há valor em
+       lugar nenhum, quem decide é a quantidade do ano. */
+    const zero = base.campo==='netQtd' ? 0.5 : 0.005;
+    const temBase = Math.abs(noPeriodo) > zero || Math.abs(noAnoBase) > zero;
+    const compensado = relevante && (temBase
+      ? Math.abs(noAnoBase) < Math.max(corte, zero)
+      : Math.abs(a.netQtd) < 0.5);
     return {...g,
       nLocais: g.locais.length,
-      netQtdAno: a ? a.netQtd : g.netQtd,
-      netValorAno: a ? a.netValor : g.netValor,
-      absQtdAno: a ? a.absQtd : g.absQtd,
-      autoAnulado: g.absQtd>0 && Math.abs(g.netQtd)/g.absQtd < IR_DIV_AUTOANULA_LIM,
-      // Vira o jogo quando o ano desmente o escopo: ganhou no ciclo, mas no ano
-      // o item está zerado (ou invertido).
-      anoAnula: a && a.absQtd>0 && Math.abs(a.netQtd)/a.absQtd < IR_DIV_AUTOANULA_LIM
+      netQtdAno: a.netQtd, netValorAno: a.netValor,
+      relevante, compensado,
+      ofensor: relevante && !compensado,
+      sentido: noPeriodo<0 ? 'perda' : 'ganho'
     };
-  }).sort((a,b)=>Math.abs(b.netValor)-Math.abs(a.netValor));
-  const totalNetAbs = itens.reduce((s,i)=>s+Math.abs(i.netValor), 0);
-  let acum = 0;
-  for(const i of itens){ acum += Math.abs(i.netValor); i.pctAcumulado = totalNetAbs>0 ? acum/totalNetAbs : 0; }
-  return {itens, totalNetAbs,
-    netQtd: itens.reduce((s,i)=>s+i.netQtd,0),
-    absQtd: itens.reduce((s,i)=>s+i.absQtd,0),
-    netValor: itens.reduce((s,i)=>s+i.netValor,0),
-    absValor: itens.reduce((s,i)=>s+i.absValor,0)};
+  }).filter(i=>{
+    if(!busca) return true;
+    return String(i.item).toLowerCase().includes(busca) || String(i.descricao||'').toLowerCase().includes(busca);
+  });
+  const o = IR.divOrdem || {col:'netValor', dir:'desc'};
+  const dir = o.dir==='desc' ? -1 : 1;
+  itens.sort((x,y)=>{
+    if(o.col==='item') return dir*String(x.item).localeCompare(String(y.item));
+    if(o.col==='descricao') return dir*String(x.descricao||'').localeCompare(String(y.descricao||''));
+    if(o.col==='situacao') return dir*String(x.ofensor?x.sentido:'compensado').localeCompare(String(y.ofensor?y.sentido:'compensado'));
+    // Colunas numéricas ordenam pelo valor COM SINAL: 1º clique traz o maior ganho
+    // no topo e a maior perda no fim, 2º clique inverte. Ordenar por módulo
+    // embaralhava perda e ganho na mesma ponta.
+    return dir*((x[o.col]||0) - (y[o.col]||0));
+  });
+  const ofensores = itens.filter(i=>i.ofensor);
+  const somaBase = arr => arr.reduce((s,i)=>s+(base.campo==='netQtd'?i.netQtd:i.netValor), 0);
+  return {
+    itens, ofensores, base,
+    perdas: ofensores.filter(i=>i.sentido==='perda'),
+    ganhos: ofensores.filter(i=>i.sentido==='ganho'),
+    perdaBase: somaBase(ofensores.filter(i=>i.sentido==='perda')),
+    ganhoBase: somaBase(ofensores.filter(i=>i.sentido==='ganho')),
+    perdaQtd: ofensores.filter(i=>i.sentido==='perda').reduce((s,i)=>s+i.netQtd,0),
+    ganhoQtd: ofensores.filter(i=>i.sentido==='ganho').reduce((s,i)=>s+i.netQtd,0),
+    compensados: itens.filter(i=>i.compensado),
+    netValor: Array.from(noEscopo.values()).reduce((s,i)=>s+i.netValor,0),
+    netQtd: Array.from(noEscopo.values()).reduce((s,i)=>s+i.netQtd,0),
+    totalItens: noEscopo.size,
+    // Cada LINHA divergente é um par item x local: o mesmo item divergindo em três
+    // endereços são três divergências pro auditor, não uma.
+    totalLinhas: divs.length,
+    totalLocais: new Set(divs.map(d=>d.local)).size,
+    perdaOfensores: ofensores.filter(i=>i.netValor<0).reduce((s,i)=>s+i.netValor,0),
+    ganhoOfensores: ofensores.filter(i=>i.netValor>0).reduce((s,i)=>s+i.netValor,0),
+    nPerda: ofensores.filter(i=>i.netValor<0).length,
+    nGanho: ofensores.filter(i=>i.netValor>0).length,
+    corte
+  };
 }
-function irDivToggleAnulados(){ IR.divMostrarAnulados = !IR.divMostrarAnulados; irRenderView(); }
-function irDivToggleItem(item){
-  if(!IR.divSelecionados) IR.divSelecionados = new Set();
-  if(IR.divSelecionados.has(item)) IR.divSelecionados.delete(item); else IR.divSelecionados.add(item);
+/* NET do mês corrente, sempre — independe do período escolhido no filtro. É o
+   número que o auditor precisa ver ao abrir a tela, mesmo olhando outro recorte. */
+function irDivNetMesVigente(){
+  const mes = new Date().toISOString().slice(0,7);
+  // O NET do mês é o do livro fiscal — mesmo número do gráfico NET Mensal. Sai da
+  // QRY410 direto, não da contagem: são bases diferentes e não fecham entre si.
+  const dados = (IR.div410Cache||{})[mes.slice(0,4)];
+  const linha = ((dados||{}).porMes || []).find(m=>m.mes===mes);
+  if(linha){
+    const itens = (linha.topItensPositivos||[]).concat(linha.topItensNegativos||[]);
+    return {
+      mes, fonte:'410',
+      valor: linha.net,
+      qtd: itens.reduce((s,i)=>s+(i.saldoQtd||0), 0),
+      itens: itens.length
+    };
+  }
+  const divs = irDivLinhasValidas((IR.divAnoCache||{}).divs || IR.divergencias)
+    .filter(d=>irDivDiaDa(d).slice(0,7)===mes);
+  return {
+    mes, fonte:'contagem',
+    valor: divs.reduce((s,d)=>s+irDivValorDa(d).valor,0),
+    qtd: divs.reduce((s,d)=>s+d.diferenca,0),
+    itens: new Set(divs.map(d=>d.item)).size
+  };
+}
+
+/* ---------- ITENS SIMILARES TROCADOS ----------
+   Assinatura de troca de contagem: no MESMO local, o item A sobra exatamente o
+   que o item B falta, e os dois se parecem. É o que o estoque aponta depois; aqui
+   sai no mesmo dia da contagem.
+
+   A semelhança é medida de dois jeitos, e basta um: descrições que compartilham
+   boa parte das palavras, ou códigos vizinhos (mesmo prefixo). Item trocado
+   costuma ser variante do mesmo produto — cor, voltagem, capacidade. */
+function irDivTokens(desc){
+  return String(desc||'').toUpperCase()
+    .replace(/[^A-Z0-9]+/g,' ').trim().split(' ')
+    .filter(t=>t.length>=3);
+}
+function irDivSemelhanca(a, b){
+  const A = new Set(irDivTokens(a)), B = new Set(irDivTokens(b));
+  if(!A.size || !B.size) return 0;
+  let inter = 0;
+  for(const t of A) if(B.has(t)) inter++;
+  return inter / (A.size + B.size - inter);   // Jaccard
+}
+/* Palavras iguais no COMEÇO da descrição. A família do produto vem na frente
+   ("COMPRESSOR DE AR ...", "SERRA CIRCULAR ...") e a especificação depois, então
+   prefixo separa variante de produto diferente melhor que contagem de palavras:
+   "COMPRESSOR DE AR 3HP 15/175L" e "COMPRESSOR DE AR 2HP 10/100L" dividem só 2 de
+   6 palavras — Jaccard baixo — mas são claramente o mesmo produto. */
+function irDivPrefixoComum(a, b){
+  const A = String(a||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().split(' ').filter(Boolean);
+  const B = String(b||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().split(' ').filter(Boolean);
+  let n = 0;
+  while(n<A.length && n<B.length && A[n]===B[n]) n++;
+  return n;
+}
+const IR_DIV_PREFIXO_MIN = 2;
+function irDivCodigosVizinhos(a, b){
+  const x = String(a).replace(/\D/g,''), y = String(b).replace(/\D/g,'');
+  if(x.length!==y.length || x.length<4) return false;
+  return x.slice(0,-2)===y.slice(0,-2);       // diferem só nos 2 últimos dígitos
+}
+const IR_DIV_SEMELHANCA_MIN = 0.45;
+/* Id Inventário da divergência. Ciclos processados antes do campo existir têm o
+   id no formato ciclo|local|inventario|item — dá pra recuperar de lá. */
+function irDivInventario(d){
+  if(d.inventario) return d.inventario;
+  const p = String(d.id||'').split('|');
+  return p.length>=4 ? p[2] : '';
+}
+function irDivSimSetFiltro(k, v){
+  if(!IR.divSimFiltro) IR.divSimFiltro = {de:'', ate:''};
+  IR.divSimFiltro[k] = v;
   irRenderView();
 }
-function irDivSelecionarTop(){
-  const n = Math.max(1, parseInt((document.getElementById('ir-div-topn')||{}).value, 10) || 10);
-  IR.divSelecionados = new Set(irDivListaVisivel().slice(0, n).map(i=>i.item));
+function irDivSimToggleDesc(){ IR.divSimExigeDesc = IR.divSimExigeDesc===false; irRenderView(); }
+function irDivSimLimpar(){ IR.divSimFiltro = {de:'', ate:''}; irRenderView(); }
+/* Cabeçalho clicável da tabela de similares. Mesma convenção da tabela de
+   ofensores: 1º clique ordena decrescente, 2º inverte. */
+function irDivSimOrdenar(col){
+  const o = IR.divSimOrdem || {col:'dia', dir:'desc'};
+  IR.divSimOrdem = (o.col===col) ? {col, dir: o.dir==='desc'?'asc':'desc'} : {col, dir:'desc'};
   irRenderView();
 }
-function irDivLimparSelecao(){ IR.divSelecionados = new Set(); IR.divAuditoria = null; irRenderView(); }
-function irDivListaVisivel(){
-  const {itens} = irDivCalcItens();
-  return IR.divMostrarAnulados ? itens : itens.filter(i=>!i.autoAnulado);
+// Colunas da tabela de similares. num = ordena por número (e por MÓDULO quando o
+// sinal não é o que interessa, como no desequilíbrio: o maior impacto no topo).
+const IR_SIM_COLS = [
+  {key:'dia',           lbl:'Dia'},
+  {key:'local',         lbl:'Local'},
+  {key:'inventario',    lbl:'Inventário'},
+  {key:'qtd',           lbl:'Qtde',            num:true},
+  {key:'itemSobra',     lbl:'Sobrou'},
+  {key:'itemFalta',     lbl:'Faltou'},
+  {key:'semelhanca',    lbl:'Semelhança',      num:true},
+  {key:'desequilibrio', lbl:'Desequilíbrio R$', num:true, abs:true}
+];
+function irDivSimOrdenarPares(pares){
+  const o = IR.divSimOrdem || {col:'dia', dir:'desc'};
+  const col = IR_SIM_COLS.find(c=>c.key===o.col) || IR_SIM_COLS[0];
+  const dir = o.dir==='desc' ? -1 : 1;
+  return pares.slice().sort((x,y)=>{
+    const a = x[col.key], b = y[col.key];
+    const cmp = col.num
+      ? (col.abs ? Math.abs(a||0)-Math.abs(b||0) : (a||0)-(b||0))
+      : String(a||'').localeCompare(String(b||''));
+    // Desempate estável pelo risco: dentro do mesmo dia, o par mais caro primeiro.
+    return dir*cmp || y.risco-x.risco;
+  });
+}
+/* Pares de troca. Dois cuidados que a primeira versão não tinha:
+
+   1. O par é dentro da mesma VISITA (local + Id Inventário). Agrupar só por local
+      fazia o mesmo item parear consigo mesmo, quando o local foi inventariado duas
+      vezes — sobrando num inventário e faltando no outro.
+   2. Semelhança de DESCRIÇÃO é obrigatória. Código vizinho virou só um selo: dois
+      códigos seguidos podem ser produtos sem nenhuma relação.
+
+   Este painel ignora o filtro de período do topo — ele tem o próprio de/até,
+   porque a pergunta aqui é "o que trocaram ontem", não "o que pesa no ciclo". */
+function irDivParesSimilares(){
+  const f = IR.divSimFiltro || {de:'', ate:''};
+  let divs = irDivLinhasValidas((IR.divAnoCache||{}).divs || IR.divergencias);
+  if(f.de)  divs = divs.filter(d=>irDivDiaDa(d) >= f.de);
+  if(f.ate) divs = divs.filter(d=>irDivDiaDa(d) <= f.ate);
+  const porVisita = new Map();
+  for(const d of divs){
+    const chave = d.local+'|'+irDivInventario(d);
+    if(!porVisita.has(chave)) porVisita.set(chave, []);
+    porVisita.get(chave).push(d);
+  }
+  const pares = [];
+  // Diagnóstico do funil. Sem ele, uma tabela vazia não diz se o problema é o
+  // filtro de data, a quantidade que não espelha ou a descrição que não bate.
+  const diag = {divs:divs.length, visitas:porVisita.size, visitasComOsDois:0,
+                qtdEspelhada:0, reprovadosPelaDescricao:0, mesmoCodigo:0, semDia:0};
+  for(const d of divs) if(!irDivDiaDa(d)) diag.semDia++;
+  const exigeDesc = IR.divSimExigeDesc !== false;
+  for(const [chave, lista] of porVisita){
+    if(lista.length<2) continue;
+    const sobra = lista.filter(d=>d.diferenca>0);
+    const falta = lista.filter(d=>d.diferenca<0);
+    if(sobra.length && falta.length) diag.visitasComOsDois++;
+    const usados = new Set();
+    for(const a of sobra){
+      for(const b of falta){
+        if(usados.has(b.id)) continue;
+        if(a.item === b.item){ diag.mesmoCodigo++; continue; }   // mesmo código não é troca
+        if(a.diferenca !== -b.diferenca) continue;               // troca é 1 pra 1
+        diag.qtdEspelhada++;
+        const sem = irDivSemelhanca(a.itemNome, b.itemNome);
+        const pref = irDivPrefixoComum(a.itemNome, b.itemNome);
+        // Basta um dos dois: mesma família no início da descrição, ou muitas
+        // palavras em comum. Código vizinho sozinho não entra — dois códigos
+        // seguidos podem ser martelo e luva.
+        const pareceu = pref >= IR_DIV_PREFIXO_MIN || sem >= IR_DIV_SEMELHANCA_MIN;
+        if(!pareceu){ diag.reprovadosPelaDescricao++; if(exigeDesc) continue; }
+        usados.add(b.id);
+        const vA = irDivValorDa(a).valor, vB = irDivValorDa(b).valor;
+        pares.push({
+          idSobra:a.id, idFalta:b.id,
+          local: a.local, inventario: irDivInventario(a), dia: irDivDiaDa(a),
+          itemSobra:a.item, nomeSobra:a.itemNome, itemFalta:b.item, nomeFalta:b.itemNome,
+          qtd: a.diferenca,
+          valorSobra: vA, valorFalta: vB,
+          desequilibrio: vA + vB,
+          risco: Math.max(Math.abs(vA), Math.abs(vB)),
+          semelhanca: sem, prefixo: pref, vizinhos: irDivCodigosVizinhos(a.item, b.item)
+        });
+        break;
+      }
+    }
+  }
+  pares.sort((x,y)=>String(y.dia).localeCompare(String(x.dia)) || y.risco-x.risco);
+  return {pares, diag};
+}
+
+/* Rótulo do período + os ciclos que ele realmente cobre. Filtrar "janeiro" com o
+   seletor de ciclo em 3/2026 não olha o ciclo 3: olha o que fechou em janeiro,
+   que é outro ciclo. O título tem que dizer isso, senão engana. */
+function irDivPeriodoLabel(){
+  const base = irDivEscopoLabel();
+  if(IR.divEscopo.tipo==='ciclo') return base;
+  const ids = new Set(irDivDivsDoEscopo().map(d=>d.cicloId).filter(Boolean));
+  if(!ids.size) return base;
+  const nomes = IR.ciclos.filter(c=>ids.has(c.id)).map(c=>irCicloLabel(c));
+  return nomes.length ? base+' · '+nomes.join(' + ') : base;
 }
 function irDivEscopoLabel(){
   const e = IR.divEscopo;
   if(e.tipo==='ano') return 'ano '+e.ano;
   if(e.tipo==='mes') return irMesLabel(e.mes);
-  if(e.tipo==='dia') return e.dia ? irFmtDate(e.dia) : 'selecione um dia';
+  if(e.tipo==='ciclos'){
+    const cs = irDivCiclosSelecionados();
+    return cs.length ? cs.map(c=>irCicloLabel(c)).join(' + ') : 'selecione os ciclos';
+  }
+  if(e.tipo==='periodo'){
+    if(e.de && e.ate) return irFmtDate(e.de)+' a '+irFmtDate(e.ate);
+    if(e.de)  return 'de '+irFmtDate(e.de);
+    if(e.ate) return 'até '+irFmtDate(e.ate);
+    return 'todo o histórico';
+  }
   const c = e.cicloId ? IR.ciclos.find(x=>x.id===e.cicloId) : IR.cicloAtivo;
   return c ? irCicloLabel(c) : 'ciclo atual';
 }
-
-/* ---------- AUDITORIA DE VALIDAÇÃO ---------- */
-/* Monta as linhas da auditoria de um conjunto de itens. O bloco de saldo depende
-   da QRY0390 estar importada e do ciclo reprocessado; se o store não existir ou
-   falhar, a auditoria ainda sai com os locais divergentes e a tela avisa. */
-async function irDivMontarAuditoria(itensSel){
-  const {itens} = irDivCalcItens();
-  const porItem = new Map(itens.map(i=>[i.item, i]));
-  const cicloId = (IR.cicloAtivo||{}).id;
-  const descricaoLocal = new Map((IR.locais||[]).map(l=>[l.idLocal, l]));
-  const linhas = [];
-  let semEstoque = 0;
-  for(const item of itensSel){
-    const g = porItem.get(item);
-    if(!g) continue;
-    const locaisDivergentes = new Set(g.locais.map(l=>l.local));
-    const refDivergentes = Array.from(locaisDivergentes).join(', ');
-    for(const d of g.locais.slice().sort((a,b)=>Math.abs(b.diferenca)-Math.abs(a.diferenca))){
-      const l = descricaoLocal.get(d.local) || {};
-      linhas.push({origem:'divergente', item, descricao:g.descricao, local:d.local,
-        descricaoLocal:l.descricao||'', rua:l.x1||'', log:l.grupoClasse||'',
-        dia:irDivDiaDa(d), qtdeSistema:d.qtdeSistema, qtdeFisica:d.qtdeFisica,
-        diferenca:d.diferenca, vlDivergencia:d.vlDivergencia, saldoAtual:null, refDivergentes:''});
-    }
-    let est = null;
-    try{ est = cicloId ? await irGetEstoqueItem(cicloId, item) : null; }
-    catch(err){ est = null; }
-    if(!est || !est.locais || !est.locais.length){ semEstoque++; continue; }
-    for(const sl of est.locais){
-      if(locaisDivergentes.has(sl.local)) continue;
-      const l = descricaoLocal.get(sl.local) || {};
-      linhas.push({origem:'saldo', item, descricao:g.descricao, local:sl.local,
-        descricaoLocal:l.descricao||'', rua:l.x1||'', log:l.grupoClasse||'',
-        dia:'', qtdeSistema:sl.qtd, qtdeFisica:null, diferenca:null, vlDivergencia:null,
-        saldoAtual:sl.qtd, refDivergentes});
-    }
-  }
-  return {linhas, semEstoque};
+function irDivToggleItem(item){
+  if(!IR.divSelecionados) IR.divSelecionados = new Set();
+  if(IR.divSelecionados.has(item)) IR.divSelecionados.delete(item); else IR.divSelecionados.add(item);
+  irRenderView();
 }
+function irDivMarcarTodos(){
+  const {ofensores} = irDivCalcItens();
+  IR.divSelecionados = new Set(ofensores.map(i=>i.item));
+  irRenderView();
+}
+function irDivLimparSelecao(){ IR.divSelecionados = new Set(); IR.divAuditoria = null; irRenderView(); }
+function irDivExpandir(item){
+  IR.divExpandido = IR.divExpandido===item ? null : item;
+  irRenderView();
+}
+
+/* ---------- AUDITORIA — locais com saldo (QRY0390) ---------- */
 async function irDivGerarAuditoria(){
   const sel = Array.from(IR.divSelecionados||[]);
   if(!sel.length){ irShowToast('Marque ao menos um item.', true); return; }
   try{
-    irShowToast('Gerando auditoria de '+sel.length+' item(ns)...');
-    const {linhas, semEstoque} = await irDivMontarAuditoria(sel);
-    if(!linhas.length){ irShowToast('Nenhum local encontrado para os itens marcados.', true); return; }
+    await irCarregarDescLocaisTodosCiclos();
+    await irCarregarItemInfo();
+    const {itens} = irDivCalcItens();
+    const porItem = new Map(itens.map(i=>[i.item, i]));
+    const cicloId = (IR.cicloAtivo||{}).id;
+    const linhas = [];
+    let semEstoque = 0, semDescricao = 0, ocultosVirtuais = 0;
+    for(const item of sel){
+      const g = porItem.get(item);
+      if(!g) continue;
+      const info = irItemInfo(item) || {};
+      const ean = g.ean || info.ean || '';
+      const descricaoItem = g.descricao || info.descricao || '';
+      // Onde o item divergiu no período — é o endereço que o auditor confere
+      // primeiro, e ele não é necessariamente um dos que têm saldo hoje.
+      const ondeDivergiu = g.locais.filter(d=>d.diferenca!==0);
+      // Onde foi a ÚLTIMA divergência dentro do filtro: é o endereço mais fresco,
+      // e o primeiro lugar onde o auditor deve olhar.
+      const porData = ondeDivergiu.slice().sort((a,b)=>
+        String(irDivDiaDa(b)).localeCompare(String(irDivDiaDa(a))));
+      // O endereço de correção não é onde a peça estava: procura o último ANTES
+      // dele. Se todos forem de correção, aí sim mostra o que tem.
+      const ult = porData.find(d=>!irAudEhCorrecao(d.local)) || porData[0];
+      const ultimaDiv = ult
+        ? ult.local + (irDescLocal(ult.local) ? ' · '+irDescLocal(ult.local) : '') + ' · ' + irFmtDate(irDivDiaDa(ult))
+        : '';
+      // Estoque atual: primeiro a ficha da QRY0390 avulsa, que é a foto de hoje e
+      // já vem com a descrição do endereço; o do ciclo entra só como reserva, pra
+      // quem ainda não importou a 390 nova.
+      let est = null;
+      if(info.locais && info.locais.length) est = {locais: info.locais};
+      else { try{ est = cicloId ? await irGetEstoqueItem(cicloId, item) : null; }catch(err){ est = null; } }
+      // Sem saldo na QRY0390 o item zerou no CD — não há endereço de estoque pra
+      // conferir. Em vez de uma linha vazia, a auditoria manda o auditor pro LOCAL
+      // DO AJUSTE: é lá que a peça estava, e é o lugar mais provável de ela ainda
+      // estar (caiu atrás, foi pro endereço vizinho, ficou no chão do corredor).
+      if(!est || !est.locais || !est.locais.length){
+        semEstoque++;
+        for(const d of ondeDivergiu){
+          linhas.push({item, ean, descricao:descricaoItem, local:d.local, descricaoLocal:irDescLocal(d.local),
+            saldo:null, diferenca:g.netQtd, valor:g.netValor, ultimaDiv});
+        }
+        if(!ondeDivergiu.length){
+          linhas.push({item, ean, descricao:descricaoItem, local:'', descricaoLocal:'',
+            saldo:null, diferenca:g.netQtd, valor:g.netValor, ultimaDiv});
+        }
+        continue;
+      }
+      const posicoes = IR.audIgnorarVirtuais===false ? est.locais
+        : est.locais.filter(x=>!irAudEhVirtual(x.local, x.desc));
+      if(!posicoes.length && est.locais.length) ocultosVirtuais += est.locais.length;
+      for(const s of (posicoes.length ? posicoes : est.locais)){
+        // A QRY0390 nova traz a descrição do endereço junto com o saldo — é a
+        // fonte mais confiável, porque cobre todo o CD e não só o que foi
+        // congelado em algum ciclo.
+        const desc = s.desc || irDescLocal(s.local);
+        if(!desc) semDescricao++;
+        // Endereço sem descrição em nenhuma base fica em branco de propósito: o
+        // código do local já basta pro auditor achar, e um rótulo no lugar da
+        // descrição só polui a folha impressa.
+        linhas.push({item, ean, descricao:descricaoItem, local:s.local,
+          descricaoLocal: desc, saldo:s.qtd, diferenca:g.netQtd, valor:g.netValor, ultimaDiv});
+      }
+    }
     IR.divAuditoria = {
       geradoEm: new Date().toLocaleString('pt-BR'),
       escopo: irDivEscopoLabel(),
-      itens: sel.length, linhas, semEstoque,
-      divergentes: linhas.filter(l=>l.origem==='divergente').length,
-      saldo: linhas.filter(l=>l.origem==='saldo').length
+      itens: sel.length, linhas, semEstoque, semDescricao, ocultosVirtuais,
+      // Sem ficha da 390 não há EAN nem saldo por endereço — é a causa mais comum
+      // de a folha sair capenga, e o aviso evita procurar bug onde não tem.
+      semFicha: !(IR._itemInfo && IR._itemInfo.size)
     };
     irRenderView();
-    const el = document.querySelector('.div-aud-panel');
+    const el = document.querySelector('.aud-panel');
     if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
   }catch(err){
     irShowToast('Falha ao gerar auditoria: '+(err && err.message || err), true);
   }
 }
-/* Botão da linha: exporta em Excel os ajustes daquele item — mesmos dois blocos
-   da auditoria (locais divergentes e locais com saldo), só que de um item só. */
-async function irDivExportarItem(item){
-  try{
-    const {linhas} = await irDivMontarAuditoria([item]);
-    if(!linhas.length){ irShowToast('Sem locais para esse item.', true); return; }
-    irDivBaixarPlanilha(linhas, 'ajustes_'+String(item).replace(/\W+/g,'_'));
-  }catch(err){
-    irShowToast('Falha ao exportar: '+(err && err.message || err), true);
-  }
+function irDivImprimirAuditoria(){ window.print(); }
+function irDivExportarAuditoria(){
+  const g = IR.divAuditoria;
+  if(!g || !g.linhas.length){ irShowToast('Nada para exportar.', true); return; }
+  const data = (document.getElementById('ir-aud-data')||{}).value || '';
+  const cols = g.tipo==='similares'
+    ? [['dia','Dia'],['local','Local'],['descricaoLocal','Desc. Local'],['inventario','Inv.'],
+       ['itemSobra','Sobrou'],['nomeSobra','Descrição (sobrou)'],['itemFalta','Faltou'],
+       ['nomeFalta','Descrição (faltou)'],['qtd','Qtde'],['desequilibrio','Desequil.'],
+       ['ondeConferir','Onde Conferir']]
+    : [['item','Item'],['ean','EAN'],['descricao','Descrição'],['local','Local'],
+       ['descricaoLocal','Desc. Local'],['saldo','Qtde'],['diferenca','Qtde Div.'],['valor','Valor Div.'],
+       ['ultimaDiv','Últ. Divergência']];
+  const cab = cols.map(c=>c[1]).concat(['Contagem','Data']);
+  const linhas = g.linhas.map(l=>cols.map(([k])=>l[k]==null?'':l[k]).concat(['', data]));
+  // Colunas de dinheiro saem formatadas como moeda na planilha — número cru vira
+  // texto ambíguo na mão de quem abre o arquivo.
+  const moeda = cab.map(h=>/Valor|Desequil/.test(h));
+  irDivBaixarPlanilha(cab, linhas, (g.tipo==='similares'?'auditoria_similares_':'auditoria_')+String(g.escopo).replace(/\W+/g,'_'), moeda);
 }
-const IR_DIV_AUD_COLS = [
-  ['origem','Origem'], ['item','Item'], ['descricao','Descrição'], ['local','Local'],
-  ['descricaoLocal','Descrição do Local'], ['rua','Rua'], ['log','Log'], ['dia','Dia do Fechamento'],
-  ['qtdeSistema','Qtde Sistema'], ['qtdeFisica','Qtde Física'], ['diferenca','Diferença'],
-  ['vlDivergencia','Valor Divergente'], ['saldoAtual','Saldo Atual'],
-  ['refDivergentes','Locais com divergência do item']
-];
-/* Gera .xlsx pelo SheetJS que o app já carrega; sem ele (offline, CDN bloqueado)
-   cai pra CSV, que abre no Excel do mesmo jeito. */
-function irDivBaixarPlanilha(linhas, nomeBase){
-  const cabecalho = IR_DIV_AUD_COLS.map(c=>c[1]).concat(['Contagem do Auditor']);
-  const dados = linhas.map(l=>IR_DIV_AUD_COLS.map(([k])=>l[k]==null?'':l[k]).concat(['']));
+/* Excel de um item: onde ele divergiu, com a descrição do local. */
+function irDivExportarItem(item){
+  const {itens} = irDivCalcItens();
+  const g = itens.find(i=>i.item===item);
+  if(!g){ irShowToast('Item fora do recorte atual.', true); return; }
+  const cab = ['Item','Descrição','Local','Descrição do Local','Rua','Log','Dia do Fechamento','Motivo',
+    'Qtde Sistema','Qtde Física','Diferença','Valor Divergente'];
+  const linhas = g.locais.slice().sort((a,b)=>Math.abs(b.vlDivergencia)-Math.abs(a.vlDivergencia)).map(d=>{
+    const l = {descricao: irDescLocal(d.local)};
+    return [g.item, g.descricao||'', d.local, l.descricao||'', l.x1||'', l.grupoClasse||'',
+      irDivDiaDa(d), d.motivo||'', d.qtdeSistema, d.qtdeFisica, d.diferenca, d.vlDivergencia];
+  });
+  irDivBaixarPlanilha(cab, linhas, 'item_'+String(item).replace(/\W+/g,'_'));
+}
+/* .xlsx pelo SheetJS que o app já carrega; CSV quando ele não estiver disponível. */
+function irDivBaixarPlanilha(cabecalho, linhas, nomeBase, colsMoeda){
   if(typeof XLSX!=='undefined' && XLSX.utils){
-    const ws = XLSX.utils.aoa_to_sheet([cabecalho, ...dados]);
-    ws['!cols'] = cabecalho.map((h,i)=>({wch: i===2||i===4||i===13 ? 34 : Math.max(12, h.length+2)}));
+    const ws = XLSX.utils.aoa_to_sheet([cabecalho, ...linhas]);
+    ws['!cols'] = cabecalho.map(h=>({wch: /Descrição/.test(h) ? 40 : Math.max(12, h.length+2)}));
+    if(colsMoeda){
+      for(let c=0;c<cabecalho.length;c++){
+        if(!colsMoeda[c]) continue;
+        for(let r=1;r<=linhas.length;r++){
+          const cel = ws[XLSX.utils.encode_cell({r, c})];
+          if(cel && typeof cel.v === 'number'){ cel.t = 'n'; cel.z = 'R$ #,##0.00;[Red]-R$ #,##0.00'; }
+        }
+      }
+    }
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Auditoria');
+    XLSX.utils.book_append_sheet(wb, ws, 'Dados');
     XLSX.writeFile(wb, nomeBase+'.xlsx');
     return;
   }
-  const esc = v => typeof v==='string' ? '"'+v.replace(/"/g,'""')+'"' : String(v).replace('.', ',');
-  const csv = '\ufeff'+cabecalho.join(';')+'\n'+dados.map(r=>r.map(esc).join(';')).join('\n');
+  const esc = v => typeof v==='string' ? '"'+v.replace(/"/g,'""')+'"' : String(v==null?'':v).replace('.', ',');
+  const csv = '﻿'+cabecalho.join(';')+'\n'+linhas.map(r=>r.map(esc).join(';')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = nomeBase+'.csv'; a.click();
   URL.revokeObjectURL(a.href);
 }
-function irDivExportarAuditoriaCsv(){
-  const g = IR.divAuditoria;
-  if(!g || !g.linhas.length){ irShowToast('Nada para exportar.', true); return; }
-  irDivBaixarPlanilha(g.linhas, 'auditoria_validacao_'+String(g.escopo).replace(/\W+/g,'_'));
+
+/* ---------- RENDER ---------- */
+function irRenderDivFiltros(){
+  const e = IR.divEscopo;
+  const b = irDivBase();
+  const meses = irDivMesesDisponiveis();
+  const dias = irDivDiasDisponiveis();
+  const anos = Array.from(new Set(IR.ciclos.map(c=>String(c.dataAbertura||'').slice(0,4)).filter(Boolean))).sort((a,b)=>b.localeCompare(a));
+  const val = e.tipo==='ano' ? 'ano:'+e.ano : e.tipo==='mes' ? 'mes:'+e.mes
+            : e.tipo==='ciclos' ? 'ciclos'
+            : e.tipo==='periodo' ? 'periodo' : 'ciclo:'+(e.cicloId || (IR.cicloAtivo||{}).id || '');
+  return `<div class="panel ofe-filtros">
+    <div class="ofe-filtro">
+      <label>Período</label>
+      <select onchange="irDivSetEscopo(this.value)">
+        <optgroup label="Ciclo">${IR.ciclos.map(c=>`<option value="ciclo:${irEsc(c.id)}" ${val==='ciclo:'+c.id?'selected':''}>${irEsc(irCicloLabel(c))}</option>`).join('')}</optgroup>
+        <optgroup label="Mês">${meses.map(m=>`<option value="mes:${m}" ${val==='mes:'+m?'selected':''}>${irEsc(irMesLabel(m))}</option>`).join('')}</optgroup>
+        <optgroup label="Ano">${anos.map(a=>`<option value="ano:${a}" ${val==='ano:'+a?'selected':''}>${a}</option>`).join('')}</optgroup>
+        <optgroup label="Vários"><option value="ciclos" ${val==='ciclos'?'selected':''}>Somar ciclos</option></optgroup>
+        <optgroup label="Datas"><option value="periodo" ${val==='periodo'?'selected':''}>Escolher de/até</option></optgroup>
+      </select>
+    </div>
+    ${e.tipo==='ciclos' ? `
+      <div class="ofe-filtro"><label>Ciclos</label>
+        <div class="conc-chips" style="margin:0;">
+          ${IR.ciclos.map(c=>`<button class="conc-chip ${(e.cicloIds||[]).includes(c.id)?'on':''}" onclick="irDivToggleCiclo('${irEsc(c.id)}')">${irEsc(irCicloLabel(c))}</button>`).join('')}
+        </div>
+      </div>
+    ` : ''}
+    ${e.tipo==='periodo' ? `
+      <div class="ofe-filtro"><label>De</label>
+        <input type="date" min="${dias[0]||''}" max="${dias[dias.length-1]||''}" value="${irEsc(e.de||'')}" onchange="irDivSetPeriodo('de', this.value)"></div>
+      <div class="ofe-filtro"><label>Até</label>
+        <input type="date" min="${dias[0]||''}" max="${dias[dias.length-1]||''}" value="${irEsc(e.ate||'')}" onchange="irDivSetPeriodo('ate', this.value)"></div>
+      ${(e.de||e.ate)?`<button class="btn-link" onclick="irDivSetEscopo('periodo');irDivSetPeriodo('de','');irDivSetPeriodo('ate','')">Limpar datas</button>`:''}
+    ` : ''}
+    <div class="ofe-filtro">
+      <label>Analisar por</label>
+      <div class="conc-chips" style="margin:0;">
+        <button class="conc-chip ${IR.divBase!=='qtd'?'on':''}" onclick="irDivSetBase('valor')">Valor R$</button>
+        <button class="conc-chip ${IR.divBase==='qtd'?'on':''}" onclick="irDivSetBase('qtd')">Quantidade</button>
+      </div>
+    </div>
+
+    <div class="ofe-filtro">
+      <label>Corte (${b.lbl})</label>
+      <input type="number" min="0" step="${b.passo}" value="${b.corte}" onchange="irDivSetCorte(this.value)">
+    </div>
+    <div class="ofe-filtro ofe-filtro-busca">
+      <label>Item</label>
+      <input type="text" placeholder="código ou descrição" value="${irEsc(IR.divBusca||'')}" oninput="irDivSetBusca(this.value)">
+    </div>
+  </div>`;
+}
+function irRenderDivResumo(c){
+  const cell = (rot, val, cls, sub) => `<div class="ofe-num ${cls||''}">
+    <span class="ofe-num-lbl">${irEsc(rot)}</span>
+    <strong class="mono">${val}</strong>
+    ${sub?`<span class="ofe-num-sub">${irEsc(sub)}</span>`:''}
+  </div>`;
+  const mv = irDivNetMesVigente();
+  const ind = irDivIndevido(c);
+  return `<div class="panel ofe-resumo">
+    ${cell('NET de '+irMesLabel(mv.mes), (mv.valor>0?'+':'')+irFmtMoney(mv.valor), mv.valor<0?'neg':'pos', irFmtInt(mv.qtd)+' peças · '+(mv.fonte==='410'?'QRY410':'contagem'))}
+    ${cell('Ganho indevido', '+'+irFmtMoney(ind.ganho), 'pos', irFmtInt(ind.nGanho)+(ind.nGanho===1?' item':' itens')+' · +'+irFmtInt(ind.ganhoQtd)+' peças')}
+    ${cell('Perda indevida', irFmtMoney(ind.perda), 'neg', irFmtInt(ind.nPerda)+(ind.nPerda===1?' item':' itens')+' · '+irFmtInt(ind.perdaQtd)+' peças')}
+    ${cell('Divergências no período', irFmtInt(c.totalLinhas), '', irFmtInt(c.totalItens)+' itens · '+irFmtInt(c.totalLocais)+' locais')}
+    ${cell('Divergências similares', irFmtInt(ind.nPares), '', irFmtMoney(ind.valorPares)+' em jogo')}
+  </div>`;
+}
+/* Indevido = o que sobrou depois de tirar tudo que se equaliza. Duas equalizações:
+   a contrapartida no ano (o item perdeu num ciclo e achou em outro, e o corte já
+   tira esses da lista) e a troca entre similares (a peça não sumiu, foi contada no
+   código errado). O que resta é ganho ou perda que ninguém explica — é o número
+   que vira prejuízo. */
+function irDivIndevido(c){
+  const pares = irDivParesSimilares().pares;
+  const explicado = new Map();
+  for(const p of pares){
+    explicado.set(p.idSobra, (explicado.get(p.idSobra)||0) + p.valorSobra);
+    explicado.set(p.idFalta, (explicado.get(p.idFalta)||0) + p.valorFalta);
+  }
+  const r = {ganho:0, perda:0, ganhoQtd:0, perdaQtd:0, nGanho:0, nPerda:0,
+             nPares:pares.length, valorPares:pares.reduce((s,p)=>s+p.risco,0)};
+  for(const i of c.ofensores){
+    let troca = 0, trocaQtd = 0;
+    for(const d of i.locais) if(explicado.has(d.id)){ troca += explicado.get(d.id); trocaQtd += d.diferenca; }
+    const valor = i.netValor - troca;
+    const qtd = i.netQtd - trocaQtd;
+    if(Math.abs(valor) < 0.005) continue;
+    if(valor > 0){ r.ganho += valor; r.ganhoQtd += qtd; r.nGanho++; }
+    else { r.perda += valor; r.perdaQtd += qtd; r.nPerda++; }
+  }
+  return r;
+}
+const IR_OFE_COLS = [
+  {key:'item',        lbl:'Item'},
+  {key:'descricao',   lbl:'Descrição'},
+  {key:'netValor',    lbl:'Divergência',      num:true},
+  {key:'netQtd',      lbl:'NET peças',        num:true},
+  {key:'netValorAno', lbl:'NET R$ (ano)',     num:true, ano:true},
+  {key:'netQtdAno',   lbl:'NET peças (ano)',  num:true, ano:true},
+  {key:'nLocais',     lbl:'Locais',           num:true},
+  {key:'situacao',    lbl:'Situação'}
+];
+function irRenderDivTabela(c){
+  const sel = IR.divSelecionados || new Set();
+  // Chips de sentido, multi-seleção: perda, ganho e compensado entram e saem da
+  // lista sem mexer no cálculo — o corte e a base continuam os mesmos.
+  const on = new Set(IR.divSentidos || ['perda','ganho']);
+  const lista = c.itens.filter(i=>{
+    if(!i.relevante) return false;
+    if(i.compensado) return on.has('compensado');
+    return on.has(i.sentido);
+  });
+  const o = IR.divOrdem || {col:'netValor', dir:'desc'};
+  const seta = k => o.col===k ? (o.dir==='desc'?' ▾':' ▴') : '';
+  const num = (v, fmt) => `<td class="mono ${v<0?'neg':(v>0?'pos':'')}">${v>0?'+':''}${fmt(v)}</td>`;
+  const linha = i=>{
+    const aberto = IR.divExpandido===i.item;
+    // Item sem preço nem na 410 nem na 278: componente de kit que não valora.
+    // Ele diverge em peça, mas não em dinheiro — e o selo diz isso.
+    const semPreco = i.origens && i.origens.size===1 && i.origens.has('zero');
+    const tag = semPreco
+      ? '<span class="ofe-tag comp">não valora</span>'
+      : i.compensado
+      ? '<span class="ofe-tag comp">compensado</span>'
+      : `<span class="ofe-tag ${i.netValor<0?'perda':'ganho'}">${i.netValor<0?'perda':'ganho'}</span>`;
+    let html = `<tr class="${sel.has(i.item)?'sel':''} ${i.compensado?'comp':''}">
+      <td><input type="checkbox" ${sel.has(i.item)?'checked':''} onchange="irDivToggleItem('${irEsc(i.item)}')"></td>
+      <td class="mono">${irEsc(i.item)}</td>
+      <td title="${irEsc(i.descricao||'')}">${irEsc(irResumirDescricao(i.descricao))}</td>
+      ${num(i.netValor, irFmtMoney)}
+      ${num(i.netQtd, irFmtInt)}
+      <td class="mono ofe-ano ${i.netValorAno<0?'neg':(i.netValorAno>0?'pos':'')}">${i.netValorAno>0?'+':''}${irFmtMoney(i.netValorAno)}</td>
+      <td class="mono ofe-ano ${i.netQtdAno<0?'neg':(i.netQtdAno>0?'pos':'')}">${i.netQtdAno>0?'+':''}${irFmtInt(i.netQtdAno)}</td>
+      <td class="mono"><button class="btn-link" onclick="irDivExpandir('${irEsc(i.item)}')">${irFmtInt(i.nLocais)} ${aberto?'▾':'▸'}</button></td>
+      <td>${tag}</td>
+      <td><button class="btn-link" onclick="irDivExportarItem('${irEsc(i.item)}')">Excel</button></td>
+    </tr>`;
+    if(aberto){
+      // O ANO inteiro, não só o período: a contrapartida quase sempre está num dia
+      // fora do filtro, e sem ela não dá pra dizer se a divergência é real.
+      const locais = irDivLinhasDoAno(i.item);
+      html += `<tr class="ofe-detalhe"><td></td><td colspan="9">
+        <table class="ofe-sub"><thead><tr>
+          <th>Local</th><th>Descrição do Local</th><th>Dia</th><th>Motivo</th><th>Sistema</th><th>Físico</th><th>Diferença</th><th>Valor</th><th>Preço unit.</th>
+        </tr></thead><tbody>${locais.map(d=>{
+          const l = {descricao: irDescLocal(d.local)};
+          return `<tr class="${d.foraDoPeriodo?'ofe-fora':''}">
+            <td class="mono">${irEsc(d.local)}</td>
+            <td>${irEsc(l.descricao||'—')}</td>
+            <td class="mono">${irFmtDate(irDivDiaDa(d))}</td>
+            <td class="mono">${irEsc(d.motivo||'')}</td>
+            <td class="mono">${irFmtInt(d.qtdeSistema)}</td>
+            <td class="mono">${irFmtInt(d.qtdeFisica)}</td>
+            <td class="mono ${d.diferenca<0?'neg':'pos'}">${d.diferenca>0?'+':''}${irFmtInt(d.diferenca)}</td>
+            <td class="mono ${d.vlDivergencia<0?'neg':'pos'}">${d.vlDivergencia>0?'+':''}${irFmtMoney(d.vlDivergencia)}</td>
+            <td class="mono">${irFmtMoney(d.precoUsado||0)}<span class="sim-desc">${irEsc(d.precoOrigem||'')}</span></td>
+          </tr>`;
+        }).join('')}</tbody></table>
+      </td></tr>`;
+    }
+    return html;
+  };
+  const chip = (k, lbl, n, cls) => `<button class="conc-chip ${cls||''} ${on.has(k)?'on':''}" onclick="irDivToggleSentido('${k}')">${irEsc(lbl)} <b>${irFmtInt(n)}</b></button>`;
+  return `<div class="panel">
+    <div class="ofe-head">
+      <h3>Divergências</h3>
+      <div class="ofe-acoes">
+        ${sel.size?`<button class="btn-link" onclick="irDivLimparSelecao()">Limpar (${sel.size})</button>`:''}
+        <button class="btn btn-secondary" onclick="irDivMarcarTodos()">Marcar todos</button>
+        <button class="btn btn-primary" onclick="irDivGerarAuditoria()">Gerar auditoria (${sel.size})</button>
+      </div>
+    </div>
+    <div class="conc-chips">
+      ${chip('perda','Perdas', c.perdas.length, 'perda')}
+      ${chip('ganho','Ganhos', c.ganhos.length, 'ganho')}
+      ${chip('compensado','Compensados', c.compensados.length)}
+    </div>
+    ${lista.length ? `<div class="table-wrap"><div class="table-scroll" style="max-height:620px;">
+      <table class="ofe-table">
+        <thead><tr>
+          <th></th>
+          ${IR_OFE_COLS.map(col=>`<th class="${col.num?'num':''} ${col.ano?'ofe-ano':''}" onclick="irDivOrdenar('${col.key}')">${irEsc(col.lbl)}${seta(col.key)}</th>`).join('')}
+          <th></th>
+        </tr></thead>
+        <tbody>${lista.map(linha).join('')}</tbody>
+      </table>
+    </div></div>` : `<p class="field-hint">${
+      'Nenhum item acima de '+c.base.fmt(c.corte)+' em '+c.base.lbl+' neste período.'}</p>`}
+  </div>`;
 }
 function irRenderDivAuditoria(){
   const g = IR.divAuditoria;
   if(!g) return '';
-  const row = l=>`<tr class="${l.origem==='saldo'?'div-aud-saldo':''}">
-    <td><span class="tag ${l.origem==='saldo'?'tag-blue':'tag-orange'}">${l.origem==='saldo'?'saldo':'divergente'}</span></td>
-    <td class="mono">${irEsc(l.item)}</td>
-    <td title="${irEsc(l.descricao||'')}">${irEsc(irResumirDescricao(l.descricao))}</td>
-    <td class="mono">${irEsc(l.local)}</td>
-    <td>${irEsc(l.descricaoLocal||'—')}</td>
-    <td class="mono">${l.qtdeSistema!=null?irFmtInt(l.qtdeSistema):'—'}</td>
-    <td class="mono">${l.qtdeFisica!=null?irFmtInt(l.qtdeFisica):'—'}</td>
-    <td class="mono">${l.diferenca!=null?(l.diferenca>0?'+':'')+irFmtInt(l.diferenca):'—'}</td>
-    <td class="mono field-hint">${irEsc(l.refDivergentes||'')}</td>
-  </tr>`;
-  return `<div class="panel div-aud-panel" style="background:var(--surface2);">
-    <div class="panel-head-row">
-      <h3>🔍 Auditoria de validação — ${irEsc(g.escopo)}</h3>
-      <button class="btn btn-primary" onclick="irDivExportarAuditoriaCsv()">📥 Exportar Excel</button>
+  const sim = g.tipo==='similares';
+  return `<div class="panel aud-panel">
+    <div class="ofe-head">
+      <h3>${sim?'Auditoria de troca entre similares':'Auditoria de validação'}</h3>
+      <div class="ofe-acoes">
+        <button class="btn-link" onclick="irDivFecharAuditoria()">Voltar às divergências</button>
+        <button class="btn btn-secondary" onclick="irDivExportarAuditoria()">Excel</button>
+        <button class="btn btn-primary" onclick="irDivImprimirAuditoria()">Imprimir</button>
+      </div>
     </div>
-    <p class="field-hint" style="margin-bottom:10px;">
-      ${irFmtInt(g.itens)} ${g.itens===1?'item':'itens'} ·
-      ${irFmtInt(g.divergentes)} ${g.divergentes===1?'local divergente':'locais divergentes'} ·
-      ${irFmtInt(g.saldo)} ${g.saldo===1?'local com saldo':'locais com saldo'} ·
-      gerado em ${irEsc(g.geradoEm)}${g.semEstoque?` · ${irFmtInt(g.semEstoque)} item(ns) sem QRY0390 importada`:''}
-    </p>
+    <div class="aud-cab">
+      <div class="ofe-filtro"><label>Data</label><input type="date" id="ir-aud-data" value="${new Date().toISOString().slice(0,10)}"></div>
+      <label class="ofe-check"><input type="checkbox" ${IR.audIgnorarVirtuais!==false?'checked':''} onchange="irAudToggleVirtuais()">
+        Ocultar ${irEsc(irAudPrefixos('virtual').join(', '))}</label>
+      ${g.semFicha ? `<span class="aud-alerta">Sem a QRY0390 importada: a folha sai sem EAN e sem saldo por endereço. Importe o estoque na aba Importação.</span>` : ''}
+      <span class="field-hint">${sim
+        ? `${irFmtInt(g.itens)} ${g.itens===1?'par':'pares'} · ${irEsc(g.escopo)}`
+        : `${irFmtInt(g.itens)} ${g.itens===1?'item':'itens'} · ${irFmtInt(g.linhas.length)} ${g.linhas.length===1?'local':'locais'} · ${irEsc(g.escopo)}${g.semEstoque?` · ${irFmtInt(g.semEstoque)} sem saldo no CD, apontados pro local do ajuste`:''}${g.ocultosVirtuais?` · ${irFmtInt(g.ocultosVirtuais)} só em endereço virtual`:''}`}</span>
+    </div>
     <div class="table-wrap"><div class="table-scroll" style="max-height:520px;">
-      <table class="table-dense">
-        <thead><tr><th>Origem</th><th>Item</th><th>Descrição</th><th>Local</th><th>Descrição do Local</th>
-          <th>Qtde Sistema</th><th>Qtde Física</th><th>Diferença</th><th>Locais com divergência</th></tr></thead>
-        <tbody>${g.linhas.map(row).join('')}</tbody>
+      <table class="aud-table ${sim?'aud-t-sim':'aud-t-item'}">
+        ${sim ? `<thead><tr><th>Dia</th><th>Local</th><th>Desc. Local</th><th>Inv.</th>
+          <th>Sobrou</th><th>Descrição</th><th>Faltou</th><th>Descrição</th>
+          <th class="num">Qtde</th><th class="num">Desequil.</th><th>Onde conferir</th><th>Confere</th></tr></thead>
+        <tbody>${g.linhas.map(l=>`<tr>
+          <td class="mono">${irFmtDate(l.dia)}</td>
+          <td class="mono">${irEsc(l.local)}</td>
+          <td>${irEsc(l.descricaoLocal||'')}</td>
+          <td class="mono">${irEsc(l.inventario||'')}</td>
+          <td class="mono">${irEsc(l.itemSobra)}</td>
+          <td class="aud-desc">${irEsc(l.nomeSobra)}</td>
+          <td class="mono">${irEsc(l.itemFalta)}</td>
+          <td class="aud-desc">${irEsc(l.nomeFalta)}</td>
+          <td class="mono">${irFmtInt(l.qtd)}</td>
+          <td class="mono ${l.desequilibrio<0?'neg':'pos'}">${Math.abs(l.desequilibrio)<0.005?'':(l.desequilibrio>0?'+':'')+irFmtMoney(l.desequilibrio)}</td>
+          <td class="aud-ult">${irEsc(l.ondeConferir||'')}${l.correcao?`<span class="sim-desc">${irEsc(l.correcao)}</span>`:''}</td>
+          <td class="aud-vazio"></td>
+        </tr>`).join('')}</tbody>` : `<thead><tr><th>Item</th><th>EAN</th><th>Descrição</th><th>Local</th><th>Desc. Local</th>
+          <th class="num">Qtde</th><th class="num">Qtde Div.</th><th class="num">Valor Div.</th>
+          <th>Últ. divergência</th><th>Contagem</th></tr></thead>
+        <tbody>${g.linhas.map(l=>`<tr>
+          <td class="mono">${irEsc(l.item)}</td>
+          <td class="mono">${irEsc(l.ean||'')}</td>
+          <td class="aud-desc">${irEsc(l.descricao||'')}</td>
+          <td class="mono">${irEsc(l.local||'')}</td>
+          <td>${irEsc(l.descricaoLocal||'')}</td>
+          <td class="mono">${l.saldo!=null?irFmtInt(l.saldo):''}</td>
+          <td class="mono ${l.diferenca<0?'neg':'pos'}">${l.diferenca>0?'+':''}${irFmtInt(l.diferenca)}</td>
+          <td class="mono ${l.valor<0?'neg':'pos'}">${l.valor>0?'+':''}${irFmtMoney(l.valor)}</td>
+          <td class="aud-ult">${irEsc(l.ultimaDiv||'')}</td>
+          <td class="aud-vazio"></td>
+        </tr>`).join('')}</tbody>`}
       </table>
     </div></div>
   </div>`;
 }
-
-/* ---------- PAINEL PRINCIPAL ---------- */
-function irRenderDivDistorcaoNet(){
-  const {itens, netQtd, absQtd, netValor, absValor} = irDivCalcItens();
-  const visiveis = IR.divMostrarAnulados ? itens : itens.filter(i=>!i.autoAnulado);
-  const anulados = itens.length - itens.filter(i=>!i.autoAnulado).length;
-  const sel = IR.divSelecionados || new Set();
-  const idx80 = visiveis.findIndex(i=>i.pctAcumulado>=0.8);
-  const itens80 = idx80===-1 ? visiveis.length : idx80+1;
-  const e = IR.divEscopo;
-  const ano = irDivAnoDoEscopo();
-  const meses = irDivMesesDisponiveis();
-  const dias = irDivDiasDisponiveis();
-  const anos = Array.from(new Set(IR.ciclos.map(c=>String(c.dataAbertura||'').slice(0,4)).filter(Boolean))).sort((a,b)=>b.localeCompare(a));
-  const valorEscopo = e.tipo==='ano' ? 'ano:'+e.ano
-    : e.tipo==='mes' ? 'mes:'+e.mes
-    : e.tipo==='dia' ? 'dia'
-    : 'ciclo:'+(e.cicloId || (IR.cicloAtivo||{}).id || '');
-  const maxNet = Math.max(1, ...visiveis.map(i=>Math.abs(i.netValor)));
-  const row = i=>`<tr class="${sel.has(i.item)?'div-sel':''}">
-    <td><input type="checkbox" ${sel.has(i.item)?'checked':''} onchange="irDivToggleItem('${irEsc(i.item)}')"></td>
-    <td class="mono">${irEsc(i.item)}</td>
-    <td title="${irEsc(i.descricao||'')}">${irEsc(irResumirDescricao(i.descricao))}</td>
-    <td class="mono" style="font-weight:700;color:${i.netQtd>=0?'var(--success)':'var(--danger)'};">${i.netQtd>0?'+':''}${irFmtInt(i.netQtd)}</td>
-    <td class="mono" style="font-weight:700;color:${i.netValor>=0?'var(--success)':'var(--danger)'};">${i.netValor>0?'+':''}${irFmtMoney(i.netValor)}</td>
-    <td class="mono div-col-ano" style="color:${i.netQtdAno>=0?'var(--success)':'var(--danger)'};">${i.netQtdAno>0?'+':''}${irFmtInt(i.netQtdAno)}${i.anoAnula?' <span class="tag tag-blue" title="No ano o item se anula">≈0</span>':''}</td>
-    <td class="mono div-col-ano" style="color:${i.netValorAno>=0?'var(--success)':'var(--danger)'};">${i.netValorAno>0?'+':''}${irFmtMoney(i.netValorAno)}</td>
-    <td class="mono field-hint">${irFmtInt(i.absQtd)}</td>
-    <td class="mono">${irFmtInt(i.nLocais)}</td>
-    <td>
-      <div class="div-acum-track"><div class="div-acum-fill" style="width:${Math.round(Math.abs(i.netValor)/maxNet*100)}%;"></div></div>
-      <span class="field-hint mono">${irFmtPct(i.pctAcumulado)} acum.</span>
-    </td>
-    <td>${i.autoAnulado?'<span class="tag tag-blue" title="Sobra e falta quase se anulam no escopo">auto-anulado</span>':''}</td>
-    <td><button class="btn-link" title="Exportar em Excel os ajustes deste item" onclick="irDivExportarItem('${irEsc(i.item)}')">📊 Excel</button></td>
-  </tr>`;
-  return `<div class="panel dash-filter-bar" style="margin-bottom:14px;">
-    <div class="dash-filter-group">
-      <label>Escopo</label>
-      <select onchange="irDivSetEscopo(this.value)">
-        <optgroup label="Ciclo">
-          ${IR.ciclos.map(c=>`<option value="ciclo:${irEsc(c.id)}" ${valorEscopo==='ciclo:'+c.id?'selected':''}>${irEsc(irCicloLabel(c))}${c.id===(IR.cicloAtivo||{}).id?' (atual)':''}</option>`).join('')}
-        </optgroup>
-        <optgroup label="Mês">
-          ${meses.map(m=>`<option value="mes:${m}" ${valorEscopo==='mes:'+m?'selected':''}>${irEsc(irMesLabel(m))}</option>`).join('')}
-        </optgroup>
-        <optgroup label="Ano">
-          ${anos.map(a=>`<option value="ano:${a}" ${valorEscopo==='ano:'+a?'selected':''}>${a}</option>`).join('')}
-        </optgroup>
-        <optgroup label="Dia">
-          <option value="dia" ${valorEscopo==='dia'?'selected':''}>Escolher um dia</option>
-        </optgroup>
-      </select>
-    </div>
-    ${e.tipo==='dia' ? `<div class="dash-filter-group">
-      <label>Dia</label>
-      <select onchange="irDivSetDia(this.value)">
-        <option value="">Selecione</option>
-        ${dias.map(d=>`<option value="${d}" ${e.dia===d?'selected':''}>${irFmtDate(d)}</option>`).join('')}
-      </select>
-    </div>` : ''}
-    <label class="prod-filtro-check">
-      <input type="checkbox" ${IR.divMostrarAnulados?'checked':''} onchange="irDivToggleAnulados()">
-      Mostrar auto-anulados (${irFmtInt(anulados)})
-    </label>
-    <span class="field-hint" style="margin-left:auto;">Coluna do ano sempre em ${irEsc(ano||'—')}</span>
-  </div>
-  <div class="kpi-grid">
-    <div class="kpi-card orange"><div class="num mono">${netQtd>0?'+':''}${irFmtInt(netQtd)}</div><div class="label">NET peças</div><div class="sub">${irEsc(irDivEscopoLabel())}</div></div>
-    <div class="kpi-card"><div class="num mono">${irFmtInt(absQtd)}</div><div class="label">Peças divergentes (ABS)</div></div>
-    <div class="kpi-card orange"><div class="num mono">${netValor>0?'+':''}${irFmtMoneyCompact(netValor)}</div><div class="label">NET valor</div><div class="sub">${irFmtMoneyInt(netValor)}</div></div>
-    <div class="kpi-card"><div class="num mono">${irFmtMoneyCompact(absValor)}</div><div class="label">Valor divergente (ABS)</div><div class="sub">${irFmtMoneyInt(absValor)}</div></div>
-    <div class="kpi-card"><div class="num mono">${irFmtInt(itens.length)}</div><div class="label">Itens divergentes</div><div class="sub">${irFmtInt(anulados)} auto-anulados</div></div>
-    <div class="kpi-card bad"><div class="num mono">${irFmtInt(itens80)}</div><div class="label">Itens = 80% do NET</div><div class="sub">ataque por aqui</div></div>
-  </div>
-  <div class="panel">
-    <div class="panel-head-row">
-      <h3>🎯 Itens que distorcem o NET — ${irEsc(irDivEscopoLabel())}</h3>
-      <div class="div-acoes">
-        <input type="number" id="ir-div-topn" min="1" max="500" value="${itens80}" style="width:72px;">
-        <button class="btn btn-secondary" onclick="irDivSelecionarTop()">Marcar top N</button>
-        ${sel.size?`<button class="btn-link" onclick="irDivLimparSelecao()">Limpar (${sel.size})</button>`:''}
-        <button class="btn btn-primary" onclick="irDivGerarAuditoria()">🔍 Gerar auditoria (${sel.size})</button>
+/* Painel de troca entre similares. Fica abaixo da tabela de ofensores: é outro
+   tipo de erro — não é perda, é contagem trocada — e pede outra ação. */
+function irRenderDivSimilares(){
+  const f = IR.divSimFiltro || {de:'', ate:''};
+  const {pares, diag} = irDivParesSimilares();
+  const risco = pares.reduce((s,p)=>s+p.risco,0);
+  const desiq = pares.reduce((s,p)=>s+Math.abs(p.desequilibrio),0);
+  const ontem = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const oSim = IR.divSimOrdem || {col:'dia', dir:'desc'};
+  const pl = (n, um, muitos) => n===1 ? um : muitos;
+  const setaSim = k => oSim.col===k ? (oSim.dir==='desc'?' ▾':' ▴') : '';
+  const filtros = `<div class="sim-filtros">
+    <div class="ofe-filtro"><label>De</label><input type="date" value="${irEsc(f.de)}" onchange="irDivSimSetFiltro('de', this.value)"></div>
+    <div class="ofe-filtro"><label>Até</label><input type="date" value="${irEsc(f.ate)}" onchange="irDivSimSetFiltro('ate', this.value)"></div>
+    <button class="btn btn-secondary" onclick="irDivSimSetFiltro('de','${ontem}');irDivSimSetFiltro('ate','${ontem}')">Ontem</button>
+    <label class="ofe-check"><input type="checkbox" ${IR.divSimExigeDesc!==false?'checked':''} onchange="irDivSimToggleDesc()"> Exigir descrição parecida</label>
+    ${(f.de||f.ate)?`<button class="btn-link" onclick="irDivSimLimpar()">Limpar</button>`:''}
+  </div>`;
+  return `<div class="panel">
+    <div class="ofe-head">
+      <h3>Itens similares trocados</h3>
+      <div class="ofe-acoes">
+        <span class="field-hint">${irFmtInt(pares.length)} ${pares.length===1?'par':'pares'} · ${irFmtMoney(risco)} em jogo · ${irFmtMoney(desiq)} de desequilíbrio</span>
+        <button class="btn btn-secondary" onclick="irDivExportarSimilares()">Excel</button>
+        <button class="btn btn-primary" onclick="irDivGerarAuditoriaSimilares()">Gerar auditoria</button>
       </div>
     </div>
-    <p class="panel-sub">Ordenado por |NET| do escopo. As colunas do ano mostram o mesmo item somando todos os ciclos de ${irEsc(ano||'—')} — ganhar 42 num ciclo e perder 42 em outro deixa o ano em zero.</p>
-    ${visiveis.length ? `<div class="table-wrap"><div class="table-scroll" style="max-height:560px;">
-      <table class="table-dense div-net-table">
+    ${filtros}
+    ${pares.length ? `<div class="table-wrap"><div class="table-scroll" style="max-height:460px;">
+      <table class="sim-table">
         <thead><tr>
-          <th></th><th>Item</th><th>Descrição</th>
-          <th>NET peças</th><th>NET valor</th>
-          <th class="div-col-ano">NET peças (ano)</th><th class="div-col-ano">NET valor (ano)</th>
-          <th>ABS peças</th><th>Locais</th><th>Peso no NET</th><th></th><th></th>
+          ${IR_SIM_COLS.map(col=>`<th class="${col.num?'num':''}" onclick="irDivSimOrdenar('${col.key}')">${irEsc(col.lbl)}${setaSim(col.key)}</th>`).join('')}
         </tr></thead>
-        <tbody>${visiveis.map(row).join('')}</tbody>
+        <tbody>${irDivSimOrdenarPares(pares).map(p=>`<tr>
+          <td class="mono">${irFmtDate(p.dia)}</td>
+          <td class="mono">${irEsc(p.local)}</td>
+          <td class="mono">${irEsc(p.inventario||'—')}</td>
+          <td class="mono">${irFmtInt(p.qtd)}</td>
+          <td><span class="mono">${irEsc(p.itemSobra)}</span><span class="sim-desc" title="${irEsc(p.nomeSobra||'')}">${irEsc(irResumirDescricao(p.nomeSobra))}</span></td>
+          <td><span class="mono">${irEsc(p.itemFalta)}</span><span class="sim-desc" title="${irEsc(p.nomeFalta||'')}">${irEsc(irResumirDescricao(p.nomeFalta))}</span></td>
+          <td class="mono">${irFmtPct(p.semelhanca)}<span class="sim-desc">${irFmtInt(p.prefixo)} palavras iguais no início${p.vizinhos?' · código vizinho':''}</span></td>
+          <td class="mono ${Math.abs(p.desequilibrio)<0.01?'':(p.desequilibrio<0?'neg':'pos')}">${Math.abs(p.desequilibrio)<0.01?'—':(p.desequilibrio>0?'+':'')+irFmtMoney(p.desequilibrio)}</td>
+        </tr>`).join('')}</tbody>
       </table>
-    </div></div>` : `<p class="field-hint">${e.tipo==='dia'&&!e.dia?'Selecione um dia.':'Nenhum item divergente nesse escopo.'}</p>`}
-  </div>
-  ${irRenderDivAuditoria()}`;
+    </div></div>` : `<div class="sim-diag">
+      <p class="field-hint">Nenhum par com assinatura de troca${(f.de||f.ate)?' no período filtrado':''}. Onde a busca parou:</p>
+      <ul class="sim-funil">
+        <li><b>${irFmtInt(diag.divs)}</b> ${pl(diag.divs,'divergência','divergências')} no filtro${diag.semDia?` <span class="field-hint">(${irFmtInt(diag.semDia)} sem dia de fechamento — reprocesse o ciclo)</span>`:''}</li>
+        <li><b>${irFmtInt(diag.visitas)}</b> ${pl(diag.visitas,'visita','visitas')} (local + inventário)</li>
+        <li><b>${irFmtInt(diag.visitasComOsDois)}</b> com sobra <i>e</i> falta na mesma visita</li>
+        <li><b>${irFmtInt(diag.qtdEspelhada)}</b> ${pl(diag.qtdEspelhada,'par','pares')} em que um sobra exatamente o que o outro falta</li>
+        <li><b>${irFmtInt(diag.reprovadosPelaDescricao)}</b> ${diag.reprovadosPelaDescricao===1?'reprovado':'reprovados'} por descrição diferente</li>
+      </ul>
+    </div>`}
+  </div>`;
 }
+/* Auditoria da troca: o auditor vai ao endereço e confere os DOIS códigos de uma
+   vez. Não usa a QRY0390 — o par já diz onde olhar, e o que interessa é confirmar
+   qual etiqueta está em qual peça. */
+async function irDivGerarAuditoriaSimilares(){
+  const {pares} = irDivParesSimilares();
+  if(!pares.length){ irShowToast('Nenhum par de similares no filtro.', true); return; }
+  try{
+    await irCarregarDescLocaisTodosCiclos();
+    await irCarregarItemInfo();
+    /* O par sai do endereço onde a contagem bateu, e às vezes esse endereço é de
+       correção — não adianta mandar o auditor pra lá. "Onde conferir" traz as
+       posições em que os dois códigos têm saldo hoje, que é onde as etiquetas
+       podem estar trocadas de verdade. */
+    const ondeConferir = p => {
+      const pos = [];
+      for(const it of [p.itemSobra, p.itemFalta]){
+        const info = irItemInfo(it);
+        for(const l of ((info && info.locais) || [])){
+          if(irAudEhCorrecao(l.local, l.desc)) continue;
+          if(IR.audIgnorarVirtuais!==false && irAudEhVirtual(l.local, l.desc)) continue;
+          pos.push(l.local + (l.desc ? ' · '+l.desc : ''));
+          if(pos.length>=4) break;
+        }
+      }
+      return Array.from(new Set(pos)).join(' | ');
+    };
+    IR.divAuditoria = {
+      tipo:'similares',
+      geradoEm: new Date().toLocaleString('pt-BR'),
+      escopo: irDivSimEscopoLabel(),
+      itens: pares.length,
+      linhas: irDivSimOrdenarPares(pares).map(p=>({
+        dia:p.dia, local:p.local, descricaoLocal:irDescLocal(p.local), inventario:p.inventario,
+        itemSobra:p.itemSobra, nomeSobra:p.nomeSobra||'', itemFalta:p.itemFalta, nomeFalta:p.nomeFalta||'',
+        qtd:p.qtd, desequilibrio:p.desequilibrio,
+        correcao: irAudEhCorrecao(p.local) ? 'endereço de correção' : '',
+        ondeConferir: ondeConferir(p)
+      }))
+    };
+    irRenderView();
+    const el = document.querySelector('.aud-panel');
+    if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+  }catch(err){
+    irShowToast('Falha ao gerar auditoria: '+(err && err.message || err), true);
+  }
+}
+function irDivSimEscopoLabel(){
+  const f = IR.divSimFiltro || {};
+  if(f.de && f.ate) return irFmtDate(f.de)+' a '+irFmtDate(f.ate);
+  if(f.de) return 'de '+irFmtDate(f.de);
+  if(f.ate) return 'até '+irFmtDate(f.ate);
+  return 'todo o período carregado';
+}
+function irDivExportarSimilares(){
+  const {pares} = irDivParesSimilares();
+  if(!pares.length){ irShowToast('Nada para exportar.', true); return; }
+  const cab = ['Dia','Local','Inventário','Qtde Trocada','Item que Sobrou','Descrição (sobrou)',
+    'Item que Faltou','Descrição (faltou)','Valor Sobra','Valor Falta','Desequilíbrio','Semelhança','Palavras Iguais no Início','Código Vizinho'];
+  const linhas = pares.map(p=>[p.dia, p.local, p.inventario, p.qtd, p.itemSobra, p.nomeSobra||'',
+    p.itemFalta, p.nomeFalta||'', p.valorSobra, p.valorFalta, p.desequilibrio,
+    Math.round(p.semelhanca*100)/100, p.prefixo, p.vizinhos?'SIM':'']);
+  const f = IR.divSimFiltro || {};
+  const sufixo = (f.de||f.ate) ? (f.de||'inicio')+'_a_'+(f.ate||'hoje') : 'todos';
+  irDivBaixarPlanilha(cab, linhas, 'similares_trocados_'+sufixo);
+}
+/* Endereços que não servem de destino de auditoria.
+
+   CORREÇÃO (AIR, AIN, AEE, REC ...): não é onde a peça está, é onde o ajuste foi
+   lançado. Apontar o auditor pra lá é mandá-lo conferir o próprio lançamento.
+
+   VIRTUAL (DS, GAI): endereço de passagem, guarda o que vai entrar e sair. O saldo
+   ali é real mas não é conferível como prateleira.
+
+   As duas listas são editáveis e o filtro pode ser desligado inteiro — tem dia em
+   que é justamente no transitório que se quer olhar. */
+const IR_AUD_PREF_CORRECAO_PADRAO = ['AIR','AIN','AEE','REC','INS','ARI'];
+const IR_AUD_PREF_VIRTUAL_PADRAO  = ['DS','GAI'];
+function irAudPrefixos(tipo){
+  const salvo = IR.audPrefixos && IR.audPrefixos[tipo];
+  return salvo || (tipo==='correcao' ? IR_AUD_PREF_CORRECAO_PADRAO : IR_AUD_PREF_VIRTUAL_PADRAO);
+}
+// Prefixo do endereço = primeira palavra da descrição (AIR LOG 001 00 -> AIR).
+// Quando não há descrição, não dá pra classificar e o endereço passa.
+function irAudPrefixoDe(local, desc){
+  const d = String(desc || irDescLocal(local) || '').trim();
+  return d ? d.split(/\s+/)[0].toUpperCase() : '';
+}
+function irAudEhCorrecao(local, desc){ return irAudPrefixos('correcao').includes(irAudPrefixoDe(local, desc)); }
+function irAudEhVirtual(local, desc){ return irAudPrefixos('virtual').includes(irAudPrefixoDe(local, desc)); }
+async function irAudToggleVirtuais(){
+  IR.audIgnorarVirtuais = IR.audIgnorarVirtuais===false;
+  await irSetConfig('auditoria-ignorar-virtuais', IR.audIgnorarVirtuais);
+  irShowToast(IR.audIgnorarVirtuais ? 'Endereços virtuais ocultos.' : 'Endereços virtuais visíveis.');
+  irRenderView();
+}
+function irDivFecharAuditoria(){ IR.divAuditoria = null; irRenderView(); }
 function irRenderDivergencias(){
-  const semDivergencias = !IR.divergencias.length;
-  if(semDivergencias && !IR.net410Anos.length) return irEmptyState('Sem divergências carregadas', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
-  if(semDivergencias) return irRenderNetDistorcaoPanel();
-  // Carrega o ano inteiro na primeira entrada da aba — a coluna do ano precisa de
-  // todos os ciclos, não só do que está em memória.
-  if(!IR.divAnoCache) irCarregarDivEscopo();
-  const locais = Array.from(new Set(IR.divergencias.map(d=>d.local))).sort();
+  if(!IR.divergencias.length) return irEmptyState('Sem divergências carregadas', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
+  if(!irDivEscopoPronto()){
+    // Uma carga por vez: o placeholder rerenderiza, e sem a trava ele dispararia
+    // uma nova leitura a cada passada.
+    if(!IR._divCarregando){
+      IR._divCarregando = true;
+      irCarregarDivEscopo().finally(()=>{ IR._divCarregando = false; irRenderView(); });
+    }
+    return irRenderDivFiltros() + irDivCarregando();
+  }
+  // Gerada a auditoria, ela toma a tela: é a folha que o auditor vai imprimir, e
+  // deixar as divergências embaixo só fazia rolar página até achar.
+  if(IR.divAuditoria) return irRenderDivAuditoria();
+  const c = irDivCalcItens();
   return `
-    ${irRenderDivDistorcaoNet()}
-    <button class="btn-link" style="margin-bottom:10px;" onclick="irToggleDivRawTable(this)">📋 Ver lista completa de divergências do ciclo atual (${irFmtInt(irDivergenciasFiltered().length)} itens, item × local)</button>
-    <div id="ir-div-raw-wrap" style="display:none;">
-    <div class="filter-bar">
-      <input type="text" placeholder="Buscar por item, descrição ou local..." value="${irEsc(IR.divFilters.search)}" oninput="irDivSetSearch(this.value)">
-      <select onchange="irDivSetFilter('local', this.value)">
-        <option value="">Todos os locais</option>${locais.map(l=>`<option value="${irEsc(l)}" ${IR.divFilters.local===l?'selected':''}>${irEsc(l)}</option>`).join('')}
-      </select>
-      <button class="btn btn-secondary" onclick="irExportDivergenciasCsv()">Exportar CSV</button>
-    </div>
-    <p class="field-hint" id="ir-div-count" style="margin-bottom:8px;">${irFmtInt(irDivergenciasFiltered().length)} itens divergentes</p>
-    <div class="table-wrap">
-      <div class="table-scroll" id="ir-div-scroll" style="height:calc(100vh - 300px);">
-        <table><thead><tr><th>Item</th><th>Descrição</th><th>Local</th><th>Qtde Sistema</th><th>Qtde Física</th><th>Diferença</th><th>Valor</th></tr></thead>
-        <tbody id="ir-div-window"></tbody></table>
-      </div>
-    </div>
-    </div>
-    <details style="margin-top:16px;">
-      <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-soft);">Análise do NET de Perdas e Ganhos (QRY410) — outra base, movimentação do CD</summary>
-      <div style="margin-top:12px;">${irRenderNetDistorcaoPanel()}</div>
-    </details>
+    ${irRenderDivFiltros()}
+    ${irRenderDivResumo(c)}
+    ${irRenderDivTabela(c)}
+    ${irRenderDivSimilares()}
   `;
-}
-function irToggleDivRawTable(btn){
-  const el = document.getElementById('ir-div-raw-wrap');
-  if(!el) return;
-  const abrindo = el.style.display==='none';
-  el.style.display = abrindo ? '' : 'none';
-  if(abrindo) irMountDivergenciasScroll(false);
-}
-function irDivSetSearch(val){ IR.divFilters.search = val; irMountDivergenciasScroll(true); irUpdateDivCount(); }
-function irDivSetFilter(k,v){ IR.divFilters[k]=v; irRenderView(); }
-function irUpdateDivCount(){ const el = document.getElementById('ir-div-count'); if(el) el.textContent = irFmtInt(irDivergenciasFiltered().length)+' itens divergentes'; }
-function irMountDivergenciasScroll(keepScroll){
-  const el = document.getElementById('ir-div-scroll');
-  if(!el) return;
-  if(IR.__divScrollHandler) el.removeEventListener('scroll', IR.__divScrollHandler);
-  let ticking=false;
-  IR.__divScrollHandler = ()=>{ if(ticking) return; ticking=true; requestAnimationFrame(()=>{ irRenderDivWindow(); ticking=false; }); };
-  el.addEventListener('scroll', IR.__divScrollHandler);
-  if(!keepScroll) el.scrollTop = 0;
-  irRenderDivWindow();
-}
-function irRenderDivWindow(){
-  const el = document.getElementById('ir-div-scroll'); const winEl = document.getElementById('ir-div-window');
-  if(!el || !winEl) return;
-  const rows = irDivergenciasFiltered();
-  if(!rows.length){ winEl.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:20px;">Nenhum item encontrado.</td></tr>`; return; }
-  const viewH = el.clientHeight||400, scrollTop = el.scrollTop, buffer=8;
-  const start = Math.max(0, Math.floor(scrollTop/IR_DIV_ROW_H)-buffer);
-  const end = Math.min(rows.length, start+Math.ceil(viewH/IR_DIV_ROW_H)+buffer*2);
-  const top=start*IR_DIV_ROW_H, bottom=(rows.length-end)*IR_DIV_ROW_H;
-  winEl.innerHTML = `<tr style="height:${top}px;"><td colspan="7" style="padding:0;border:none;"></td></tr>`
-    + rows.slice(start,end).map(d=>`<tr style="height:${IR_DIV_ROW_H}px;">
-        <td class="mono">${irEsc(d.item)}</td><td>${irEsc(d.itemNome)}</td><td>${irEsc(d.local)}</td>
-        <td class="mono">${irFmtInt(d.qtdeSistema)}</td><td class="mono">${irFmtInt(d.qtdeFisica)}</td>
-        <td class="mono ${d.diferenca>=0?'pos':'neg'}">${d.diferenca>0?'+':''}${irFmtInt(d.diferenca)}</td>
-        <td class="mono ${d.vlDivergencia>=0?'pos':'neg'}">${irFmtMoney(d.vlDivergencia)}</td>
-      </tr>`).join('')
-    + `<tr style="height:${bottom}px;"><td colspan="7" style="padding:0;border:none;"></td></tr>`;
-}
-function irExportDivergenciasCsv(){
-  const rows = irDivergenciasFiltered();
-  if(!rows.length){ irShowToast('Nada para exportar.', true); return; }
-  const cols = ['item','itemNome','local','qtdeSistema','qtdeFisica','diferenca','precoUnitario','vlFisico','vlDivergencia'];
-  const header = cols.join(';');
-  const lines = rows.map(r=>cols.map(c=>{ let v=r[c]; if(typeof v==='string') v='"'+v.replace(/"/g,'""')+'"'; return v??''; }).join(';'));
-  const csv = '﻿'+header+'\n'+lines.join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'divergencias_ciclo_'+IR.cicloAtivo.numero+'.csv'; a.click(); URL.revokeObjectURL(a.href);
 }
 // Locais pendentes de CONTAGEM no ciclo VIGENTE — cruza a Base Congelada com a
 // QRY0843: se existe qualquer linha do local com Situação Local e Situação Inventário
@@ -4134,65 +5547,692 @@ function irExportarLocaisPendentesCsv(rua){
 }
 
 /* ============================================================
-   AUDITORIA INTELIGENTE
+   TRANSITÓRIOS
+   Estoque parado fora do endereço de picking, separado por SETOR responsável.
+   A base é a QRY0390 agregada por endereço — importada na aba Importação,
+   independente de ciclo.
+
+   O prefixo do endereço (X1) é o que diz de quem é o saldo, e esse mapa é
+   editável: só quem opera sabe que GAI é carga e DEV é devolução. O que não
+   estiver mapeado aparece em "Não classificado", justamente pra ser resolvido em
+   vez de sumir numa conta agregada.
    ============================================================ */
-const IR_AUD_ROW_H = 32;
-function irAuditoriaFiltered(){
-  return IR.divergencias.filter(d=>d.diferenca!==0 && d.prioridade>=IR.auditFilters.minPrioridade)
-    .sort((a,b)=>b.prioridade-a.prioridade);
+// IGN não é setor: é o endereço que não conta como transitório (expedição em uso,
+// picking, área operacional normal). Fica visível num painel próprio pra ninguém
+// achar que o número sumiu, mas fora do total.
+const IR_TRANS_SETORES = ['TSF','C.E','INB','OUT','TRP','REV','IGN'];
+const IR_TRANS_SETOR_NOME = {
+  'C.E':'Controle de Estoque', INB:'Inbound', OUT:'Outbound',
+  TRP:'Transporte', REV:'Reversa', TSF:'Transferência', IGN:'Desconsiderado'
+};
+/* O setor dono do endereço vem da CLASSE LOCAL do WMS: TSF, C.E, INB, OUT, TRP e
+   REV são os códigos que a operação cadastra. Endereço novo com a classe certa
+   entra no dashboard sozinho, sem ninguém mexer em configuração.
+
+   O mapa por prefixo continua como rede de segurança, pro endereço antigo que
+   ainda não tem classe. Quando nem um nem outro resolvem, o endereço cai em "não
+   classificado" — que é o sinal de que falta classe no cadastro. */
+function irTransSetorDe(l){
+  const clal = String(l.clal||'').trim().toUpperCase();
+  if(IR_TRANS_SETORES.includes(clal)) return clal;
+  // Sem classe cadastrada não há setor. O palpite por prefixo saiu: ele colocava
+  // endereço no setor errado (RES caía em Controle de Estoque sem ser C.E) e
+  // escondia justamente o que precisa ser corrigido no cadastro do WMS. O ajuste
+  // manual continua valendo, mas só pra quem o usuário apontou de propósito.
+  return (IR.transSetores||{})[l.x1] || '';
 }
-function irRenderAuditoria(){
-  if(!IR.divergencias.length) return irEmptyState('Sem itens para auditar', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
+// Palpite inicial, a partir do que o próprio endereço diz. Serve pra tela nascer
+// útil; o usuário corrige o que estiver errado e a correção fica salva.
+/* Só o que o usuário mandou desconsiderar de propósito. O resto vem da classe
+   local do WMS — palpite por prefixo colocava endereço no setor errado. */
+const IR_TRANS_SEED = { GAI:'IGN' };
+/* O palpite inicial evolui — GAI virou expedição depois que o usuário explicou o
+   que ele é. Quando isso acontece, o mapa salvo precisa receber a correção sem
+   atropelar o que o usuário classificou à mão: por isso as escolhas dele ficam
+   numa lista separada, e o seed só sobrescreve prefixo que ele nunca tocou. */
+const IR_TRANS_SEED_V = 3;
+async function irSeedTransSetoresIfEmpty(){
+  const salvo = await irGetConfig('transitorio-setores');
+  if(!salvo){
+    await irSetConfig('transitorio-setores', IR_TRANS_SEED);
+    await irSetConfig('transitorio-setores-v', IR_TRANS_SEED_V);
+    return Object.assign({}, IR_TRANS_SEED);
+  }
+  const versao = await irGetConfig('transitorio-setores-v');
+  if(versao === IR_TRANS_SEED_V) return salvo;
+  /* Recomeça do zero, mantendo só o que o usuário apontou de propósito. Merge
+     simples não bastava: o palpite antigo por prefixo (RES em Controle de
+     Estoque, TRI em Reversa...) continuava gravado e mandava endereço pro setor
+     errado mesmo depois de a regra passar a ser a classe local do WMS. */
+  const doUsuario = new Set(await irGetConfig('transitorio-setores-user') || []);
+  const mapa = Object.assign({}, IR_TRANS_SEED);
+  for(const pref in salvo) if(doUsuario.has(pref)) mapa[pref] = salvo[pref];
+  await irSetConfig('transitorio-setores', mapa);
+  await irSetConfig('transitorio-setores-v', IR_TRANS_SEED_V);
+  return mapa;
+}
+async function irTransSetPrefixo(prefixo, setor){
+  const mapa = Object.assign({}, IR.transSetores || {});
+  if(setor) mapa[prefixo] = setor; else delete mapa[prefixo];
+  IR.transSetores = mapa;
+  const doUsuario = new Set(await irGetConfig('transitorio-setores-user') || []);
+  doUsuario.add(prefixo);
+  await irSetConfig('transitorio-setores-user', Array.from(doUsuario));
+  await irSetConfig('transitorio-setores', mapa);
+  irRenderView();
+}
+function irTransToggle(chave){ IR.transExpandido = IR.transExpandido===chave ? null : chave; irRenderView(); }
+async function irCarregarEstoque390(){
+  if(IR._est390Loading) return;
+  IR._est390Loading = true;
+  try{ IR.est390Locais = await irGetEstoqueLocais(); }
+  catch(err){ IR.est390Locais = []; }
+  finally{ IR._est390Loading = false; irRenderView(); }
+}
+/* Agrupa os endereços por setor. Só entra endereço com saldo — endereço vazio não
+   é transitório, é endereço livre. */
+function irTransCalc(){
+  const mapa = IR.transSetores || {};
+  const grupos = new Map();
+  let valorTotal = 0, pecasTotal = 0, nLocais = 0;
+  for(const l of (IR.est390Locais||[])){
+    if(!l.qtd && !l.valor) continue;
+    const setor = irTransSetorDe(l);
+    if(!grupos.has(setor)) grupos.set(setor, {setor, valor:0, qtd:0, locais:[], prefixos:new Set()});
+    const g = grupos.get(setor);
+    g.valor += l.valor; g.qtd += l.qtd; g.locais.push(l); g.prefixos.add(irTransChave(l));
+    if(setor==='IGN') continue; // desconsiderado não entra no total de transitório
+    valorTotal += l.valor; pecasTotal += l.qtd; nLocais++;
+  }
+  for(const g of grupos.values()) g.locais.sort((a,b)=>b.valor-a.valor);
+  // Transporte em penúltimo e Reversa por último: são os maiores volumes e os que
+  // menos mudam de um dia pro outro, então empurram pra baixo o que precisa de decisão.
+  const ordem = g => g.setor==='IGN' ? 4 : (!g.setor ? 3
+    : (g.setor==='REV' ? 2 : (g.setor==='TRP' ? 1 : 0)));
+  const lista = Array.from(grupos.values()).sort((a,b)=> ordem(a)-ordem(b) || b.valor-a.valor);
+  return {lista, valorTotal, pecasTotal, nLocais};
+}
+/* Nome do transitório. O prefixo sozinho não diz nada pra quem lê o relatório —
+   "CAN" é "pedidos cancelados". A lista nasce com os nomes que o próprio usuário
+   já usa no relatório de pendência e cai no prefixo quando não conhece. */
+const IR_TRANS_NOMES = {
+  CAN:'PEDIDOS CANCELADOS', MOV:'MOVIMENTAÇÃO DE STK', REV:'MOV. REVERSA P/ ESTOQUE',
+  AEE:'GANHOS P/ SEREM MOV.', TR:'TRANSITORIO', TRA:'TRANSITORIO', TRI:'TRANSITORIO',
+  ANE:'ANE', ARI:'AJUSTE RECEBIMENTO', AVA:'AVARIA', DEV:'DEVOLUÇÃO', DS:'DESCARTE',
+  QBR:'QUEBRA', BLO:'BLOQUEADO', LIT:'LITÍGIO', INV:'INVENTÁRIO', PAL:'PALLETS',
+  EPI:'EPI', PIC:'PICKING REVERSA', BMS:'BMS REVERSA', RML:'REMANEJO', FAT:'FATURAMENTO',
+  OUT:'EXPEDIÇÃO', GAI:'EXPEDIÇÃO', REC:'RECEBIMENTO', BUF:'BUFFER', ATI:'ATIVO',
+  ROT:'ROTATIVO', INA:'INATIVO', MEZ:'MEZANINO', RES:'RESERVA', CAR:'CARGA'
+};
+/* O nome do transitório é editável: a lista de fábrica cobre o que apareceu no
+   relatório do usuário, mas só quem opera sabe que SEG é seguro. O que ele digita
+   fica salvo e vale por cima do padrão. */
+/* Chave do transitório: X1 + X2. Só o X1 juntava numa linha coisas de finalidade
+   diferente — "CAN SAC" e "CAN MCL" são os dois cancelamento, mas um é SAC e o
+   outro MCL, e o saldo parado de cada um é cobrado de gente diferente. */
+function irTransChave(l){
+  const x1 = String(l.x1||'').trim(), x2 = String(l.x2||'').trim();
+  return x2 ? x1+' '+x2 : x1;
+}
+/* Nome do transitório. Procura primeiro pela chave inteira ("CAN SAC"), depois
+   pelo X1 sozinho — assim os nomes já cadastrados por prefixo continuam valendo
+   pras duas linhas até alguém dar um nome específico a cada uma. */
+function irTransNome(p){
+  const chave = String(p||'').trim();
+  const meu = (IR.transNomes||{})[chave];
+  if(meu!=null && meu!=='') return meu;
+  if(IR_TRANS_NOMES[chave]) return IR_TRANS_NOMES[chave];
+  const x1 = chave.split(' ')[0];
+  const meuX1 = (IR.transNomes||{})[x1];
+  if(meuX1!=null && meuX1!=='') return meuX1;
+  return IR_TRANS_NOMES[x1] || chave;
+}
+async function irTransSetNome(prefixo, nome){
+  const mapa = Object.assign({}, IR.transNomes||{});
+  const v = String(nome||'').trim();
+  if(v) mapa[prefixo] = v; else delete mapa[prefixo];
+  IR.transNomes = mapa;
+  await irSetConfig('transitorio-nomes', mapa);
+  irRenderView();
+}
+// Ordem fixa dos LOGs, pra tabela não trocar de coluna a cada importação.
+const IR_TRANS_LOGS = ['LOG 1','LOG 2','LOG 3','LOG 4','LOG 5','LOG 6','EMBALAGEM','S/CAD'];
+function irTransLogsPresentes(){
+  const vistos = new Set();
+  for(const l of (IR.est390Locais||[])) for(const k in (l.porLog||{})) if(l.porLog[k]) vistos.add(k);
+  const conhecidos = IR_TRANS_LOGS.filter(x=>vistos.has(x));
+  const outros = Array.from(vistos).filter(x=>!IR_TRANS_LOGS.includes(x)).sort();
+  return conhecidos.concat(outros);
+}
+/* Faixas de idade do saldo, contadas do dia do último movimento até hoje. É a
+   pendência de movimentação: D0 é o que entrou hoje e ainda pode sair sozinho;
+   D+7 é acumulativo — sete dias OU MAIS. A faixa aberta "D+" que existia depois
+   dele saía do gráfico e da tabela sem dizer de quantos dias estava falando, o
+   que não serve pra cobrar responsável. Saldo sem data cai em D+7 pelo mesmo
+   motivo: se ninguém sabe quando entrou, é caso de cobrança, não de folga. */
+const IR_TRANS_FAIXAS = ['D0','D+1','D+2','D+3','D+4','D+5','D+6','D+7'];
+const IR_TRANS_FAIXA_MAX = 7;
+function irTransFaixa(dia, hoje){
+  if(!dia) return 'D+'+IR_TRANS_FAIXA_MAX;
+  const d = Math.round((hoje - Date.parse(dia+'T00:00:00')) / 86400000);
+  if(d <= 0) return 'D0';
+  if(d >= IR_TRANS_FAIXA_MAX) return 'D+'+IR_TRANS_FAIXA_MAX;
+  return 'D+'+d;
+}
+/* Prazo do transitório: 48 horas. D0 e D+1 estão dentro; de D+2 em diante o saldo
+   já passou do combinado. É o que separa verde de vermelho na tabela. */
+const IR_TRANS_PRAZO_H = 48;
+function irTransDentroDoPrazo(faixa){ return faixa==='D0' || faixa==='D+1'; }
+// Peças E valor por faixa de idade de um endereço (ou de um grupo de endereços).
+function irTransIdade(locais){
+  const hoje = Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00');
+  const r = {}, v = {}; let comData = 0;
+  for(const f of IR_TRANS_FAIXAS){ r[f] = 0; v[f] = 0; }
+  for(const l of locais){
+    const pd = l.porDia, pv = l.porDiaValor || {};
+    if(pd && Object.keys(pd).length){
+      for(const dia in pd){
+        const f = irTransFaixa(dia, hoje);
+        r[f] += pd[dia]; v[f] += (pv[dia]||0); comData += pd[dia];
+      }
+    }
+  }
+  return {faixas:r, valores:v, comData};
+}
+/* Barrinhas de valor acumulado por idade, acima de cada tabela. A pergunta é
+   "quanto dinheiro está represado em cada faixa" — e a resposta em barra se lê
+   antes da tabela, que é onde estão os detalhes. */
+function irTransTemData(){
+  return (IR.est390Meta||{}).fonte === '160';
+}
+/* Quanto do saldo parado em transitório é ganho do NET.
+
+   O ANE é endereço de "não localizado": quando o assistente não acha a peça, ele
+   move o saldo pra lá. Se depois a peça aparece em outro endereço, o inventário
+   registra GANHO — e o saldo do ANE continua parado, representando um ganho que
+   já foi contabilizado. É o caso de mandar movimentar em vez de sair procurando. */
+async function irTransCarregarGanhos(){
+  if(IR._transGanhos || IR._transGanhosLoading) return;
+  IR._transGanhosLoading = true;
+  try{
+    // O NET do ano vem da QRY410 — é o livro fiscal, tem todo ajuste do CD, e é a
+    // base que a operação usa pra falar de ganho. Só item com saldo POSITIVO entra:
+    // item que perdeu no ano não tem duplicidade pra explicar.
+    const ano = String(new Date().getFullYear());
+    let dados = (IR.div410Cache||{})[ano];
+    if(!dados){ dados = await irGetNet410(Number(ano)); IR.div410Cache = Object.assign({}, IR.div410Cache||{}, {[ano]:dados||{vazio:true}}); }
+    const porItem = new Map();
+    for(const linha of ((dados||{}).porMes || [])){
+      for(const i of (linha.topItensPositivos||[]).concat(linha.topItensNegativos||[])){
+        const k = irDivNormItem(i.item);
+        if(!k) continue;
+        porItem.set(k, (porItem.get(k)||0) + (i.saldoQtd||0));
+      }
+    }
+    IR._transGanhos = new Map(Array.from(porItem.entries()).filter(([,q])=>q>0));
+    IR._transGanhosAno = ano;
+    // Diagnóstico: sem isso, "prov. duplicidade" zerada é indistinguível de
+    // "não tem duplicidade" — e o motivo quase sempre é a QRY410 não importada.
+    IR._transGanhosDiag = {
+      ano, tem410: !!(dados && !dados.vazio && (dados.porMes||[]).length),
+      itens410: porItem.size, comGanho: IR._transGanhos.size
+    };
+  }catch(err){ IR._transGanhos = new Map(); IR._transGanhosDiag = {erro:String(err)}; }
+  finally{ IR._transGanhosLoading = false; irRenderView(); }
+}
+// local -> {qtd, valor} do saldo que pertence a item com ganho no ano.
+function irTransGanhoPorLocal(){
+  if(IR._transGanhoLocal) return IR._transGanhoLocal;
+  const m = new Map();
+  const ganhos = IR._transGanhos;
+  if(ganhos && ganhos.size && IR._itemInfo){
+    // Só endereço de transitório entra no rateio. A ficha da 390 traz TODOS os
+    // endereços do item, ordenados do maior saldo pro menor, e o rateio gastava o
+    // ganho do ano nos endereços de picking — que vêm primeiro e são bem maiores —
+    // antes de chegar no ANE/CAN da vez. Era por isso que a coluna vinha zerada
+    // mesmo com a QRY410 importada: a pergunta aqui é quanto do ganho PODE estar
+    // parado num transitório, então o transitório é quem atende primeiro.
+    const transitorios = new Set();
+    for(const g of irTransCalc().lista){
+      if(!g.setor || g.setor==='IGN') continue;
+      for(const l of g.locais) transitorios.add(l.local);
+    }
+    // Contadores do cruzamento. Uma coluna zerada tem quatro causas possíveis e
+    // cada uma se resolve de um jeito; sem medir onde a corrente arrebenta, a
+    // única saída é chutar qual base reimportar.
+    const d = IR._transGanhosDiag = IR._transGanhosDiag || {};
+    d.locaisTransitorios = transitorios.size;
+    d.fichas390 = IR._itemInfo.size;
+    d.comFicha = 0; d.comEndereco = 0; d.comTransitorio = 0;
+    for(const [item, ganhoQtd] of ganhos){
+      const info = IR._itemInfo.get(irDivNormItem(item));
+      if(!info || !info.locais) continue;
+      d.comFicha++;
+      if(info.locais.length) d.comEndereco++;
+      if(info.locais.some(l=>transitorios.has(l.local))) d.comTransitorio++;
+      const preco = info.valorUnitario || 0;
+      // A duplicidade não pode ser maior que o ganho do ano nem que o saldo do
+      // endereço: o excedente é estoque legítimo, não sobra duplicada.
+      let restante = ganhoQtd;
+      for(const l of info.locais){
+        if(restante <= 0) break;
+        if(!transitorios.has(l.local)) continue;
+        const q = Math.min(l.qtd, restante);
+        restante -= q;
+        if(!m.has(l.local)) m.set(l.local, {qtd:0, valor:0});
+        const g = m.get(l.local);
+        g.qtd += q; g.valor += q * preco;
+      }
+    }
+  }
+  IR._transGanhoLocal = m;
+  return m;
+}
+/* Três leituras lado a lado, pequenas.
+
+   Duas linhas — peças e valor — porque a mesma faixa pode ter muita peça barata
+   ou pouca peça cara, e a decisão muda. Cada uma na sua escala; comparar as duas
+   num eixo só achataria a de menor magnitude.
+
+   E uma rosca com o valor dentro e fora do prazo de 48h, que é a leitura de
+   gestão: quanto do dinheiro parado já estourou o combinado. */
+/* Cores literais pros SVGs. Dentro de um data: URI (que é como o gráfico vira
+   imagem pro boletim) não existe var() nem folha de estilo — o que não for
+   literal simplesmente não pinta. */
+function irCorTema(nome, padrao){
+  try{
+    const v = getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+    return v || padrao;
+  }catch(err){ return padrao; }
+}
+function irPaletaSVG(){
+  return {
+    blue: irCorTema('--blue', '#001A72'),
+    orange: irCorTema('--orange', '#FA4616'),
+    success: irCorTema('--success', '#1F8A52'),
+    ink: irCorTema('--ink', '#1D1F2A'),
+    inkSoft: irCorTema('--ink-soft', '#6B7280'),
+    line: irCorTema('--line', '#D5D8E0'),
+    surface2: irCorTema('--surface2', '#EEF0F4')
+  };
+}
+const IR_SVG_FONTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif";
+/* Curva suave (Catmull-Rom convertido em bézier cúbica) em vez de segmentos retos.
+   Os pontos de controle são grampeados na faixa do plot: sem isso um pico isolado
+   como o D+7 faz a curva estourar pra fora do card. */
+function irTransCurva(pts, yMin, yMax){
+  if(pts.length < 2) return pts.length ? `M${pts[0][0]} ${pts[0][1]}` : '';
+  const cl = v => Math.min(yMax, Math.max(yMin, v));
+  const T = 0.85;
+  let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for(let i=0;i<pts.length-1;i++){
+    const p0 = pts[i-1] || pts[i], p1 = pts[i], p2 = pts[i+1], p3 = pts[i+2] || p2;
+    const c1x = p1[0] + (p2[0]-p0[0])/6*T, c1y = cl(p1[1] + (p2[1]-p0[1])/6*T);
+    const c2x = p2[0] - (p3[0]-p1[0])/6*T, c2y = cl(p2[1] - (p3[1]-p1[1])/6*T);
+    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+/* O viewBox tem proporção fixa e o SVG escala junto (height:auto no CSS). O
+   preserveAspectRatio="none" que estava aqui esticava traço e texto na horizontal
+   — era isso que dava o aspecto borrado. */
+function irTransLinha(vals, titulo, total, fmt, cor, fmtCurto){
+  const W = 368, H = 128, padL = 16, padR = 16, padT = 32, padB = 21;
+  const P = irPaletaSVG();
+  const tinta = cor === 'blue' ? P.blue : P.orange;
+  const max = Math.max(...vals, 1);
+  const passo = (W - padL - padR) / Math.max(1, vals.length - 1);
+  const base = H - padB;
+  const y = v => padT + (base - padT) * (1 - v/max);
+  const pts = vals.map((v,i)=>[padL + i*passo, y(v)]);
+  const linha = irTransCurva(pts, padT - 4, base);
+  const area = linha + ` L${pts[pts.length-1][0].toFixed(1)} ${base} L${pts[0][0].toFixed(1)} ${base} Z`;
+  const iMax = vals.indexOf(Math.max(...vals));
+  const gid = 'tgg' + Math.random().toString(36).slice(2,8);
+  return `<div class="tg-card">
+    <div class="tg-head"><span>${irEsc(titulo)}</span><strong>${irEsc(total)}</strong></div>
+    <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="tg-svg" shape-rendering="geometricPrecision"
+      font-family="${IR_SVG_FONTE}" role="img" aria-label="${irEsc(titulo)}: ${irEsc(total)}">
+      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${tinta}" stop-opacity=".28"/>
+        <stop offset="1" stop-color="${tinta}" stop-opacity="0"/>
+      </linearGradient></defs>
+      <line x1="${padL-6}" y1="${base}" x2="${W-padL+6}" y2="${base}" stroke="${P.line}" stroke-width="1.2"/>
+      <path d="${area}" fill="url(#${gid})"/>
+      <path d="${linha}" fill="none" stroke="${tinta}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${i===iMax?4.6:3.2}"
+        fill="${irTransDentroDoPrazo(IR_TRANS_FAIXAS[i])?P.success:P.orange}" stroke="${P.surface2}" stroke-width="1.4"><title>${irEsc(IR_TRANS_FAIXAS[i])}: ${irEsc(fmt(vals[i]))}</title></circle>`).join('')}
+      ${pts.map((p,i)=>{
+        if(!(vals[i]>0)) return '';
+        // O máximo leva o valor cheio; os demais vão compactos, senão os rótulos
+        // se sobrepõem — são oito dias em pouco mais de 300px de viewBox.
+        const cheio = i===iMax;
+        const txt = cheio ? fmt(vals[i]) : fmtCurto(vals[i]);
+        const fs = cheio ? 10 : 8;
+        // Largura estimada do texto (o SVG não mede antes de desenhar): metade
+        // dela é o quanto o rótulo precisa de folga de cada lado pra não vazar
+        // do card — foi o que aconteceu com o valor cheio no D+7.
+        const meia = txt.length * fs * 0.30;
+        // Um pico vizinho passa por cima do rótulo. Empurra pro lado contrário
+        // à subida antes de grampear na caixa.
+        const sobe = (j) => pts[j] && pts[j][1] < p[1] - 14;
+        let x = p[0] + (sobe(i+1) ? -7 : (sobe(i-1) ? 7 : 0));
+        x = Math.min(W - meia - 1, Math.max(meia + 1, x));
+        const yTxt = Math.max(fs + 2, p[1] - (cheio ? 11 : 8));
+        return `<text x="${x.toFixed(1)}" y="${yTxt.toFixed(1)}" font-size="${fs}" font-weight="800"
+          fill="${cheio?P.ink:P.inkSoft}" text-anchor="middle">${irEsc(txt)}</text>`;
+      }).join('')}
+      ${pts.map((p,i)=>`<text x="${p[0].toFixed(1)}" y="${H-6}" font-size="9" font-weight="800"
+        fill="${irTransDentroDoPrazo(IR_TRANS_FAIXAS[i])?P.success:P.orange}" text-anchor="middle">${irEsc(IR_TRANS_FAIXAS[i].replace('D+','+').replace('D0','0'))}</text>`).join('')}
+    </svg>
+  </div>`;
+}
+/* Compacto sem casa decimal: no rótulo dentro do anel e na legenda o centavo não
+   decide nada, e "R$20,1K" só rouba espaço de fonte. */
+/* Valor da célula da tabela de transitórios, por extenso e com centavos — o
+   mesmo formato da coluna "valor por endereço". Compacto (R$10,6K) arredondava
+   demais pra quem usa a tabela pra cobrar o responsável pelo saldo. As colunas
+   de dia foram alargadas pra caber. */
+function irTransValorCel(n){
+  return irFmtMoney(n||0);
+}
+function irTransNumCurto(n){
+  n = n||0;
+  return Math.abs(n)>=10000 ? Math.round(n/1000).toLocaleString('pt-BR')+'K' : irFmtInt(n);
+}
+function irTransValorCurto(n){
+  n = n||0;
+  const abs = Math.abs(n);
+  if(abs>=1000000) return 'R$'+Math.round(n/1000000).toLocaleString('pt-BR')+'M';
+  if(abs>=1000) return 'R$'+Math.round(n/1000).toLocaleString('pt-BR')+'K';
+  return 'R$'+Math.round(n).toLocaleString('pt-BR');
+}
+/* Rosca nas cores da casa: azul o que está no prazo, laranja o que estourou.
+   Rótulo de dados em cada fatia (o percentual, inteiro). O miolo fica vazio: o
+   total já está no KPI do topo do painel, e repetido ali só apertava o anel. */
+function irTransRosca(dentro, fora){
+  const total = dentro + fora;
+  if(total <= 0) return '';
+  const P = irPaletaSVG();
+  const cx = 84, R = 60, C = 2*Math.PI*R, larg = 44, pctFora = fora/total;
+  const pctTxt = p => Math.round(p*100)+'%';
+  // Rótulo no meio da banda da fatia. A laranja começa às 12h e cresce no sentido
+  // horário; a azul ocupa o que sobra.
+  const rot = (pct, inicio) => {
+    if(pct < .08) return '';                        // fatia fina: o texto não caberia
+    const ang = (inicio + pct/2) * 2*Math.PI - Math.PI/2;
+    return `<text x="${(cx + R*Math.cos(ang)).toFixed(1)}" y="${(cx + R*Math.sin(ang)).toFixed(1)}"
+      font-size="15" font-weight="800" fill="#fff" text-anchor="middle"
+      dominant-baseline="central">${pctTxt(pct)}</text>`;
+  };
+  return `<div class="tg-card tg-card-rosca">
+    <div class="tg-head"><span>Prazo de ${IR_TRANS_PRAZO_H}h</span><strong class="${pctFora>0?'atraso':''}">${pctTxt(pctFora)} fora</strong></div>
+    <div class="tg-rosca">
+      <svg viewBox="0 0 ${cx*2} ${cx*2}" width="${cx*2}" height="${cx*2}" shape-rendering="geometricPrecision"
+        font-family="${IR_SVG_FONTE}" role="img" aria-label="${pctTxt(pctFora)} do valor fora do prazo">
+        <circle cx="${cx}" cy="${cx}" r="${R}" fill="none" stroke="${P.blue}" stroke-width="${larg}"/>
+        <circle cx="${cx}" cy="${cx}" r="${R}" fill="none" stroke="${P.orange}" stroke-width="${larg}"
+          stroke-dasharray="${(C*pctFora).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${cx} ${cx})"/>
+        ${rot(pctFora, 0)}
+        ${rot(1-pctFora, pctFora)}
+      </svg>
+      <ul class="tg-leg">
+        <li><span><i class="prazo"></i>No prazo</span><b>${irEsc(irTransValorCurto(dentro))}</b></li>
+        <li><span><i class="atraso"></i>Fora</span><b class="atraso">${irEsc(irTransValorCurto(fora))}</b></li>
+      </ul>
+    </div>
+  </div>`;
+}
+/* Por que a duplicidade deu zero. São três motivos possíveis e cada um tem uma
+   ação diferente — dizer só "nada a movimentar" mandaria o usuário procurar bug
+   onde só falta importar uma planilha. */
+function irTransDiagDuplicidade(){
+  const d = IR._transGanhosDiag || {};
+  if(d.erro) return 'erro ao ler a QRY410: '+d.erro;
+  if(!d.tem410) return 'importe a QRY410 de '+(d.ano||'')+' na aba Importação';
+  if(!d.comGanho) return 'nenhum item com ganho no NET de '+(d.ano||'')+' ('+(d.itens410||0)+' itens na 410)';
+  if(!d.fichas390) return 'importe a QRY0390: é a única base que diz em que endereço o item está';
+  if(!d.comFicha) return 'nenhum dos '+d.comGanho+' itens com ganho está na QRY0390 — reimporte a 390 (ela é do dia)';
+  if(!d.comEndereco) return 'os '+d.comFicha+' itens com ganho não têm saldo em nenhum endereço do CD';
+  if(!d.comTransitorio) return 'os '+d.comFicha+' itens com ganho têm saldo no CD, mas nenhum em transitório';
+  return 'nada a movimentar';
+}
+function irTransGraficos(porFaixaQtd, porFaixaValor){
+  const qs = IR_TRANS_FAIXAS.map(f=>porFaixaQtd[f]||0);
+  const vs = IR_TRANS_FAIXAS.map(f=>porFaixaValor[f]||0);
+  const totQ = qs.reduce((a,b)=>a+b,0), totV = vs.reduce((a,b)=>a+b,0);
+  if(totQ<=0 && totV<=0) return '';
+  let dentro=0, fora=0;
+  IR_TRANS_FAIXAS.forEach((f,i)=>{ if(irTransDentroDoPrazo(f)) dentro += vs[i]; else fora += vs[i]; });
+  return `<div class="tg-wrap">
+    ${irTransLinha(qs, 'Peças por idade', irFmtInt(totQ), irFmtInt, 'blue', irTransNumCurto)}
+    ${irTransLinha(vs, 'Valor por idade', irFmtMoney(totV), irFmtMoney, 'orange', irTransValorCurto)}
+    ${irTransRosca(dentro, fora)}
+  </div>`;
+}
+function irRenderTransitorios(){
+  if(!IR.est390Locais){ irCarregarEstoque390(); return irDivCarregando(); }
+  if(!IR._itemInfo){ irCarregarItemInfo().then(()=>irRenderView()); return irDivCarregando(); }
+  if(!IR._transGanhos){ irTransCarregarGanhos(); return irDivCarregando(); }
+  if(!IR.est390Locais.length){
+    return irEmptyState('Sem estoque importado',
+      'Importe a QRY0390 (ficha dos itens) e depois a QRY0160 (saldo com data de movimento) na aba Importação.',
+      "irSwitchTab('importacao')", 'Ir para Importação');
+  }
+  const c = irTransCalc();
+  const m = IR.est390Meta || {};
+  const logs = irTransLogsPresentes();
+  const naoClass = c.lista.find(g=>!g.setor);
   return `
-    <div class="filter-bar">
-      <label style="margin:0;">Prioridade mínima:</label>
-      <input type="range" min="0" max="100" value="${IR.auditFilters.minPrioridade}" style="width:180px;" oninput="irAuditSetMinPrioridade(this.value)">
-      <span class="mono" id="ir-aud-min-label">${IR.auditFilters.minPrioridade}</span>
-      <button class="btn btn-secondary" onclick="irSwitchTab('configuracoes')">Ajustar pesos</button>
+    <div class="ofe-head" style="margin-bottom:4px;">
+      <h3 style="margin:0;">Transitórios</h3>
+      <button class="btn btn-primary" onclick="irBaixarBoletimTransitorios()">✉️ Reportar por e-mail</button>
     </div>
-    <p class="field-hint" id="ir-aud-count" style="margin-bottom:8px;">${irFmtInt(irAuditoriaFiltered().length)} itens na fila</p>
-    <div class="table-wrap">
-      <div class="table-scroll" id="ir-aud-scroll" style="height:calc(100vh - 300px);">
-        <table><thead><tr><th>Prioridade</th><th>Item</th><th>Descrição</th><th>Local</th><th>Diferença</th><th>Valor</th><th>Rodadas</th></tr></thead>
-        <tbody id="ir-aud-window"></tbody></table>
-      </div>
-    </div>
+    ${irRenderTransEmailForm()}
+    ${c.lista.filter(g=>g.setor && g.setor!=='IGN').map(g=>irTransPainelSetor(g, logs)).join('')}
+    ${naoClass ? `<div class="panel"><div class="ofe-head">
+      <h3>Não classificado</h3>
+      <span class="field-hint">${irFmtMoney(naoClass.valor)} · ${irFmtInt(naoClass.locais.length)} endereços · ${irFmtInt(naoClass.prefixos.size)} transitórios. Cadastre a classe local (TSF, C.E, INB, OUT, TRP, REV) no WMS e eles entram sozinhos; até lá, dá pra apontar o setor aqui.</span>
+    </div>${irTransTabelaPrefixos(naoClass)}</div>` : ''}
+    <p class="field-hint">Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · ${irFmtInt(m.locais||0)} endereços no CD · ${irFmtMoney(m.valorTotal||0)} no total.
+    ${irTransTemData() ? 'Idade do saldo contada da Data Movimento da QRY0160 até hoje.' : 'Importe a QRY0160 na aba Importação para abrir as colunas por idade do saldo — a QRY0390 não traz data de movimento.'}</p>
   `;
 }
-function irAuditSetMinPrioridade(v){
-  IR.auditFilters.minPrioridade = parseInt(v,10);
-  document.getElementById('ir-aud-min-label').textContent = v;
-  irMountAuditoriaScroll(true);
-  const el = document.getElementById('ir-aud-count'); if(el) el.textContent = irFmtInt(irAuditoriaFiltered().length)+' itens na fila';
+/* Uma tabela por setor, no formato do relatório de pendência: uma linha por
+   transitório, peças abertas por LOG e o valor parado no endereço. */
+function irTransPainelSetor(g, logs, estatico){
+  const porPrefixo = new Map();
+  for(const l of g.locais){
+    const chave = irTransChave(l);
+    if(!porPrefixo.has(chave)) porPrefixo.set(chave, {x1:chave, valor:0, qtd:0, n:0, itens:0, porLog:{}, locais:[], ganhoValor:0, ganhoQtd:0});
+    const p = porPrefixo.get(chave);
+    p.valor += l.valor; p.qtd += l.qtd; p.n++; p.itens += l.itens||0; p.locais.push(l);
+    const gl = irTransGanhoPorLocal().get(l.local);
+    if(gl){ p.ganhoValor += gl.valor; p.ganhoQtd += gl.qtd; }
+    for(const k in (l.porLog||{})) p.porLog[k] = (p.porLog[k]||0) + l.porLog[k];
+  }
+  const linhas = Array.from(porPrefixo.values()).sort((a,b)=>b.valor-a.valor);
+  // Com a QRY0160 importada a tabela abre por IDADE do saldo, que é a pergunta do
+  // relatório de pendência; sem ela, cai pro LOG, que é o que a 390 sabe dizer.
+  const comData = irTransTemData();
+  const cols = IR_TRANS_FAIXAS;
+  const totValFaixa = {};
+  for(const p of linhas){
+    const id = irTransIdade(p.locais);
+    p.cel = id.faixas; p.celValor = id.valores;
+    for(const f of cols) totValFaixa[f] = (totValFaixa[f]||0) + (id.valores[f]||0);
+  }
+  const totCol = {};
+  for(const p of linhas) for(const k in p.cel) totCol[k] = (totCol[k]||0) + p.cel[k];
+  const itens = linhas.reduce((s,p)=>s+p.itens,0);
+  const ganhoSetor = linhas.reduce((s,p)=>s+p.ganhoValor,0);
+  const cell = (rot, val, sub, classe) => `<div class="ofe-num${classe?' '+classe:''}">
+    <span class="ofe-num-lbl">${irEsc(rot)}</span><strong class="mono">${val}</strong>
+    ${sub?`<span class="ofe-num-sub">${irEsc(sub)}</span>`:''}</div>`;
+  return `<div class="panel">
+    <div class="ofe-head">
+      <h3>${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</h3>
+    </div>
+    <div class="ofe-resumo trans-kpis">
+      ${cell('Parado', irFmtMoney(g.valor), irFmtInt(g.qtd)+' peças')}
+      ${cell('Endereços', irFmtInt(g.locais.length), irFmtInt(linhas.length)+(linhas.length===1?' transitório':' transitórios'))}
+      ${cell('Itens', irFmtInt(itens), 'distintos por endereço')}
+      ${cell('Provável duplicidade', ganhoSetor>0?irFmtMoney(ganhoSetor):'—',
+        ganhoSetor>0 ? irFmtPct(g.valor?ganhoSetor/g.valor:0)+' do saldo · ganho no NET do ano' : irTransDiagDuplicidade(),
+        ganhoSetor>0 ? 'trans-kpi-dup' : '')}
+    </div>
+    ${irTransGraficos(totCol, totValFaixa)}
+    <div class="table-wrap"><table class="trans-table">
+      <thead>
+        <tr><th rowspan="2" class="tt-local">Local transitório</th><th rowspan="2" class="tt-desc">Descrição</th>
+            <th colspan="${cols.length}">Peças paradas há — prazo de ${IR_TRANS_PRAZO_H}h</th>
+            <th rowspan="2" class="num tt-valor">Valor por endereço</th>
+            <th rowspan="2" class="num tt-dup">Prov. duplicidade</th></tr>
+        <tr>${cols.map(l=>`<th class="num tt-dia ${irTransDentroDoPrazo(l)?'tg-th-ok':'tg-th-atraso'}">${irEsc(l)}</th>`).join('')}</tr>
+      </thead>
+      <tbody>${linhas.map(p=>`<tr>
+        <td class="mono">${irEsc(p.x1||'(vazio)')}</td>
+        <td>${estatico ? irEsc(irTransNome(p.x1))
+          : `<input class="trans-nome" value="${irEsc(irTransNome(p.x1))}" title="Nome do transitório — dá pra editar"
+             onchange="irTransSetNome('${irEsc(p.x1)}', this.value)">`}</td>
+        ${cols.map(l=>`<td class="mono tt-c-dia ${p.cel[l]?(irTransDentroDoPrazo(l)?'trans-ok':'trans-atraso'):''}">${
+          p.cel[l] ? irFmtInt(p.cel[l])+'<span class="trans-cel-val">'+irTransValorCel(p.celValor[l]||0)+'</span>' : '0'}</td>`).join('')}
+        <td class="mono tt-c-num">${irFmtMoney(p.valor)}</td>
+        <td class="mono tt-c-num ${p.ganhoValor>0?'trans-ganho':''}" title="Saldo que pode estar duplicado: item com ganho no NET do ano da QRY410 e saldo parado aqui">${
+          p.ganhoValor>0 ? irFmtMoney(p.ganhoValor)+'<span class="trans-pct">'+irFmtPct(p.valor?p.ganhoValor/p.valor:0)+'</span>' : '—'}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr>
+        <td colspan="2"><strong>Total</strong></td>
+        ${cols.map(l=>`<td class="mono tt-c-dia"><strong>${totCol[l]?irFmtInt(totCol[l]):'0'}</strong>${
+          totCol[l]?'<span class="trans-cel-val">'+irTransValorCel(totValFaixa[l]||0)+'</span>':''}</td>`).join('')}
+        <td class="mono tt-c-num"><strong>${irFmtMoney(g.valor)}</strong></td>
+        <td class="mono tt-c-num"><strong>${ganhoSetor>0?irFmtMoney(ganhoSetor):'—'}</strong></td>
+      </tr></tfoot>
+    </table></div>
+  </div>`;
 }
-function irMountAuditoriaScroll(keepScroll){
-  const el = document.getElementById('ir-aud-scroll');
-  if(!el) return;
-  if(IR.__audScrollHandler) el.removeEventListener('scroll', IR.__audScrollHandler);
-  let ticking=false;
-  IR.__audScrollHandler = ()=>{ if(ticking) return; ticking=true; requestAnimationFrame(()=>{ irRenderAudWindow(); ticking=false; }); };
-  el.addEventListener('scroll', IR.__audScrollHandler);
-  if(!keepScroll) el.scrollTop = 0;
-  irRenderAudWindow();
+/* Os prefixos sem setor, com o botão de classificar em cada linha. É por aqui que
+   o mapa vai sendo corrigido, sem menu de configuração separado. */
+function irTransTabelaPrefixos(g){
+  const porPrefixo = new Map();
+  for(const l of g.locais){
+    const chave = irTransChave(l);
+    if(!porPrefixo.has(chave)) porPrefixo.set(chave, {x1:chave, prefixo:l.x1, valor:0, qtd:0, n:0, ex:l.desc, clal:new Set()});
+    const p = porPrefixo.get(chave); p.valor += l.valor; p.qtd += l.qtd; p.n++;
+    if(l.clal) p.clal.add(l.clal);
+  }
+  const lista = Array.from(porPrefixo.values()).sort((a,b)=>b.valor-a.valor);
+  return `<div class="table-wrap"><div class="table-scroll" style="max-height:420px;">
+    <table class="conc-table">
+      <thead><tr><th>Local transitório</th><th>Exemplo</th><th>Classe no WMS</th><th class="num">Endereços</th><th class="num">Peças</th><th class="num">Valor</th><th>Setor</th></tr></thead>
+      <tbody>${lista.map(p=>`<tr>
+        <td class="mono">${irEsc(p.x1||'(vazio)')}</td>
+        <td>${irEsc(p.ex||'')}</td>
+        <td class="mono">${irEsc(Array.from(p.clal||[]).join(', ') || '—')}</td>
+        <td class="mono">${irFmtInt(p.n)}</td>
+        <td class="mono">${irFmtInt(p.qtd)}</td>
+        <td class="mono">${irFmtMoney(p.valor)}</td>
+        <td><select onchange="irTransSetPrefixo('${irEsc(p.prefixo||p.x1)}', this.value)">
+          <option value="">—</option>
+          ${IR_TRANS_SETORES.map(x=>`<option value="${x}">${irEsc(IR_TRANS_SETOR_NOME[x]||x)}</option>`).join('')}
+        </select></td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div></div>`;
 }
-function irRenderAudWindow(){
-  const el = document.getElementById('ir-aud-scroll'); const winEl = document.getElementById('ir-aud-window');
-  if(!el || !winEl) return;
-  const rows = irAuditoriaFiltered();
-  if(!rows.length){ winEl.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:20px;">Nenhum item nessa faixa de prioridade.</td></tr>`; return; }
-  const viewH = el.clientHeight||400, scrollTop = el.scrollTop, buffer=8;
-  const start = Math.max(0, Math.floor(scrollTop/IR_AUD_ROW_H)-buffer);
-  const end = Math.min(rows.length, start+Math.ceil(viewH/IR_AUD_ROW_H)+buffer*2);
-  const top=start*IR_AUD_ROW_H, bottom=(rows.length-end)*IR_AUD_ROW_H;
-  winEl.innerHTML = `<tr style="height:${top}px;"><td colspan="7" style="padding:0;border:none;"></td></tr>`
-    + rows.slice(start,end).map(d=>`<tr style="height:${IR_AUD_ROW_H}px;">
-        <td><span class="priority-badge" style="background:${irPrioridadeCor(d.prioridade)};">${d.prioridade}</span></td>
-        <td class="mono">${irEsc(d.item)}</td><td>${irEsc(d.itemNome)}</td><td>${irEsc(d.local)}</td>
-        <td class="mono ${d.diferenca>=0?'pos':'neg'}">${d.diferenca>0?'+':''}${irFmtInt(d.diferenca)}</td>
-        <td class="mono ${d.vlDivergencia>=0?'pos':'neg'}">${irFmtMoney(d.vlDivergencia)}</td>
-        <td class="mono">${d.rodadasLocal}</td>
-      </tr>`).join('')
-    + `<tr style="height:${bottom}px;"><td colspan="7" style="padding:0;border:none;"></td></tr>`;
+/* Boletim em imagem pros gestores: é o MESMO painel da tela, reaproveitado por
+   setor, e não uma segunda montagem parecida. Duas montagens é como o boletim
+   ficou pra trás dos ajustes do dash — gráfico empilhado, tabela com outra grade.
+   Aqui a única diferença é o nome do transitório sair como texto no lugar do
+   campo editável, que numa imagem viraria uma caixa de formulário. */
+/* Destinatários do report de transitórios. Ficam salvos porque o pedido é não
+   redigitar os responsáveis todo dia — e o assunto é FIXO de propósito: o
+   Outlook agrupa conversa por assunto, então repetir o mesmo texto faz o report
+   de hoje cair na mesma thread do de ontem. Botar a data no assunto quebraria
+   isso, por isso ela vai no corpo. */
+const IR_TRANS_EMAIL_ASSUNTO = 'Transitórios — Pendência de Movimentação';
+function irTransEmailCfg(){
+  const c = IR.transEmail || {};
+  return {para: c.para||'', cc: c.cc||'', assunto: c.assunto || IR_TRANS_EMAIL_ASSUNTO};
+}
+async function irTransSetEmail(campo, valor){
+  IR.transEmail = Object.assign({}, irTransEmailCfg(), {[campo]: (valor||'').trim()});
+  await irSetConfig('transitorio-email', IR.transEmail);
+  irRenderView();
+}
+function irTransToggleDestinatarios(){
+  IR.transEmailAberto = !IR.transEmailAberto;
+  irRenderView();
+}
+/* Corpo do e-mail: os mesmos números da tela, em texto. A imagem depende de
+   anexar à mão, então o e-mail precisa se sustentar sem ela. */
+function irTransCorpoEmail(){
+  const c = irTransCalc();
+  const m = IR.est390Meta || {};
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const linhas = [`Transitórios — ${hoje}`, ''];
+  let dentro = 0, fora = 0;
+  const setores = c.lista.filter(g=>g.setor && g.setor!=='IGN');
+  for(const g of setores){
+    const id = irTransIdade(g.locais);
+    let d = 0, f = 0;
+    for(const faixa of IR_TRANS_FAIXAS){
+      if(irTransDentroDoPrazo(faixa)) d += id.valores[faixa]||0; else f += id.valores[faixa]||0;
+    }
+    dentro += d; fora += f;
+    const pct = (d+f) > 0 ? Math.round(f/(d+f)*100) : 0;
+    linhas.push(`${IR_TRANS_SETOR_NOME[g.setor]||g.setor}: ${irFmtMoney(g.valor)} · ${irFmtInt(g.qtd)} pç · ${pct}% fora do prazo`);
+  }
+  const total = dentro + fora;
+  linhas.push('');
+  linhas.push(`Total parado: ${irFmtMoney(c.valorTotal)} · ${irFmtInt(c.pecasTotal)} peças · ${irFmtInt(c.nLocais)} endereços`);
+  if(total > 0) linhas.push(`Fora do prazo de ${IR_TRANS_PRAZO_H}h: ${irFmtMoney(fora)} (${Math.round(fora/total*100)}%)`);
+  const dup = irTransGanhoPorLocal();
+  let vDup = 0; for(const [,g] of dup) vDup += g.valor;
+  if(vDup > 0) linhas.push(`Provável duplicidade: ${irFmtMoney(vDup)}`);
+  if(m.importadoEm) linhas.push(`\nEstoque de ${new Date(m.importadoEm).toLocaleString('pt-BR')}.`);
+  return linhas.join('\n');
+}
+function irRenderTransEmailForm(){
+  const c = irTransEmailCfg();
+  if(!IR.transEmailAberto){
+    const quem = c.para ? c.para.split(/[,;]/).filter(Boolean).length + ' destinatário(s)' : 'nenhum destinatário';
+    return `<p class="field-hint trans-dest"><strong>${irEsc(quem)}</strong>
+      <button class="btn-link" onclick="irTransToggleDestinatarios()">${c.para?'alterar':'definir'}</button></p>`;
+  }
+  return `<div class="trans-dest-form">
+    <div><label>Para</label><input type="text" value="${irEsc(c.para)}" placeholder="fulano@lojadomecanico.com.br; ciclano@..."
+      onchange="irTransSetEmail('para', this.value)"></div>
+    <div><label>Em cópia</label><input type="text" value="${irEsc(c.cc)}" placeholder="gestores@..."
+      onchange="irTransSetEmail('cc', this.value)"></div>
+    <div><label>Assunto (fixo — é o que junta os e-mails na mesma conversa)</label>
+      <input type="text" value="${irEsc(c.assunto)}" onchange="irTransSetEmail('assunto', this.value)"></div>
+    <div class="form-actions"><button class="btn btn-secondary" onclick="irTransToggleDestinatarios()">Fechar</button></div>
+  </div>`;
+}
+async function irBaixarBoletimTransitorios(){
+  const c = irTransCalc();
+  const m = IR.est390Meta || {};
+  const logs = irTransLogsPresentes();
+  const setores = c.lista.filter(g=>g.setor && g.setor!=='IGN');
+  const html = `<div class="rp-page rp-page-wide">
+    <div class="rp-hero">
+      <div class="rp-hero-top">
+        <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="rp-hero-logo">
+        <div class="rp-hero-status">${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleDateString('pt-BR') : '')}</div>
+      </div>
+      <div class="rp-hero-badge">Pendência de Movimentação</div>
+      <h1>Transitórios por setor</h1>
+      <p>Loja do Mecânico · Centro de Distribuição Cajamar</p>
+      <div class="rp-hero-meta"><span>${irFmtMoney(c.valorTotal)} parados · ${irFmtInt(c.pecasTotal)} peças · ${irFmtInt(c.nLocais)} endereços</span></div>
+    </div>
+    <div class="rp-body">
+      ${setores.map(g=>irTransPainelSetor(g, logs, true)).join('')}
+      <p class="rp-footer">Prazo do transitório: ${IR_TRANS_PRAZO_H}h — verde está no prazo, laranja passou. D+${IR_TRANS_FAIXA_MAX} é acumulativo: sete dias ou mais.<br>"Prov. duplicidade" é o saldo de itens que fecharam o ano com ganho no NET da QRY410 — movimentar resolve, procurar não.<br>Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · Controle de Transitórios.</p>
+    </div>
+  </div>`;
+  irBaixarBoletimImagem(html, 'Transitorios_'+new Date().toISOString().slice(0,10)+'.png',
+    Object.assign({}, irTransEmailCfg(), {corpo: irTransCorpoEmail()}));
 }
 
 /* ============================================================
@@ -4202,9 +6242,9 @@ function irRenderHistorico(){
   if(!IR.ciclos.length) return irEmptyState('Nenhum ciclo no histórico', 'Processe o primeiro ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   return `<div class="panel"><h3>Linha do tempo</h3>
     <div class="table-wrap"><table><thead><tr><th>Ciclo</th><th>Status</th><th>Abertura</th><th>Término previsto</th><th>Encerrado em</th><th></th></tr></thead>
-    <tbody>${IR.ciclos.map(c=>`<tr>
+    <tbody>${IR.ciclos.slice().sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a)).map(c=>`<tr>
       <td class="mono">${c.numero}${irCicloAno(c)?'/'+irCicloAno(c):''}</td>
-      <td><span class="tag ${c.status==='aberto'?'tag-orange':'tag-good'}">${c.status==='aberto'?'Aberto':'Encerrado'}</span></td>
+      <td><span class="tag ${irCicloStatus(c)==='aberto'?'tag-orange':'tag-good'}">${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</span></td>
       <td>${irFmtDate(c.dataAbertura)}</td><td>${irFmtDate(c.dataPrevistaTermino)}</td><td>${irFmtDate(c.dataEncerramento)}</td>
       <td><button class="btn-link" onclick="irSelecionarCiclo('${c.id}')">Ver indicadores</button></td>
     </tr>`).join('')}</tbody></table></div>
@@ -4373,15 +6413,25 @@ function irRenderCiclosConfig(){
         <td class="mono">${irFmtDate(c.dataAbertura)}</td>
         <td class="mono">${irFmtDate(c.dataPrevistaTermino)}</td>
         <td>${irEsc(c.status||'—')}</td>
-        <td><button class="btn-link" style="color:var(--danger);" onclick="irExcluirCicloUI('${irEsc(c.id)}')">Excluir</button></td>
+        <td>${IR.cicloParaExcluir===c.id
+          ? `<button class="btn-link" style="color:var(--danger);font-weight:800;" onclick="irExcluirCicloUI('${irEsc(c.id)}')">Confirmar exclusão</button>
+             <button class="btn-link" onclick="irConfirmarExcluirCiclo('${irEsc(c.id)}')">Cancelar</button>`
+          : `<button class="btn-link" style="color:var(--danger);" onclick="irConfirmarExcluirCiclo('${irEsc(c.id)}')">Excluir</button>`}</td>
       </tr>`).join('')}</tbody>
     </table></div>
   </div>`;
 }
+/* Confirmação na própria linha, não no confirm() do navegador: o Chrome oferece
+   "não permitir que esta página crie mais diálogos" e, depois disso, todo
+   confirm() volta falso — o botão parava de funcionar sem dizer nada. */
+function irConfirmarExcluirCiclo(cicloId){
+  IR.cicloParaExcluir = IR.cicloParaExcluir===cicloId ? null : cicloId;
+  irRenderView();
+}
 async function irExcluirCicloUI(cicloId){
   const c = (IR.ciclos||[]).find(x=>x.id===cicloId);
   if(!c) return;
-  if(!confirm('Excluir '+irCicloLabel(c)+' e todos os dados dele (contagens, divergências, indicadores)?\n\nEssa ação não pode ser desfeita.')) return;
+  IR.cicloParaExcluir = null;
   try{
     await irDeleteCiclo(cicloId);
     IR.ciclos = await irGetAllCiclos();
