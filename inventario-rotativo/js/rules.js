@@ -43,7 +43,11 @@ const IR_410_LEGENDA = [
   {id:'ADE', legenda:'Auditorias', considerarNet:true},
   {id:'AIC', legenda:'Inventário de Curvas', considerarNet:true},
   {id:'AIT', legenda:'Inventario de Transitorios', considerarNet:true},
-  {id:'AII', legenda:'Inventário de Insumos', considerarNet:false}
+  {id:'AII', legenda:'Inventário de Insumos', considerarNet:false},
+  /* Sem código na frente: a observação vem escrita por extenso. Entra na legenda
+     como frase, e é por isso que a classificação precisa procurar o texto dentro
+     da observação e não só no começo dela. */
+  {id:'SALDO INCLUIDO INDEVIDAMENTE', legenda:'Saldo incluído indevidamente via NF', considerarNet:false}
 ];
 // legendaList opcional = a lista editável do usuário (carregada do IndexedDB); sem
 // ela, cai no padrão de fábrica (IR_410_LEGENDA) — mantém retrocompatibilidade com
@@ -63,6 +67,20 @@ function irClassificarMotivo410(obsWmsRaw, legendaList){
   if(!texto) return {id:'(sem observação)', legenda:'', considerarNet:true};
   for(const item of lista){
     if(texto===item.id || texto.startsWith(item.id+' ') || texto.startsWith(item.id+'-')){
+      return {id:item.id, legenda:item.legenda, considerarNet:item.considerarNet};
+    }
+  }
+  /* Segunda passada, por texto contido. Nem toda observação começa com código:
+     "SALDO INCLUIDO INDEVIDAMENTE VIA NF" é escrita por extenso, não casava com
+     nada e caía no padrão "considera no NET" — sozinha ela deslocou o NET de
+     março em R$ 279.734,88.
+
+     Só vale pra entrada com 6 caracteres ou mais, que é o tamanho de uma frase.
+     Com código de três letras, procurar em qualquer posição casaria "AIR" dentro
+     de outra palavra e classificaria errado o que hoje está certo. */
+  for(const item of lista){
+    const chave = String(item.id||'').trim().toUpperCase();
+    if(chave.length >= 6 && texto.includes(chave)){
       return {id:item.id, legenda:item.legenda, considerarNet:item.considerarNet};
     }
   }
