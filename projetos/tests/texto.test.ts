@@ -144,3 +144,39 @@ describe('lerTextoCorrido', () => {
     expect(() => lerTextoCorrido('   ', base())).toThrow(/Cole o texto/);
   });
 });
+
+/* O pedido escrito sem título nenhum, que é como a maioria escreve. */
+const PEDIDO_SEM_TITULO = `Solicito a inclusão de duas colunas na QRY0191
+
+A query 191 é utilizada para identificar quem realizou a reimpressão de um ean. Se duas pessoas realizarem a colagem de um ean incorreto no período próximo, não consigo identificar quem foi e aonde. Hoje é necessário eu entrar na plataforma senior e identificar quem é a pessoa e qual filial ela atual.
+
+Solicito a inclusão de duas novas colunas sendo elas a filial de impressão e impressora, assim se tornando mais fácil o rastreio e a comunicação prévia.`;
+
+describe('texto sem título', () => {
+  it('a ordem dos parágrafos vira objetivo, dor e o que muda', () => {
+    const { dados, mapa } = lerTextoCorrido(PEDIDO_SEM_TITULO, documentoVazio(1));
+    expect(dados.objetivo).toBe('Solicito a inclusão de duas colunas na QRY0191');
+    expect(dados.dor).toMatch(/^A query 191 é utilizada/);
+    expect(dados.to_be).toMatch(/^Solicito a inclusão de duas novas colunas/);
+    expect(mapa[0]).toEqual({ titulo: 'Abertura', destino: 'Objetivo, Dor atual (AS IS), O que muda (TO BE)' });
+  });
+
+  it('com dois parágrafos, o segundo é a dor', () => {
+    const { dados } = lerTextoCorrido('Quero uma coluna nova.\n\nHoje não dá para saber quem imprimiu.', documentoVazio(1));
+    expect(dados.objetivo).toBe('Quero uma coluna nova.');
+    expect(dados.dor).toBe('Hoje não dá para saber quem imprimiu.');
+    expect(dados.to_be).toBe('');
+  });
+
+  it('um parágrafo só continua sendo apenas o objetivo', () => {
+    const { dados } = lerTextoCorrido('Quero uma coluna nova.', documentoVazio(1));
+    expect(dados.objetivo).toBe('Quero uma coluna nova.');
+    expect(dados.dor).toBe('');
+  });
+
+  it('quem escreveu os títulos manda: a distribuição não atropela', () => {
+    const { dados } = lerTextoCorrido(PEDIDO, documentoVazio(1));
+    expect(dados.dor).toMatch(/^Atualmente, a QRY0730/);
+    expect(dados.objetivo).toMatch(/^Disponibilizar informações complementares/);
+  });
+});

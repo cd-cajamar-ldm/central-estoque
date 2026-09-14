@@ -97,11 +97,15 @@ export function Campo({ rotulo, children }: { rotulo: string; children: ReactNod
   );
 }
 
-export function Aviso({ tipo = 'erro', children }: { tipo?: 'erro' | 'info' | 'sucesso'; children: ReactNode }) {
+export function Aviso({ tipo = 'erro', children }: {
+  tipo?: 'erro' | 'info' | 'sucesso' | 'atencao'; children: ReactNode;
+}) {
   const estilo = {
     erro: 'border-vermelho/30 bg-vermelho/5 text-vermelho',
     info: 'border-roxo/30 bg-roxo-suave text-roxo-escuro',
     sucesso: 'border-verde/30 bg-verde/5 text-verde',
+    /* Nem erro nem tudo certo: "deu para preencher, mas falta coisa". */
+    atencao: 'border-ambar/40 bg-ambar/10 text-ambar',
   }[tipo];
   return <div className={`rounded-lg border px-3 py-2 text-sm ${estilo}`}>{children}</div>;
 }
