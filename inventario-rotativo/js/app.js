@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v154';
+const IR_APP_VERSION = 'v155';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -5966,10 +5966,21 @@ function irTransLinha(vals, titulo, total, fmt, cor, fmtCurto){
   const W = 368, H = 128, padL = 16, padR = 16, padT = 32, padB = 21;
   const P = irPaletaSVG();
   const tinta = cor === 'blue' ? P.blue : P.orange;
-  const max = Math.max(...vals, 1);
   const passo = (W - padL - padR) / Math.max(1, vals.length - 1);
   const base = H - padB;
-  const y = v => padT + (base - padT) * (1 - v/max);
+  /* Escala logarítmica, e não linear. Um dia costuma concentrar quase tudo
+     (48.310 peças no D+7 contra 173 no D+1, 279 vezes mais): no linear os outros
+     dias viravam 0,4% da altura e a linha sumia dentro do eixo — sete dos oito
+     pontos encostados nele. O log põe as ordens de grandeza na mesma tela e
+     preserva a ordem e o pico; a altura passa a dizer "qual dia tem massa
+     parada", e o quanto exato continua escrito no próprio ponto e na tabela.
+     log1p em vez de log porque dia zerado é comum aqui e log(0) não existe.
+     O piso tira a curva de cima do eixo: dia zerado desenha logo acima dele, em
+     vez de se confundir com a própria linha de base. */
+  const esc = v => Math.log1p(Math.max(0, v||0));
+  const maxE = Math.max(...vals.map(esc), 1);
+  const piso = 7;
+  const y = v => padT + (base - piso - padT) * (1 - esc(v)/maxE);
   const pts = vals.map((v,i)=>[padL + i*passo, y(v)]);
   const linha = irTransCurva(pts, padT - 4, base);
   const area = linha + ` L${pts[pts.length-1][0].toFixed(1)} ${base} L${pts[0][0].toFixed(1)} ${base} Z`;
