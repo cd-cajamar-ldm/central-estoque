@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v157';
+const IR_APP_VERSION = 'v158';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -5649,10 +5649,7 @@ function irExportarLocaisPendentesCsv(rua){
 const IR_TRANS_SETORES = ['TSF','C.E','INB','OUT','TRP','REV','IGN'];
 const IR_TRANS_SETOR_NOME = {
   'C.E':'Controle de Estoque', INB:'Inbound', OUT:'Outbound',
-  TRP:'Transporte', REV:'Reversa', TSF:'Transferência', IGN:'Desconsiderado',
-  // Não é classe do WMS: é o rótulo do que ficou sem classe cadastrada, usado no
-  // boletim pra esse saldo não sumir do relatório.
-  SEM:'Sem classe cadastrada'
+  TRP:'Transporte', REV:'Reversa', TSF:'Transferência', IGN:'Desconsiderado'
 };
 /* O setor dono do endereço vem da CLASSE LOCAL do WMS: TSF, C.E, INB, OUT, TRP e
    REV são os códigos que a operação cadastra. Endereço novo com a classe certa
@@ -6342,12 +6339,12 @@ async function irBaixarBoletimTransitorios(){
       <div class="rp-hero-meta"><span>${irFmtMoney(c.valorTotal)} parados · ${irFmtInt(c.pecasTotal)} peças · ${irFmtInt(c.nLocais)} endereços</span></div>
     </div>
     <div class="rp-body">
+      ${/* Só os setores da legenda (TSF, C.E, INB, OUT, TRP, REV). O endereço sem
+            classe não entra: "sem classe" aqui é o CD inteiro — picking, pulmão,
+            armazenagem normal —, dezenas de milhares de endereços que não são
+            transitório e afogariam o relatório. Ele continua visível na tela,
+            que é onde se resolve o cadastro. */''}
       ${setores.map(g=>irTransPainelSetor(g, logs, true)).join('')}
-      ${(()=>{ const nc = c.lista.find(g=>!g.setor);
-        // O não classificado ficava só na tela e sumia do boletim. Saldo parado
-        // some do relatório sem ninguém saber que sumiu — pior que aparecer sem
-        // setor. Entra por último, com o nome do que é.
-        return nc ? irTransPainelSetor(Object.assign({}, nc, {setor:'SEM'}), logs, true) : ''; })()}
       <p class="rp-footer">Prazo do transitório: ${IR_TRANS_PRAZO_H}h — verde está no prazo, laranja passou. D+${IR_TRANS_FAIXA_MAX} é acumulativo: sete dias ou mais.<br>"Prov. duplicidade" é o saldo de itens que fecharam o ano com ganho no NET da QRY410 — movimentar resolve, procurar não.<br>Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · Controle de Transitórios.</p>
     </div>
   </div>`;
