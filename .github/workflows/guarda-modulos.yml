@@ -1,0 +1,72 @@
+name: Guarda dos módulos
+
+# Cada módulo do repositório (Inventário, Projetos, ...) mora numa pasta, mas o PR
+# entrega o repositório INTEIRO como estava no branch. Um branch antigo carrega
+# junto a versão velha das pastas dos outros módulos e as sobrescreve na mesclagem
+# — foi o que apagou ~3.700 linhas do Inventário nos PRs #235 e #240, os dois
+# tratando só de Projetos.
+#
+# Esta verificação olha uma coisa só: alguma pasta de módulo está encolhendo muito
+# neste PR? Se está, ela falha e pede confirmação. Trabalho normal não chega perto
+# do limite; reversão acidental passa muito longe dele.
+#
+# Para remover de propósito, marque o PR com a etiqueta "remocao-intencional".
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guarda:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Módulo encolhendo demais?
+        env:
+          ETIQUETAS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Quantas linhas uma pasta pode perder, no líquido, sem levantar a mão.
+          LIMITE=400
+          MODULOS="inventario-rotativo acompanhamento-projetos projetos auditoria elevadores equalizacao-elevadores"
+
+          if [[ ",$ETIQUETAS," == *",remocao-intencional,"* ]]; then
+            echo "Etiqueta 'remocao-intencional' presente — verificação dispensada."
+            exit 0
+          fi
+
+          BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          falhou=0
+
+          for mod in $MODULOS; do
+            # Pasta que não existe nem agora nem na base não tem o que comparar.
+            if [ ! -d "$mod" ] && ! git cat-file -e "$BASE:$mod" 2>/dev/null; then
+              continue
+            fi
+            # numstat traz "adicionadas <TAB> removidas <TAB> arquivo" por arquivo.
+            # Arquivo binário vem com "-" nas duas colunas e é ignorado na soma.
+            leitura=$(git diff --numstat "$BASE" "$HEAD_SHA" -- "$mod" \
+              | awk '$1!="-" && $2!="-" {a+=$1; r+=$2} END {print (a+0)" "(r+0)}')
+            add=${leitura% *}
+            rem=${leitura#* }
+            liquido=$((add - rem))
+
+            if [ "$liquido" -le "-$LIMITE" ]; then
+              echo "::error title=$mod encolheu $((-liquido)) linhas::Este PR remove $rem e adiciona $add linhas em $mod/ (líquido: $liquido). Se não era essa a intenção, o branch provavelmente está com uma cópia antiga da pasta: atualize-o com o main antes de mesclar. Se for de propósito, marque o PR com a etiqueta 'remocao-intencional'."
+              falhou=1
+            else
+              echo "$mod: +$add -$rem (líquido $liquido) — ok"
+            fi
+          done
+
+          exit $falhou
