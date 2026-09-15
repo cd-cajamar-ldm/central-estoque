@@ -823,13 +823,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <div class="kpi-block-body">${tilesHtml}</div>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 17; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v166';
+const IR_APP_VERSION = 'v167';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -1007,17 +1007,18 @@ function irPorMesDoAno(ano){
   const acc = new Map();
   for(const {ind} of pares){
     for(const m of ((ind&&ind.porMes)||[])){
-      if(!acc.has(m.mes)) acc.set(m.mes, {mes:m.mes, pecasContadas:0, pecasDivergentes:0,
+      if(!acc.has(m.mes)) acc.set(m.mes, {mes:m.mes, pecasContadas:0, pecasSaldoLogico:0, pecasDivergentes:0,
         locaisContados:0, locaisDivergentes:0, valorContado:0, valorDivergente:0});
       const a = acc.get(m.mes);
       a.pecasContadas += m.pecasContadas||0;   a.pecasDivergentes += m.pecasDivergentes||0;
+      a.pecasSaldoLogico += (m.pecasSaldoLogico!=null ? m.pecasSaldoLogico : (m.pecasContadas||0));
       a.locaisContados += m.locaisContados||0; a.locaisDivergentes += m.locaisDivergentes||0;
       a.valorContado += m.valorContado||0;     a.valorDivergente += m.valorDivergente||0;
     }
   }
   return Array.from(acc.values()).sort((x,y)=>x.mes.localeCompare(y.mes)).map(a=>({
     ...a,
-    acuraciaPecas:  a.pecasContadas>0  ? 1-a.pecasDivergentes/a.pecasContadas   : 0,
+    acuraciaPecas:  a.pecasSaldoLogico>0 ? 1-a.pecasDivergentes/a.pecasSaldoLogico : 0,
     acuraciaLocal:  a.locaisContados>0 ? 1-a.locaisDivergentes/a.locaisContados : 0,
     acuraciaValor:  a.valorContado>0   ? 1-a.valorDivergente/a.valorContado     : 0
   }));
@@ -1314,6 +1315,8 @@ function irFiltrarLogsValidos(porLog){
 function irCalcLogTotal(rows){
   const sum = k => rows.reduce((s,r)=>s+(r[k]||0), 0);
   const pecasContadas = sum('pecasContadas'), pecasDivergentes = sum('pecasDivergentes');
+  // Denominador da acurácia é o saldo lógico, igual ao KPI do topo.
+  const pecasSaldoLogico = sum('pecasSaldoLogico') || pecasContadas;
   const vlFisicoTotal = sum('vlFisicoTotal'), valorDivergenteAbsoluto = sum('valorDivergenteAbsoluto');
   const locaisContados = sum('locaisContados'), locaisDivergentes = sum('locaisDivergentes');
   return {
@@ -1321,10 +1324,10 @@ function irCalcLogTotal(rows){
     // considerados. Com LOG 4, LOG 5 ou local sem Grupo Classe no ciclo, esse
     // número fica abaixo do KPI do topo e parece erro de cálculo.
     chave: 'TOTAL DOS LOGS LISTADOS', isTotal: true,
-    acuraciaPecas: pecasContadas>0 ? Math.max(0,1-pecasDivergentes/pecasContadas) : 1,
+    acuraciaPecas: pecasSaldoLogico>0 ? Math.max(0,1-pecasDivergentes/pecasSaldoLogico) : 1,
     acuraciaValor: vlFisicoTotal>0 ? Math.max(0,1-valorDivergenteAbsoluto/vlFisicoTotal) : 1,
     acuraciaPosicoes: locaisContados>0 ? Math.max(0,1-locaisDivergentes/locaisContados) : 1,
-    pecasContadas, pecasDivergentes, vlFisicoTotal, valorDivergenteAbsoluto,
+    pecasContadas, pecasSaldoLogico, pecasDivergentes, vlFisicoTotal, valorDivergenteAbsoluto,
     locaisContados, locaisDivergentes, locaisOrcados: sum('locaisOrcados')
   };
 }
@@ -1534,11 +1537,12 @@ function irRenderComparativoCiclosPanel(){
     label: irCicloLabel(ciclo),
     pecas: ind?ind.acuraciaPecas:null, locais: ind?ind.acuraciaLocal:null, valor: ind?ind.acuraciaValor:null
   }));
-  let pecasContadas=0, pecasDivergentes=0, locaisContados=0, locaisDivergentes=0, valorContado=0, valorDivergente=0;
+  let pecasContadas=0, pecasDivergentes=0, locaisContados=0, locaisDivergentes=0, valorContado=0, valorDivergente=0, saldoLogico=0;
   let temValorContado=false;
   for(const {ind} of pares){
     if(!ind) continue;
     pecasContadas += ind.pecasContadas||0; pecasDivergentes += ind.pecasDivergentes||0;
+    saldoLogico += (ind.pecasSaldoLogico!=null ? ind.pecasSaldoLogico : (ind.pecasContadas||0));
     locaisContados += ind.locaisContadosTotal||0;
     // locaisDivergentes é campo novo — ciclo processado antes dele existir cai no
     // fallback (soma de "locais" do divergentesPorDia, já existia e é equivalente).
@@ -1559,7 +1563,7 @@ function irRenderComparativoCiclosPanel(){
     </div>
     <div class="kpi-blocks" style="margin-top:14px;">
       ${irKpiBlock('orange','📦','Peças',
-        irKpiTile('🎯', pecasContadas>0?irFmtPct(1-pecasDivergentes/pecasContadas):'—', 'Acurácia Geral', '', 'ciclos de '+ano) +
+        irKpiTile('🎯', saldoLogico>0?irFmtPct(1-pecasDivergentes/saldoLogico):'—', 'Acurácia Geral', '', 'ciclos de '+ano) +
         irKpiTile('📦', irFmtInt(pecasContadas), 'Contadas', '', 'ciclos de '+ano) +
         irKpiTile('⚠️', irFmtInt(pecasDivergentes), 'Divergentes', 'bad', ''))}
       ${irKpiBlock('blue','📍','Locais',
@@ -1653,7 +1657,11 @@ function irAcuraciaDoAno(ano){
   let pc=0, pd=0, lc=0, ld=0, vc=0, vd=0, temValor=false;
   for(const {ind} of pares){
     if(!ind) continue;
-    pc += ind.pecasContadas||0; pd += ind.pecasDivergentes||0;
+    // Base da acurácia = saldo lógico. Ciclo processado antes do motor 17 não tem
+    // o campo; cai na física, que era o denominador de então — melhor um número
+    // do ciclo velho na régua velha do que buraco na série.
+    pc += (ind.pecasSaldoLogico!=null ? ind.pecasSaldoLogico : (ind.pecasContadas||0));
+    pd += ind.pecasDivergentes||0;
     lc += ind.locaisContadosTotal||0;
     // locaisDivergentes é campo novo — ciclo antigo cai no equivalente que já existia.
     ld += ind.locaisDivergentes!=null ? ind.locaisDivergentes
@@ -6652,12 +6660,35 @@ function irRenderIndicadores(){
    e mede quanto cada regra discutível está pesando — com o número que a acurácia
    teria sem ela. */
 const IR_DIV_CONCLUIDO = new Set(['convergido','encerrado_sem_convergencia']);
+/* Número do inventário, pra achar a rodada de fechamento — mesma regra do motor. */
+function irNumInventario(v){
+  const n = parseInt(String(v||'').replace(/\D+/g,''), 10);
+  return isNaN(n) ? -1 : n;
+}
 function irComposicaoDivergencia(){
-  const divs = (IR.divergencias||[]).filter(d=>IR_DIV_CONCLUIDO.has(d.statusLocal));
+  const concluidas = (IR.divergencias||[]).filter(d=>IR_DIV_CONCLUIDO.has(d.statusLocal));
+  if(!concluidas.length) return null;
+  /* A base é a MESMA do KPI: só ajuste AIR e só a rodada de fechamento. Sem isso o
+     painel decomporia um total diferente do que está no dashboard — que é
+     exatamente o tipo de contradição que ele existe pra resolver. O que ficou de
+     fora vira número no rodapé, pra continuar visível. */
+  const air = concluidas.filter(d=>String(d.motivo||'').trim().toUpperCase()==='AIR');
+  const ultima = new Map();
+  for(const d of air){
+    const n = irNumInventario(d.inventario);
+    if(!ultima.has(d.local) || n > ultima.get(d.local)) ultima.set(d.local, n);
+  }
+  const divs = air.filter(d=>irNumInventario(d.inventario) === ultima.get(d.local));
   if(!divs.length) return null;
+  const absD = d => Math.abs(d.diferenca||0);
+  const foraMotivo = concluidas.filter(d=>String(d.motivo||'').trim().toUpperCase()!=='AIR')
+    .reduce((s,d)=>s+absD(d),0);
+  const foraRodada = air.filter(d=>irNumInventario(d.inventario) !== ultima.get(d.local))
+    .reduce((s,d)=>s+absD(d),0);
   const abs = d => Math.abs(d.diferenca||0);
   const total = divs.reduce((s,d)=>s+abs(d),0);
   const contadas = divs.reduce((s,d)=>s+(d.qtdeFisica||0),0);
+  const saldo = divs.reduce((s,d)=>s+(d.qtdeSistema||0),0);
   const soma = f => divs.filter(f).reduce((s,d)=>s+abs(d),0);
   const conta = f => divs.filter(f).length;
 
@@ -6675,30 +6706,19 @@ function irComposicaoDivergencia(){
 
   // Regras que outra planilha pode não aplicar. Não se somam entre si (um item
   // pode cair em duas), por isso cada uma é medida sozinha, contra o total.
-  const ruaDe = d => String(d.local||'').trim();
-  const locaisComVariasVisitas = new Set();
-  const porLocal = new Map();
-  for(const d of divs){
-    const k = d.local+'|'+d.item;
-    if(!porLocal.has(k)) porLocal.set(k, new Set());
-    porLocal.get(k).add(d.inventario||'');
-  }
-  for(const [k,invs] of porLocal) if(invs.size>1) locaisComVariasVisitas.add(k);
   const hipoteses = [
     ['Itens que o sistema não tinha no local (sobra pura)', sobraPura],
-    ['Locais encerrados sem as rodadas baterem', d=>d.statusLocal==='encerrado_sem_convergencia'],
-    ['Motivo AIR (ajuste de inventário)', d=>String(d.motivo||'').trim().toUpperCase()==='AIR'],
-    ['Item contado em mais de uma visita ao mesmo local', d=>locaisComVariasVisitas.has(d.local+'|'+d.item)]
+    ['Locais encerrados sem as rodadas baterem', d=>d.statusLocal==='encerrado_sem_convergencia']
   ].map(([rot,f])=>{
     const pecas = soma(f);
-    const contadasFora = divs.filter(f).reduce((s,d)=>s+(d.qtdeFisica||0),0);
-    const restoContadas = contadas - contadasFora;
+    const saldoFora = divs.filter(f).reduce((s,d)=>s+(d.qtdeSistema||0),0);
+    const restoSaldo = saldo - saldoFora;
     return {rot, pecas, itens:conta(f),
       divSem: total - pecas,
-      accSem: restoContadas>0 ? Math.max(0, Math.min(1, 1-(total-pecas)/restoContadas)) : null};
+      accSem: restoSaldo>0 ? Math.max(0, Math.min(1, 1-(total-pecas)/restoSaldo)) : null};
   });
-  return {total, contadas, itens:divs.length, partes, hipoteses,
-    acuracia: contadas>0 ? Math.max(0, Math.min(1, 1-total/contadas)) : null, ruaDe};
+  return {total, contadas, saldo, itens:divs.length, partes, hipoteses, foraMotivo, foraRodada,
+    acuracia: saldo>0 ? Math.max(0, Math.min(1, 1-total/saldo)) : null};
 }
 function irRenderComposicaoDivergenciaPanel(){
   const c = irComposicaoDivergencia();
@@ -6730,7 +6750,8 @@ function irRenderComposicaoDivergenciaPanel(){
         <td class="mono">${h.accSem==null?'—':irFmtPct(h.accSem)}</td>
       </tr>`).join('')}</tbody>
     </table></div>
-    <p class="field-hint" style="margin-top:10px;">Hoje: ${irFmtInt(c.contadas)} peças contadas · ${irFmtInt(c.total)} divergentes · ${c.acuracia==null?'—':irFmtPct(c.acuracia)} de acurácia.</p>
+    <p class="field-hint" style="margin-top:10px;">Hoje: ${irFmtInt(c.saldo)} peças de saldo lógico (base da acurácia) · ${irFmtInt(c.contadas)} contadas · ${irFmtInt(c.total)} divergentes · ${c.acuracia==null?'—':irFmtPct(c.acuracia)} de acurácia.${
+      (c.foraMotivo||c.foraRodada) ? ' Fora do recorte do ciclo rotativo: '+irFmtInt(c.foraMotivo)+' peças em ajustes que não são AIR e '+irFmtInt(c.foraRodada)+' em rodadas anteriores do mesmo local.' : ''}</p>
   </div>`;
 }
 
