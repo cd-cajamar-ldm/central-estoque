@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v163';
+const IR_APP_VERSION = 'v164';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -6588,6 +6588,97 @@ function irRenderIndicadores(){
     <div class="table-wrap"><table><thead><tr><th>Indicador</th><th>Valor</th><th>Fórmula</th></tr></thead>
     <tbody>${rows.map(([l,v,f])=>`<tr><td>${l}</td><td class="mono">${v}</td><td class="field-hint">${irEsc(f)}</td></tr>`).join('')}</tbody>
     </table></div>
+  </div>
+  ${irRenderComposicaoDivergenciaPanel()}`;
+}
+/* De onde vêm as peças divergentes, parcela por parcela.
+
+   Quando o número do dashboard não bate com o de outra planilha, a pergunta é
+   sempre a mesma: o que um conta que o outro não conta. Responder isso lendo
+   código não serve pra quem opera; responder somando linha por linha na mão é
+   inviável. Este painel quebra o total em partes que se somam de volta ao total,
+   e mede quanto cada regra discutível está pesando — com o número que a acurácia
+   teria sem ela. */
+const IR_DIV_CONCLUIDO = new Set(['convergido','encerrado_sem_convergencia']);
+function irComposicaoDivergencia(){
+  const divs = (IR.divergencias||[]).filter(d=>IR_DIV_CONCLUIDO.has(d.statusLocal));
+  if(!divs.length) return null;
+  const abs = d => Math.abs(d.diferenca||0);
+  const total = divs.reduce((s,d)=>s+abs(d),0);
+  const contadas = divs.reduce((s,d)=>s+(d.qtdeFisica||0),0);
+  const soma = f => divs.filter(f).reduce((s,d)=>s+abs(d),0);
+  const conta = f => divs.filter(f).length;
+
+  // Partes que se somam ao total: cada item cai em exatamente uma.
+  const sobraPura  = d => (d.qtdeSistema||0)===0 && (d.qtdeFisica||0)>0;
+  const faltaTotal = d => (d.qtdeFisica||0)===0 && (d.qtdeSistema||0)>0;
+  const sobraParc  = d => (d.diferenca||0)>0 && !sobraPura(d);
+  const faltaParc  = d => (d.diferenca||0)<0 && !faltaTotal(d);
+  const partes = [
+    ['Sobra pura — item sem linha na Rodada 1 (sistema = 0)', sobraPura],
+    ['Falta total — item sumiu na rodada final (física = 0)', faltaTotal],
+    ['Sobra parcial — contou mais do que o sistema tinha', sobraParc],
+    ['Falta parcial — contou menos do que o sistema tinha', faltaParc]
+  ].map(([rot,f])=>({rot, pecas:soma(f), itens:conta(f)}));
+
+  // Regras que outra planilha pode não aplicar. Não se somam entre si (um item
+  // pode cair em duas), por isso cada uma é medida sozinha, contra o total.
+  const ruaDe = d => String(d.local||'').trim();
+  const locaisComVariasVisitas = new Set();
+  const porLocal = new Map();
+  for(const d of divs){
+    const k = d.local+'|'+d.item;
+    if(!porLocal.has(k)) porLocal.set(k, new Set());
+    porLocal.get(k).add(d.inventario||'');
+  }
+  for(const [k,invs] of porLocal) if(invs.size>1) locaisComVariasVisitas.add(k);
+  const hipoteses = [
+    ['Itens que o sistema não tinha no local (sobra pura)', sobraPura],
+    ['Locais encerrados sem as rodadas baterem', d=>d.statusLocal==='encerrado_sem_convergencia'],
+    ['Motivo AIR (ajuste de inventário)', d=>String(d.motivo||'').trim().toUpperCase()==='AIR'],
+    ['Item contado em mais de uma visita ao mesmo local', d=>locaisComVariasVisitas.has(d.local+'|'+d.item)]
+  ].map(([rot,f])=>{
+    const pecas = soma(f);
+    const contadasFora = divs.filter(f).reduce((s,d)=>s+(d.qtdeFisica||0),0);
+    const restoContadas = contadas - contadasFora;
+    return {rot, pecas, itens:conta(f),
+      divSem: total - pecas,
+      accSem: restoContadas>0 ? Math.max(0, Math.min(1, 1-(total-pecas)/restoContadas)) : null};
+  });
+  return {total, contadas, itens:divs.length, partes, hipoteses,
+    acuracia: contadas>0 ? Math.max(0, Math.min(1, 1-total/contadas)) : null, ruaDe};
+}
+function irRenderComposicaoDivergenciaPanel(){
+  const c = irComposicaoDivergencia();
+  if(!c) return `<div class="panel"><h3>Composição da divergência de peças</h3>
+    <p class="field-hint">As divergências linha a linha deste ciclo não estão salvas no navegador — reprocesse o ciclo na Importação para abrir esta análise.</p></div>`;
+  const pct = n => c.total>0 ? irFmtPct(n/c.total) : '—';
+  return `<div class="panel">
+    <h3>Composição da divergência de peças</h3>
+    <p class="panel-sub">As ${irFmtInt(c.total)} peças divergentes, quebradas por origem. As quatro primeiras somam o total.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Origem</th><th>Peças</th><th>% do total</th><th>Itens</th></tr></thead>
+      <tbody>${c.partes.map(p=>`<tr>
+        <td>${irEsc(p.rot)}</td>
+        <td class="mono">${irFmtInt(p.pecas)}</td>
+        <td class="mono">${pct(p.pecas)}</td>
+        <td class="mono">${irFmtInt(p.itens)}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
+        <td>TOTAL</td><td class="mono">${irFmtInt(c.total)}</td><td class="mono">100,0%</td><td class="mono">${irFmtInt(c.itens)}</td>
+      </tr></tfoot>
+    </table></div>
+    <p class="panel-sub" style="margin-top:18px;">Quanto cada regra pesa, e o que a acurácia seria sem ela. Aqui as linhas se sobrepõem — um item pode entrar em mais de uma.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Regra</th><th>Peças</th><th>Divergência sem ela</th><th>Acurácia sem ela</th></tr></thead>
+      <tbody>${c.hipoteses.map(h=>`<tr>
+        <td>${irEsc(h.rot)}</td>
+        <td class="mono">${irFmtInt(h.pecas)}</td>
+        <td class="mono">${irFmtInt(h.divSem)}</td>
+        <td class="mono">${h.accSem==null?'—':irFmtPct(h.accSem)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <p class="field-hint" style="margin-top:10px;">Hoje: ${irFmtInt(c.contadas)} peças contadas · ${irFmtInt(c.total)} divergentes · ${c.acuracia==null?'—':irFmtPct(c.acuracia)} de acurácia.</p>
   </div>`;
 }
 
