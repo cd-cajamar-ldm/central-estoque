@@ -834,7 +834,7 @@ const IR_INDICADORES_VERSION = 17; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v169';
+const IR_APP_VERSION = 'v170';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -844,31 +844,50 @@ function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); 
    planilha — e nada na tela diz isso. Como a base congelada, as contagens e as
    divergências estão no IndexedDB, dá pra refazer a conta sem pedir o arquivo. */
 async function irRecalcularSeMotorAntigo(){
-  const ind = IR.indicadores, ciclo = IR.cicloAtivo;
-  if(!ind || !ciclo || ind._v === IR_INDICADORES_VERSION) return;
   if(IR._recalculando) return;
+  /* Todos os ciclos, não só o aberto. A acurácia anual e o comparativo somam os
+     indicadores gravados de cada ciclo: se um ciclo continuasse na régua antiga,
+     o número do ano seria uma mistura de duas réguas — pior que um número velho,
+     porque não dá pra saber de qual regra ele veio. O ciclo ativo vai primeiro,
+     que é o que está na tela. */
+  const pendentes = [];
+  for(const c of (IR.ciclos||[])){
+    const ind = await irGetIndicadores(c.id);
+    if(ind && ind._v !== IR_INDICADORES_VERSION) pendentes.push(c);
+  }
+  if(!pendentes.length) return;
+  const ativoId = (IR.cicloAtivo||{}).id;
+  pendentes.sort((a,b)=> (b.id===ativoId) - (a.id===ativoId));
   IR._recalculando = true;
-  irShowToast('Regra de cálculo mudou — recalculando este ciclo...');
-  await new Promise(resolve=>{
+  irShowToast('Regra de cálculo mudou — recalculando '+pendentes.length+' ciclo(s)...');
+  let falhou = 0;
+  for(const c of pendentes){
+    const ok = await irRecalcularCiclo(c.id);
+    if(!ok) falhou++;
+    if(c.id === ativoId){
+      // Atualiza a tela assim que o ciclo aberto fica pronto, sem esperar o resto.
+      IR.indicadores = await irGetIndicadores(c.id);
+      irRenderView();
+    }
+  }
+  IR.comparativoCiclos = null;
+  await irCarregarComparativoCiclos();
+  IR._recalculando = false;
+  irRenderView();
+  irShowToast(falhou
+    ? (pendentes.length-falhou)+' ciclo(s) recalculado(s); '+falhou+' sem dados salvos — reprocesse na Importação.'
+    : 'Ciclo(s) recalculado(s).', !!falhou);
+}
+function irRecalcularCiclo(cicloId){
+  return new Promise(resolve=>{
     const w = irNovoWorker();
-    w.onmessage = async (e)=>{
+    w.onmessage = (e)=>{
       const m = e.data;
-      if(m.type === 'doneRecalculo'){
-        IR.indicadores = await irGetIndicadores(ciclo.id);
-        IR.comparativoCiclos = null;
-        await irCarregarComparativoCiclos();
-        w.terminate(); IR._recalculando = false;
-        irRenderView();
-        irShowToast('Ciclo recalculado.');
-        resolve();
-      } else if(m.type === 'erroRecalculo'){
-        w.terminate(); IR._recalculando = false;
-        irShowToast(m.message || 'Não foi possível recalcular o ciclo.', true);
-        resolve();
-      }
+      if(m.type === 'doneRecalculo'){ w.terminate(); resolve(true); }
+      else if(m.type === 'erroRecalculo'){ w.terminate(); resolve(false); }
     };
-    w.onerror = ()=>{ w.terminate(); IR._recalculando = false; resolve(); };
-    w.postMessage({type:'recalcular', cicloId: ciclo.id});
+    w.onerror = ()=>{ w.terminate(); resolve(false); };
+    w.postMessage({type:'recalcular', cicloId});
   });
 }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
