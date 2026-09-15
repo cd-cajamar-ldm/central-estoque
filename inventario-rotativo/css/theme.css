@@ -1395,6 +1395,12 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .acan-ciclos .cmp-legend{ justify-content:center; margin-top:2px; }
 .imp-sem-preco{ color:var(--danger); margin-top:10px; }
 
+/* ---------- SELEÇÃO DE LOCAIS PENDENTES (Resumo por Setor) ---------- */
+.pend-col{ width:34px; text-align:center; padding-inline:6px !important; }
+.pend-col input{ width:15px; height:15px; accent-color:var(--blue); cursor:pointer; vertical-align:middle; }
+.pend-acoes{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.pend-acoes button[disabled]{ opacity:.45; cursor:not-allowed; }
+
 /* ---------- AVISO DE VERSÃO NOVA ---------- */
 /* Aparece só quando o app atualiza com a aba já aberta. Recarregar sozinho nesse
    momento poderia interromper uma importação em andamento. */

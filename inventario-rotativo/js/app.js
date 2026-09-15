@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v161';
+const IR_APP_VERSION = 'v162';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -1193,23 +1193,29 @@ function irRenderPorRuaPanel(ind){
   // A exportação lista os locais um a um, e pra isso precisa da base congelada em
   // memória. O número da coluna não precisa — e é por isso que ele não some mais.
   const podeExportar = irLocaisPendentesContagem().length > 0;
+  const comPendente = rowsComPendentes.filter(r=>r.locaisPendentes>0);
   return `<div class="panel">
     <h3>Resumo por Setor</h3>
     <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por rua.</p>
-    ${totalPendentes>0 ? (podeExportar
-      ? `<div class="form-actions" style="margin:0 0 12px;">
-          <button class="btn-link" onclick="irExportarLocaisPendentesCsv()">📤 Exportar todos os locais pendentes (${irFmtInt(totalPendentes)})</button>
-        </div>`
-      : `<p class="field-hint" style="margin:0 0 12px;">A lista endereço a endereço dos ${irFmtInt(totalPendentes)} pendentes precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar a exportação.</p>`)
+    ${totalPendentes>0 ? `<div class="form-actions pend-acoes" style="margin:0 0 12px;">
+        <button class="btn-link" id="irPendBtn" onclick="irExportarLocaisPendentesCsv()">📤 Baixar locais pendentes (${irFmtInt(totalPendentes)})</button>
+        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>
+        <button class="btn-link" onclick="irPendMarcarTodas(true)">Marcar todas</button>`:''}
+      </div>
+      ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
     <div class="table-wrap"><table>
       <thead><tr>
+        <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
         <th>Rua</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
         <th>Locais Pendentes</th>
         <th>Peças Contadas</th><th>Peças Divergentes</th>
         <th>Acurácia Peças</th><th>Posições</th><th>Valores</th>
       </tr></thead>
       <tbody>${rowsComPendentes.map(r=>`<tr>
+        <td class="pend-col">${r.locaisPendentes>0
+          ? `<input type="checkbox" class="pend-chk" checked value="${irEsc(r.chave)}" data-pend="${r.locaisPendentes}" onchange="irPendAtualizarBotao()">`
+          : ''}</td>
         <td class="mono">${irEsc(r.chave)}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
@@ -1222,6 +1228,7 @@ function irRenderPorRuaPanel(ind){
         <td class="mono" style="${irHeatStyle(r.acuraciaValor, meta)}">${irFmtPct(r.acuraciaValor)}</td>
       </tr>`).join('')}</tbody>
       <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
+        <td class="pend-col"></td>
         <td class="mono">TOTAL</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
@@ -5669,20 +5676,55 @@ function irLocaisPendentesPor(campo, valor){
   if(valor) base = base.filter(l=>l[campo]===valor);
   return base.sort((a,b)=>String(a.descricao||'').localeCompare(String(b.descricao||''), undefined, {numeric:true}));
 }
+/* Seleção por linha no Resumo por Setor: quem cobra a contagem cobra rua por rua,
+   e baixar o CD inteiro pra filtrar no Excel depois é trabalho jogado fora. */
+function irPendRuasMarcadas(){
+  return Array.from(document.querySelectorAll('.pend-chk:checked')).map(c=>c.value);
+}
+function irPendAtualizarBotao(){
+  const btn = document.getElementById('irPendBtn');
+  if(!btn) return;
+  const n = Array.from(document.querySelectorAll('.pend-chk:checked'))
+    .reduce((s,c)=>s + (parseInt(c.dataset.pend,10)||0), 0);
+  const todas = document.querySelectorAll('.pend-chk').length;
+  const marcadas = document.querySelectorAll('.pend-chk:checked').length;
+  btn.textContent = '📤 Baixar locais pendentes ('+irFmtInt(n)+')'
+    + (marcadas && marcadas<todas ? ' · '+marcadas+' de '+todas+' ruas' : '');
+  btn.disabled = n === 0;
+}
+function irPendMarcarTodas(marcar){
+  document.querySelectorAll('.pend-chk').forEach(c=>{ c.checked = !!marcar; });
+  const cab = document.querySelector('thead .pend-col input');
+  if(cab) cab.checked = !!marcar;
+  irPendAtualizarBotao();
+}
 function irExportarLocaisPendentesCsv(rua){
   if(!IR.cicloAtivo){ irShowToast('Nenhum ciclo ativo.', true); return; }
-  const pendentes = irLocaisPendentesContagem(rua);
-  if(!pendentes.length){ irShowToast('Nenhum local pendente'+(rua?' na rua '+rua:'')+'.'); return; }
-  const header = 'Local;Descrição';
+  // Sem argumento, exporta o que estiver marcado na tabela; com argumento, só
+  // aquela rua (usado por quem chama a função direto).
+  const ruas = rua ? [rua] : irPendRuasMarcadas();
+  const filtro = ruas.length ? new Set(ruas) : null;
+  const pendentes = irLocaisPendentesContagem()
+    .filter(l => !filtro || filtro.has(l.x1));
+  if(!pendentes.length){
+    // Distingue "não há pendente" de "não dá pra listar": o segundo caso tem
+    // pendente na tela e some sem explicação se o aviso for o mesmo.
+    irShowToast(irLocaisPendentesContagem().length===0
+      ? 'A base congelada deste ciclo não está salva — reprocesse o ciclo na Importação para baixar a lista.'
+      : 'Nenhum local pendente nas ruas marcadas.', true);
+    return;
+  }
+  const header = 'Rua;Local;Descrição';
   const lines = pendentes.map(l=>{
     const desc = '"'+String(l.descricao||'').replace(/"/g,'""')+'"';
-    return l.idLocal+';'+desc;
+    return (l.x1||'')+';'+l.idLocal+';'+desc;
   });
   const csv = '﻿'+header+'\n'+lines.join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'locais_pendentes_ciclo_'+IR.cicloAtivo.numero+(rua?'_'+rua:'')+'.csv';
+  a.download = 'locais_pendentes_ciclo_'+IR.cicloAtivo.numero
+    + (ruas.length===1 ? '_'+ruas[0] : '') + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
 }
