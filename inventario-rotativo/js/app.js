@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v164';
+const IR_APP_VERSION = 'v165';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -1172,7 +1172,24 @@ function irRenderLogTablePanel(ind){
         <td class="mono" style="${irHeatStyle(r.acuraciaValor, meta)}">${irFmtPct(r.acuraciaValor)}</td>
       </tr>`).join('')}</tbody>
     </table></div>
+    ${irRenderLogForaDaTabela(ind, rows)}
   </div>`;
+}
+/* O que a tabela deixou de fora, com nome e número.
+
+   A tabela só lista LOG 1, 2, 3 e 6. Local em qualquer outro Grupo Classe (ou sem
+   Grupo Classe nenhum) sai da tabela mas continua no KPI do topo — então o TOTAL
+   daqui fica abaixo do KPI e parece conta errada. Esta linha fecha a diferença:
+   listado + fora = KPI. */
+function irRenderLogForaDaTabela(ind, listadas){
+  const dentro = new Set(listadas.map(r=>r.chave));
+  const fora = (ind.porLog||[]).filter(r=>!dentro.has(r.chave));
+  const pecas = fora.reduce((s,r)=>s+(r.pecasContadas||0),0);
+  const div = fora.reduce((s,r)=>s+(r.pecasDivergentes||0),0);
+  if(!pecas && !div) return '';
+  const nomes = fora.filter(r=>(r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)
+    .map(r=>r.chave).slice(0,8).join(', ');
+  return `<p class="field-hint" style="margin-top:10px;">Fora da tabela: ${irFmtInt(pecas)} peças contadas e ${irFmtInt(div)} divergentes${nomes?' em '+irEsc(nomes):''} — a tabela lista só ${IR_LOGS_VALIDOS.join(', ')}, mas o KPI "Acurácia Peças" do topo inclui tudo. ${irFmtInt((ind.pecasDivergentes||0))} divergentes no ciclo = ${irFmtInt(div)} fora + ${irFmtInt((ind.pecasDivergentes||0)-div)} nos logs listados.</p>`;
 }
 function irHeatStyle(val, meta){
   const t = Math.max(0, Math.min(1, meta>0 ? val/meta : val));
@@ -1240,7 +1257,7 @@ function irRenderPorRuaPanel(ind){
       </tr>`).join('')}</tbody>
       <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
         <td class="pend-col"></td>
-        <td class="mono">TOTAL</td>
+        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisDivergentes,0))}</td>
@@ -1250,6 +1267,11 @@ function irRenderPorRuaPanel(ind){
         <td colspan="3"></td>
       </tr></tfoot>
     </table></div>
+    ${(()=>{ // Mesmo caso da tabela por log: "(sem rua)" sai da lista mas conta no KPI.
+      const sr = (ind.porRua||[]).find(r=>r.chave==='(sem rua)');
+      if(!sr || (!(sr.pecasContadas||0) && !(sr.pecasDivergentes||0))) return '';
+      return `<p class="field-hint" style="margin-top:10px;">Fora da tabela: ${irFmtInt(sr.pecasContadas||0)} peças contadas e ${irFmtInt(sr.pecasDivergentes||0)} divergentes em endereços sem X1 na base congelada — o KPI "Acurácia Peças" do topo inclui esses.</p>`;
+    })()}
   </div>`;
 }
 // Só esses 4 logs têm base congelada confiável hoje (os demais — LOG 4, COFRE, ESC,
@@ -1268,7 +1290,10 @@ function irCalcLogTotal(rows){
   const vlFisicoTotal = sum('vlFisicoTotal'), valorDivergenteAbsoluto = sum('valorDivergenteAbsoluto');
   const locaisContados = sum('locaisContados'), locaisDivergentes = sum('locaisDivergentes');
   return {
-    chave: 'TOTAL', isTotal: true,
+    // "TOTAL" sozinho lia como total do ciclo, e não é: a tabela só soma os logs
+    // considerados. Com LOG 4, LOG 5 ou local sem Grupo Classe no ciclo, esse
+    // número fica abaixo do KPI do topo e parece erro de cálculo.
+    chave: 'TOTAL DOS LOGS LISTADOS', isTotal: true,
     acuraciaPecas: pecasContadas>0 ? Math.max(0,1-pecasDivergentes/pecasContadas) : 1,
     acuraciaValor: vlFisicoTotal>0 ? Math.max(0,1-valorDivergenteAbsoluto/vlFisicoTotal) : 1,
     acuraciaPosicoes: locaisContados>0 ? Math.max(0,1-locaisDivergentes/locaisContados) : 1,
