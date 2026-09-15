@@ -160,12 +160,76 @@ self.onmessage = async (e)=>{
   } else if(msg.type === 'process160'){
     try{ await runPipeline160(msg); }
     catch(err){ self.postMessage({type:'error160', message: err.message||String(err)}); }
+  } else if(msg.type === 'recalcular'){
+    try{ await recalcularIndicadores(msg.cicloId); }
+    catch(err){ self.postMessage({type:'erroRecalculo', message: err.message||String(err)}); }
   } else if(msg.type === 'detect843'){
     try{ self.postMessage({type:'done843detect', ...detectarCiclo843(msg.bufs843)}); }
     catch(err){ self.postMessage({type:'done843detect', erro: err.message||String(err)}); }
   }
 };
 
+/* Recalcula os indicadores de um ciclo com os dados que já estão no navegador.
+
+   Regra de cálculo que muda não reaparece sozinha na tela: os indicadores ficam
+   gravados por ciclo, e sem reprocessar a planilha o dashboard segue mostrando o
+   número da régua antiga — sem nada avisando. Como a base congelada, as contagens
+   e as divergências já estão no IndexedDB, dá pra refazer a conta ali mesmo, sem
+   pedir o arquivo de novo.
+
+   O que não dá pra refazer sai da leitura da planilha e não depende das regras de
+   cálculo (cancelamentos, tempo perdido): é copiado do indicador antigo. */
+async function recalcularIndicadores(cicloId){
+  post('progress', {stage:'Relendo dados do ciclo...', pct:10});
+  const ciclo = await irGetCiclo(cicloId);
+  const antigo = (await irGetIndicadores(cicloId)) || {};
+  const congelados = await irGetByCiclo(IR_STORES.locais, cicloId);
+  const contagens = await irGetByCiclo(IR_STORES.contagens, cicloId);
+  const divergencias = await irGetByCiclo(IR_STORES.divergencias, cicloId);
+  if(!congelados.length || !divergencias.length){
+    self.postMessage({type:'erroRecalculo', message:'Os dados deste ciclo não estão salvos no navegador — reprocesse as planilhas na Importação.'});
+    return;
+  }
+  post('progress', {stage:'Refazendo status dos locais...', pct:45});
+  // Mesmo critério do processamento: visita = local + Nº Inventário, só linha
+  // liquidada, e o status do local é o melhor entre as visitas de ajuste AIR.
+  const porVisita = new Map();
+  for(const c of contagens){
+    if(c.liquidada===false) continue;
+    const chave = c.local+'|'+(c.inventario||'');
+    if(!porVisita.has(chave)) porVisita.set(chave, []);
+    porVisita.get(chave).push(c);
+  }
+  const STATUS_PRIORIDADE = {convergido:3, encerrado_sem_convergencia:2, em_contagem:1};
+  const statusPorLocalAIR = new Map();
+  for(const [chave, lista] of porVisita){
+    if(!lista.some(c=>c.idConferencia>=2)) continue;
+    if(!lista.some(c=>String(c.motivo||'').trim().toUpperCase()==='AIR')) continue;
+    const local = chave.split('|')[0];
+    const maxRodada = Math.max(...lista.map(c=>c.idConferencia||0));
+    const st = {status:'convergido', rodadas:maxRodada};
+    const atual = statusPorLocalAIR.get(local);
+    if(!atual || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atual.status]) statusPorLocalAIR.set(local, st);
+  }
+  const pecasFisicasPorLocal = new Map();
+  for(const d of divergencias) pecasFisicasPorLocal.set(d.local, (pecasFisicasPorLocal.get(d.local)||0) + (d.qtdeFisica||0));
+
+  post('progress', {stage:'Recalculando indicadores...', pct:75});
+  const ind = calcularIndicadores({
+    congelados, contagens: contagens.filter(c=>c.liquidada!==false), divergencias,
+    statusPorLocal: statusPorLocalAIR, pecasFisicasPorLocal,
+    dataAbertura: ciclo && ciclo.dataAbertura, dataPrevistaTermino: ciclo && ciclo.dataPrevistaTermino,
+    locaisComCancelamento: antigo.locaisComCancelamento,
+    tentativasCanceladas: antigo.tentativasCanceladas,
+    minutosPerdidosCancelamento: (antigo.horasPerdidasCancelamento||0)*60,
+    sessoesComHorarioRegistrado: antigo.sessoesComHorarioRegistrado,
+    locaisCanceladosAposBater: antigo.locaisCanceladosAposBater,
+    locaisCanceladosInterrompidos: antigo.locaisCanceladosInterrompidos
+  });
+  await irSaveIndicadores(cicloId, ind);
+  post('progress', {stage:'Pronto', pct:100});
+  self.postMessage({type:'doneRecalculo', cicloId});
+}
 /* Lê a QRY0843 anexada e diz de qual ciclo ela é, pra não depender do usuário
    lembrar de trocar o número na mão (e gravar por cima do ciclo errado).
 
@@ -998,9 +1062,30 @@ function irDivergenciasDoCiclo(divergencias){
   }
   return air.filter(d=>irNumInventario(d.inventario) === ultima.get(d.local));
 }
-function calcularIndicadores({congelados, contagens, divergencias: divergenciasTodas, statusPorLocal, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
+/* Endereços que não são posição de estoque, e por isso ficam fora dos indicadores
+   do ciclo: os de lançamento de ajuste e os transitórios. A divergência de um
+   endereço de ajuste é o próprio acerto sendo registrado — ela já foi contada no
+   endereço onde o erro aconteceu, e contar de novo é contar em dobro.
+
+   ML não entra na lista: é escada, foi reclassificada como posição do ciclo.
+
+   Vale só aqui. A aba Divergências continua enxergando tudo, porque é auditoria do
+   CD inteiro. */
+const IR_PREFIXOS_FORA_DO_CICLO = new Set([
+  'AIN','AEE','BAI','ANF','LIT','TID','PER','ERR','ERO','GER','NFS','ER','AIR',
+  'REV','REC','INS','ME','TR','ANE','AVA','CAN','QBR'
+]);
+function irForaDoCiclo(x1){
+  return IR_PREFIXOS_FORA_DO_CICLO.has(String(x1||'').trim().toUpperCase());
+}
+function calcularIndicadores({congelados: congeladosTodos, contagens, divergencias: divergenciasTodas, statusPorLocal: statusPorLocalTodos, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
   locaisComCancelamento, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
   locaisCanceladosAposBater, locaisCanceladosInterrompidos}){
+  // Escopo do ciclo: fora os endereços de ajuste e os transitórios.
+  const congelados = congeladosTodos.filter(l=>!irForaDoCiclo(l.x1));
+  const foraDoCiclo = new Set(congeladosTodos.filter(l=>irForaDoCiclo(l.x1)).map(l=>l.idLocal));
+  const statusPorLocal = new Map();
+  for(const [local, st] of statusPorLocalTodos) if(!foraDoCiclo.has(local)) statusPorLocal.set(local, st);
   const locaisCongelados = congelados.length;
   // Taxa de recontagem/cancelamento: local que teve trabalho de campo cancelado (não
   // fechou porque foi interrompido) sobre o total de locais orçados do ciclo.
@@ -1009,7 +1094,7 @@ function calcularIndicadores({congelados, contagens, divergencias: divergenciasT
 
   const clamp01 = (n)=>Math.max(0, Math.min(1, n));
   // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo.
-  const divergencias = irDivergenciasDoCiclo(divergenciasTodas);
+  const divergencias = irDivergenciasDoCiclo(divergenciasTodas).filter(d=>!foraDoCiclo.has(d.local));
 
   // Acurácia Peças/Valor e Divergência Peças/Valor só podem considerar locais já
   // CONCLUÍDOS (rodadas bateram = "convergido", ou encerrado após 5 rodadas sem bater
