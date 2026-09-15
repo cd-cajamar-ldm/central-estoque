@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v158';
+const IR_APP_VERSION = 'v159';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -875,7 +875,6 @@ function irRenderDashboard(){
     ${irRenderContadosPorDiaPanel(ind)}
     ${irRenderDivergentesPorDiaPanel(ind)}
     ${irRenderLogTablePanel(ind)}
-    ${irRenderComparativoCiclosPanel(ind)}
     ${irRenderEvolucaoMensalPanel(ind)}
   `;
 }
@@ -1408,8 +1407,13 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
   opts = opts||{};
   const meta = opts.meta!=null ? opts.meta : 0.97;
   const cores = {pecas:'#FA4616', locais:'#001A72', valor:'#1D1F2A', vazio:'#D8DCE3', axis:'#6B7280', label:'#1D1F2A', meta:'#6B7280'};
-  const W = 800, H = 260;
-  const padL = 14, padR = 14, padT = 30, padB = 32;
+  // Largura do desenho por parâmetro: o mesmo gráfico aparece num painel de meia
+  // largura, e escalar 800px pra dentro de ~560 encolhia o rótulo junto (13px
+  // viravam 9). Desenhar já no tamanho de destino mantém o texto legível.
+  const W = opts.W||800, H = opts.H||260;
+  // padT abre a faixa do rótulo da meta: com 30 ele ainda encostava no valor de
+  // uma barra perto de 100%, que é desenhado logo abaixo do topo da área útil.
+  const padL = 14, padR = 14, padT = 46, padB = 32;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const n = Math.max(1, rows.length);
   const grupoW = plotW/n;
@@ -1432,9 +1436,12 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
     });
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="14" text-anchor="middle" fill="${cores.axis}" font-weight="800">${irEsc(r.label)}</text>`;
   });
+  /* O rótulo da meta sai de cima da linha e vai pra faixa livre acima do gráfico:
+     na linha ele ficava na mesma altura do valor da barra mais à direita (uma
+     acurácia de 96% encosta na meta de 97%) e os dois textos se tocavam. */
   const metaLine = `<line x1="${padL}" y1="${metaY.toFixed(1)}" x2="${W-padR}" y2="${metaY.toFixed(1)}" stroke="${cores.meta}" stroke-width="1.5" stroke-dasharray="5 4"/>
-    <text x="${W-padR}" y="${(metaY-6).toFixed(1)}" font-size="13" text-anchor="end" fill="${cores.meta}" font-weight="700">Meta ${(meta*100).toFixed(0)}%</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${metaLine}${bars}${labels}${xLabels}</svg>`;
+    <text x="${W-padR}" y="${(padT-28).toFixed(1)}" font-size="13" text-anchor="end" fill="${cores.meta}" font-weight="700">- - Meta ${(meta*100).toFixed(0)}%</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto;">${metaLine}${bars}${labels}${xLabels}</svg>`;
 }
 function irRenderComparativoCiclosPanel(){
   // Só os ciclos do ano em curso. Misturar 2025 com 2026 numa barra ao lado da
@@ -1610,6 +1617,26 @@ function irRenderAcuraciaAnualPanel(){
     ${linha('Locais', ac.locais, '#001A72', irFmtInt(ac.locaisContados), irFmtInt(ac.locaisDivergentes))}
     ${linha('Valor',  ac.valor,  '#1D1F2A', ac.valorContado==null?'—':irFmtMoneyCompact(ac.valorContado), irFmtMoneyCompact(ac.valorDivergente))}
     <p class="field-hint acan-pe">${irEsc(String(ano))} · ${irFmtInt(ac.ciclos)} ciclo(s) · meta ${irFmtPct(IR_META_ACURACIA)}</p>
+    ${irRenderAcuraciaPorCiclo(ano)}
+  </div>`;
+}
+/* O acumulado do ano e a quebra por ciclo moram no mesmo painel: eram o mesmo
+   gráfico duas vezes na página, um embaixo do outro. O de cima diz onde o ano
+   está; este diz qual ciclo puxou pra lá. */
+function irRenderAcuraciaPorCiclo(ano){
+  const pares = (IR.comparativoCiclos||[]).filter(({ciclo}) => irCicloAno(ciclo) === ano);
+  if(!pares.length) return '';
+  const rows = pares.map(({ciclo,ind})=>({
+    label: irCicloLabel(ciclo),
+    pecas: ind?ind.acuraciaPecas:null, locais: ind?ind.acuraciaLocal:null, valor: ind?ind.acuraciaValor:null
+  }));
+  return `<div class="acan-ciclos">
+    ${irBuildAcuraciaCiclosSvg(rows, {meta:IR_META_ACURACIA, W:560, H:230})}
+    <div class="cmp-legend">
+      <span><span class="cmp-dot" style="background:#FA4616;"></span>Peças</span>
+      <span><span class="cmp-dot" style="background:#001A72;"></span>Locais</span>
+      <span><span class="cmp-dot" style="background:#1D1F2A;"></span>Valor</span>
+    </div>
   </div>`;
 }
 function irRenderStatusInventarioPanel(ind){

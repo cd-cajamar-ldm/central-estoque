@@ -1390,6 +1390,9 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .acan-val.good{ color:var(--success); }
 .acan-val.bad{ color:var(--danger); }
 .acan-pe{ margin-top:14px; }
+/* Quebra por ciclo, no espaço que sobrava abaixo das três barras do ano. */
+.acan-ciclos{ margin-top:10px; padding-top:12px; border-top:1px solid var(--line); }
+.acan-ciclos .cmp-legend{ justify-content:center; margin-top:2px; }
 .imp-sem-preco{ color:var(--danger); margin-top:10px; }
 
 /* ---------- AVISO DE VERSÃO NOVA ---------- */
