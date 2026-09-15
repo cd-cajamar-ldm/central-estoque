@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v159';
+const IR_APP_VERSION = 'v160';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -1417,8 +1417,12 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const n = Math.max(1, rows.length);
   const grupoW = plotW/n;
-  const barW = Math.min(46, grupoW*0.26);
-  const gap = 6;
+  const barW = Math.min(26, grupoW*0.15);
+  /* O espaço entre as barras acompanha a largura delas: afinar a coluna aproxima
+     os centros, e o rótulo ("100.0%", ~40px) é mais largo que a barra — com o
+     vão fixo os percentuais de duas barras vizinhas se encostavam. O vão é o que
+     sobra do grupo depois das três barras, limitado pra não espalhar demais. */
+  const gap = Math.max(8, Math.min(22, (grupoW*0.72 - 3*barW)/2));
   const metaY = padT + plotH*(1-meta);
   let bars = '', labels = '', xLabels = '';
   rows.forEach((r,i)=>{
@@ -1656,29 +1660,31 @@ function irRenderStatusInventarioPanel(ind){
         <div class="status-donut-stat"><div class="n mono good">${irFmtInt(concluidos)}</div><div class="l">Locais concluídos</div></div>
         <div class="status-donut-stat"><div class="n mono bad">${irFmtInt(total-concluidos)}</div><div class="l">Ainda não concluídos</div></div>
       </div>
-      ${irRenderPioresRuas(ind)}
     </div>
+    ${irRenderPioresRuas(ind)}
   </div>`;
 }
 /* Top 5 ruas com a pior acurácia de peças, no espaço que sobrava ao lado do donut.
    Só entra rua que já tem peça contada: rua ainda não contada fica em 100% (ou 0%)
    por falta de base e ocuparia o ranking sem significar nada. */
+/* Ranking por PEÇAS DIVERGENTES, não por percentual de acurácia. Por percentual,
+   uma rua com 3 peças contadas e 2 erradas (33%) ficava acima de uma com 133 mil
+   peças e 9.436 erradas (92,9%) — o topo da lista enchia de rua irrelevante e a
+   que realmente dói não aparecia. O volume absoluto é o que se cobra. A acurácia
+   continua ali do lado, como leitura secundária. Vem do ciclo ativo (ind.porRua). */
 function irRenderPioresRuas(ind){
   const rows = (ind.porRua||[])
-    .filter(r => r.chave!=='(sem rua)' && (r.pecasContadas||0) > 0)
-    .slice().sort((a,b)=> a.acuraciaPecas - b.acuraciaPecas).slice(0,5);
+    .filter(r => r.chave!=='(sem rua)' && (r.pecasDivergentes||0) > 0)
+    .slice().sort((a,b)=> (b.pecasDivergentes||0) - (a.pecasDivergentes||0)).slice(0,5);
   if(!rows.length) return '';
-  // A barra mede o ERRO, não a acurácia, e é normalizada pela pior rua: barra de
-  // acurácia deixaria as cinco quase cheias (74% e 99% pareceriam iguais) e o
-  // ranking não se leria de relance. O percentual ao lado continua sendo a acurácia.
-  const piorErro = Math.max(...rows.map(r => 1-r.acuraciaPecas), 0.0001);
+  const pior = Math.max(...rows.map(r => r.pecasDivergentes||0), 1);
   return `<div class="pior-ruas">
-    <div class="pior-ruas-h">Top 5 ruas · pior acurácia</div>
+    <div class="pior-ruas-h">Top 5 ruas · mais peças divergentes</div>
     ${rows.map(r=>`<div class="pior-rua">
       <div class="pr-nome">${irEsc(r.chave)}</div>
-      <div class="pr-track"><div class="pr-fill" style="width:${Math.round(Math.max(0,Math.min(1,(1-r.acuraciaPecas)/piorErro))*100)}%;"></div></div>
-      <div class="pr-val mono ${r.acuraciaPecas>=IR_META_ACURACIA?'good':'bad'}">${irFmtPct(r.acuraciaPecas)}</div>
-      <div class="pr-sub">${irFmtInt(r.pecasDivergentes)} de ${irFmtInt(r.pecasContadas)} pç</div>
+      <div class="pr-track"><div class="pr-fill" style="width:${Math.round((r.pecasDivergentes||0)/pior*100)}%;"></div></div>
+      <div class="pr-val mono bad">${irFmtInt(r.pecasDivergentes)}</div>
+      <div class="pr-sub">de ${irFmtInt(r.pecasContadas)} pç contadas · ${irFmtPct(r.acuraciaPecas)} de acurácia</div>
     </div>`).join('')}
   </div>`;
 }
