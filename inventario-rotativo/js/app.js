@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v160';
+const IR_APP_VERSION = 'v161';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -1126,7 +1126,7 @@ function irCalNavMonth(delta){
 }
 function irRenderLogTablePanel(ind){
   const rows = irFiltrarLogsValidos(ind.porLog).map(r=>({
-    ...r, locaisPendentes: irLocaisPendentesPor('grupoClasse', r.chave).length
+    ...r, locaisPendentes: irPendentesDaLinha(r)
   }));
   // Sem log válido a tabela sumia da tela sem explicação. Agora o painel continua
   // no lugar dizendo por que está vazio — some do Dashboard é o pior sintoma
@@ -1188,14 +1188,20 @@ function irRenderPorRuaPanel(ind){
   const meta = ind.meta;
   // Pendente aqui usa a mesma regra do módulo de Inventário: local sem NENHUMA linha
   // Liquidada na 843 ainda, cruzado pela rua (X1) da base congelada.
-  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irLocaisPendentesContagem(r.chave).length}));
+  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
   const totalPendentes = rowsComPendentes.reduce((s,r)=>s+r.locaisPendentes,0);
+  // A exportação lista os locais um a um, e pra isso precisa da base congelada em
+  // memória. O número da coluna não precisa — e é por isso que ele não some mais.
+  const podeExportar = irLocaisPendentesContagem().length > 0;
   return `<div class="panel">
     <h3>Resumo por Setor</h3>
     <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por rua.</p>
-    ${totalPendentes>0?`<div class="form-actions" style="margin:0 0 12px;">
-      <button class="btn-link" onclick="irExportarLocaisPendentesCsv()">📤 Exportar todos os locais pendentes (${irFmtInt(totalPendentes)})</button>
-    </div>`:''}
+    ${totalPendentes>0 ? (podeExportar
+      ? `<div class="form-actions" style="margin:0 0 12px;">
+          <button class="btn-link" onclick="irExportarLocaisPendentesCsv()">📤 Exportar todos os locais pendentes (${irFmtInt(totalPendentes)})</button>
+        </div>`
+      : `<p class="field-hint" style="margin:0 0 12px;">A lista endereço a endereço dos ${irFmtInt(totalPendentes)} pendentes precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar a exportação.</p>`)
+    :''}
     <div class="table-wrap"><table>
       <thead><tr>
         <th>Rua</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
@@ -5618,6 +5624,22 @@ function irRenderDivergencias(){
 // "concluído" (usado na Acurácia), que exige convergência das rodadas, não só contagem.
 // rua (opcional) filtra pela coluna X1 da base congelada, usado pelo botão por
 // setor em "Resumo por Setor" — ordenado por DESCRIÇÃO do local, não pelo código.
+/* Pendentes de uma linha das tabelas por rua/log: orçados menos contados, da
+   PRÓPRIA linha.
+
+   Antes esse número era contado ao vivo, varrendo a base congelada do ciclo em
+   memória (IR.locais). Dá no mesmo enquanto ela está carregada — contado é o
+   local com rodada física, pendente é o resto —, mas quando ela não está, a
+   varredura não acha nada e a coluna inteira exibe zero. Zero é uma resposta
+   plausível, então ninguém desconfia: a tabela mostrava "122 orçados, 2
+   contados, 0 pendentes" na mesma linha.
+
+   Pela subtração o número nasce das duas colunas ao lado, não pode contradizê-las
+   e não depende de nada estar carregado. A varredura continua viva só onde ela é
+   de fato necessária: a exportação, que lista endereço por endereço. */
+function irPendentesDaLinha(r){
+  return Math.max(0, (r.locaisOrcados||0) - (r.locaisContados||0));
+}
 function irLocaisPendentesContagem(rua){
   // Usa IR.contagens, não IR.divergencias — local confirmado VAZIO (Liquidado, sem
   // nenhum item) é um local válido e contado, mas não gera nenhuma linha em
