@@ -596,18 +596,21 @@ function irRenderAvisoJanela(){
 function irRenderDestino843(){
   const m = IR.importMeta;
   if(!m || m.totalLinhas843 == null) return '';
+  // Linha não liquidada deixou de ser descartada: ela é gravada e alimenta só a
+  // produtividade individual. Chamá-la de "descartada" aqui seria mentira.
   const desc = [
-    ['não liquidadas', m.linhasNaoLiquidadas],
     ['fora da janela do ciclo', m.linhasForaDaJanela],
     ['motivo fora do NET', m.linhasForaDoNet],
     ['sem data utilizável', m.linhasSemDataDescartadas]
   ].filter(([,n])=>n>0);
   const total = m.totalLinhas843||0;
+  const naoLiq = m.linhasNaoLiquidadas||0;
   const aceitas = total - desc.reduce((s,[,n])=>s+n,0);
   const d = s => s ? irFmtDate(s) : '—';
   return `<p class="field-hint" style="margin-top:10px;">
     QRY0843: ${irFmtInt(total)} linhas · ${irFmtInt(aceitas)} aceitas${m.dataMaisRecenteAceita?' (última contagem em '+d(m.dataMaisRecenteAceita)+')':''}${
-      desc.length?' · descartadas: '+desc.map(([r,n])=>irFmtInt(n)+' '+r).join(', '):''}.${
+      desc.length?' · descartadas: '+desc.map(([r,n])=>irFmtInt(n)+' '+r).join(', '):''}${
+      naoLiq?' · '+irFmtInt(naoLiq)+' ainda não liquidadas (contam só na produtividade individual)':''}.${
       m.dataMaisRecenteNoArquivo ? ' Data mais recente no arquivo: <b>'+d(m.dataMaisRecenteNoArquivo)+'</b>.' : ''}
   </p>`;
 }
@@ -829,7 +832,7 @@ const IR_INDICADORES_VERSION = 17; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v167';
+const IR_APP_VERSION = 'v168';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -1008,19 +1011,20 @@ function irPorMesDoAno(ano){
   for(const {ind} of pares){
     for(const m of ((ind&&ind.porMes)||[])){
       if(!acc.has(m.mes)) acc.set(m.mes, {mes:m.mes, pecasContadas:0, pecasSaldoLogico:0, pecasDivergentes:0,
-        locaisContados:0, locaisDivergentes:0, valorContado:0, valorDivergente:0});
+        locaisContados:0, locaisDivergentes:0, valorContado:0, valorSaldoLogico:0, valorDivergente:0});
       const a = acc.get(m.mes);
       a.pecasContadas += m.pecasContadas||0;   a.pecasDivergentes += m.pecasDivergentes||0;
       a.pecasSaldoLogico += (m.pecasSaldoLogico!=null ? m.pecasSaldoLogico : (m.pecasContadas||0));
       a.locaisContados += m.locaisContados||0; a.locaisDivergentes += m.locaisDivergentes||0;
       a.valorContado += m.valorContado||0;     a.valorDivergente += m.valorDivergente||0;
+      a.valorSaldoLogico += (m.valorSaldoLogico!=null ? m.valorSaldoLogico : (m.valorContado||0));
     }
   }
   return Array.from(acc.values()).sort((x,y)=>x.mes.localeCompare(y.mes)).map(a=>({
     ...a,
     acuraciaPecas:  a.pecasSaldoLogico>0 ? 1-a.pecasDivergentes/a.pecasSaldoLogico : 0,
     acuraciaLocal:  a.locaisContados>0 ? 1-a.locaisDivergentes/a.locaisContados : 0,
-    acuraciaValor:  a.valorContado>0   ? 1-a.valorDivergente/a.valorContado     : 0
+    acuraciaValor:  a.valorSaldoLogico>0 ? 1-a.valorDivergente/a.valorSaldoLogico : 0
   }));
 }
 function irRenderEvolucaoMensalPanel(ind){
@@ -1318,6 +1322,7 @@ function irCalcLogTotal(rows){
   // Denominador da acurácia é o saldo lógico, igual ao KPI do topo.
   const pecasSaldoLogico = sum('pecasSaldoLogico') || pecasContadas;
   const vlFisicoTotal = sum('vlFisicoTotal'), valorDivergenteAbsoluto = sum('valorDivergenteAbsoluto');
+  const vlSaldoLogico = sum('vlSaldoLogico') || vlFisicoTotal;
   const locaisContados = sum('locaisContados'), locaisDivergentes = sum('locaisDivergentes');
   return {
     // "TOTAL" sozinho lia como total do ciclo, e não é: a tabela só soma os logs
@@ -1325,9 +1330,9 @@ function irCalcLogTotal(rows){
     // número fica abaixo do KPI do topo e parece erro de cálculo.
     chave: 'TOTAL DOS LOGS LISTADOS', isTotal: true,
     acuraciaPecas: pecasSaldoLogico>0 ? Math.max(0,1-pecasDivergentes/pecasSaldoLogico) : 1,
-    acuraciaValor: vlFisicoTotal>0 ? Math.max(0,1-valorDivergenteAbsoluto/vlFisicoTotal) : 1,
+    acuraciaValor: vlSaldoLogico>0 ? Math.max(0,1-valorDivergenteAbsoluto/vlSaldoLogico) : 1,
     acuraciaPosicoes: locaisContados>0 ? Math.max(0,1-locaisDivergentes/locaisContados) : 1,
-    pecasContadas, pecasSaldoLogico, pecasDivergentes, vlFisicoTotal, valorDivergenteAbsoluto,
+    pecasContadas, pecasSaldoLogico, pecasDivergentes, vlFisicoTotal, vlSaldoLogico, valorDivergenteAbsoluto,
     locaisContados, locaisDivergentes, locaisOrcados: sum('locaisOrcados')
   };
 }
@@ -1549,7 +1554,8 @@ function irRenderComparativoCiclosPanel(){
     locaisDivergentes += ind.locaisDivergentes!=null ? ind.locaisDivergentes : (ind.divergentesPorDia||[]).reduce((s,d)=>s+(d.locais||0),0);
     // valorFisicoTotal também é novo, sem fallback confiável — só soma quando existe,
     // pra não mostrar R$ 0,00 como se fosse um valor real (ciclo precisa reprocessar).
-    if(ind.valorFisicoTotal!=null){ temValorContado = true; valorContado += ind.valorFisicoTotal; }
+    const baseVal = ind.valorSaldoLogico!=null ? ind.valorSaldoLogico : ind.valorFisicoTotal;
+    if(baseVal!=null){ temValorContado = true; valorContado += baseVal; }
     valorDivergente += ind.valorDivergenteAbsoluto||0;
   }
   return `<div class="panel">
@@ -1666,7 +1672,9 @@ function irAcuraciaDoAno(ano){
     // locaisDivergentes é campo novo — ciclo antigo cai no equivalente que já existia.
     ld += ind.locaisDivergentes!=null ? ind.locaisDivergentes
         : (ind.divergentesPorDia||[]).reduce((x,d)=>x+(d.locais||0),0);
-    if(ind.valorFisicoTotal!=null){ temValor = true; vc += ind.valorFisicoTotal; }
+    // Base da acurácia de valor = valor do saldo lógico; ciclo antigo cai no físico.
+    const baseValor = ind.valorSaldoLogico!=null ? ind.valorSaldoLogico : ind.valorFisicoTotal;
+    if(baseValor!=null){ temValor = true; vc += baseValor; }
     vd += ind.valorDivergenteAbsoluto||0;
   }
   return {
@@ -3073,9 +3081,16 @@ function irRenderDashProdutividade(){
 function irProdSetFilter(key, val){ IR.prodFilters[key] = val; irRenderView(); }
 function irProdToggleAbertura(){ IR.prodFilters.incluirAbertura = !IR.prodFilters.incluirAbertura; irRenderView(); }
 function irToggleDashDateScope(key){ IR.dashFilters[key] = !IR.dashFilters[key]; irRenderView(); }
+/* A produtividade individual é a única tela que enxerga contagem não liquidada:
+   ela mede o esforço do conferente no dia em que ele contou, e uma contagem ainda
+   em aberto já consumiu tempo de alguém. Como o status pode virar liquidado ou
+   cancelado numa base seguinte, é esperado que o número se ajuste junto.
+   O recorte de ajuste AIR vale aqui também — contagem de ADE ou AIC é esforço de
+   outro programa, não do rotativo. */
 function irProdContagensBase(applyDate){
   const {de, ate, incluirAbertura} = IR.prodFilters;
   return IR.contagens.filter(c=>{
+    if(String(c.motivo||'').trim().toUpperCase()!=='AIR') return false;
     if((incluirAbertura ? c.idConferencia<1 : c.idConferencia<=1) || !c.usuario || !c.dataInicioContagem) return false;
     if(!applyDate) return true;
     const dia = c.dataInicioContagem.slice(0,10);
@@ -4636,7 +4651,7 @@ function irDivDiaPorLocalLegado(){
   if(IR._divDiaLegado && IR._divDiaLegadoCiclo===(IR.cicloAtivo||{}).id) return IR._divDiaLegado;
   const fim = new Map();
   for(const c of (IR.contagens||[])){
-    if(c.idConferencia<2 || !c.dataSituacao) continue;
+    if(c.idConferencia<2 || !c.dataSituacao || c.liquidada===false) continue;
     const a = fim.get(c.local);
     if(!a || c.idConferencia>a.rodada) fim.set(c.local, {rodada:c.idConferencia, dia:c.dataSituacao.slice(0,10)});
   }
@@ -5743,7 +5758,14 @@ function irLocaisContadosSet(){
   // render do Dashboard.
   const cicloId = (IR.cicloAtivo||{}).id;
   if(IR._contadosSet && IR._contadosSetCiclo===cicloId && IR._contadosSetN===(IR.contagens||[]).length) return IR._contadosSet;
-  IR._contadosSet = new Set((IR.contagens||[]).filter(c=>c.idConferencia>=2).map(c=>c.local));
+  /* Só contagem liquidada e de ajuste AIR fecha local. Liquidada porque contagem em
+     aberto ainda pode virar cancelada; AIR porque o indicador de contados/pendentes
+     é do ciclo rotativo — local visitado só por uma auditoria (ADE) continua
+     pendente pro ciclo, e sem esse recorte a lista de pendentes contradizia a
+     coluna da tabela, que já sai do recorte AIR. */
+  IR._contadosSet = new Set((IR.contagens||[])
+    .filter(c=>c.idConferencia>=2 && c.liquidada!==false && String(c.motivo||'').trim().toUpperCase()==='AIR')
+    .map(c=>c.local));
   IR._contadosSetCiclo = cicloId;
   IR._contadosSetN = (IR.contagens||[]).length;
   return IR._contadosSet;

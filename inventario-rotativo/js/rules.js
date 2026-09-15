@@ -65,8 +65,17 @@ function irClassificarMotivo410(obsWmsRaw, legendaList){
   const texto = String(obsWmsRaw||'').trim().toUpperCase();
   const lista = legendaList || IR_410_LEGENDA;
   if(!texto) return {id:'(sem observação)', legenda:'', considerarNet:true};
+  /* O código casa quando a observação é ele sozinho ou quando ele vem seguido de
+     qualquer caractere que não seja letra nem número. Antes só espaço e hífen
+     valiam, então "AIR." e "AIR/2" viravam códigos próprios ("AIR.", "AIR/2") e
+     ficavam de fora do recorte do ciclo rotativo — contagem boa descartada por
+     causa de pontuação. Continua exigindo um separador depois do código, pra
+     "AIRTON" não virar AIR. Espaço em volta e minúscula já eram tratados pelo
+     trim/uppercase acima. */
   for(const item of lista){
-    if(texto===item.id || texto.startsWith(item.id+' ') || texto.startsWith(item.id+'-')){
+    const cod = String(item.id||'').trim().toUpperCase();
+    if(!cod) continue;
+    if(texto===cod || (texto.startsWith(cod) && /[^A-Z0-9]/.test(texto.charAt(cod.length)))){
       return {id:item.id, legenda:item.legenda, considerarNet:item.considerarNet};
     }
   }
