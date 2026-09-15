@@ -203,6 +203,8 @@ async function irLoadCicloData(cicloId){
   IR.itemDivFiltro = {tipo:'ciclo'};
   IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
   IR.comparativoCiclos = null; // recarrega no próximo render do Dashboard (irCarregarComparativoCiclos)
+  // Sem await: a tela abre com o que tem e se refaz quando o recálculo terminar.
+  irRecalcularSeMotorAntigo();
 }
 // Carrega os indicadores de TODOS os ciclos já processados (ordenados por ano+número)
 // pro gráfico "Comparativo de Acurácias entre Ciclos" do Dashboard — cada ciclo já é
@@ -832,8 +834,43 @@ const IR_INDICADORES_VERSION = 17; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v168';
+const IR_APP_VERSION = 'v169';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
+/* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
+   estão no navegador.
+
+   Os indicadores ficam gravados por ciclo. Quando uma regra de cálculo muda, o
+   número na tela continua o da régua velha até alguém lembrar de reprocessar a
+   planilha — e nada na tela diz isso. Como a base congelada, as contagens e as
+   divergências estão no IndexedDB, dá pra refazer a conta sem pedir o arquivo. */
+async function irRecalcularSeMotorAntigo(){
+  const ind = IR.indicadores, ciclo = IR.cicloAtivo;
+  if(!ind || !ciclo || ind._v === IR_INDICADORES_VERSION) return;
+  if(IR._recalculando) return;
+  IR._recalculando = true;
+  irShowToast('Regra de cálculo mudou — recalculando este ciclo...');
+  await new Promise(resolve=>{
+    const w = irNovoWorker();
+    w.onmessage = async (e)=>{
+      const m = e.data;
+      if(m.type === 'doneRecalculo'){
+        IR.indicadores = await irGetIndicadores(ciclo.id);
+        IR.comparativoCiclos = null;
+        await irCarregarComparativoCiclos();
+        w.terminate(); IR._recalculando = false;
+        irRenderView();
+        irShowToast('Ciclo recalculado.');
+        resolve();
+      } else if(m.type === 'erroRecalculo'){
+        w.terminate(); IR._recalculando = false;
+        irShowToast(m.message || 'Não foi possível recalcular o ciclo.', true);
+        resolve();
+      }
+    };
+    w.onerror = ()=>{ w.terminate(); IR._recalculando = false; resolve(); };
+    w.postMessage({type:'recalcular', cicloId: ciclo.id});
+  });
+}
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
 function irMostrarVersao(){
