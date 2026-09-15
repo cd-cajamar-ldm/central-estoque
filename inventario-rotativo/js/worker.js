@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 16;
+const IR_INDICADORES_VERSION = 17;
 
 function parseNumber(v){
   if(v===undefined || v===null || v==='') return 0;
@@ -774,10 +774,25 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // concluído, mesmo que a contagem original (errada) nunca tivesse batido sozinha.
   const STATUS_PRIORIDADE = {convergido:3, encerrado_sem_convergencia:2, em_contagem:1};
   const statusPorLocal = new Map(); // local -> {status, rodadas}
+  /* Segundo mapa, só com visitas de ajuste AIR. É ele que alimenta os indicadores
+     do ciclo (locais contados, concluídos, andamento): uma visita de ADE ou AIC é
+     de outro programa de contagem, e contá-la como "local contado do ciclo" inflava
+     o avanço com trabalho que não é do rotativo. O mapa completo continua sendo o
+     que carimba o status em cada divergência, porque a aba Divergências enxerga
+     todos os motivos. */
+  const statusPorLocalAIR = new Map();
+  const visitaEhAIR = new Map(); // chave -> bool
+  for(const [chave, lista] of porVisitaBruto){
+    visitaEhAIR.set(chave, lista.some(c=>String(c.motivo||'').trim().toUpperCase()==='AIR'));
+  }
   for(const [chave, st] of statusPorVisita){
     const local = localDaVisita.get(chave);
     const atual = statusPorLocal.get(local);
     if(!atual || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atual.status]) statusPorLocal.set(local, st);
+    if(visitaEhAIR.get(chave)){
+      const atualAIR = statusPorLocalAIR.get(local);
+      if(!atualAIR || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atualAIR.status]) statusPorLocalAIR.set(local, st);
+    }
   }
   // Peças físicas + divergências — tudo derivado só da QRY0843, sem QRY0114. Por item
   // dentro de CADA VISITA: a Rodada 1 é a quantidade SISTÊMICA e a última rodada em que
@@ -880,7 +895,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   }
 
   post('progress', {stage:'Calculando indicadores...', pct:90});
-  const indicadores = calcularIndicadores({congelados: locais, contagens, divergencias, statusPorLocal, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
+  const indicadores = calcularIndicadores({congelados: locais, contagens, divergencias, statusPorLocal: statusPorLocalAIR, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
     locaisComCancelamento: locaisComCancelamentoSet.size, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
     locaisCanceladosAposBater: locaisCanceladosAposBater.size, locaisCanceladosInterrompidos: locaisCanceladosInterrompidos.size});
 
@@ -941,7 +956,37 @@ function isoDateTime(d){
   return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
 }
 
-function calcularIndicadores({congelados, contagens, divergencias, statusPorLocal, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
+/* Número da rodada de inventário, pra comparar qual é a mais recente. Vem como
+   texto e nem sempre é só dígito, então quando não dá pra ler como número cai
+   pra comparação de texto — melhor um critério estável do que quebrar. */
+function irNumInventario(v){
+  const n = parseInt(String(v||'').replace(/\D+/g,''), 10);
+  return isNaN(n) ? -1 : n;
+}
+/* Recorte dos indicadores do ciclo rotativo: só ajuste AIR e só a rodada de
+   fechamento de cada local.
+
+   AIR: ADE (auditoria) e AIC (curva) são outros programas de contagem. A
+   divergência que eles encontram não é erro da equipe do rotativo e o volume
+   deles não faz parte do escopo do ciclo — misturar responde outra pergunta. As
+   divergências continuam gravadas com todos os motivos, porque a aba
+   Divergências é auditoria do CD inteiro e depende disso; o recorte é só aqui.
+
+   Rodada de fechamento: um local reauditado ganha um Nº Inventário novo. Somar
+   as duas rodadas conta o mesmo erro duas vezes — a rodada intermediária já foi
+   corrigida pela seguinte. Vale a de maior Nº Inventário. O saldo do sistema já
+   é o da própria rodada (Id Conferência 1 dela), então não há o risco de contar
+   venda e reposição do intervalo como erro de contagem. */
+function irDivergenciasDoCiclo(divergencias){
+  const air = divergencias.filter(d=>String(d.motivo||'').trim().toUpperCase()==='AIR');
+  const ultima = new Map(); // local -> maior Nº Inventário entre as rodadas AIR
+  for(const d of air){
+    const n = irNumInventario(d.inventario);
+    if(!ultima.has(d.local) || n > ultima.get(d.local)) ultima.set(d.local, n);
+  }
+  return air.filter(d=>irNumInventario(d.inventario) === ultima.get(d.local));
+}
+function calcularIndicadores({congelados, contagens, divergencias: divergenciasTodas, statusPorLocal, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
   locaisComCancelamento, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
   locaisCanceladosAposBater, locaisCanceladosInterrompidos}){
   const locaisCongelados = congelados.length;
@@ -951,6 +996,8 @@ function calcularIndicadores({congelados, contagens, divergencias, statusPorLoca
   const horasPerdidasCancelamento = (minutosPerdidosCancelamento||0)/60;
 
   const clamp01 = (n)=>Math.max(0, Math.min(1, n));
+  // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo.
+  const divergencias = irDivergenciasDoCiclo(divergenciasTodas);
 
   // Acurácia Peças/Valor e Divergência Peças/Valor só podem considerar locais já
   // CONCLUÍDOS (rodadas bateram = "convergido", ou encerrado após 5 rodadas sem bater
@@ -967,7 +1014,14 @@ function calcularIndicadores({congelados, contagens, divergencias, statusPorLoca
   // final física — nunca soma rodada, sempre a última).
   const totalPecasFisicas = divergenciasConcluidas.reduce((s,d)=>s+d.qtdeFisica,0);
   const totalDiferencaAbs = divergenciasConcluidas.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-  const acuraciaPecas = clamp01(totalPecasFisicas>0 ? 1-(totalDiferencaAbs/totalPecasFisicas) : 1);
+  /* Denominador = SALDO LÓGICO (Id Conferência 1 da rodada), não a quantidade
+     física contada. Com a física no denominador, um item que sumiu inteiro
+     (sistema 500, físico 0) põe 500 no numerador e ZERO no denominador: o erro
+     passa de 100% e a conta estoura — só não aparecia negativa porque o clamp
+     segurava em 0%. Pelo saldo lógico o erro de um item nunca passa de 100% e o
+     resultado é limitado por construção. */
+  const totalSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+(d.qtdeSistema||0),0);
+  const acuraciaPecas = clamp01(totalSaldoLogico>0 ? 1-(totalDiferencaAbs/totalSaldoLogico) : 1);
   const totalItensContados = divergenciasConcluidas.length;
 
   // "AIR" (X1) é tratado como um local normal, no mesmo padrão de qualquer outro —
@@ -1052,7 +1106,9 @@ function calcularIndicadores({congelados, contagens, divergencias, statusPorLoca
   function calcAcuraciasSubset(divsTodos, divsConcluidos, baseLocais){
     const totalPecasGrupo = divsConcluidos.reduce((s,d)=>s+d.qtdeFisica,0);
     const totalDiferencaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-    const acuraciaPecas = clamp01(totalPecasGrupo>0 ? 1-(totalDiferencaAbs/totalPecasGrupo) : 1);
+    // Mesmo denominador do KPI do topo: saldo lógico, não a física contada.
+    const totalSaldoGrupo = divsConcluidos.reduce((s,d)=>s+(d.qtdeSistema||0),0);
+    const acuraciaPecas = clamp01(totalSaldoGrupo>0 ? 1-(totalDiferencaAbs/totalSaldoGrupo) : 1);
     const totalVlFisico = divsConcluidos.reduce((s,d)=>s+d.vlFisico,0);
     const totalVlDivergenciaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.vlDivergencia),0);
     const acuraciaValor = clamp01(totalVlFisico>0 ? 1-(totalVlDivergenciaAbs/totalVlFisico) : 1);
@@ -1061,6 +1117,7 @@ function calcularIndicadores({congelados, contagens, divergencias, statusPorLoca
     return {
       acuraciaPecas, acuraciaValor, acuraciaPosicoes,
       pecasContadas: totalPecasGrupo, pecasDivergentes: totalDiferencaAbs,
+      pecasSaldoLogico: totalSaldoGrupo,
       itensContados: divsConcluidos.length,
       locaisDivergentes: locaisComDivergencia.size,
       valorDivergenteLiquido: divsConcluidos.reduce((s,d)=>s+d.vlDivergencia,0),
@@ -1171,7 +1228,7 @@ function calcularIndicadores({congelados, contagens, divergencias, statusPorLoca
   const mesMap = new Map(); // 'YYYY-MM' -> agregados
   function getMes(mes){
     if(!mesMap.has(mes)) mesMap.set(mes, {
-      mes, pecasContadas:0, pecasDivergentes:0, valorContado:0, valorDivergente:0,
+      mes, pecasContadas:0, pecasSaldoLogico:0, pecasDivergentes:0, valorContado:0, valorDivergente:0,
       locaisContados:0, locaisDivergentesSet:new Set()
     });
     return mesMap.get(mes);
@@ -1187,6 +1244,7 @@ function calcularIndicadores({congelados, contagens, divergencias, statusPorLoca
     if(!mes) continue;
     const g = getMes(mes);
     g.pecasContadas   += d.qtdeFisica;
+    g.pecasSaldoLogico += (d.qtdeSistema||0);
     g.pecasDivergentes += Math.abs(d.diferenca);
     g.valorContado    += d.vlFisico;
     g.valorDivergente += Math.abs(d.vlDivergencia);
@@ -1202,10 +1260,11 @@ function calcularIndicadores({congelados, contagens, divergencias, statusPorLoca
       const locaisDivergentes = g.locaisDivergentesSet.size;
       return {
         mes: g.mes,
-        pecasContadas: g.pecasContadas, pecasDivergentes: g.pecasDivergentes,
+        pecasContadas: g.pecasContadas, pecasSaldoLogico: g.pecasSaldoLogico,
+        pecasDivergentes: g.pecasDivergentes,
         valorContado: g.valorContado, valorDivergente: g.valorDivergente,
         locaisContados: g.locaisContados, locaisDivergentes,
-        acuraciaPecas: clamp01(g.pecasContadas>0 ? 1-(g.pecasDivergentes/g.pecasContadas) : 1),
+        acuraciaPecas: clamp01(g.pecasSaldoLogico>0 ? 1-(g.pecasDivergentes/g.pecasSaldoLogico) : 1),
         acuraciaValor: clamp01(g.valorContado>0 ? 1-(g.valorDivergente/g.valorContado) : 1),
         acuraciaLocal: clamp01(g.locaisContados>0 ? 1-(locaisDivergentes/g.locaisContados) : 1)
       };
@@ -1258,6 +1317,9 @@ function calcularIndicadores({congelados, contagens, divergencias, statusPorLoca
     horasPerdidasCancelamento, sessoesComHorarioRegistrado: sessoesComHorarioRegistrado||0, taxaCancelamento,
     itensSemPreco, itensSemPrecoTotal: semPrecoPorItem.size,
     pecasContadas: totalPecasFisicas, pecasDivergentes: totalDiferencaAbs,
+    // Base da acurácia de peças, gravada junto pra que a soma anual e a mensal
+    // usem o mesmo denominador do ciclo em vez de recalcular pela física.
+    pecasSaldoLogico: totalSaldoLogico,
     qtdRecontagens, tempoMedioContagemMin, diasRestantes, eficiencia,
     rankingProdutividade, porRua, porLog, contadosPorDia, porDiaRua, divergentesPorDia, porMes,
     topItensPositivos, topItensNegativos, topItensPositivosValor, topItensNegativosValor
