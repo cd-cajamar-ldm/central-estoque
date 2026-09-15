@@ -570,7 +570,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // linha nao entrou (janela do ciclo? nao-AIR? nao liquidada?), e o numero "congela"
   // sem explicacao quando a janela do ciclo ja passou.
   let linhasForaDaJanela = 0, linhasForaDoNet = 0, linhasNaoLiquidadas = 0;
-  let dataMaisRecenteAceita = '', dataMaisRecenteForaDaJanela = '';
+  let dataMaisRecenteAceita = '', dataMaisRecenteForaDaJanela = '', dataMaisRecenteNoArquivo = '';
   for(const row of rows843){
     idx843++;
     const local = irNormItemKey(getVal(row, r843.local));
@@ -582,6 +582,16 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
     // "Id Item" vem vazio quando o local foi contado e confirmado SEM nenhum item (local
     // vazio) — isso ainda é um local válido e contado, só não gera uma linha de item.
     if(!local) continue;
+    /* Data mais recente do ARQUIVO, medida antes de qualquer filtro. Sem ela não
+       dá pra responder "por que o dia X não apareceu no gráfico": as datas que o
+       processamento guardava eram só a da última linha ACEITA e a da última
+       barrada pela janela, então uma linha do dia X descartada por não estar
+       Liquidada não deixava rastro nenhum — e a resposta "o arquivo não tem esse
+       dia" ficava indistinguível de "tem, mas foi descartada". */
+    const dRefBruto = (isoDateTime(parseDateVal(getVal(row, r843.dataSituacao)))
+      || isoDateTime(parseDateVal(getVal(row, r843.dataFimContagem)))
+      || isoDateTime(parseDateVal(getVal(row, r843.dataInicioContagem))) || '').slice(0,10);
+    if(dRefBruto > dataMaisRecenteNoArquivo) dataMaisRecenteNoArquivo = dRefBruto;
     // Todo motivo de ajuste entra, menos os que a legenda marca como fora do NET
     // (baixa de insumo, quebra, EPI, nota fiscal, pallets...). É a MESMA legenda
     // editável em Configurações que classifica a QRY410, então os dois lados do
@@ -907,7 +917,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
     totalDivergencias: divergencias.filter(d=>d.diferenca!==0).length,
     linhasSemDataDescartadas, visitasSemContagemFisica,
     totalLinhas843: rows843.length, linhasForaDaJanela, linhasForaDoNet, linhasNaoLiquidadas,
-    dataMaisRecenteAceita, dataMaisRecenteForaDaJanela,
+    dataMaisRecenteAceita, dataMaisRecenteForaDaJanela, dataMaisRecenteNoArquivo,
     janelaAbertura: dataAbertura || '', janelaTermino: dataPrevistaTermino || '',
     itensComEstoque390: estoqueRows.length, temQry390: !!r390,
     // Versão do motor que gerou estes números. Sem isso, um worker servido do cache

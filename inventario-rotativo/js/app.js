@@ -546,6 +546,7 @@ function irRenderImportacao(){
     ${irRenderBasesAvulsas()}
     ${(()=>{ const n = irItensSemPrecoResumo();
       return n ? `<p class="field-hint imp-sem-preco">⚠️ ${irFmtInt(n)} itens divergiram em peça e ficaram sem preço — o valor divergente deles sai R$ 0,00 até a valoração ser corrigida na SIGEQ278 ou na ZBIQ0051.</p>` : ''; })()}
+    ${irRenderDestino843()}
     ${irRenderDiagBanco()}
   `;
 }
@@ -583,6 +584,32 @@ function irRenderAvisoJanela(){
     Tudo que for contado a partir de agora vai continuar sendo ignorado e os números não vão mudar.
     <b>Corrija o Término Previsto do ciclo</b> na tela de ciclos e reprocesse.
   </div>`;
+}
+/* O destino das linhas da QRY0843, em uma linha.
+
+   "Contei no dia X e o dia X não apareceu no gráfico" não tinha resposta na tela:
+   o processamento já contava quantas linhas caíram em cada filtro, mas nenhum
+   desses números chegava a lugar nenhum. Aqui eles aparecem, junto com a última
+   data do arquivo e a última aceita — que é o par que resolve a dúvida na hora:
+   se a última do arquivo é maior que a aceita, o dia existe e foi descartado; se
+   as duas são menores que o dia procurado, o arquivo é que não tem aquele dia. */
+function irRenderDestino843(){
+  const m = IR.importMeta;
+  if(!m || m.totalLinhas843 == null) return '';
+  const desc = [
+    ['não liquidadas', m.linhasNaoLiquidadas],
+    ['fora da janela do ciclo', m.linhasForaDaJanela],
+    ['motivo fora do NET', m.linhasForaDoNet],
+    ['sem data utilizável', m.linhasSemDataDescartadas]
+  ].filter(([,n])=>n>0);
+  const total = m.totalLinhas843||0;
+  const aceitas = total - desc.reduce((s,[,n])=>s+n,0);
+  const d = s => s ? irFmtDate(s) : '—';
+  return `<p class="field-hint" style="margin-top:10px;">
+    QRY0843: ${irFmtInt(total)} linhas · ${irFmtInt(aceitas)} aceitas${m.dataMaisRecenteAceita?' (última contagem em '+d(m.dataMaisRecenteAceita)+')':''}${
+      desc.length?' · descartadas: '+desc.map(([r,n])=>irFmtInt(n)+' '+r).join(', '):''}.${
+      m.dataMaisRecenteNoArquivo ? ' Data mais recente no arquivo: <b>'+d(m.dataMaisRecenteNoArquivo)+'</b>.' : ''}
+  </p>`;
 }
 /* Aviso do ciclo lido da 843. Diz de onde veio a leitura e se ela vai criar um
    ciclo novo ou regravar um que já existe — regravar por engano era o risco de
@@ -802,7 +829,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v165';
+const IR_APP_VERSION = 'v166';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
