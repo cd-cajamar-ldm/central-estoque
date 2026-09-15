@@ -598,9 +598,15 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
     // app passam a concordar sobre o que é ajuste de estoque. Antes só "AIR"
     // entrava, e divergência real lançada com outro motivo sumia da aba.
     if(!irClassificarMotivo410(obsInventario, legendaMotivos).considerarNet){ linhasForaDoNet++; continue; }
-    // "Contado" de verdade só quando o local E o inventário foram liquidados — sessões
-    // Canceladas (ex.: reabertas depois) não contam como contagem válida.
-    if(situacaoLocal!=='Liquidado' || situacaoInventario!=='Liquidado'){ linhasNaoLiquidadas++; continue; }
+    /* Antes a linha não liquidada era descartada aqui. Agora ela é GRAVADA, marcada
+       com liquidada:false, e continua fora de tudo que não seja produtividade
+       individual — divergência, acurácia, locais contados e pendentes seguem
+       exigindo Liquidado/Liquidado. O motivo é medir o esforço do conferente no dia
+       em que ele contou: uma contagem em aberto ainda não virou ajuste, mas o
+       trabalho existiu. Ela pode virar liquidada ou cancelada numa base seguinte —
+       é esperado que o número de produtividade se ajuste junto. */
+    const liquidada = (situacaoLocal==='Liquidado' && situacaoInventario==='Liquidado');
+    if(!liquidada) linhasNaoLiquidadas++;
     const dataSituacao = isoDateTime(parseDateVal(getVal(row, r843.dataSituacao)));
     const dataInicioContagem = isoDateTime(parseDateVal(getVal(row, r843.dataInicioContagem)));
     const dataFimContagem = isoDateTime(parseDateVal(getVal(row, r843.dataFimContagem)));
@@ -631,7 +637,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
       cicloId, inventario: String(getVal(row, r843.inventario) ?? '').trim(), local,
       descricaoLocal: String(getVal(row, r843.descricaoLocal) ?? '').trim(),
       dataSituacao, dataInicioContagem, dataFimContagem,
-      obsInventario, situacaoInventario, situacaoLocal,
+      obsInventario, situacaoInventario, situacaoLocal, liquidada,
       motivo: irClassificarMotivo410(obsInventario, legendaMotivos).id,
       usuario: String(getVal(row, r843.usuario) ?? '').trim(),
       idConferencia, item, itemNome: String(getVal(row, r843.itemNome) ?? '').trim(),
@@ -731,7 +737,9 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // são reais e devem contar).
   const porVisitaBruto = new Map(); // chave "local|inventario" -> linhas
   const localDaVisita = new Map(); // chave -> local físico (pra agregar de volta)
-  for(const c of contagens){
+  // Só linha liquidada: contagem em aberto ainda pode mudar de número.
+  const contagensLiquidadas = contagens.filter(c=>c.liquidada!==false);
+  for(const c of contagensLiquidadas){
     const chave = c.local+'|'+(c.inventario||'');
     if(!porVisitaBruto.has(chave)){ porVisitaBruto.set(chave, []); localDaVisita.set(chave, c.local); }
     porVisitaBruto.get(chave).push(c);
@@ -857,6 +865,10 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
         ean: eanPorItem.get(item) || '', motivo: motivoVisita,
         qtdeSistema: sistema, qtdeFisica: g.final, diferenca,
         precoUnitario, vlFisico: g.final*precoUnitario, vlDivergencia: diferenca*precoUnitario,
+        // Valor do saldo lógico: é o denominador da Acurácia Valor, pela mesma
+        // razão da de peças — item que sumiu inteiro zera o valor físico e faz a
+        // conta estourar.
+        vlSistema: sistema*precoUnitario,
         statusLocal: st.status, rodadasLocal: st.rodadas, diaFechamento,
         diagnostico: diferenca!==0 ? 'divergente' : 'correto', componenteSemValor
       });
@@ -895,7 +907,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   }
 
   post('progress', {stage:'Calculando indicadores...', pct:90});
-  const indicadores = calcularIndicadores({congelados: locais, contagens, divergencias, statusPorLocal: statusPorLocalAIR, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
+  const indicadores = calcularIndicadores({congelados: locais, contagens: contagensLiquidadas, divergencias, statusPorLocal: statusPorLocalAIR, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
     locaisComCancelamento: locaisComCancelamentoSet.size, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
     locaisCanceladosAposBater: locaisCanceladosAposBater.size, locaisCanceladosInterrompidos: locaisCanceladosInterrompidos.size});
 
@@ -1031,7 +1043,8 @@ function calcularIndicadores({congelados, contagens, divergencias: divergenciasT
   // (S/N do componente no kit) — não mais pela QRY0114.
   const totalVlFisico = divergenciasConcluidas.reduce((s,d)=>s+d.vlFisico,0);
   const totalVlDivergenciaAbs = divergenciasConcluidas.reduce((s,d)=>s+Math.abs(d.vlDivergencia),0);
-  const acuraciaValor = clamp01(totalVlFisico>0 ? 1-(totalVlDivergenciaAbs/totalVlFisico) : 1);
+  const totalVlSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+(d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0)),0);
+  const acuraciaValor = clamp01(totalVlSaldoLogico>0 ? 1-(totalVlDivergenciaAbs/totalVlSaldoLogico) : 1);
   const valorDivergenteLiquido = divergenciasConcluidas.reduce((s,d)=>s+d.vlDivergencia,0);
   const valorDivergenteAbsoluto = totalVlDivergenciaAbs;
 
@@ -1111,7 +1124,8 @@ function calcularIndicadores({congelados, contagens, divergencias: divergenciasT
     const acuraciaPecas = clamp01(totalSaldoGrupo>0 ? 1-(totalDiferencaAbs/totalSaldoGrupo) : 1);
     const totalVlFisico = divsConcluidos.reduce((s,d)=>s+d.vlFisico,0);
     const totalVlDivergenciaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.vlDivergencia),0);
-    const acuraciaValor = clamp01(totalVlFisico>0 ? 1-(totalVlDivergenciaAbs/totalVlFisico) : 1);
+    const totalVlSaldoGrupo = divsConcluidos.reduce((s,d)=>s+(d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0)),0);
+    const acuraciaValor = clamp01(totalVlSaldoGrupo>0 ? 1-(totalVlDivergenciaAbs/totalVlSaldoGrupo) : 1);
     const locaisComDivergencia = new Set(divsTodos.filter(d=>d.diferenca!==0).map(d=>d.local));
     const acuraciaPosicoes = clamp01(baseLocais>0 ? 1-(locaisComDivergencia.size/baseLocais) : 1);
     return {
@@ -1122,7 +1136,7 @@ function calcularIndicadores({congelados, contagens, divergencias: divergenciasT
       locaisDivergentes: locaisComDivergencia.size,
       valorDivergenteLiquido: divsConcluidos.reduce((s,d)=>s+d.vlDivergencia,0),
       valorDivergenteAbsoluto: totalVlDivergenciaAbs,
-      vlFisicoTotal: totalVlFisico
+      vlFisicoTotal: totalVlFisico, vlSaldoLogico: totalVlSaldoGrupo
     };
   }
   function agruparPor(campo, rotuloVazio, baseCongelados){
@@ -1228,7 +1242,7 @@ function calcularIndicadores({congelados, contagens, divergencias: divergenciasT
   const mesMap = new Map(); // 'YYYY-MM' -> agregados
   function getMes(mes){
     if(!mesMap.has(mes)) mesMap.set(mes, {
-      mes, pecasContadas:0, pecasSaldoLogico:0, pecasDivergentes:0, valorContado:0, valorDivergente:0,
+      mes, pecasContadas:0, pecasSaldoLogico:0, pecasDivergentes:0, valorContado:0, valorSaldoLogico:0, valorDivergente:0,
       locaisContados:0, locaisDivergentesSet:new Set()
     });
     return mesMap.get(mes);
@@ -1247,6 +1261,7 @@ function calcularIndicadores({congelados, contagens, divergencias: divergenciasT
     g.pecasSaldoLogico += (d.qtdeSistema||0);
     g.pecasDivergentes += Math.abs(d.diferenca);
     g.valorContado    += d.vlFisico;
+    g.valorSaldoLogico += (d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0));
     g.valorDivergente += Math.abs(d.vlDivergencia);
   }
   for(const d of divergencias){
@@ -1262,10 +1277,11 @@ function calcularIndicadores({congelados, contagens, divergencias: divergenciasT
         mes: g.mes,
         pecasContadas: g.pecasContadas, pecasSaldoLogico: g.pecasSaldoLogico,
         pecasDivergentes: g.pecasDivergentes,
-        valorContado: g.valorContado, valorDivergente: g.valorDivergente,
+        valorContado: g.valorContado, valorSaldoLogico: g.valorSaldoLogico,
+        valorDivergente: g.valorDivergente,
         locaisContados: g.locaisContados, locaisDivergentes,
         acuraciaPecas: clamp01(g.pecasSaldoLogico>0 ? 1-(g.pecasDivergentes/g.pecasSaldoLogico) : 1),
-        acuraciaValor: clamp01(g.valorContado>0 ? 1-(g.valorDivergente/g.valorContado) : 1),
+        acuraciaValor: clamp01(g.valorSaldoLogico>0 ? 1-(g.valorDivergente/g.valorSaldoLogico) : 1),
         acuraciaLocal: clamp01(g.locaisContados>0 ? 1-(locaisDivergentes/g.locaisContados) : 1)
       };
     })
@@ -1312,6 +1328,7 @@ function calcularIndicadores({congelados, contagens, divergencias: divergenciasT
     andamentoCiclo, acuraciaPecas, acuraciaLocal, acuraciaValor, meta: IR_META_ACURACIA,
     itensDivergentes, itensContados: totalItensContados, valorDivergenteLiquido, valorDivergenteAbsoluto,
     locaisDivergentes: locaisComDivergencia.size, valorFisicoTotal: totalVlFisico,
+    valorSaldoLogico: totalVlSaldoLogico,
     locaisComCancelamento: locaisComCancelamento||0, tentativasCanceladas: tentativasCanceladas||0,
     locaisCanceladosAposBater: locaisCanceladosAposBater||0, locaisCanceladosInterrompidos: locaisCanceladosInterrompidos||0,
     horasPerdidasCancelamento, sessoesComHorarioRegistrado: sessoesComHorarioRegistrado||0, taxaCancelamento,
