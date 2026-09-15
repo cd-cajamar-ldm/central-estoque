@@ -802,7 +802,7 @@ const IR_INDICADORES_VERSION = 16; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v162';
+const IR_APP_VERSION = 'v163';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 // Versão no rodapé do menu: sem ela não dá pra saber, olhando a tela, se o
 // navegador está com a build nova depois de um deploy.
@@ -913,22 +913,30 @@ function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
   const meta = IR_META_ACURACIA;
   const lo = irMesAccFloor(rows);
   const W=1080, padL=86, padR=16, padT=26;
-  const plotH=210, baseY=padT+plotH, plotW=W-padL-padR;
+  const plotH=186, baseY=padT+plotH, plotW=W-padL-padR;
   const accTop=baseY+58, H=accTop+42;
   const maxVal = Math.max(...rows.map(r=>r.contado), 1)*1.05;
   const step = plotW/rows.length;
   const bw = Math.min(24, Math.max(10, step/3.2)), gapIn = 6;
+  /* Altura pela raiz quadrada do valor. No linear, divergente ao lado de contado
+     é sempre um toco: 50.846 contra 973.436 dá 5% da altura da barra vizinha, e
+     a comparação mês a mês — que é pra que o gráfico existe — não se fazia. A
+     raiz aproxima as duas sem igualá-las (os mesmos números viram 23%), então
+     continua na cara qual é qual. As linhas de grade vão nos mesmos valores de
+     sempre, só que nas posições da nova escala: elas se fecham em direção ao
+     topo, que é o aviso visual de que o eixo não é linear. */
+  const alt = v => (Math.sqrt(Math.max(0, v))/Math.sqrt(maxVal))*plotH;
   let grid='', bars='', faixa='';
   for(let i=0;i<=4;i++){
-    const v = maxVal*i/4, y = baseY-(v/maxVal)*plotH;
+    const v = maxVal*i/4, y = baseY-alt(v);
     grid += `<line x1="${padL}" x2="${W-padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="mes-grid"/>`
          +  `<text x="${padL-9}" y="${(y+3.5).toFixed(1)}" text-anchor="end" class="mes-axis">${irEsc(fmtVal(v))}</text>`;
   }
   rows.forEach((r,i)=>{
     const cx = padL+step*i+step/2;
     const x1 = cx-bw-gapIn/2, x2 = cx+gapIn/2;
-    const hC = (r.contado/maxVal)*plotH;
-    const hD = Math.max((r.divergente/maxVal)*plotH, 2);
+    const hC = alt(r.contado);
+    const hD = Math.max(alt(r.divergente), 2);
     bars += `<rect x="${x1.toFixed(1)}" y="${(baseY-hC).toFixed(1)}" width="${bw.toFixed(1)}" height="${hC.toFixed(1)}" rx="4" fill="${cfg.cont}"><title>${irEsc(irMesLabel(r.mes))} — ${irEsc(cfg.rotContado)}: ${irEsc(fmtVal(r.contado))}</title></rect>`
          +  `<rect x="${x2.toFixed(1)}" y="${(baseY-hD).toFixed(1)}" width="${bw.toFixed(1)}" height="${hD.toFixed(1)}" rx="4" fill="${cfg.div}"><title>${irEsc(irMesLabel(r.mes))} — ${irEsc(cfg.rotDiv)}: ${irEsc(fmtVal(r.divergente))}</title></rect>`
          // Rótulos ancorados nas bordas EXTERNAS do par (contado alinhado à direita,
@@ -1213,9 +1221,12 @@ function irRenderPorRuaPanel(ind){
         <th>Acurácia Peças</th><th>Posições</th><th>Valores</th>
       </tr></thead>
       <tbody>${rowsComPendentes.map(r=>`<tr>
+        ${/* Toda linha tem a caixa, inclusive a que não tem pendente — só que
+             desabilitada. Antes a linha sem pendente vinha sem caixa nenhuma, e a
+             coluna ficava com buracos que parecem falha de renderização. */''}
         <td class="pend-col">${r.locaisPendentes>0
           ? `<input type="checkbox" class="pend-chk" checked value="${irEsc(r.chave)}" data-pend="${r.locaisPendentes}" onchange="irPendAtualizarBotao()">`
-          : ''}</td>
+          : `<input type="checkbox" disabled title="Nenhum local pendente nesta rua">`}</td>
         <td class="mono">${irEsc(r.chave)}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
@@ -1685,9 +1696,16 @@ function irRenderStatusInventarioPanel(ind){
    peças e 9.436 erradas (92,9%) — o topo da lista enchia de rua irrelevante e a
    que realmente dói não aparecia. O volume absoluto é o que se cobra. A acurácia
    continua ali do lado, como leitura secundária. Vem do ciclo ativo (ind.porRua). */
+/* Ruas que existem pra receber ajuste, não pra guardar estoque: a divergência
+   delas é o próprio trabalho de acerto sendo registrado, não erro de contagem de
+   ninguém. No ranking elas roubavam a vaga de uma rua operacional de verdade. Só
+   saem DAQUI — no Resumo por Setor continuam, porque lá o número é o retrato do
+   ciclo, não uma lista de quem cobrar. */
+const IR_RUAS_AJUSTE = new Set(['AIR']);
 function irRenderPioresRuas(ind){
   const rows = (ind.porRua||[])
-    .filter(r => r.chave!=='(sem rua)' && (r.pecasDivergentes||0) > 0)
+    .filter(r => r.chave!=='(sem rua)' && !IR_RUAS_AJUSTE.has(String(r.chave||'').trim().toUpperCase())
+                 && (r.pecasDivergentes||0) > 0)
     .slice().sort((a,b)=> (b.pecasDivergentes||0) - (a.pecasDivergentes||0)).slice(0,5);
   if(!rows.length) return '';
   const pior = Math.max(...rows.map(r => r.pecasDivergentes||0), 1);
