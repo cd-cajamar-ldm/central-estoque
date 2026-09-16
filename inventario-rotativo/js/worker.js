@@ -996,11 +996,16 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   await irClearCiclo(IR_STORES.locais, cicloId);
   await irClearCiclo(IR_STORES.contagens, cicloId);
   await irClearCiclo(IR_STORES.divergencias, cicloId);
-  const CHUNK = 1500;
-  for(let i=0;i<locais.length;i+=CHUNK) await irBulkPut(IR_STORES.locais, locais.slice(i,i+CHUNK));
-  for(let i=0;i<contagens.length;i+=CHUNK) await irBulkPut(IR_STORES.contagens, contagens.slice(i,i+CHUNK));
-  for(let i=0;i<divergencias.length;i+=CHUNK) await irBulkPut(IR_STORES.divergencias, divergencias.slice(i,i+CHUNK));
-  for(let i=0;i<estoqueRows.length;i+=CHUNK) await irBulkPut(IR_STORES.estoqueItem, estoqueRows.slice(i,i+CHUNK));
+  // Blocos grandes: o custo aqui é o commit de cada transação, não o tamanho dela.
+  const grava = async (store, rows, rotulo)=>{
+    await irBulkPutTudo(store, rows, (feito, total)=>{
+      post('progress', {stage:'Gravando '+rotulo+' ('+feito.toLocaleString('pt-BR')+' de '+total.toLocaleString('pt-BR')+')...', pct:95});
+    });
+  };
+  await grava(IR_STORES.locais, locais, 'base congelada');
+  await grava(IR_STORES.contagens, contagens, 'contagens');
+  await grava(IR_STORES.divergencias, divergencias, 'divergências');
+  await grava(IR_STORES.estoqueItem, estoqueRows, 'estoque por item');
   await irSaveIndicadores(cicloId, indicadores);
   await irSaveImportMeta(cicloId, {
     totalLocaisCongelados: indicadores.locaisCongelados,
