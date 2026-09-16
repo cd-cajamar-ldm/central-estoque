@@ -3,7 +3,7 @@
    100% client-side. Nenhum servidor, nenhuma API.
    ============================================================ */
 const IR_DB_NAME = 'inventario_rotativo_v1';
-const IR_DB_VERSION = 9;
+const IR_DB_VERSION = 10;
 
 const IR_STORES = {
   ciclos: 'ciclos',
@@ -67,15 +67,10 @@ function irOpenDBNaVersao(versao){
       if(!db.objectStoreNames.contains(IR_STORES.contagens)){
         const s = db.createObjectStore(IR_STORES.contagens, {keyPath:'id'});
         s.createIndex('cicloId', 'cicloId', {unique:false});
-        s.createIndex('local', 'local', {unique:false});
-        s.createIndex('item', 'item', {unique:false});
-        s.createIndex('usuario', 'usuario', {unique:false});
       }
       if(!db.objectStoreNames.contains(IR_STORES.divergencias)){
         const s = db.createObjectStore(IR_STORES.divergencias, {keyPath:'id'});
         s.createIndex('cicloId', 'cicloId', {unique:false});
-        s.createIndex('diagnostico', 'diagnostico', {unique:false});
-        s.createIndex('item', 'item', {unique:false});
       }
       if(!db.objectStoreNames.contains(IR_STORES.indicadores)){
         db.createObjectStore(IR_STORES.indicadores, {keyPath:'cicloId'});
@@ -103,14 +98,29 @@ function irOpenDBNaVersao(versao){
         db.createObjectStore(IR_STORES.net410PadroesIgnorados, {keyPath:'id'});
       }
       if(!db.objectStoreNames.contains(IR_STORES.estoqueLocal)){
-        const s = db.createObjectStore(IR_STORES.estoqueLocal, {keyPath:'local'});
-        s.createIndex('x1', 'x1', {unique:false});
+        db.createObjectStore(IR_STORES.estoqueLocal, {keyPath:'local'});
       }
       if(!db.objectStoreNames.contains(IR_STORES.itemInfo)){
         db.createObjectStore(IR_STORES.itemInfo, {keyPath:'item'});
       }
       if(!db.objectStoreNames.contains(IR_STORES.localInfo)){
         db.createObjectStore(IR_STORES.localInfo, {keyPath:'local'});
+      }
+      /* Índices que ninguém consulta são apagados. Todo índice é mantido a cada
+         gravação: numa importação de 190 mil contagens, três índices mortos são
+         570 mil atualizações de estrutura que nunca serão lidas. Só 'cicloId' é
+         usado (irGetByCiclo); os demais sobraram de uma versão em que a busca
+         por item/usuário ia ao banco, e hoje é feita em memória. */
+      const tx = e.target.transaction;
+      const indicesMortos = {
+        [IR_STORES.contagens]: ['local','item','usuario'],
+        [IR_STORES.divergencias]: ['diagnostico','item'],
+        [IR_STORES.estoqueLocal]: ['x1']
+      };
+      for(const nome in indicesMortos){
+        if(!db.objectStoreNames.contains(nome)) continue;
+        const st = tx.objectStore(nome);
+        for(const idx of indicesMortos[nome]) if(st.indexNames.contains(idx)) st.deleteIndex(idx);
       }
     };
     req.onsuccess = ()=>resolve(req.result);
@@ -155,15 +165,22 @@ async function irGetCiclo(id){
 }
 
 /* ---------- Locais congelados ---------- */
+/* Apaga tudo de um ciclo numa operação só, por intervalo de CHAVE PRIMÁRIA.
+
+   A chave desses stores é sempre "cicloId|resto" (id do local, do item, da
+   visita...), então o ciclo inteiro é um intervalo contínuo: de "c|" até
+   "c|\uffff". Antes isso era feito abrindo um cursor no índice e apagando linha
+   por linha — com 190 mil contagens são 190 mil idas e voltas antes de a
+   importação sequer começar a gravar. O intervalo faz o mesmo trabalho num
+   pedido só.
+
+   Se algum dia um store guardar chave fora desse padrão, o cursor volta a ser
+   necessário — por isso o formato está escrito aqui e não só implícito. */
 async function irClearCiclo(storeKey, cicloId){
   const store = await irTx(storeKey, 'readwrite');
   return new Promise((resolve, reject)=>{
-    const idx = store.index('cicloId');
-    const req = idx.openCursor(IDBKeyRange.only(cicloId));
-    req.onsuccess = (e)=>{
-      const cursor = e.target.result;
-      if(cursor){ cursor.delete(); cursor.continue(); }
-    };
+    const faixa = IDBKeyRange.bound(cicloId+'|', cicloId+'|\uffff');
+    store.delete(faixa);
     const tx = store.transaction;
     tx.oncomplete = ()=>resolve();
     tx.onerror = ()=>reject(tx.error);
@@ -177,6 +194,20 @@ async function irBulkPut(storeKey, rows){
     tx.oncomplete = ()=>resolve();
     tx.onerror = ()=>reject(tx.error);
   });
+}
+/* Grava uma lista inteira com o MENOR número possível de transações.
+
+   O tamanho do bloco foi medido, não chutado: 1.500 por transação é mais rápido
+   que 4.000, 10.000 ou 25.000 — transação grande demais piora (25.000 chegou a
+   ser quase o dobro do tempo). O ganho de verdade veio de apagar por faixa de
+   chave e de tirar os índices que ninguém lê; aqui o bloco serve pra reportar
+   progresso sem prender a memória. */
+async function irBulkPutTudo(storeKey, rows, onProgress){
+  const BLOCO = 1500;
+  for(let i=0; i<rows.length; i+=BLOCO){
+    await irBulkPut(storeKey, rows.slice(i, i+BLOCO));
+    if(onProgress) onProgress(Math.min(i+BLOCO, rows.length), rows.length);
+  }
 }
 async function irGetByCiclo(storeKey, cicloId){
   const store = await irTx(storeKey, 'readonly');
