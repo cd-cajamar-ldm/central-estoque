@@ -834,7 +834,7 @@ const IR_INDICADORES_VERSION = 17; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v171';
+const IR_APP_VERSION = 'v172';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -921,24 +921,30 @@ function irRenderDashboard(){
   // + volume principal, + divergência/pendência. Os demais indicadores (itens
   // divergentes, recontagens, tempo médio etc.) continuam na aba Indicadores.
   const metaHint = `Meta: ${irFmtPct(ind.meta)}`;
-  // Taxa de recontagem = locais que tiveram trabalho de campo cancelado (contagem
-  // começou mas o local não fechou porque foi interrompido, ex.: precisava coletar)
-  // sobre o total de locais orçados do ciclo. Pedido explícito do usuário: aparecer
-  // em CADA bloco de acurácia, pra deixar claro o quanto disso pesa em cada frente.
-  const taxaRecontagemHint = `Recontagem: ${irFmtPct(ind.taxaCancelamento||0)}`;
+  // O número que acompanha a meta é a taxa de CANCELAMENTO: locais cuja contagem
+  // começou e foi interrompida antes de fechar (ex.: precisava coletar) sobre o
+  // total de locais orçados do ciclo. Já foi rotulado como "Recontagem", o que
+  // estava errado — recontagem é local que passou da rodada 2 (ind.qtdRecontagens,
+  // exibido no bloco Locais). São coisas diferentes e não devem dividir o rótulo.
+  const cancelHint = `Cancelamento: ${irFmtPct(ind.taxaCancelamento||0)}`;
+  // Denominador das acurácias = SALDO LÓGICO (rodada 1), não o total contado exibido
+  // ao lado. Sem essa dica o card mostra dois números com que é impossível refazer a
+  // conta: 1 − divergentes ÷ contadas não reproduz a acurácia. Mostra a base junto.
+  const basePecasHint = ind.pecasSaldoLogico ? `base: ${irFmtInt(ind.pecasSaldoLogico)} pç` : '';
+  const baseValorHint = ind.valorSaldoLogico ? `base: ${irFmtMoneyInt(ind.valorSaldoLogico)}` : '';
   const blocoPecas = irKpiBlock('orange','📦','Peças',
-    irKpiTile('🎯', irFmtPct(ind.acuraciaPecas), 'Acurácia Peças', ind.acuraciaPecas>=ind.meta?'good':'bad', metaHint+' · '+taxaRecontagemHint) +
-    irKpiTile('📦', irFmtInt(ind.pecasContadas), 'Peças Contadas', '', 'total físico') +
-    irKpiTile('⚠️', irFmtInt(ind.pecasDivergentes), 'Peças Divergentes', 'bad', irFmtInt(ind.itensDivergentes)+' itens')
+    irKpiTile('🎯', irFmtPct(ind.acuraciaPecas), 'Acurácia Peças', ind.acuraciaPecas>=ind.meta?'good':'bad', metaHint+' · '+cancelHint) +
+    irKpiTile('📦', irFmtInt(ind.pecasContadas), 'Peças Contadas', '', 'total físico'+(basePecasHint?' · '+basePecasHint:'')) +
+    irKpiTile('⚠️', irFmtInt(ind.pecasDivergentes), 'Peças Divergentes', 'bad', irFmtInt(ind.itensDivergentes)+' itens × locais')
   );
   const blocoLocais = irKpiBlock('blue','📍','Locais',
-    irKpiTile('🎯', irFmtPct(ind.acuraciaLocal), 'Acurácia Local', ind.acuraciaLocal>=ind.meta?'good':'bad', metaHint+' · '+taxaRecontagemHint) +
+    irKpiTile('🎯', irFmtPct(ind.acuraciaLocal), 'Acurácia Local', ind.acuraciaLocal>=ind.meta?'good':'bad', metaHint+' · base: '+irFmtInt(ind.locaisContadosTotal)+' contados') +
     irKpiTile('✅', irFmtInt(ind.locaisConcluidos), 'Concluídos', '', 'de '+irFmtInt(ind.locaisContadosTotal)+' contados') +
-    irKpiTile('⏳', irFmtInt(ind.locaisPendentes), 'Pendentes', 'bad', irFmtInt(ind.qtdRecontagens)+' recontagens')
+    irKpiTile('⏳', irFmtInt(ind.locaisPendentes), 'Pendentes', 'bad', irFmtInt(ind.qtdRecontagens)+' recontagens · '+cancelHint)
   );
   const blocoValor = irKpiBlock('black','💰','Valor',
-    irKpiTile('🎯', irFmtPct(ind.acuraciaValor), 'Acurácia Valor', ind.acuraciaValor>=ind.meta?'good':'bad', metaHint+' · '+taxaRecontagemHint) +
-    irKpiTile('💰', irFmtMoneyCompact(ind.valorFisicoTotal), 'Valor Contado', '', irFmtMoneyInt(ind.valorFisicoTotal)) +
+    irKpiTile('🎯', irFmtPct(ind.acuraciaValor), 'Acurácia Valor', ind.acuraciaValor>=ind.meta?'good':'bad', metaHint+' · '+cancelHint) +
+    irKpiTile('💰', irFmtMoneyCompact(ind.valorFisicoTotal), 'Valor Contado', '', irFmtMoneyInt(ind.valorFisicoTotal)+(baseValorHint?' · '+baseValorHint:'')) +
     irKpiTile('⚠️', irFmtMoneyCompact(ind.valorDivergenteAbsoluto), 'Valor Divergente', 'bad', irFmtMoneyInt(ind.valorDivergenteAbsoluto))
   );
   const blocoCiclo = irKpiBlock('neutral','🔄','Ciclo',
@@ -1145,7 +1151,7 @@ function irRenderCancelamentoImpactoPanel(ind){
   return `<div class="panel">
     <h3>Impacto de cancelamentos</h3>
     <div class="kpi-blocks">
-      ${irKpiBlock('black','⏱️','Recontagem por interrupção',
+      ${irKpiBlock('black','⏱️','Cancelamento por interrupção',
         irKpiTile('📍', irFmtInt(ind.locaisComCancelamento||0), 'Locais Afetados', '', '') +
         irKpiTile('📊', irFmtPct(ind.taxaCancelamento||0), 'Taxa', (ind.taxaCancelamento||0)>0.1?'bad':'', 'sobre os locais do ciclo') +
         irKpiTile('💥', irFmtInt(bateram), 'Contagem Jogada Fora', bateram>0?'bad':'', 'bateu e foi cancelada') +
@@ -1598,7 +1604,10 @@ function irRenderComparativoCiclosPanel(){
     label: irCicloLabel(ciclo),
     pecas: ind?ind.acuraciaPecas:null, locais: ind?ind.acuraciaLocal:null, valor: ind?ind.acuraciaValor:null
   }));
-  let pecasContadas=0, pecasDivergentes=0, locaisContados=0, locaisDivergentes=0, valorContado=0, valorDivergente=0, saldoLogico=0;
+  // "Contado" é o físico; "base" é o saldo lógico que entra no denominador da
+  // acurácia. Eram a mesma variável, e o tile "Contado" acabava exibindo o saldo
+  // lógico com rótulo de físico. São dois acumuladores separados.
+  let pecasContadas=0, pecasDivergentes=0, locaisContados=0, locaisDivergentes=0, valorContado=0, valorBase=0, valorDivergente=0, saldoLogico=0;
   let temValorContado=false;
   for(const {ind} of pares){
     if(!ind) continue;
@@ -1611,7 +1620,7 @@ function irRenderComparativoCiclosPanel(){
     // valorFisicoTotal também é novo, sem fallback confiável — só soma quando existe,
     // pra não mostrar R$ 0,00 como se fosse um valor real (ciclo precisa reprocessar).
     const baseVal = ind.valorSaldoLogico!=null ? ind.valorSaldoLogico : ind.valorFisicoTotal;
-    if(baseVal!=null){ temValorContado = true; valorContado += baseVal; }
+    if(baseVal!=null){ temValorContado = true; valorBase += baseVal; valorContado += (ind.valorFisicoTotal||0); }
     valorDivergente += ind.valorDivergenteAbsoluto||0;
   }
   return `<div class="panel">
@@ -1625,7 +1634,7 @@ function irRenderComparativoCiclosPanel(){
     </div>
     <div class="kpi-blocks" style="margin-top:14px;">
       ${irKpiBlock('orange','📦','Peças',
-        irKpiTile('🎯', saldoLogico>0?irFmtPct(1-pecasDivergentes/saldoLogico):'—', 'Acurácia Geral', '', 'ciclos de '+ano) +
+        irKpiTile('🎯', saldoLogico>0?irFmtPct(1-pecasDivergentes/saldoLogico):'—', 'Acurácia Geral', '', 'ciclos de '+ano+(saldoLogico>0?' · base: '+irFmtInt(saldoLogico)+' pç':'')) +
         irKpiTile('📦', irFmtInt(pecasContadas), 'Contadas', '', 'ciclos de '+ano) +
         irKpiTile('⚠️', irFmtInt(pecasDivergentes), 'Divergentes', 'bad', ''))}
       ${irKpiBlock('blue','📍','Locais',
@@ -1633,7 +1642,7 @@ function irRenderComparativoCiclosPanel(){
         irKpiTile('📍', irFmtInt(locaisContados), 'Contados', '', 'ciclos de '+ano) +
         irKpiTile('⚠️', irFmtInt(locaisDivergentes), 'Divergentes', 'bad', ''))}
       ${irKpiBlock('black','💰','Valor',
-        irKpiTile('🎯', temValorContado&&valorContado>0?irFmtPct(1-valorDivergente/valorContado):'—', 'Acurácia Geral', '', temValorContado?'todos os ciclos':'reprocesse o ciclo pra habilitar') +
+        irKpiTile('🎯', temValorContado&&valorBase>0?irFmtPct(1-valorDivergente/valorBase):'—', 'Acurácia Geral', '', temValorContado?'ciclos de '+ano+' · base: '+irFmtMoneyInt(valorBase):'reprocesse o ciclo pra habilitar') +
         irKpiTile('💰', temValorContado?irFmtMoneyCompact(valorContado):'—', 'Contado', '', temValorContado?irFmtMoneyInt(valorContado):'') +
         irKpiTile('⚠️', irFmtMoneyCompact(valorDivergente), 'Divergente', 'bad', irFmtMoneyInt(valorDivergente)))}
     </div>
@@ -1738,11 +1747,13 @@ function irAcuraciaDoAno(ano){
     pecas:  pc>0 ? 1-pd/pc : null,
     locais: lc>0 ? 1-ld/lc : null,
     valor:  (temValor && vc>0) ? 1-vd/vc : null,
-    // Totais que geraram cada percentual — o painel mostra contado x divergente
-    // lado a lado, pra que o número possa ser conferido sem abrir outra tela.
-    pecasContadas: pc, pecasDivergentes: pd,
-    locaisContados: lc, locaisDivergentes: ld,
-    valorContado: temValor ? vc : null, valorDivergente: vd
+    // Totais que geraram cada percentual — o painel mostra base x divergente lado a
+    // lado, pra que o número possa ser conferido sem abrir outra tela. É a BASE da
+    // conta (saldo lógico), não a quantidade física contada: rotulá-la como
+    // "Contado" dava um par de números com que era impossível refazer o percentual.
+    pecasBase: pc, pecasDivergentes: pd,
+    locaisBase: lc, locaisDivergentes: ld,
+    valorBase: temValor ? vc : null, valorDivergente: vd
   };
 }
 /* Acurácia anual num painel próprio, no lugar do medidor de Saúde do Estoque —
@@ -1753,9 +1764,9 @@ function irRenderAcuraciaAnualPanel(){
   const ano = irCicloAno(IR.cicloAtivo);
   const ac = irAcuraciaDoAno(ano);
   if(!ac) return '';
-  const linha = (rot, v, cor, contado, divergente) => `<div class="acan-row">
+  const linha = (rot, v, cor, base, divergente) => `<div class="acan-row">
     <div class="acan-label">${irEsc(rot)}</div>
-    <div class="acan-qt"><span class="k">Contado</span><span class="n mono">${contado}</span></div>
+    <div class="acan-qt"><span class="k">Base</span><span class="n mono">${base}</span></div>
     <div class="acan-qt"><span class="k">Divergente</span><span class="n mono bad">${divergente}</span></div>
     <div class="acan-track">
       <div class="acan-fill" style="width:${v==null?0:Math.round(Math.max(0,Math.min(1,v))*100)}%;background:${cor};"></div>
@@ -1765,9 +1776,9 @@ function irRenderAcuraciaAnualPanel(){
   </div>`;
   return `<div class="panel">
     <h3>Acurácia Anual</h3>
-    ${linha('Peças',  ac.pecas,  '#FA4616', irFmtInt(ac.pecasContadas), irFmtInt(ac.pecasDivergentes))}
-    ${linha('Locais', ac.locais, '#001A72', irFmtInt(ac.locaisContados), irFmtInt(ac.locaisDivergentes))}
-    ${linha('Valor',  ac.valor,  '#1D1F2A', ac.valorContado==null?'—':irFmtMoneyCompact(ac.valorContado), irFmtMoneyCompact(ac.valorDivergente))}
+    ${linha('Peças',  ac.pecas,  '#FA4616', irFmtInt(ac.pecasBase), irFmtInt(ac.pecasDivergentes))}
+    ${linha('Locais', ac.locais, '#001A72', irFmtInt(ac.locaisBase), irFmtInt(ac.locaisDivergentes))}
+    ${linha('Valor',  ac.valor,  '#1D1F2A', ac.valorBase==null?'—':irFmtMoneyCompact(ac.valorBase), irFmtMoneyCompact(ac.valorDivergente))}
     <p class="field-hint acan-pe">${irEsc(String(ano))} · ${irFmtInt(ac.ciclos)} ciclo(s) · meta ${irFmtPct(IR_META_ACURACIA)}</p>
     ${irRenderAcuraciaPorCiclo(ano)}
   </div>`;
