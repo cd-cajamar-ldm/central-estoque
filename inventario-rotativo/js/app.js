@@ -834,7 +834,7 @@ const IR_INDICADORES_VERSION = 17; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v172';
+const IR_APP_VERSION = 'v173';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -3154,10 +3154,24 @@ function irToggleDashDateScope(key){ IR.dashFilters[key] = !IR.dashFilters[key];
    cancelado numa base seguinte, é esperado que o número se ajuste junto.
    O recorte de ajuste AIR vale aqui também — contagem de ADE ou AIC é esforço de
    outro programa, não do rotativo. */
+/* Situação da linha na Produtividade: entra LIQUIDADO e entra CANCELADO, e só
+   isso. Cancelado entra porque o conferente foi até o endereço e contou — o
+   trabalho aconteceu, e descontá-lo da produtividade dele puniria o colaborador
+   por uma interrupção que não foi ele quem causou. Linha em aberto (nem liquidada
+   nem cancelada) fica fora: ainda não é um resultado, e vira liquidada ou
+   cancelada na próxima base, quando então passa a contar.
+   Nas acurácias nada disso entra — lá é só Liquidado, filtrado na ingestão da
+   843 (situacaoLocal e situacaoInventario ambos 'Liquidado'). */
+function irProdLinhaVale(c){
+  if(c.liquidada!==false) return true; // liquidada (ou base antiga, que só gravava liquidada)
+  return String(c.situacaoLocal||'').trim()==='Cancelado'
+      || String(c.situacaoInventario||'').trim()==='Cancelado';
+}
 function irProdContagensBase(applyDate){
   const {de, ate, incluirAbertura} = IR.prodFilters;
   return IR.contagens.filter(c=>{
     if(String(c.motivo||'').trim().toUpperCase()!=='AIR') return false;
+    if(!irProdLinhaVale(c)) return false;
     if((incluirAbertura ? c.idConferencia<1 : c.idConferencia<=1) || !c.usuario || !c.dataInicioContagem) return false;
     if(!applyDate) return true;
     const dia = c.dataInicioContagem.slice(0,10);
