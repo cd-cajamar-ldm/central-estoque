@@ -64,6 +64,27 @@ export const rotuloDaForma: Record<FormaDoNo, string> = {
 
 export const ESPESSURAS = [1, 2, 3, 5, 8];
 
+/* Zoom do quadro. Os passos sao fixos, e nao um multiplicador livre, para
+   o botao sempre cair num numero redondo: quem esta desenhando quer "metade"
+   ou "o dobro", nao 137%. */
+export const ZOOMS = [0.25, 0.4, 0.5, 0.75, 1, 1.25, 1.5, 2];
+
+export const ZOOM_PADRAO = 1;
+
+/* O zoom vizinho na direcao pedida; nas pontas, fica onde esta. Um valor
+   guardado que nao esta na lista (versao antiga, localStorage adulterado)
+   cai no degrau mais proximo em vez de travar o botao. */
+export function proximoZoom(atual: number, direcao: 1 | -1): number {
+  const indice = ZOOMS.findIndex((z) => z === atual);
+  if (indice < 0) {
+    const perto = ZOOMS.reduce((a, b) => (Math.abs(b - atual) < Math.abs(a - atual) ? b : a), ZOOMS[0]);
+    return perto;
+  }
+  return ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, indice + direcao))];
+}
+
+export const zoomValido = (v: number): boolean => ZOOMS.includes(v);
+
 export const espessuraDo = (no: NoDoFluxo): number => no.espessura ?? 2;
 
 const TAMANHOS: Record<FormaDoNo, { largura: number; altura: number }> = {
@@ -97,13 +118,16 @@ export function fluxoVazio(): Fluxo {
   return { nos: [], ligacoes: [] };
 }
 
-export function noNovo(forma: FormaDoNo, x: number, y: number): NoDoFluxo {
+/* A cor vem de quem esta desenhando: a barra guarda a cor escolhida e a
+   forma ja nasce nela, em vez de nascer roxa e ser repintada uma a uma.
+   Sem escolha, a anotacao nasce ambar e o resto roxo, como sempre. */
+export function noNovo(forma: FormaDoNo, x: number, y: number, cor?: string): NoDoFluxo {
   const { largura, altura } = TAMANHOS[forma];
   return {
     id: crypto.randomUUID(),
     texto: rotuloDaForma[forma],
     x, y, largura, altura, forma,
-    cor: forma === 'nota' ? '#C79212' : '#7C3AED',
+    cor: cor ?? (forma === 'nota' ? '#C79212' : '#7C3AED'),
   };
 }
 
