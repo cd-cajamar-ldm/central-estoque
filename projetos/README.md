@@ -248,21 +248,33 @@ falhar pela metade. Dois tipos de bloco:
   página por cima desta.
 - **vários blocos e alinhar** — Shift+clique junta e tira blocos da seleção,
   Ctrl+A pega todos. Com dois ou mais, a barra troca as propriedades do bloco
-  pelos seis alinhamentos (`⇤ ↔ ⇥ ⤒ ↕ ⤓`): todos vão até a mesma borda do grupo,
-  ou ao meio entre as bordas extremas — e não à média das posições, que com
-  larguras diferentes puxaria a coluna para o lado de quem tem mais vizinhos.
+  pelos seis alinhamentos: todos vão até a mesma borda do grupo, ou ao meio
+  entre as bordas extremas — e não à média das posições, que com larguras
+  diferentes puxaria a coluna para o lado de quem tem mais vizinhos.
+
+  O que se alinha é a **caixa que aparece na tela** (`caixaVisual`), e não o
+  retângulo guardado no bloco: um losango de 170×96 girado 45° ocupa 188×188 e
+  começa bem acima do `y` gravado, então alinhar pelo retângulo deixava a decisão
+  visivelmente fora da linha — para quem olhava, o alinhamento simplesmente não
+  funcionava. Se a borda alvo cair fora do quadro, o grupo inteiro volta para
+  dentro pelo mesmo tanto, mantendo o alinhamento: bloco com posição negativa
+  fica inalcançável.
   Arrastar ou empurrar com as setas move o grupo inteiro mantendo as distâncias;
   clicar num bloco do grupo sem arrastar volta a escolher só ele, e a troca
   acontece ao soltar o botão, porque no mousedown ainda não se sabe se o gesto
   é clique ou arrasto.
 
 - **copiar, recortar e colar** — Ctrl+C, Ctrl+X e Ctrl+V (e os botões na barra)
-  sobre os blocos escolhidos. A área de transferência é do próprio quadro: o
-  Ctrl+V do sistema já tem dono aqui (colar print), então colar bloco só entra
-  em ação quando não veio imagem nenhuma junto. O recorte leva as setas **entre**
-  os blocos copiados, e só elas — uma seta que sai do grupo não teria de onde
-  sair depois de colada. A cópia entra deslocada 30 px, e colar de novo cai mais
-  adiante, em vez de voltar ao mesmo lugar.
+  sobre os blocos escolhidos. Copiar escreve o recorte **na área de transferência
+  do sistema**, como texto com uma marca própria (`recorteParaTexto`): sem isso,
+  um print copiado antes continuava valendo e era ele que colava no lugar do
+  bloco — o Ctrl+V trazia "outra coisa". Ao colar, a primeira pergunta é "isto é
+  um bloco deste quadro?"; só depois vem a imagem. A cópia guardada em memória
+  continua como reserva, para quando o navegador recusa a escrita.
+
+  O recorte leva as setas **entre** os blocos copiados, e só elas — uma seta que
+  sai do grupo não teria de onde sair depois de colada. A cópia entra deslocada
+  30 px, e colar de novo cai mais adiante, em vez de voltar ao mesmo lugar.
 
 #### Compartilhar a página
 
