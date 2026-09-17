@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   bordaMaisProxima, CORES_DO_FLUXO, ESPESSURAS, escreverFluxo, espessuraDo, fluxoVazio, lerFluxo,
-  limitesDoFluxo, noDeImagem, noNovo, proximaPosicao, proximoZoom, rotuloDaForma, ZOOM_PADRAO,
-  ZOOMS, zoomValido,
+  alinharNos, limitesDoFluxo, noDeImagem, noNovo, proximaPosicao, proximoZoom, rotuloDaForma,
+  rotuloDoAlinhamento, ZOOM_PADRAO, ZOOMS, zoomValido,
 } from '@/dominio/fluxo';
 import { imagemDoEvento, reduzirImagem } from '@/lib/imagemColada';
-import type { Fluxo, FormaDoNo, NoDoFluxo } from '@/dominio/fluxo';
+import type { Alinhamento, Fluxo, FormaDoNo, NoDoFluxo } from '@/dominio/fluxo';
 
 interface Props {
   conteudo: string;
@@ -14,6 +14,37 @@ interface Props {
 }
 
 const FORMAS: FormaDoNo[] = ['inicio', 'caixa', 'decisao', 'circulo', 'triangulo', 'nota'];
+
+/* Desenhinho de cada alinhamento no botao: a barra e estreita, e o nome
+   por extenso ("Centralizar na vertical") so cabe no title. E um desenho,
+   e nao uma seta de texto (⇤, ⤒), porque as setas sao quase iguais entre
+   si em fonte pequena — aqui a linha de referencia e as duas barras
+   mostram para onde os blocos vao. */
+function IconeAlinhar({ como }: { como: Alinhamento }) {
+  /* Duas barras de tamanhos diferentes, para dar para ver que elas se
+     movem ate a guia, e a guia na posicao do alinhamento. */
+  const barras: Record<Alinhamento, { x: number; y: number; w: number; h: number }[]> = {
+    esquerda: [{ x: 4, y: 3, w: 9, h: 3 }, { x: 4, y: 9, w: 6, h: 3 }],
+    direita: [{ x: 3, y: 3, w: 9, h: 3 }, { x: 6, y: 9, w: 6, h: 3 }],
+    centro: [{ x: 3.5, y: 3, w: 9, h: 3 }, { x: 5, y: 9, w: 6, h: 3 }],
+    topo: [{ x: 3, y: 4, w: 3, h: 9 }, { x: 9, y: 4, w: 3, h: 6 }],
+    base: [{ x: 3, y: 3, w: 3, h: 9 }, { x: 9, y: 6, w: 3, h: 6 }],
+    meio: [{ x: 3, y: 3.5, w: 3, h: 9 }, { x: 9, y: 5, w: 3, h: 6 }],
+  };
+  const guia: Record<Alinhamento, [number, number, number, number]> = {
+    esquerda: [3, 1, 3, 14], direita: [12, 1, 12, 14], centro: [7.5, 1, 7.5, 14],
+    topo: [1, 3, 14, 3], base: [1, 12, 14, 12], meio: [1, 7.5, 14, 7.5],
+  };
+  const [x1, y1, x2, y2] = guia[como];
+  return (
+    <svg viewBox="0 0 15 15" className="h-3.5 w-3.5" aria-hidden="true">
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="1" strokeDasharray="2 1.5" />
+      {barras[como].map((b, i) => (
+        <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} rx="1" fill="currentColor" opacity={0.75} />
+      ))}
+    </svg>
+  );
+}
 
 /* Quadro de fluxo com blocos que se arrastam e setas que os ligam, no
    espirito do Miro. Usa mouse e SVG direto, sem biblioteca de diagrama:
@@ -25,7 +56,13 @@ const FORMAS: FormaDoNo[] = ['inicio', 'caixa', 'decisao', 'circulo', 'triangulo
    vez de sumir com o que ja estava escrito. */
 export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
   const [fluxo, setFluxo] = useState<Fluxo>(() => lerFluxo(conteudo) ?? fluxoVazio());
-  const [selecionado, setSelecionado] = useState<string | null>(null);
+  /* Selecao de varios blocos: Shift+clique junta, Ctrl+A pega todos.
+     Sem isso nao ha o que alinhar — alinhar e uma operacao entre blocos,
+     e ate agora so um bloco por vez podia estar selecionado. */
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  /* A barra de propriedades (texto, cor, giro) fala com um bloco so: com
+     dois selecionados, o que aparece sao os botoes de alinhar. */
+  const selecionado = selecionados.length === 1 ? selecionados[0] : null;
   const [ligandoDe, setLigandoDe] = useState<string | null>(null);
   /* A seta tambem se seleciona: sem isso, o Delete do teclado nao teria
      como saber que e ela que deve sair. */
@@ -35,7 +72,16 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
      em 10 px: o ponteiro terminava fora dele, o navegador mandava o
      clique para o fundo do quadro e a selecao se perdia no ato. */
   const FOLGA = 4;
-  const arrastando = useRef<{ id: string; dx: number; dy: number; x: number; y: number; moveu: boolean } | null>(null);
+  const arrastando = useRef<
+    {
+      id: string; grupo: string[]; dx: number; dy: number; x: number; y: number;
+      moveu: boolean;
+      /* Clique num bloco do grupo sem arrastar escolhe so ele. A troca
+         nao pode ser no mousedown: ali ainda nao se sabe se o gesto e um
+         clique ou o comeco de um arrasto do grupo inteiro. */
+      colapsar: boolean;
+    } | null
+  >(null);
   /* Puxar o canto muda o tamanho; e o gesto que se espera de um quadro
      assim, e evita ficar clicando em + e − para chegar ao tamanho certo. */
   const esticando = useRef<{ id: string; x: number; y: number; largura: number; altura: number } | null>(null);
@@ -151,20 +197,47 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
     const posicao = proximaPosicao(fluxo);
     const no = noNovo(forma, posicao.x, posicao.y, corNova);
     gravar({ ...fluxo, nos: [...fluxo.nos, no] });
-    setSelecionado(no.id);
+    setSelecionados([no.id]);
   }
 
   function alterarNo(id: string, mudanca: Partial<NoDoFluxo>) {
     gravar({ ...fluxo, nos: fluxo.nos.map((n) => (n.id === id ? { ...n, ...mudanca } : n)) });
   }
 
-  function removerNo(id: string) {
+  function removerNos(ids: string[]) {
     gravar({
-      nos: fluxo.nos.filter((n) => n.id !== id),
+      nos: fluxo.nos.filter((n) => !ids.includes(n.id)),
       /* Seta sem uma das pontas nao existe: some junto com o bloco. */
-      ligacoes: fluxo.ligacoes.filter((l) => l.de !== id && l.para !== id),
+      ligacoes: fluxo.ligacoes.filter((l) => !ids.includes(l.de) && !ids.includes(l.para)),
     });
-    setSelecionado(null);
+    setSelecionados([]);
+  }
+
+  /* Shift+clique junta e tira da selecao; clique simples recomeca dela.
+     E o gesto de qualquer ferramenta de desenho, e o unico jeito de
+     escolher a mao os blocos que se quer alinhar. */
+  function escolher(id: string, juntando: boolean) {
+    setSelecionados((atual) => {
+      if (!juntando) return [id];
+      return atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id];
+    });
+    setLigacaoSelecionada(null);
+  }
+
+  /* As setas do teclado empurram tudo o que esta selecionado junto: com
+     dois blocos escolhidos, mover so um desfaria o que se acabou de
+     alinhar. */
+  function empurrar(dx: number, dy: number) {
+    gravar({
+      ...fluxo,
+      nos: fluxo.nos.map((n) => (selecionados.includes(n.id)
+        ? { ...n, x: Math.max(0, n.x + dx), y: Math.max(0, n.y + dy) }
+        : n)),
+    });
+  }
+
+  function alinhar(como: Alinhamento) {
+    gravar({ ...fluxo, nos: alinharNos(fluxo.nos, selecionados, como) });
   }
 
   function ligar(paraId: string) {
@@ -194,7 +267,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
       const posicao = proximaPosicao(fluxo);
       const no = noDeImagem(reduzida.dados, reduzida.largura, reduzida.altura, posicao.x, posicao.y);
       gravar({ ...fluxo, nos: [...fluxo.nos, no] });
-      setSelecionado(no.id);
+      setSelecionados([no.id]);
     } catch (falha) {
       setAvisoDaImagem(falha instanceof Error ? falha.message : 'Não consegui colar esta imagem.');
     }
@@ -233,6 +306,12 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
       const tecla = e.key.toLowerCase();
       if (tecla === 'z' && !e.shiftKey) { e.preventDefault(); desfazer(); return; }
       if (tecla === 'y' || (tecla === 'z' && e.shiftKey)) { e.preventDefault(); refazer(); return; }
+      if (tecla === 'a') {
+        e.preventDefault();
+        setSelecionados(fluxo.nos.map((n) => n.id));
+        setLigacaoSelecionada(null);
+        return;
+      }
     }
 
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -242,28 +321,23 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
         setLigacaoSelecionada(null);
         return;
       }
-      if (selecionado) {
+      if (selecionados.length) {
         e.preventDefault();
-        removerNo(selecionado);
+        removerNos(selecionados);
       }
       return;
     }
 
-    if (e.key === 'Escape') { setSelecionado(null); setLigacaoSelecionada(null); setLigandoDe(null); return; }
+    if (e.key === 'Escape') { setSelecionados([]); setLigacaoSelecionada(null); setLigandoDe(null); return; }
 
     const passos: Record<string, [number, number]> = {
       ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
     };
     const passo = passos[e.key];
-    if (!passo || !selecionado) return;
+    if (!passo || !selecionados.length) return;
     e.preventDefault();
     const distancia = e.shiftKey ? 1 : 10;
-    const no = fluxo.nos.find((n) => n.id === selecionado);
-    if (!no) return;
-    alterarNo(no.id, {
-      x: Math.max(0, no.x + passo[0] * distancia),
-      y: Math.max(0, no.y + passo[1] * distancia),
-    });
+    empurrar(passo[0] * distancia, passo[1] * distancia);
   }
 
   /* O ouvinte fica na janela, e nao no quadro: depois de clicar num
@@ -274,7 +348,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
   useEffect(() => {
     if (!editando) return;
     const ouvir = (e: KeyboardEvent) => {
-      const meu = selecionado || ligacaoSelecionada
+      const meu = selecionados.length || ligacaoSelecionada
         || (!!quadro.current && quadro.current.contains(document.activeElement));
       if (meu) aoTeclar(e);
     };
@@ -307,15 +381,25 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
     /* Com o quadro afastado, um pixel de tela vale mais de um pixel de
        desenho: sem dividir pelo zoom o bloco fugiria do ponteiro. */
     antesDoGesto.current = fluxo;
+    /* Arrastar um bloco que ja faz parte da selecao leva o grupo inteiro
+       junto; arrastar um de fora dela recomeca a selecao nele. */
+    const grupo = selecionados.includes(no.id) ? selecionados : [no.id];
     arrastando.current = {
       id: no.id,
+      grupo,
       dx: (e.clientX - area.left) / zoom - no.x,
       dy: (e.clientY - area.top) / zoom - no.y,
       x: e.clientX,
       y: e.clientY,
       moveu: false,
+      colapsar: !e.shiftKey && selecionados.length > 1 && selecionados.includes(no.id),
     };
-    setSelecionado(no.id);
+    /* A selecao se resolve aqui, no mousedown, e nao no clique: o clique
+       chegaria depois e desfaria o Shift que acabou de juntar o bloco.
+       Bloco ja selecionado e clicado sem Shift nao mexe na selecao, para
+       o arrasto levar o grupo inteiro. */
+    if (e.shiftKey) escolher(no.id, true);
+    else if (!selecionados.includes(no.id)) escolher(no.id, false);
     setLigacaoSelecionada(null);
     /* Sem foco no quadro, as setas do teclado rolariam a pagina em vez
        de mover o bloco. */
@@ -344,16 +428,27 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
     const x = Math.max(0, (e.clientX - area.left) / zoom - atual.dx);
     const y = Math.max(0, (e.clientY - area.top) / zoom - atual.dy);
     /* Encaixe de 10 em 10 px: alinha os blocos sem precisar de mira. */
-    setFluxo((f) => ({
-      ...f,
-      nos: f.nos.map((n) => (n.id === atual.id
-        ? { ...n, x: Math.round(x / 10) * 10, y: Math.round(y / 10) * 10 }
-        : n)),
-    }));
+    setFluxo((f) => {
+      const puxado = f.nos.find((n) => n.id === atual.id);
+      if (!puxado) return f;
+      /* O grupo anda pelo deslocamento do bloco que esta sob o ponteiro:
+         assim as distancias entre eles nao mudam no caminho. */
+      const dx = Math.round(x / 10) * 10 - puxado.x;
+      const dy = Math.round(y / 10) * 10 - puxado.y;
+      if (!dx && !dy) return f;
+      return {
+        ...f,
+        nos: f.nos.map((n) => (atual.grupo.includes(n.id)
+          ? { ...n, x: Math.max(0, n.x + dx), y: Math.max(0, n.y + dy) }
+          : n)),
+      };
+    });
   }
 
   function terminarArrasto() {
     const mexeu = arrastando.current?.moveu || !!esticando.current;
+    const colapsarEm = !mexeu && arrastando.current?.colapsar ? arrastando.current.id : null;
+    if (colapsarEm) setSelecionados([colapsarEm]);
     const antes = antesDoGesto.current;
     arrastando.current = null;
     esticando.current = null;
@@ -461,7 +556,30 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
 
           <span className="mx-1 h-4 w-px bg-linha" />
 
-          {noSelecionado ? (
+          {selecionados.length > 1 ? (
+            <>
+              {/* Alinhar: leva os blocos escolhidos ate a mesma borda ou
+                  ao mesmo centro. So aparece com dois ou mais, porque com
+                  um so nao ha a quem se alinhar. */}
+              <span className="text-[11px] font-bold text-tinta-suave">
+                {selecionados.length} blocos
+              </span>
+              <span className="flex items-center gap-1">
+                {(['esquerda', 'centro', 'direita', 'topo', 'meio', 'base'] as Alinhamento[]).map((como) => (
+                  <button
+                    key={como}
+                    title={rotuloDoAlinhamento[como]}
+                    onClick={() => alinhar(como)}
+                    className="rounded-lg border border-linha px-1.5 py-1.5 text-tinta-suave hover:border-roxo hover:text-roxo-escuro"
+                  ><IconeAlinhar como={como} /></button>
+                ))}
+              </span>
+              <button
+                className="rounded-lg px-2 py-1 text-[11px] font-bold text-vermelho hover:bg-vermelho/5"
+                onClick={() => removerNos(selecionados)}
+              >Excluir {selecionados.length} blocos</button>
+            </>
+          ) : noSelecionado ? (
             <>
               {noSelecionado.forma === 'imagem' ? (
                 <span className="text-[11px] font-bold text-tinta-suave">Imagem colada</span>
@@ -550,14 +668,15 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
               </button>
               <button
                 className="rounded-lg px-2 py-1 text-[11px] font-bold text-vermelho hover:bg-vermelho/5"
-                onClick={() => removerNo(noSelecionado.id)}
+                onClick={() => removerNos([noSelecionado.id])}
               >Excluir bloco</button>
             </>
           ) : (
             <span className="text-[11px] text-tinta-suave">
               Clique num bloco para editar o texto, mudar a cor ou ligar a outro. Arraste ou use as
               setas do teclado para mover, Delete para apagar o que estiver selecionado, Ctrl+V
-              para colar um print e Ctrl+Z para desfazer.
+              para colar um print e Ctrl+Z para desfazer. Shift+clique escolhe vários blocos (Ctrl+A
+              pega todos) e a barra alinha o grupo.
             </span>
           )}
         </div>
@@ -593,7 +712,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget && comecouNoFundo.current) {
-              setSelecionado(null);
+              setSelecionados([]);
               setLigacaoSelecionada(null);
               setLigandoDe(null);
             }
@@ -666,7 +785,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
                   title="Editar esta seta (rótulo, traço, remover)"
                   onMouseDown={() => {
                     setLigacaoSelecionada(l.id);
-                    setSelecionado(null);
+                    setSelecionados([]);
                     tela.current?.focus({ preventScroll: true });
                   }}
                   className="absolute z-10 h-3 w-3 rounded-full border border-linha bg-white opacity-40 hover:opacity-100 hover:border-roxo"
@@ -679,7 +798,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
               <div
                 key={l.id}
                 onMouseDown={() => {
-                  setSelecionado(null);
+                  setSelecionados([]);
                   tela.current?.focus({ preventScroll: true });
                 }}
                 className="absolute z-20 flex items-center gap-1 rounded bg-white/90 ring-2 ring-roxo"
@@ -734,10 +853,10 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
               alt={no.texto || 'Print colado no fluxo'}
               draggable={false}
               onMouseDown={(e) => comecarArrasto(e, no)}
-              onClick={() => (ligandoDe ? ligar(no.id) : setSelecionado(no.id))}
+              onClick={() => ligandoDe && ligar(no.id)}
               className={`absolute rounded-lg border-2 bg-white object-contain ${
                 editando ? 'cursor-grab active:cursor-grabbing' : ''
-              } ${selecionado === no.id ? 'border-roxo shadow-alto' : 'border-linha shadow-card'}`}
+              } ${selecionados.includes(no.id) ? 'border-roxo shadow-alto' : 'border-linha shadow-card'}`}
               style={{
                 left: no.x, top: no.y, width: no.largura, height: no.altura,
                 transform: no.rotacao ? `rotate(${no.rotacao}deg)` : undefined,
@@ -747,10 +866,10 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
             <div
               key={no.id}
               onMouseDown={(e) => comecarArrasto(e, no)}
-              onClick={() => (ligandoDe ? ligar(no.id) : setSelecionado(no.id))}
+              onClick={() => ligandoDe && ligar(no.id)}
               className={`absolute flex items-center justify-center px-2 text-center text-xs font-semibold transition-shadow ${
                 editando ? 'cursor-grab active:cursor-grabbing' : ''
-              } ${selecionado === no.id ? 'shadow-alto' : 'shadow-card'} ${
+              } ${selecionados.includes(no.id) ? 'shadow-alto ring-2 ring-roxo ring-offset-1' : 'shadow-card'} ${
                 ligandoDe && ligandoDe !== no.id ? 'ring-2 ring-roxo ring-offset-1' : ''
               }`}
               style={{

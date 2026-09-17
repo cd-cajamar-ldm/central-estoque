@@ -246,6 +246,30 @@ falhar pela metade. Dois tipos de bloco:
   andam nos últimos 50 passos. Um arrasto inteiro conta como um passo só, e
   trocar de página zera o histórico — desfazer ali devolveria o desenho de outra
   página por cima desta.
+- **vários blocos e alinhar** — Shift+clique junta e tira blocos da seleção,
+  Ctrl+A pega todos. Com dois ou mais, a barra troca as propriedades do bloco
+  pelos seis alinhamentos (`⇤ ↔ ⇥ ⤒ ↕ ⤓`): todos vão até a mesma borda do grupo,
+  ou ao meio entre as bordas extremas — e não à média das posições, que com
+  larguras diferentes puxaria a coluna para o lado de quem tem mais vizinhos.
+  Arrastar ou empurrar com as setas move o grupo inteiro mantendo as distâncias;
+  clicar num bloco do grupo sem arrastar volta a escolher só ele, e a troca
+  acontece ao soltar o botão, porque no mousedown ainda não se sabe se o gesto
+  é clique ou arrasto.
+
+#### Compartilhar a página
+
+O botão **Compartilhar**, ao lado de *Histórico*, baixa a página como um único
+arquivo `.html` (`src/exportar/paginaHtml.ts`): texto e fluxogramas na ordem em
+que foram escritos, o fluxo desenhado em SVG dentro do próprio arquivo e o print
+colado dentro do SVG. Abre em qualquer navegador, sem internet e sem login — é
+assim que a documentação chega a fornecedor ou ao time do BSeller, que não têm
+acesso ao módulo. O estilo vai embutido, pelo mesmo motivo.
+
+O que sai é o que está na tela, e não o que está no banco: quem acabou de
+escrever espera mandar o que acabou de escrever. O HTML do texto passa pela
+mesma limpeza da tela (`limparHtml`, injetada de fora para a função de exportar
+continuar pura e testável sem navegador), e fluxo no formato antigo vai como
+texto em vez de sumir do arquivo.
 
 Cada página tem **situação** própria: rascunho, em revisão, aprovada, concluída
 ou cancelada. O seletor fica no canto superior direito da página e grava na hora,
