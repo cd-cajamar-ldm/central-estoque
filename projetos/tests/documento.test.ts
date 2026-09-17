@@ -167,3 +167,101 @@ describe('zoom e cor do quadro', () => {
     expect(noNovo('nota', 0, 0).cor).toBe('#C79212');
   });
 });
+
+describe('alinhar blocos do fluxo', () => {
+  const bloco = (id: string, x: number, y: number, largura = 100, altura = 50) => ({
+    id, texto: id, x, y, largura, altura, forma: 'caixa' as const, cor: '#7C3AED',
+  });
+
+  it('alinha pela borda esquerda do grupo', async () => {
+    const { alinharNos } = await import('../src/dominio/fluxo');
+    const nos = [bloco('a', 40, 0), bloco('b', 120, 100), bloco('c', 300, 200)];
+    const depois = alinharNos(nos, ['a', 'b'], 'esquerda');
+    expect(depois.map((n) => n.x)).toEqual([40, 40, 300]);
+    // Quem não estava selecionado não se mexe.
+    expect(depois[2]).toEqual(nos[2]);
+  });
+
+  it('alinha pela direita levando em conta a largura de cada um', async () => {
+    const { alinharNos } = await import('../src/dominio/fluxo');
+    const nos = [bloco('a', 0, 0, 100), bloco('b', 50, 100, 200)];
+    const depois = alinharNos(nos, ['a', 'b'], 'direita');
+    // A borda direita do grupo é 250: o bloco de 100 px começa em 150.
+    expect(depois.map((n) => n.x)).toEqual([150, 50]);
+  });
+
+  it('centraliza pelo meio entre as bordas extremas', async () => {
+    const { alinharNos } = await import('../src/dominio/fluxo');
+    const nos = [bloco('a', 0, 0, 100), bloco('b', 200, 0, 100)];
+    const depois = alinharNos(nos, ['a', 'b'], 'centro');
+    // Centro do grupo em 150: os dois, de 100 px, começam em 100.
+    expect(depois.map((n) => n.x)).toEqual([100, 100]);
+  });
+
+  it('alinha pelo topo e pela base sem tocar no x', async () => {
+    const { alinharNos } = await import('../src/dominio/fluxo');
+    const nos = [bloco('a', 10, 30, 100, 50), bloco('b', 90, 80, 100, 20)];
+    expect(alinharNos(nos, ['a', 'b'], 'topo').map((n) => n.y)).toEqual([30, 30]);
+    // A base do grupo é 100: o bloco de 50 px de altura começa em 50.
+    expect(alinharNos(nos, ['a', 'b'], 'base').map((n) => n.y)).toEqual([50, 80]);
+    expect(alinharNos(nos, ['a', 'b'], 'base').map((n) => n.x)).toEqual([10, 90]);
+  });
+
+  it('com menos de dois blocos não há a quem se alinhar', async () => {
+    const { alinharNos } = await import('../src/dominio/fluxo');
+    const nos = [bloco('a', 40, 0), bloco('b', 120, 100)];
+    expect(alinharNos(nos, ['a'], 'esquerda')).toEqual(nos);
+    expect(alinharNos(nos, [], 'topo')).toEqual(nos);
+  });
+});
+
+describe('compartilhar a página em HTML', () => {
+  it('leva o texto e o fluxograma no mesmo arquivo', async () => {
+    const { paginaParaHtml } = await import('../src/exportar/paginaHtml');
+    const { escreverFluxo, noNovo } = await import('../src/dominio/fluxo');
+    const no = { ...noNovo('caixa', 20, 20), texto: 'Conferir endereço' };
+    const html = paginaParaHtml({
+      titulo: 'Comportamento da tela de endereço',
+      situacao: 'Aprovada',
+      blocos: [
+        { id: 'b1', tipo: 'texto', conteudo: '<p>Ao digitar o código, destacar o corredor.</p>' },
+        { id: 'b2', tipo: 'fluxo', conteudo: escreverFluxo({ nos: [no], ligacoes: [] }) },
+      ],
+      geradoEm: new Date('2026-09-17T12:00:00'),
+    }, (h) => h);
+    expect(html.startsWith('<!doctype html>')).toBe(true);
+    expect(html).toContain('<title>Comportamento da tela de endereço</title>');
+    expect(html).toContain('Ao digitar o código, destacar o corredor.');
+    // O fluxo vai desenhado no próprio arquivo, e não como anexo à parte.
+    expect(html).toContain('<svg');
+    expect(html).toContain('Conferir endereço');
+    expect(html).toContain('Aprovada');
+  });
+
+  it('o texto do bloco passa pela limpeza antes de entrar no arquivo', async () => {
+    const { paginaParaHtml } = await import('../src/exportar/paginaHtml');
+    const html = paginaParaHtml({
+      titulo: 'Página',
+      blocos: [{ id: 'b1', tipo: 'texto', conteudo: '<p>oi</p><script>roubar()</script>' }],
+    }, (h) => h.replace(/<script>.*?<\/script>/g, ''));
+    expect(html).not.toContain('roubar()');
+    expect(html).toContain('<p>oi</p>');
+  });
+
+  it('escapa o título e nomeia o arquivo sem acento', async () => {
+    const { paginaParaHtml, nomeDoArquivoHtml } = await import('../src/exportar/paginaHtml');
+    const html = paginaParaHtml({ titulo: 'Endereço <b> & cia', blocos: [] }, (h) => h);
+    expect(html).toContain('<title>Endereço &lt;b&gt; &amp; cia</title>');
+    expect(nomeDoArquivoHtml('Endereço <b> & cia')).toBe('endereco-b-cia.html');
+    expect(nomeDoArquivoHtml('   ')).toBe('pagina.html');
+  });
+
+  it('fluxo no formato antigo vai como texto, em vez de sumir', async () => {
+    const { paginaParaHtml } = await import('../src/exportar/paginaHtml');
+    const html = paginaParaHtml({
+      titulo: 'Antiga',
+      blocos: [{ id: 'b1', tipo: 'fluxo', conteudo: 'graph TD; A-->B;' }],
+    }, (h) => h);
+    expect(html).toContain('graph TD; A--&gt;B;');
+  });
+});

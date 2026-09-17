@@ -493,6 +493,49 @@ await pagina.getByTitle('Novas formas em verde').click();
 await pagina.getByRole('button', { name: '+ Círculo', exact: true }).click();
 await pagina.getByRole('button', { name: '+ Triângulo', exact: true }).click();
 await pagina.waitForTimeout(400);
+
+/* Selecao de varios e alinhamento: Shift+clique junta o circulo ao
+   triangulo, e alinhar pela esquerda poe os dois na mesma borda. */
+/* O texto fica num <span> centralizado dentro do bloco: quem tem posicao
+   e o bloco, o pai dele. */
+const circulo = pagina.locator('[data-quadro="fluxo"] >> text=Círculo').first().locator('xpath=..');
+const triangulo = pagina.locator('[data-quadro="fluxo"] >> text=Triângulo').first().locator('xpath=..');
+/* O triângulo acabou de nascer selecionado: as setas o empurram para o
+   lado, para os dois blocos entrarem no teste desalinhados. */
+for (let i = 0; i < 4; i += 1) await pagina.keyboard.press('ArrowRight');
+await pagina.waitForTimeout(300);
+await circulo.click();
+await triangulo.click({ modifiers: ['Shift'] });
+await pagina.waitForTimeout(300);
+if (!((await pagina.textContent('body')) ?? '').includes('2 blocos')) {
+  console.error('FALHOU: Shift+clique deveria selecionar dois blocos.');
+  process.exitCode = 1;
+}
+const xAntes = [
+  (await circulo.boundingBox())?.x ?? 0,
+  (await triangulo.boundingBox())?.x ?? 0,
+];
+if (Math.abs(xAntes[0] - xAntes[1]) < 2) {
+  console.error('FALHOU: os dois blocos já nasceram alinhados — o teste não prova nada.');
+  process.exitCode = 1;
+}
+await pagina.getByTitle('Alinhar à esquerda').click();
+await pagina.waitForTimeout(300);
+const xDepois = [
+  (await circulo.boundingBox())?.x ?? 0,
+  (await triangulo.boundingBox())?.x ?? 0,
+];
+if (Math.abs(xDepois[0] - xDepois[1]) > 1) {
+  console.error(`FALHOU: alinhar à esquerda não igualou a borda (${xDepois[0]} / ${xDepois[1]}).`);
+  process.exitCode = 1;
+}
+/* Um bloco só volta a mostrar a barra de propriedades, não a de alinhar. */
+await circulo.click();
+await pagina.waitForTimeout(300);
+if (((await pagina.textContent('body')) ?? '').includes('2 blocos')) {
+  console.error('FALHOU: clique simples deveria recomeçar a seleção num bloco só.');
+  process.exitCode = 1;
+}
 if (!(await pagina.locator('[data-quadro="fluxo"] svg polygon[stroke="#2E8B57"]').count())) {
   console.error('FALHOU: a forma nova não nasceu na cor escolhida na barra.');
   process.exitCode = 1;
@@ -505,6 +548,26 @@ if (!(await pagina.locator('[data-quadro="fluxo"] svg polygon').count())) {
 await pagina.screenshot({ path: 'verificacao-fluxo-imagem.png', fullPage: true });
 await secaoPaginas.getByRole('button', { name: 'Cancelar', exact: true }).click();
 await pagina.waitForTimeout(300);
+
+/* Compartilhar: a página baixa como um HTML com o texto e o fluxograma
+   no mesmo arquivo. */
+{
+  const baixando = pagina.waitForEvent('download');
+  await secaoPaginas.getByRole('button', { name: 'Compartilhar', exact: true }).click();
+  const arquivo = await baixando;
+  if (!arquivo.suggestedFilename().endsWith('.html')) {
+    console.error(`FALHOU: o compartilhar deveria baixar um .html (veio "${arquivo.suggestedFilename()}").`);
+    process.exitCode = 1;
+  }
+  const caminho = await arquivo.path();
+  const conteudo = caminho ? await readFile(caminho, 'utf8') : '';
+  for (const pedaco of ['<!doctype html>', 'Busca de endereço', '<svg']) {
+    if (!conteudo.includes(pedaco)) {
+      console.error(`FALHOU: o arquivo compartilhado não tem "${pedaco}".`);
+      process.exitCode = 1;
+    }
+  }
+}
 
 /* Campo de lista do documento: o texto passa por lista e volta, e a
    volta apara espacos. Sem cuidado, o espaco some enquanto se digita —

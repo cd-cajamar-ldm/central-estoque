@@ -9,9 +9,25 @@ import {
   salvarPagina, usePaginas,
 } from '@/estado/paginas';
 import { limparHtml } from '@/lib/html';
+import { nomeDoArquivoHtml, paginaParaHtml } from '@/exportar/paginaHtml';
 import { formatarData } from '@/dominio/regras';
 import type { Bloco, Pagina, Pessoa, StatusPagina, VersaoDePagina } from '@/dominio/tipos';
 import { STATUS_PAGINA, rotuloStatusPagina } from '@/dominio/tipos';
+
+/* A pagina vira um arquivo que abre em qualquer navegador: e assim que
+   ela chega a quem nao tem login aqui (fornecedor, time do BSeller). O
+   texto e os fluxogramas vao no mesmo arquivo, na ordem em que foram
+   escritos — o fluxo desenhado em SVG, e o print colado dentro dele. */
+function baixarHtml(html: string, nome: string) {
+  const endereco = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = endereco;
+  link.download = nome;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(endereco);
+}
 
 interface Props {
   projetoId: string;
@@ -112,6 +128,20 @@ export default function Paginas({ projetoId, pessoas }: Props) {
     } catch (falha) {
       setErro(mensagemDeErro(falha));
     }
+  }
+
+  /* Compartilha o que esta na tela, e nao o que esta no banco: quem
+     acabou de escrever espera mandar o que acabou de escrever. */
+  function compartilhar() {
+    if (!aberta) return;
+    const html = paginaParaHtml({
+      titulo: titulo.trim() || aberta.titulo,
+      blocos,
+      situacao: rotuloStatusPagina[aberta.status],
+      atualizadoEm: formatarData(aberta.atualizado_em),
+      atualizadoPor: aberta.atualizado_por,
+    }, limparHtml);
+    baixarHtml(html, nomeDoArquivoHtml(titulo.trim() || aberta.titulo));
   }
 
   function trocarBloco(id: string, conteudo: string) {
@@ -224,6 +254,10 @@ export default function Paginas({ projetoId, pessoas }: Props) {
                     </>
                   ) : (
                     <>
+                      <button
+                        className="botao-neutro" onClick={compartilhar}
+                        title="Baixar esta página como um arquivo HTML, com o texto e os fluxogramas"
+                      >Compartilhar</button>
                       <button className="botao-neutro" onClick={() => void abrirHistorico()}>Histórico</button>
                       <button className="botao-neutro" onClick={() => void excluir(aberta)}>Excluir</button>
                       <button className="botao-primario" onClick={() => setEditando(true)}>Editar</button>
