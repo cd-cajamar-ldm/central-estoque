@@ -1,18 +1,16 @@
 /* ============================================================
-   Service Worker — Inventário Rotativo (PWA offline-first)
+   Service Worker — Gestão de Transitórios (PWA offline-first)
    Mesma estratégia já validada e corrigida no módulo de Auditoria:
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'inventario-rotativo-v176';
+const CACHE_VERSION = 'transitorios-v1';
 const PRECACHE_URLS = [
   './',
   './index.html',
   './manifest.json',
   './css/theme.css',
   './js/db.js',
-  './js/rules.js',
-  './js/worker.js',
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
