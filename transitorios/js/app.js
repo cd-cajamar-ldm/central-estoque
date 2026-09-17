@@ -13,12 +13,17 @@
    Consequência a conhecer: em um navegador onde o Inventário nunca importou a
    390, esta tela não tem o que mostrar — e diz isso, em vez de aparecer vazia.
    ============================================================ */
-const IR_APP_VERSION = 'v1';
+const IR_APP_VERSION = 'v2';
 const IR = {
   est390Meta:null, est390Locais:null, _est390Loading:false,
   transSetores:null, transNomes:null, transExpandido:null,
   transEmail:null, transEmailAberto:false,
   div410Cache:null, _itemInfo:null, _itemInfoLoading:false,
+  est390Ficha:null, est390File:null, est390Processing:false, est390Progress:{stage:'', pct:0},
+  est160File:null, est160Processing:false, est160Progress:{stage:'', pct:0},
+  net410File:null, net410Processing:false, net410Progress:{stage:'', pct:0},
+  net410Anos:[], net410AnoSel:null, net410Data:null,
+  tela:'transitorios',
   _transGanhos:null, _transGanhosAno:null, _transGanhosLoading:false,
   _transGanhoLocal:null, _transGanhosDiag:null,
   initErro:null
@@ -938,22 +943,258 @@ async function irBaixarBoletimTransitorios(){
 
 
 /* ============================================================
+   IMPORTAÇÃO (bases do transitório)
+   ============================================================
+   As três bases entram aqui, no próprio módulo: a QRY0390 (ficha do item e do
+   endereço, de onde saem valor e classe local), a QRY0160 (saldo por endereço
+   com data de movimento, que é o transitório em si) e a QRY410 (ganhos do ano,
+   que viram a coluna de provável duplicidade).
+
+   A ordem importa e a tela diz isso: a 160 usa a ficha que a 390 grava — sem ela
+   o saldo aparece sem valor e sem classe. */
+const IR_AVULSAS = [
+  {id:'390', icone:'📦', titulo:'QRY0390', sub:'Estoque por endereço', input:'ir-file-390-est',
+   onFile:'irOnFile390Est', onDrop:'irOnDropFile390Est', remove:'irRemoveFile390Est',
+   processa:'irProcessarEst390', botao:'Processar estoque', arquivo:()=>IR.est390File,
+   rodando:()=>IR.est390Processing, prog:()=>IR.est390Progress, idStage:'ir-390-stage', idFill:'ir-390-fill'},
+  {id:'160', icone:'⏱️', titulo:'QRY0160', sub:'Data de movimento', input:'ir-file-160',
+   onFile:'irOnFile160', onDrop:'irOnDropFile160', remove:'irRemoveFile160',
+   processa:'irProcessar160', botao:'Processar pendência', arquivo:()=>IR.est160File,
+   rodando:()=>IR.est160Processing, prog:()=>IR.est160Progress, idStage:'ir-160-stage', idFill:'ir-160-fill'},
+  {id:'410', icone:'📄', titulo:'QRY410', sub:'Perdas e ganhos', input:'ir-file-410',
+   onFile:'irOnFile410', onDrop:'irOnDropFile410', remove:'irRemoveFile410',
+   processa:'irProcessar410', botao:'Processar QRY410', arquivo:()=>IR.net410File,
+   rodando:()=>IR.net410Processing, prog:()=>IR.net410Progress, idStage:'ir-410-stage', idFill:'ir-410-fill'}
+];
+function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
+function irFmtDate(s){
+  if(!s) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s).trim());
+  if(m) return m[3]+'/'+m[2]+'/'+m[1];
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR');
+}
+function irFmtDataHora(s){
+  const dt = new Date(s);
+  if(isNaN(dt.getTime())) return '—';
+  return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+function irOnFile390Est(f){ if(!f) return; IR.est390File = f; irRenderView(); }
+function irOnDropFile390Est(e){ e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) irOnFile390Est(f); }
+function irRemoveFile390Est(){ IR.est390File = null; irRenderView(); }
+function irProcessarEst390(){
+  if(IR.est390Processing || !IR.est390File) return Promise.resolve(false);
+  IR.est390Processing = true; IR.est390Progress = {stage:'Lendo arquivo...', pct:0};
+  irRenderView();
+  let _fim; const _p = new Promise(r=>{ _fim = r; });
+  IR.est390File.arrayBuffer().then(buf=>{
+    const worker = irNovoWorker();
+    worker.onmessage = async ev=>{
+      const msg = ev.data;
+      if(msg.type==='progress'){ IR.est390Progress = {stage:msg.stage, pct:msg.pct}; irUpdateProgressUI390(); }
+      else if(msg.type==='error390'){
+        IR.est390Processing = false; worker.terminate();
+        irShowToast('Erro na QRY0390: '+msg.message, true); irRenderView(); _fim(false);
+      } else if(msg.type==='done390'){
+        IR.est390Processing = false; worker.terminate();
+        IR.est390Ficha = await irGetConfig('estoque390-ficha');
+        IR._itemInfo = null;
+        IR._transGanhos = null; IR._transGanhoLocal = null; IR._transGanhosDiag = null;
+        IR.est390File = null;
+        irShowToast(irFmtInt(msg.itens)+' itens e '+irFmtInt(msg.locais)+' endereços fichados.');
+        irRenderView(); _fim(true);
+      }
+    };
+    worker.onerror = ()=>{ worker.terminate(); IR.est390Processing=false; irShowToast('Falha no processamento da QRY0390.', true); irRenderView(); _fim(false); };
+    worker.postMessage({type:'process390', buf390:buf}, [buf]);
+  }).catch(err=>{ IR.est390Processing=false; irShowToast('Erro ao ler a QRY0390: '+err.message, true); irRenderView(); _fim(false); });
+  return _p;
+}
+function irUpdateProgressUI390(){
+  const st = document.getElementById('ir-390-stage'), fi = document.getElementById('ir-390-fill');
+  if(st && fi){ st.textContent = IR.est390Progress.stage; fi.style.width = IR.est390Progress.pct+'%'; }
+}
+function irOnFile160(f){ if(!f) return; IR.est160File = f; irRenderView(); }
+function irOnDropFile160(e){ e.preventDefault(); const f = e.dataTransfer.files[0]; if(f) irOnFile160(f); }
+function irRemoveFile160(){ IR.est160File = null; irRenderView(); }
+function irProcessar160(){
+  if(IR.est160Processing || !IR.est160File) return Promise.resolve(false);
+  IR.est160Processing = true; IR.est160Progress = {stage:'Lendo arquivo...', pct:0};
+  irRenderView();
+  let _fim; const _p = new Promise(r=>{ _fim = r; });
+  IR.est160File.arrayBuffer().then(buf=>{
+    const worker = irNovoWorker();
+    worker.onmessage = async ev=>{
+      const msg = ev.data;
+      if(msg.type==='progress'){ IR.est160Progress = {stage:msg.stage, pct:msg.pct}; irUpdateProgressUI160(); }
+      else if(msg.type==='error160'){
+        IR.est160Processing = false; worker.terminate();
+        irShowToast('Erro na QRY0160: '+msg.message, true); irRenderView(); _fim(false);
+      } else if(msg.type==='done160'){
+        IR.est160Processing = false; worker.terminate();
+        IR.est390Meta = await irGetEstoqueMeta();
+        IR.est390Locais = null; IR.est160File = null;
+        irShowToast(irFmtInt(msg.locais)+' endereços com data de movimento.');
+        irRenderView(); _fim(true);
+      }
+    };
+    worker.onerror = ()=>{ worker.terminate(); IR.est160Processing=false; irShowToast('Falha no processamento da QRY0160.', true); irRenderView(); _fim(false); };
+    worker.postMessage({type:'process160', buf160:buf}, [buf]);
+  }).catch(err=>{ IR.est160Processing=false; irShowToast('Erro ao ler a QRY0160: '+err.message, true); irRenderView(); _fim(false); });
+  return _p;
+}
+function irUpdateProgressUI160(){
+  const st = document.getElementById('ir-160-stage'), fi = document.getElementById('ir-160-fill');
+  if(st && fi){ st.textContent = IR.est160Progress.stage; fi.style.width = IR.est160Progress.pct+'%'; }
+}
+function irOnFile410(file){ if(!file) return; IR.net410File = file; irRenderView(); }
+function irOnDropFile410(e){ e.preventDefault(); const file = e.dataTransfer.files[0]; if(file) irOnFile410(file); }
+function irRemoveFile410(){ IR.net410File = null; irRenderView(); }
+function irProcessar410(){
+  if(IR.net410Processing || !IR.net410File) return Promise.resolve(false);
+  IR.net410Processing = true; IR.net410Progress = {stage:'Lendo arquivo...', pct:0};
+  irRenderView();
+  const file = IR.net410File;
+  let _fim; const _p = new Promise(r=>{ _fim = r; });
+  file.arrayBuffer().then(buf410=>{
+    const worker = irNovoWorker();
+    worker.onmessage = async (e)=>{
+      const msg = e.data;
+      if(msg.type==='progress'){ IR.net410Progress = {stage:msg.stage, pct:msg.pct}; irUpdateProgressUI410(); }
+      else if(msg.type==='error410'){
+        IR.net410Processing=false; worker.terminate();
+        irShowToast('Erro no processamento da QRY410: '+msg.message, true); irRenderView(); _fim(false);
+      } else if(msg.type==='done410'){
+        IR.net410Processing = false; worker.terminate();
+        for(const ano of msg.anos) await irSaveNet410(ano, msg.resumos[ano]);
+        // Tudo que foi derivado da 410 antiga precisa cair aqui, senão a tela
+        // segue mostrando o número da importação anterior até dar F5.
+        IR.div410Cache = null;
+        IR.est390Meta = await irGetEstoqueMeta();
+        IR.est390Ficha = await irGetConfig('estoque390-ficha');
+        IR.net410Anos = await irGetAllNet410Anos();
+        IR.net410File = null;
+        IR.net410AnoSel = msg.anos[0];
+        IR.net410Data = await irGetNet410(IR.net410AnoSel);
+        // A prov. duplicidade sai da 410: sem zerar o cache, a coluna continua
+        // mostrando o número da importação anterior até dar F5.
+        IR._transGanhos = null; IR._transGanhoLocal = null; IR._transGanhosDiag = null;
+        irShowToast('✓ QRY410 processada: '+msg.anos.map(a=>a+'').join(', ')+'.');
+        irRenderView(); _fim(true);
+      }
+    };
+    worker.onerror = (err)=>{ IR.net410Processing=false; irShowToast('Erro no worker (QRY410): '+err.message, true); irRenderView(); _fim(false); };
+    worker.postMessage({type:'process410', buf410}, [buf410]);
+  }).catch(err=>{
+    IR.net410Processing=false; irShowToast('Erro ao ler arquivo: '+err.message, true); irRenderView(); _fim(false);
+  });
+  return _p;
+}
+function irUpdateProgressUI410(){
+  const stageEl = document.querySelector('.progress-stage');
+  const fillEl = document.querySelector('.progress-fill');
+  if(stageEl && fillEl){ stageEl.textContent = IR.net410Progress.stage; fillEl.style.width = IR.net410Progress.pct+'%'; }
+  else irRenderView();
+}
+function irNet410UltimoMovimento(d){
+  const dias = (d && d.porDia) || [];
+  return dias.length ? dias[dias.length-1].dia : null;
+}
+function irAvulsaEstado(id){
+  if(id==='390'){
+    const f = IR.est390Ficha;
+    return f ? irFmtInt(f.locais)+' endereços · '+irFmtInt(f.itens)+' itens · '+irFmtDate(f.importadoEm) : 'nunca importada';
+  }
+  if(id==='160'){
+    const m = IR.est390Meta;
+    return (m && m.fonte==='160')
+      ? irFmtInt(m.locais)+' endereços · '+irFmtInt(m.pecasTotal)+' peças · '+irFmtDate(m.importadoEm)
+      : 'nunca importada';
+  }
+  const anos = IR.net410Anos || [];
+  if(!anos.length) return 'nunca importada';
+  // Linhas lidas e hora da importação. É o que responde "reimportei e o número não
+  // mudou": se o total de linhas sai igual duas vezes seguidas, o arquivo é o
+  // mesmo — a planilha atualizou a consulta mas não foi salva, ou a extração não
+  // trouxe nada novo. Sem esse número, não dá pra separar isso de um bug na tela.
+  const d = IR.net410Data;
+  const partes = ['anos: '+anos.join(', ')];
+  if(d && d.totalLinhas != null) partes.push(irFmtInt(d.totalLinhas)+' linhas em '+d.ano);
+  // Data do movimento mais recente DENTRO do arquivo. É o que responde de vez
+  // "reimportei e não mudou": a 410 vem de um dataflow com atualização própria,
+  // então o arquivo pode estar salvo hoje e mesmo assim não ter movimento novo.
+  // Sem esse dado, a única saída era abrir a planilha e procurar a última data.
+  const ultimo = irNet410UltimoMovimento(d);
+  if(ultimo) partes.push('movimento até '+irFmtDate(ultimo));
+  if(d && d.processedAt) partes.push('lida '+irFmtDataHora(d.processedAt));
+  return partes.join(' · ');
+}
+function irRenderBasesAvulsas(){
+  const temFicha = !!(IR._itemInfo && IR._itemInfo.size);
+  const cartao = b=>{
+    const arq = b.arquivo(), rodando = b.rodando(), prog = b.prog();
+    return `<div class="av-card ${arq?'has-file':''}">
+      <div class="av-top">
+        <span class="av-icone">${b.icone}</span>
+        <div class="av-nome"><strong>${irEsc(b.titulo)}</strong><span>${irEsc(b.sub)}</span></div>
+      </div>
+      <div class="av-estado">${irEsc(irAvulsaEstado(b.id))}</div>
+      <input type="file" id="${b.input}" accept=".xlsx,.xls" style="display:none" onchange="${b.onFile}(this.files[0])">
+      ${rodando ? `
+        <div class="progress-wrap av-prog">
+          <div class="progress-stage" id="${b.idStage}">${irEsc(prog.stage)}</div>
+          <div class="progress-track"><div class="progress-fill orange" id="${b.idFill}" style="width:${prog.pct}%"></div></div>
+        </div>`
+      : arq ? `
+        <div class="av-arquivo mono">${irEsc(arq.name)}</div>
+        <div class="av-acoes">
+          <button class="btn btn-primary" onclick="${b.processa}()">${irEsc(b.botao)}</button>
+          <button class="btn-link" onclick="${b.remove}()">Remover</button>
+        </div>`
+      : `<div class="av-acoes"><button class="btn btn-secondary" onclick="document.getElementById('${b.input}').click()">Selecionar</button></div>`}
+      ${b.id==='160' && !temFicha ? `<p class="av-aviso">Importe a QRY0390 antes: o valor e o LOG saem de lá.</p>` : ''}
+    </div>`;
+  };
+  return `<div class="panel">
+    <div class="ofe-head"><h3>Bases do transitório</h3></div>
+    <div class="av-grid" ondragover="event.preventDefault()">${IR_AVULSAS.map(cartao).join('')}</div>
+  </div>`;
+}
+
+/* ============================================================
    SHELL
    ============================================================
    Uma tela só: não há aba pra trocar. O que existia de navegação no Inventário
    (ciclo ativo, filtro de mês, troca de aba) não faz sentido aqui — transitório
    não é do ciclo, é do estoque de agora. */
+const IR_TELAS = {
+  transitorios:['Gestão de Transitórios','Estoque parado fora do picking, por setor responsável.'],
+  importacao:['Importação','QRY0390, QRY0160 e QRY410 — as bases do transitório.']
+};
 function irRenderView(){
   const raiz = document.getElementById('viewRoot');
   if(!raiz) return;
-  raiz.innerHTML = IR.initErro
-    ? irEmptyState('Não consegui abrir o banco do navegador', IR.initErro, null, null)
-    : irRenderTransitorios();
+  if(IR.initErro){
+    raiz.innerHTML = irEmptyState('Não consegui abrir o banco do navegador', IR.initErro, null, null);
+    return;
+  }
+  raiz.innerHTML = IR.tela==='importacao' ? irRenderImportacao() : irRenderTransitorios();
 }
-/* A tela de transitórios oferece "ir importar" quando não há estoque carregado.
-   Quem importa a QRY0390 é o Inventário, então o botão leva pra lá em vez de
-   trocar de aba — aqui não existe aba pra trocar. */
-function irSwitchTab(){ location.href = '../inventario-rotativo/'; }
+function irRenderImportacao(){
+  return irRenderBasesAvulsas();
+}
+// Duas telas só: transitórios e importação. O nome irSwitchTab é o mesmo do
+// Inventário de propósito — é o que a tela de transitórios chama no estado vazio.
+function irSwitchTab(tela){
+  IR.tela = (tela==='importacao') ? 'importacao' : 'transitorios';
+  document.querySelectorAll('.nav-item[data-tab]').forEach(b=>b.classList.toggle('active', b.dataset.tab===IR.tela));
+  const [titulo, sub] = IR_TELAS[IR.tela];
+  const t = document.getElementById('tabTitle'), s2 = document.getElementById('tabSubtitle');
+  if(t) t.textContent = titulo;
+  if(s2) s2.textContent = sub;
+  irCloseSidebarMobile();
+  irRenderView();
+}
 async function irInit(){
   const temaSalvo = localStorage.getItem('ir-theme');
   if(temaSalvo) document.documentElement.setAttribute('data-theme', temaSalvo);
@@ -968,6 +1209,12 @@ async function irInit(){
     IR.transSetores = await irSeedTransSetoresIfEmpty();
     IR.transNomes = await irGetConfig('transitorio-nomes') || {};
     IR.transEmail = await irGetConfig('transitorio-email');
+    IR.est390Ficha = await irGetConfig('estoque390-ficha');
+    IR.net410Anos = await irGetAllNet410Anos();
+    if(IR.net410Anos.length){
+      IR.net410AnoSel = IR.net410Anos[0];
+      IR.net410Data = await irGetNet410(IR.net410AnoSel);
+    }
   }catch(e){
     console.error('Falha ao iniciar', e);
     IR.initErro = (e && (e.name ? e.name+': '+e.message : e.message)) || String(e);
