@@ -46,6 +46,11 @@ const IR = {
   transEmail:null, transEmailAberto:false,
   pastaHandle:null, pastaArquivos:null, pastaUltimo:null, pastaPerm:null,
   pastaProcessando:false, pastaVarridoEm:null, pastaErro:null,
+  // Varredura completa: TODOS os arquivos de cada base, não só o mais recente.
+  // É o que permite enxergar vários ciclos de uma vez na mesma pasta.
+  pastaTodos:null, pastaCiclos:null, pastaDeteccao:null, pastaImportados:null,
+  pastaLendoCiclos:false, pastaFilaAtual:null, pastaAnosFechados:null,
+  importManualAberto:false,
   est390Meta:null, est390Ficha:null, est390Locais:null, transSetores:null, transExpandido:null,
   est160File:null, est160Processing:false, est160Progress:{stage:'', pct:0},
   audIgnorarVirtuais:true, audPrefixos:null, transNomes:null,
@@ -507,8 +512,9 @@ function irRenderImportacao(){
   return `
     ${irRenderAvisoJanela()}
     ${irRenderPastaPanel()}
-    <div class="panel" ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)">
-      <h3>Ciclo rotativo</h3>
+    <details class="panel imp-manual" ${IR.pastaHandle && IR.pastaPerm==='granted' ? '' : 'open'}
+        ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)">
+      <summary>Importar planilhas à mão${IR.pastaHandle ? ' (sem usar a pasta conectada)' : ''}</summary>
       <input type="file" id="ir-file-all" accept=".xlsx,.xls" multiple style="display:none" onchange="irOnPickMultiAll(this.files)">
       <div class="imp-drop" ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)"
            onclick="document.getElementById('ir-file-all').click()">
@@ -544,7 +550,7 @@ function irRenderImportacao(){
           ? `<div class="form-actions"><button class="btn btn-primary" style="font-size:14px;padding:11px 28px;" onclick="irProcessar()">PROCESSAR CICLO</button></div>`
           : `<p class="field-hint" style="margin-top:14px;">Faltam ${faltando.map(t=>irEsc(t.label)).join(', ')} pra liberar o processamento.</p>`
       }
-    </div>
+    </details>
     ${irRenderBasesAvulsas()}
     ${(()=>{ const n = irItensSemPrecoResumo();
       return n ? `<p class="field-hint imp-sem-preco">⚠️ ${irFmtInt(n)} itens divergiram em peça e ficaram sem preço — o valor divergente deles sai R$ 0,00 até a valoração ser corrigida na SIGEQ278 ou na ZBIQ0051.</p>` : ''; })()}
@@ -725,16 +731,17 @@ function irOnDropMulti(e){
 function irOnPickMultiAll(fileList){
   irClassifyAndAssignFiles(Array.from(fileList || []));
 }
-async function irProcessar(){
-  if(IR.processing) return;
-  const f = IR.files;
-  const files843 = f.f843.filter(Boolean), filesCong = f.fCong.filter(Boolean),
-        files278 = f.f278.filter(Boolean), files051 = f.f051.filter(Boolean);
-  if(!(files843.length && filesCong.length && files278.length && files051.length)) return;
-  const numero = parseInt(document.getElementById('ir-inp-ciclo').value, 10);
-  const dataAbertura = document.getElementById('ir-inp-abertura').value;
-  const dataPrevistaTermino = document.getElementById('ir-inp-termino').value;
-  if(!numero || !dataAbertura){ irShowToast('Informe o número do ciclo e a data de abertura.', true); return; }
+/* Processa UM ciclo. Separado da tela de propósito: a importação por pasta
+   precisa rodar vários ciclos em fila, um atrás do outro, sem ler input nenhum.
+   Devolve uma promessa que resolve true/false — é o que a fila espera pra saber
+   se continua ou para. */
+function irProcessarCiclo(op){
+  if(IR.processing) return Promise.resolve(false);
+  const files843 = (op.files843||[]).filter(Boolean), filesCong = (op.filesCong||[]).filter(Boolean),
+        files278 = (op.files278||[]).filter(Boolean), files051 = (op.files051||[]).filter(Boolean);
+  if(!(files843.length && filesCong.length && files278.length && files051.length)) return Promise.resolve(false);
+  const numero = op.numero, dataAbertura = op.dataAbertura, dataPrevistaTermino = op.dataPrevistaTermino;
+  if(!numero || !dataAbertura){ irShowToast('Informe o número do ciclo e a data de abertura.', true); return Promise.resolve(false); }
 
   // Ciclo é identificado por número + ano (não só o número) — evita que
   // "Ciclo 1" de um ano novo sobrescreva o "Ciclo 1" de um ano anterior.
@@ -749,9 +756,11 @@ async function irProcessar(){
 
   IR.processing = true; IR.progress = {stage:'Lendo arquivos...', pct:0};
   irRenderView();
+  let _fim; const _p = new Promise(r=>{ _fim = r; });
+  (async ()=>{
   try{
     const [buf390, bufs843, bufsCongelada, bufs278, bufs051] = await Promise.all([
-      f.f390 ? f.f390.arrayBuffer() : Promise.resolve(null),
+      op.f390 ? op.f390.arrayBuffer() : Promise.resolve(null),
       Promise.all(files843.map(file=>file.arrayBuffer())),
       Promise.all(filesCong.map(file=>file.arrayBuffer())),
       Promise.all(files278.map(file=>file.arrayBuffer())),
@@ -763,7 +772,7 @@ async function irProcessar(){
       if(msg.type==='progress'){ IR.progress = {stage:msg.stage, pct:msg.pct}; irUpdateProgressUI(); }
       else if(msg.type==='error'){
         IR.processing=false; worker.terminate();
-        irShowToast('Erro no processamento: '+msg.message, true); irRenderView();
+        irShowToast('Erro no processamento: '+msg.message, true); irRenderView(); _fim(false);
       } else if(msg.type==='done'){
         IR.processing = false; worker.terminate();
         await irSaveCiclo(ciclo);
@@ -777,23 +786,38 @@ async function irProcessar(){
           if(!velho.dataEncerramento) velho.dataEncerramento = ciclo.dataAbertura;
           await irSaveCiclo(velho);
         }
-        IR.files = {f390:null, f843:[null,null,null,null], fCong:[null,null,null,null], f278:[null,null,null,null], f051:[null,null,null,null]};
+        if(op.limparFiles) IR.files = {f390:null, f843:[null,null,null,null], fCong:[null,null,null,null], f278:[null,null,null,null], f051:[null,null,null,null]};
         IR.ciclos = await irGetAllCiclos();
         IR.cicloAtivo = IR.ciclos.find(c=>c.id===cicloId);
         await irLoadCicloData(cicloId);
-        irShowToast('✓ Ciclo '+numero+' processado: '+irFmtInt(msg.totalLocais)+' locais, '+irFmtInt(msg.totalDivergencias)+' itens divergentes.');
-        irSwitchTab('dashboard');
+        irShowToast('✓ Ciclo '+numero+'/'+anoNovo+' processado: '+irFmtInt(msg.totalLocais)+' locais, '+irFmtInt(msg.totalDivergencias)+' itens divergentes.');
+        if(op.abrirDashboard) irSwitchTab('dashboard'); else irRenderView();
+        _fim(true);
       }
     };
-    worker.onerror = (err)=>{ IR.processing=false; irShowToast('Erro no worker: '+err.message, true); irRenderView(); };
+    worker.onerror = (err)=>{ IR.processing=false; irShowToast('Erro no worker: '+err.message, true); irRenderView(); _fim(false); };
     worker.postMessage({
       type:'process', buf390, bufs843, bufsCongelada, bufs278, bufs051,
       cicloId, cicloNumero:numero, dataAbertura, dataPrevistaTermino,
       prioridadeConfig: IR.prioridadeConfig
     }, [...(buf390 ? [buf390] : []), ...bufs843, ...bufsCongelada, ...bufs278, ...bufs051]);
   }catch(err){
-    IR.processing=false; irShowToast('Erro ao ler arquivos: '+err.message, true); irRenderView();
+    IR.processing=false; irShowToast('Erro ao ler arquivos: '+err.message, true); irRenderView(); _fim(false);
   }
+  })();
+  return _p;
+}
+// Botão PROCESSAR CICLO da importação manual: lê os campos da tela e delega.
+async function irProcessar(){
+  const f = IR.files;
+  const numero = parseInt(document.getElementById('ir-inp-ciclo').value, 10);
+  const dataAbertura = document.getElementById('ir-inp-abertura').value;
+  const dataPrevistaTermino = document.getElementById('ir-inp-termino').value;
+  return irProcessarCiclo({
+    numero, dataAbertura, dataPrevistaTermino, f390:f.f390,
+    files843:f.f843, filesCong:f.fCong, files278:f.f278, files051:f.f051,
+    limparFiles:true, abrirDashboard:true
+  });
 }
 function irUpdateProgressUI(){
   const stageEl = document.querySelector('.progress-stage');
@@ -834,7 +858,7 @@ const IR_INDICADORES_VERSION = 17; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v173';
+const IR_APP_VERSION = 'v174';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2642,7 +2666,7 @@ async function irPastaCarregar(){
     IR.pastaHandle = h;
     IR.pastaUltimo = await irGetConfig('pasta-ultimo') || {};
     IR.pastaPerm = await irPastaPermissao(h, false);
-    if(IR.pastaPerm === 'granted') await irPastaVarrer();
+    if(IR.pastaPerm === 'granted') await irPastaSincronizar();
   }catch(err){ IR.pastaErro = String(err && err.message || err); }
 }
 async function irPastaConectar(){
@@ -2651,8 +2675,8 @@ async function irPastaConectar(){
     const h = await window.showDirectoryPicker({mode:'read', id:'inv-bases'});
     IR.pastaHandle = h; IR.pastaPerm = 'granted'; IR.pastaErro = null;
     await irSetConfig('pasta-handle', h);
-    await irPastaVarrer();
     irShowToast('Pasta conectada: '+h.name);
+    await irPastaSincronizar();
   }catch(err){
     // Cancelar o seletor é AbortError e não é erro nenhum.
     if(err && err.name === 'AbortError') return;
@@ -2663,10 +2687,11 @@ async function irPastaConectar(){
 async function irPastaReautorizar(){
   if(!IR.pastaHandle) return;
   IR.pastaPerm = await irPastaPermissao(IR.pastaHandle, true);
-  if(IR.pastaPerm === 'granted') await irPastaVarrer(); else irRenderView();
+  if(IR.pastaPerm === 'granted') await irPastaSincronizar(); else irRenderView();
 }
 async function irPastaDesconectar(){
-  IR.pastaHandle = null; IR.pastaArquivos = null; IR.pastaErro = null;
+  IR.pastaHandle = null; IR.pastaArquivos = null; IR.pastaTodos = null;
+  IR.pastaCiclos = null; IR.pastaErro = null;
   await irSetConfig('pasta-handle', null);
   irRenderView();
 }
@@ -2691,8 +2716,13 @@ async function irPastaVarrer(){
   const h = IR.pastaHandle;
   if(!h) return;
   const achados = {};
+  const todos = {};
   let visitadas = 0, estourou = false;
   const guardar = (base, file, caminho)=>{
+    // Lista completa: cada ciclo tem a sua 843/congelada, e todas precisam
+    // sobreviver à varredura. O "vence o mais recente" abaixo continua valendo
+    // só para as bases fora do ciclo (390, 160, 410), que são foto única.
+    (todos[base] = todos[base] || []).push({file, pasta:caminho});
     const atual = achados[base];
     if(!atual){ achados[base] = {file, pasta:caminho, copias:1}; return; }
     achados[base].copias++;
@@ -2726,6 +2756,7 @@ async function irPastaVarrer(){
   try{
     await lerDir(h, h.name, IR_PASTA_NIVEIS);
     IR.pastaArquivos = achados;
+    IR.pastaTodos = todos;
     IR.pastaVarridoEm = new Date().toISOString();
     IR.pastaErro = estourou
       ? 'A pasta tem muitas subpastas; parei em '+IR_PASTA_MAX_DIRS+'. Se faltar alguma base, conecte uma pasta mais específica.'
@@ -2794,7 +2825,7 @@ async function irPastaAtualizar(forcar){
       slots++;
     }
     if(feitas.length) irShowToast('Atualizado: '+feitas.join(', ')+'.');
-    if(slots) irShowToast(slots+' arquivo(s) do ciclo prontos — confira o número do ciclo e clique em PROCESSAR CICLO.');
+    if(slots && !(IR.pastaCiclos||[]).length) irShowToast(slots+' arquivo(s) do ciclo prontos — confira o número do ciclo e clique em PROCESSAR CICLO.');
   } finally {
     IR.pastaProcessando = false; irRenderView();
   }
@@ -2841,28 +2872,280 @@ function irRenderPastaPanel(){
         : '<span class="pasta-tag ok">em dia</span>'}</td>
     </tr>`;
   };
+  const pendCiclos = irPastaCiclosPendentes().length;
+  const ocupado = IR.pastaProcessando || IR.processing || IR.pastaLendoCiclos;
   return `<div class="panel pasta-panel">
-    <div class="ofe-head">
-      <h3>Pasta conectada</h3>
-      <div class="ofe-acoes">
-        <button class="btn btn-secondary" onclick="irPastaVarrer()">Reler pasta</button>
-        <button class="btn btn-secondary" onclick="irPastaDesconectar()">Desconectar</button>
-      </div>
+    <div class="pc-topo">
+      <span class="pc-ic">📁</span>
+      <span class="pc-tx">
+        <strong class="mono">${irEsc(IR.pastaHandle.name)}</strong>
+        <span>${IR.pastaVarridoEm ? 'Lida às '+irEsc(new Date(IR.pastaVarridoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})) : 'Ainda não lida'}${
+          pendCiclos ? ' · '+pendCiclos+' ciclo(s) novo(s)' : ''}${
+          pend.length ? ' · '+pend.length+' base(s) fora do ciclo pra atualizar' : ''}</span>
+      </span>
+      <span class="pc-bt">
+        <button class="btn btn-primary" onclick="irPastaSincronizar()" ${ocupado?'disabled':''}>${
+          ocupado ? 'Trabalhando...' : 'Buscar novidades'}</button>
+        <button class="btn-link" onclick="irPastaConectar()">Trocar pasta</button>
+        <button class="btn-link" onclick="irPastaDesconectar()">Desconectar</button>
+      </span>
     </div>
-    <p class="field-hint"><strong class="mono">${irEsc(IR.pastaHandle.name)}</strong>${
-      IR.pastaVarridoEm ? ' · lida às '+irEsc(new Date(IR.pastaVarridoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})) : ''}</p>
     ${IR.pastaErro ? `<p class="pasta-erro">${irEsc(IR.pastaErro)}</p>` : ''}
-    <div class="table-wrap"><table class="pasta-table">
-      <thead><tr><th>Base</th><th>Arquivo na pasta</th><th>Modificado em</th><th>Situação</th></tr></thead>
-      <tbody>${IR_PASTA_BASES.map(linha).join('')}</tbody>
-    </table></div>
-    <div class="form-actions">
-      <button class="btn btn-primary" onclick="irPastaAtualizar()" ${IR.pastaProcessando||!pend.length?'disabled':''}>${
-        IR.pastaProcessando ? 'Atualizando...' : pend.length ? 'Atualizar '+pend.length+' base(s)' : 'Tudo em dia'}</button>
-      <button class="btn btn-secondary" onclick="irPastaAtualizar(true)" ${IR.pastaProcessando?'disabled':''}
-        title="Reprocessa 390, 160 e 410 mesmo que a data do arquivo não tenha mudado">Reimportar tudo</button>
-    </div>
+    ${irRenderPastaCiclos()}
+    <details class="pc-det">
+      <summary>Bases fora do ciclo (QRY0390, QRY0160, QRY410)</summary>
+      <div class="table-wrap"><table class="pasta-table">
+        <thead><tr><th>Base</th><th>Arquivo na pasta</th><th>Modificado em</th><th>Situação</th></tr></thead>
+        <tbody>${IR_PASTA_BASES.map(linha).join('')}</tbody>
+      </table></div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" onclick="irPastaAtualizar(true)" ${ocupado?'disabled':''}
+          title="Reprocessa 390, 160 e 410 mesmo que a data do arquivo não tenha mudado">Reimportar bases fora do ciclo</button>
+      </div>
+    </details>
   </div>`;
+}
+
+/* ============================================================
+   PASTA -> CICLOS (importação em lote)
+   ============================================================
+   A varredura já sabia achar as planilhas; o que ela fazia era jogar fora todas
+   menos a mais recente de cada base — e por isso a importação continuava sendo
+   ciclo a ciclo, na mão, toda vez.
+
+   Aqui a lista completa (IR.pastaTodos) é agrupada POR CICLO: cada QRY0843
+   encontrada é lida num worker, que devolve número, ano e janela de datas; as
+   843 que caem no mesmo ciclo viram partes de um grupo só. A congelada, a
+   SIGEQ278 e a ZBIQ0051 são encaixadas em cada grupo pela pasta em que estão e,
+   quando isso não decide, pela data do arquivo.
+
+   O que já foi importado fica registrado por ASSINATURA dos arquivos (nome,
+   tamanho e data). Arquivo que não mudou não reprocessa — sem isso, abrir o
+   dash reprocessaria anos de ciclo toda vez. */
+const IR_PASTA_CICLO_BASES = [
+  {id:'843',  slot:'files843',  label:'QRY0843'},
+  {id:'cong', slot:'filesCong', label:'Base Congelada'},
+  {id:'278',  slot:'files278',  label:'SIGEQ278'},
+  {id:'051',  slot:'files051',  label:'ZBIQ0051'}
+];
+function irPastaChaveArq(file){ return file.name+'|'+file.size+'|'+file.lastModified; }
+function irPastaCicloChave(g){ return g.numero+'/'+g.ano; }
+// Lê UMA 843 e devolve o ciclo dela. O resultado fica em cache pela assinatura do
+// arquivo: reler dez planilhas grandes a cada abertura do dash é caro e inútil.
+function irPastaDetectar843(file){
+  return file.arrayBuffer().then(buf=>new Promise(res=>{
+    const w = irNovoWorker();
+    w.onmessage = ev=>{ if(ev.data.type!=='done843detect') return; w.terminate(); res(ev.data); };
+    w.onerror = ()=>{ w.terminate(); res({erro:'não consegui ler o arquivo'}); };
+    w.postMessage({type:'detect843', bufs843:[buf]}, [buf]);
+  })).catch(err=>({erro:String(err && err.message || err)}));
+}
+/* Escolhe os arquivos de uma base (congelada/278/051) para um ciclo.
+
+   1. Mesma pasta da 843 — é o caso da pasta por ciclo, e o mais confiável.
+   2. Se a pasta é compartilhada por mais de um ciclo (tudo solto na raiz), a
+      pasta não distingue nada: vale a data do arquivo.
+   3. A congelada é do ciclo: fora da janela dele, não serve. A 278 e a 051 são
+      tabelas de preço/estrutura e valem a mais recente até o fim do ciclo. */
+function irPastaEscolherBase(baseId, g, pastasCompartilhadas, pastasDeOutros){
+  let lista = (IR.pastaTodos||{})[baseId] || [];
+  if(!lista.length) return [];
+  const compartilhada = Array.from(g.pastas).some(p=>pastasCompartilhadas.has(p));
+  if(!compartilhada){
+    const mesma = lista.filter(a=>g.pastas.has(a.pasta));
+    if(mesma.length) return mesma;
+    /* Arquivo que mora na pasta de OUTRO ciclo é daquele ciclo, não deste — sem
+       isso, um ciclo sem congelada roubava a congelada do ciclo seguinte e
+       processava com a base errada, o que é pior do que não processar. */
+    lista = lista.filter(a=>!pastasDeOutros.has(a.pasta));
+    if(!lista.length) return [];
+  }
+  const dia = 86400000;
+  const inicio = new Date(g.dataAbertura+'T00:00:00').getTime();
+  const fim = new Date((g.dataPrevistaTermino||g.dataAbertura)+'T23:59:59').getTime() + 60*dia;
+  const ate = lista.filter(a=>a.file.lastModified <= fim);
+  const cand = ate.length ? ate : lista;
+  const maisNovo = arr => arr.slice().sort((a,b)=>b.file.lastModified-a.file.lastModified)[0];
+  if(baseId === 'cong'){
+    const janela = cand.filter(a=>a.file.lastModified >= inicio - 30*dia);
+    return janela.length ? [maisNovo(janela)] : [];
+  }
+  return [maisNovo(cand)];
+}
+// Monta IR.pastaCiclos a partir da varredura. Não processa nada.
+async function irPastaMapearCiclos(){
+  const todos = IR.pastaTodos || {};
+  const lista843 = todos['843'] || [];
+  IR.pastaLendoCiclos = true; irRenderView();
+  try{
+    if(IR.pastaDeteccao == null) IR.pastaDeteccao = (await irGetConfig('pasta-deteccao')) || {};
+    if(IR.pastaImportados == null) IR.pastaImportados = (await irGetConfig('pasta-ciclos')) || {};
+    const cache = IR.pastaDeteccao;
+    let mudouCache = false;
+    const grupos = new Map();
+    for(const arq of lista843){
+      const chave = irPastaChaveArq(arq.file);
+      let det = cache[chave];
+      if(!det){ det = await irPastaDetectar843(arq.file); cache[chave] = det; mudouCache = true; }
+      if(det.erro || !det.numero || !det.ano) continue;
+      const k = det.numero+'/'+det.ano;
+      let g = grupos.get(k);
+      if(!g){
+        g = {numero:det.numero, ano:det.ano, dataAbertura:det.dataAbertura,
+             dataPrevistaTermino:det.dataPrevistaTermino, origem:det.origem,
+             pastas:new Set(), arquivos:{'843':[]}};
+        grupos.set(k, g);
+      }
+      if(det.dataAbertura < g.dataAbertura) g.dataAbertura = det.dataAbertura;
+      if(det.dataPrevistaTermino > g.dataPrevistaTermino) g.dataPrevistaTermino = det.dataPrevistaTermino;
+      g.pastas.add(arq.pasta);
+      g.arquivos['843'].push(arq);
+    }
+    // Pasta que guarda 843 de mais de um ciclo não serve pra decidir nada.
+    const contaPorPasta = new Map();
+    for(const g of grupos.values()){
+      for(const p of g.pastas) contaPorPasta.set(p, (contaPorPasta.get(p)||0)+1);
+    }
+    const compartilhadas = new Set(Array.from(contaPorPasta.entries()).filter(([,n])=>n>1).map(([p])=>p));
+    for(const g of grupos.values()){
+      const deOutros = new Set();
+      for(const outro of grupos.values()){
+        if(outro === g) continue;
+        for(const p of outro.pastas) if(!g.pastas.has(p)) deOutros.add(p);
+      }
+      for(const b of IR_PASTA_CICLO_BASES){
+        if(b.id === '843') continue;
+        g.arquivos[b.id] = irPastaEscolherBase(b.id, g, compartilhadas, deOutros);
+      }
+      g.assinatura = IR_PASTA_CICLO_BASES
+        .map(b=>(g.arquivos[b.id]||[]).map(a=>irPastaChaveArq(a.file)).sort().join(','))
+        .join(' :: ');
+    }
+    IR.pastaCiclos = Array.from(grupos.values())
+      .sort((a,b)=>(a.ano-b.ano) || (a.numero-b.numero));
+    if(mudouCache) await irSetConfig('pasta-deteccao', cache);
+  }catch(err){
+    IR.pastaErro = 'Não consegui identificar os ciclos da pasta: '+(err && err.message || err);
+  } finally {
+    IR.pastaLendoCiclos = false; irRenderView();
+  }
+}
+function irPastaCicloFaltando(g){
+  return IR_PASTA_CICLO_BASES.filter(b=>!(g.arquivos[b.id]||[]).length).map(b=>b.label);
+}
+function irPastaCicloEstado(g){
+  if(IR.pastaFilaAtual === irPastaCicloChave(g)) return 'processando';
+  if(irPastaCicloFaltando(g).length) return 'incompleto';
+  const reg = (IR.pastaImportados||{})[irPastaCicloChave(g)];
+  return reg && reg.assinatura === g.assinatura ? 'importado' : 'pendente';
+}
+async function irPastaMarcarCiclo(g){
+  IR.pastaImportados = Object.assign({}, IR.pastaImportados||{}, {
+    [irPastaCicloChave(g)]: {assinatura:g.assinatura, importadoEm:new Date().toISOString()}
+  });
+  await irSetConfig('pasta-ciclos', IR.pastaImportados);
+}
+function irPastaCiclosPendentes(){
+  return (IR.pastaCiclos||[]).filter(g=>irPastaCicloEstado(g)==='pendente');
+}
+/* A fila. Do ciclo mais antigo pro mais novo — é a ordem que o encerramento
+   automático espera (processar um ciclo fecha os anteriores). Um erro para a
+   fila: insistir nos seguintes só empilha mensagem de erro. */
+async function irPastaProcessarCiclos(forcarChave){
+  if(IR.pastaProcessando || IR.processing) return;
+  const fila = (IR.pastaCiclos||[]).filter(g=>{
+    if(irPastaCicloFaltando(g).length) return false;
+    return forcarChave ? irPastaCicloChave(g)===forcarChave : irPastaCicloEstado(g)==='pendente';
+  });
+  if(!fila.length){ if(!forcarChave) irShowToast('Nenhum ciclo novo na pasta.'); return; }
+  IR.pastaProcessando = true;
+  try{
+    for(const g of fila){
+      IR.pastaFilaAtual = irPastaCicloChave(g); irRenderView();
+      const ok = await irProcessarCiclo({
+        numero:g.numero, dataAbertura:g.dataAbertura, dataPrevistaTermino:g.dataPrevistaTermino,
+        f390:null,
+        files843:g.arquivos['843'].map(a=>a.file),
+        filesCong:(g.arquivos['cong']||[]).map(a=>a.file),
+        files278:(g.arquivos['278']||[]).map(a=>a.file),
+        files051:(g.arquivos['051']||[]).map(a=>a.file),
+        limparFiles:false, abrirDashboard:false
+      });
+      if(!ok){ irShowToast('Parei no Ciclo '+irPastaCicloChave(g)+' — os seguintes não foram processados.', true); break; }
+      await irPastaMarcarCiclo(g);
+    }
+  } finally {
+    IR.pastaProcessando = false; IR.pastaFilaAtual = null; irRenderView();
+  }
+}
+/* Ponto de entrada único: relê a pasta, atualiza as bases fora do ciclo (390,
+   160, 410 — a ordem importa e quem cuida disso é o irPastaAtualizar) e só então
+   processa os ciclos novos. É o que roda ao conectar a pasta, ao abrir o dash
+   com uma pasta já conectada e no botão "Buscar novidades". */
+async function irPastaSincronizar(){
+  if(IR.pastaProcessando || IR.processing) return;
+  await irPastaVarrer();
+  if(IR.pastaPerm && IR.pastaPerm !== 'granted') return;
+  if(irPastaPendentes().length) await irPastaAtualizar();
+  await irPastaMapearCiclos();
+  await irPastaProcessarCiclos();
+}
+function irPastaAnoToggle(ano){
+  const fechados = new Set(IR.pastaAnosFechados || []);
+  if(fechados.has(ano)) fechados.delete(ano); else fechados.add(ano);
+  IR.pastaAnosFechados = Array.from(fechados);
+  irRenderView();
+}
+function irPastaCicloLinha(g){
+  const estado = irPastaCicloEstado(g);
+  const faltando = irPastaCicloFaltando(g);
+  const marca = {importado:'✓', pendente:'•', incompleto:'!', processando:'⟳'}[estado];
+  const reg = (IR.pastaImportados||{})[irPastaCicloChave(g)];
+  const partes = (g.arquivos['843']||[]).length;
+  let situacao;
+  if(estado === 'processando'){
+    // Estas duas classes são as que o irUpdateProgressUI() procura pra mexer no
+    // texto e na barra sem redesenhar a tela inteira a cada mensagem do worker.
+    situacao = `<span class="progress-stage">${irEsc(IR.progress.stage||'Processando...')}</span>
+      <span class="pc-bar"><i class="progress-fill" style="width:${IR.progress.pct||0}%"></i></span>`;
+  } else if(estado === 'incompleto'){
+    situacao = 'Falta '+irEsc(faltando.join(' e '))+' na pasta';
+  } else if(estado === 'importado'){
+    situacao = 'Importado'+(reg && reg.importadoEm ? ' em '+irEsc(new Date(reg.importadoEm).toLocaleDateString('pt-BR')) : '')
+      +' · '+partes+' planilha(s) da 843';
+  } else {
+    situacao = 'Pronto pra importar · '+partes+' planilha(s) da 843';
+  }
+  const acao = estado === 'processando' ? ''
+    : estado === 'incompleto' ? ''
+    : `<button class="btn-link" onclick="irPastaProcessarCiclos('${irPastaCicloChave(g)}')" ${IR.pastaProcessando?'disabled':''}>${estado==='importado'?'Reprocessar':'Importar'}</button>`;
+  return `<div class="pc-linha ${estado}">
+    <span class="pc-mk">${marca}</span>
+    <span class="pc-nm"><strong>Ciclo ${g.numero}/${g.ano}</strong>
+      <em>${irEsc(irFmtDate(g.dataAbertura))} a ${irEsc(irFmtDate(g.dataPrevistaTermino))}</em></span>
+    <span class="pc-st">${situacao}</span>
+    <span class="pc-ac">${acao}</span>
+  </div>`;
+}
+function irRenderPastaCiclos(){
+  const ciclos = IR.pastaCiclos || [];
+  if(IR.pastaLendoCiclos && !ciclos.length) return `<p class="field-hint">Lendo as planilhas da pasta pra identificar os ciclos...</p>`;
+  if(!ciclos.length) return `<p class="field-hint">Nenhuma QRY0843 reconhecida na pasta. Confira se o nome do arquivo tem "843".</p>`;
+  const anos = Array.from(new Set(ciclos.map(g=>g.ano))).sort((a,b)=>b-a);
+  const anoCorrente = anos[0];
+  const fechados = new Set(IR.pastaAnosFechados || []);
+  return anos.map(ano=>{
+    const doAno = ciclos.filter(g=>g.ano===ano).sort((a,b)=>b.numero-a.numero);
+    const aberto = ano===anoCorrente ? !fechados.has(ano) : fechados.has(ano);
+    const importados = doAno.filter(g=>irPastaCicloEstado(g)==='importado').length;
+    if(!aberto){
+      return `<div class="pc-ano-fechado" onclick="irPastaAnoToggle(${ano})">
+        <strong>› ${ano}</strong><span>${importados} de ${doAno.length} ciclo(s) importado(s)</span></div>`;
+    }
+    return `<div class="pc-ano" onclick="irPastaAnoToggle(${ano})"><h4>${ano}</h4>
+        <span>${ano===anoCorrente?'ano corrente':''}</span></div>
+      <div class="pc-lista">${doAno.map(irPastaCicloLinha).join('')}</div>`;
+  }).join('');
 }
 
 /* ---------- IMPORTAÇÃO DA QRY0160 (PENDÊNCIA DE MOVIMENTAÇÃO) ---------- */

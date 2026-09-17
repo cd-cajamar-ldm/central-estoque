@@ -1143,6 +1143,50 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 /* Linhas do ano que estão fora do período filtrado — visíveis, mas em segundo plano. */
 table.ofe-sub tr.ofe-fora{ opacity:.55; }
 
+/* ---------- PASTA CONECTADA: CICLOS ---------- */
+.pc-topo{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.pc-ic{ font-size:22px; line-height:1; }
+.pc-tx{ display:flex; flex-direction:column; min-width:0; }
+.pc-tx strong{ font-size:13.5px; }
+.pc-tx span{ font-size:11.5px; color:var(--ink-soft); }
+.pc-bt{ margin-left:auto; display:flex; align-items:center; gap:12px; }
+
+.pc-ano{ display:flex; align-items:baseline; gap:10px; margin:16px 0 6px; cursor:pointer; }
+.pc-ano h4{ margin:0; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.pc-ano span{ font-size:11.5px; color:var(--ink-soft); }
+.pc-ano-fechado{ display:flex; align-items:center; gap:10px; border:1px solid var(--line);
+  border-radius:10px; padding:11px 14px; margin-top:8px; font-size:12.5px; cursor:pointer; }
+.pc-ano-fechado span{ margin-left:auto; color:var(--ink-soft); font-weight:400; font-size:11.5px; }
+.pc-ano-fechado:hover{ border-color:var(--orange); }
+
+.pc-lista{ border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.pc-linha{ display:flex; align-items:center; gap:14px; padding:12px 14px;
+  border-top:1px solid var(--line); font-size:12.5px; }
+.pc-lista .pc-linha:first-child{ border-top:none; }
+.pc-mk{ width:16px; text-align:center; font-weight:800; color:var(--ink-soft); }
+.pc-linha.importado .pc-mk{ color:var(--success); }
+.pc-linha.incompleto .pc-mk{ color:var(--danger); }
+.pc-linha.processando .pc-mk{ color:var(--orange); }
+.pc-nm{ min-width:150px; }
+.pc-nm strong{ font-size:13px; }
+.pc-nm em{ display:block; font-style:normal; font-size:11px; color:var(--ink-soft); }
+.pc-st{ flex:1; min-width:0; font-size:11.5px; color:var(--ink-soft); }
+.pc-linha.incompleto .pc-st{ color:var(--danger); }
+.pc-bar{ display:block; height:5px; max-width:260px; margin-top:5px; border-radius:99px;
+  background:var(--surface2); overflow:hidden; }
+.pc-bar i{ display:block; height:100%; background:var(--orange); }
+.pc-ac{ margin-left:auto; white-space:nowrap; }
+.pc-det{ margin-top:16px; border-top:1px solid var(--line); padding-top:10px; }
+.pc-det summary{ cursor:pointer; font-size:12px; font-weight:700; color:var(--ink-soft); }
+
+/* Importação manual recolhida quando existe pasta conectada. */
+.imp-manual > summary{ cursor:pointer; font-size:13px; font-weight:800; margin-bottom:6px; }
+@media (max-width:700px){
+  .pc-linha{ flex-wrap:wrap; }
+  .pc-st{ flex-basis:100%; }
+  .pc-bt{ margin-left:0; width:100%; }
+}
+
 /* ---------- IMPORTAÇÃO COMPACTA ---------- */
 .imp-drop{
   display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center;
