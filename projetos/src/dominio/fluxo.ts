@@ -171,6 +171,52 @@ export function bordaMaisProxima(de: NoDoFluxo, para: NoDoFluxo): Ponto {
   return { x: centroDe.x + dx * escala, y: centroDe.y + dy * escala };
 }
 
+/* Alinhamento de varios blocos.
+
+   Desenhar a mao deixa tudo torto: tres caixas que deviam formar uma
+   coluna ficam com dois pixels de diferenca cada, e o olho ve. Alinhar e
+   levar todos ate a mesma referencia — a borda mais a esquerda do grupo,
+   o centro medio, a base mais baixa —, que e como funciona em qualquer
+   ferramenta de desenho. */
+export type Alinhamento = 'esquerda' | 'centro' | 'direita' | 'topo' | 'meio' | 'base';
+
+export const rotuloDoAlinhamento: Record<Alinhamento, string> = {
+  esquerda: 'Alinhar à esquerda',
+  centro: 'Centralizar na vertical',
+  direita: 'Alinhar à direita',
+  topo: 'Alinhar pelo topo',
+  meio: 'Centralizar na horizontal',
+  base: 'Alinhar pela base',
+};
+
+export function alinharNos(nos: NoDoFluxo[], ids: string[], como: Alinhamento): NoDoFluxo[] {
+  const alvo = nos.filter((n) => ids.includes(n.id));
+  /* Com um bloco so nao ha a quem se alinhar: o desenho fica como esta. */
+  if (alvo.length < 2) return nos;
+
+  const esquerda = Math.min(...alvo.map((n) => n.x));
+  const direita = Math.max(...alvo.map((n) => n.x + n.largura));
+  const topo = Math.min(...alvo.map((n) => n.y));
+  const base = Math.max(...alvo.map((n) => n.y + n.altura));
+  /* O centro do grupo e o meio entre as bordas extremas, e nao a media
+     das posicoes: com blocos de larguras diferentes, a media puxaria a
+     coluna para o lado de quem tem mais vizinhos. */
+  const centroX = (esquerda + direita) / 2;
+  const centroY = (topo + base) / 2;
+
+  return nos.map((n) => {
+    if (!ids.includes(n.id)) return n;
+    switch (como) {
+      case 'esquerda': return { ...n, x: esquerda };
+      case 'direita': return { ...n, x: direita - n.largura };
+      case 'centro': return { ...n, x: Math.round(centroX - n.largura / 2) };
+      case 'topo': return { ...n, y: topo };
+      case 'base': return { ...n, y: base - n.altura };
+      case 'meio': return { ...n, y: Math.round(centroY - n.altura / 2) };
+    }
+  });
+}
+
 export function limitesDoFluxo(fluxo: Fluxo): { largura: number; altura: number } {
   const largura = Math.max(900, ...fluxo.nos.map((n) => n.x + n.largura + 60));
   const altura = Math.max(420, ...fluxo.nos.map((n) => n.y + n.altura + 60));
