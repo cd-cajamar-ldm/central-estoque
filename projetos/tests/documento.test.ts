@@ -371,3 +371,77 @@ describe('o arquivo compartilhado abre sozinho', () => {
     expect(fluxoParaSvg(fluxo)).toContain('viewBox="0 0 900 524"');
   });
 });
+
+describe('alinhar pelo que se vê na tela', () => {
+  const caixa = (id: string, x: number, y: number, forma: 'caixa' | 'decisao' = 'caixa') => ({
+    id, texto: id, x, y, largura: 100, altura: 60, forma, cor: '#7C3AED',
+  });
+
+  it('a caixa da decisão é a do losango girado, não a do retângulo guardado', async () => {
+    const { caixaVisual } = await import('../src/dominio/fluxo');
+    const visual = caixaVisual(caixa('d', 0, 0, 'decisao'));
+    // 100x60 a 45°: 113,1 nos dois lados, crescendo a partir do centro (50, 30).
+    expect(Math.round(visual.largura)).toBe(113);
+    expect(Math.round(visual.altura)).toBe(113);
+    expect(Math.round(visual.x)).toBe(-7);
+    expect(Math.round(visual.y)).toBe(-27);
+  });
+
+  it('o giro dado a mão entra na conta', async () => {
+    const { caixaVisual, giroDo } = await import('../src/dominio/fluxo');
+    const girado = { ...caixa('a', 0, 0), rotacao: 90 };
+    expect(giroDo(girado)).toBe(90);
+    const visual = caixaVisual(girado);
+    expect(Math.round(visual.largura)).toBe(60);
+    expect(Math.round(visual.altura)).toBe(100);
+  });
+
+  it('a decisão encosta na mesma borda que a caixa, e não no retângulo dela', async () => {
+    const { alinharNos, caixaVisual } = await import('../src/dominio/fluxo');
+    const nos = [caixa('a', 40, 0), caixa('d', 300, 200, 'decisao')];
+    const depois = alinharNos(nos, ['a', 'd'], 'esquerda');
+    const bordas = depois.map((n) => Math.round(caixaVisual(n).x));
+    expect(bordas[0]).toBe(bordas[1]);
+    // O x guardado da decisão não é o da borda: ele compensa o giro.
+    expect(depois[1].x).not.toBe(depois[0].x);
+  });
+
+  it('alinhar pelo topo iguala o topo do que se vê', async () => {
+    const { alinharNos, caixaVisual } = await import('../src/dominio/fluxo');
+    const nos = [caixa('a', 0, 100), caixa('d', 300, 200, 'decisao')];
+    const topos = alinharNos(nos, ['a', 'd'], 'topo').map((n) => Math.round(caixaVisual(n).y));
+    expect(topos[0]).toBe(topos[1]);
+  });
+});
+
+describe('o bloco copiado vai para a área de transferência', () => {
+  it('o texto copiado volta como fluxo, e só o nosso', async () => {
+    const { recorteDoTexto, recorteParaTexto } = await import('../src/dominio/fluxo');
+    const recorte = {
+      nos: [{ id: 'a', texto: 'a', x: 0, y: 0, largura: 10, altura: 10, forma: 'caixa' as const, cor: '#000' }],
+      ligacoes: [],
+    };
+    const texto = recorteParaTexto(recorte);
+    expect(recorteDoTexto(texto)).toEqual(recorte);
+    // Texto qualquer copiado de outro lugar não vira bloco.
+    expect(recorteDoTexto('Tela no bseller')).toBeNull();
+    expect(recorteDoTexto('{"nos":[],"ligacoes":[]}')).toBeNull();
+    expect(recorteDoTexto('{quebrado')).toBeNull();
+  });
+});
+
+describe('alinhar não joga o grupo para fora do quadro', () => {
+  it('o losango que passaria da borda traz o grupo de volta, alinhado', async () => {
+    const { alinharNos, caixaVisual } = await import('../src/dominio/fluxo');
+    const nos = [
+      { id: 'a', texto: 'a', x: 40, y: 200, largura: 100, altura: 60, forma: 'caixa' as const, cor: '#000' },
+      { id: 'd', texto: 'd', x: 300, y: 10, largura: 100, altura: 60, forma: 'decisao' as const, cor: '#000' },
+    ];
+    const depois = alinharNos(nos, ['a', 'd'], 'topo');
+    const caixas = depois.map(caixaVisual);
+    // Alinhados entre si…
+    expect(Math.round(caixas[0].y)).toBe(Math.round(caixas[1].y));
+    // …e dentro do quadro.
+    expect(Math.min(...caixas.map((c) => c.y))).toBeGreaterThanOrEqual(0);
+  });
+});

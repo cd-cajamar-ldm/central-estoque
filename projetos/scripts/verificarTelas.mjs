@@ -535,11 +535,31 @@ if (Math.abs(xDepois[0] - xDepois[1]) > 1) {
   console.error(`FALHOU: alinhar à esquerda não igualou a borda (${xDepois[0]} / ${xDepois[1]}).`);
   process.exitCode = 1;
 }
+
 /* Copiar e colar: o par selecionado vira quatro blocos no quadro, e
    recortar tira os originais de lá. */
 const blocosDoQuadro = () => pagina.locator('[data-quadro="fluxo"] > div').count();
 const antesDaCopia = await blocosDoQuadro();
+/* Um print copiado antes não pode ganhar do bloco copiado agora: era o
+   que fazia o Ctrl+V colar "outra coisa" no lugar do bloco. */
+await pagina.evaluate(async () => {
+  const tela = document.createElement('canvas');
+  tela.width = 12; tela.height = 12;
+  tela.getContext('2d').fillRect(0, 0, 12, 12);
+  const imagem = await new Promise((pronto) => tela.toBlob(pronto, 'image/png'));
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': imagem })]);
+});
 await pagina.getByTitle('Copiar (Ctrl+C)').click();
+await pagina.waitForTimeout(300);
+await pagina.locator('[data-quadro="fluxo"]').first().focus();
+await pagina.keyboard.press('Control+v');
+await pagina.waitForTimeout(600);
+if ((await blocosDoQuadro()) !== antesDaCopia + 2) {
+  console.error('FALHOU: o Ctrl+V colou outra coisa no lugar dos blocos copiados.');
+  process.exitCode = 1;
+}
+await pagina.keyboard.press('Delete');
+await pagina.waitForTimeout(300);
 await pagina.getByTitle('Colar (Ctrl+V)').click();
 await pagina.waitForTimeout(400);
 const depoisDaColagem = await blocosDoQuadro();
@@ -576,6 +596,25 @@ if (!(await pagina.locator('[data-quadro="fluxo"] svg polygon[stroke="#2E8B57"]'
 }
 if (!(await pagina.locator('[data-quadro="fluxo"] svg polygon').count())) {
   console.error('FALHOU: o triângulo não desenhou o contorno.');
+  process.exitCode = 1;
+}
+
+/* A decisão é desenhada girada 45°: o que tem de encostar na linha é o
+   losango que se vê, e não o retângulo guardado nele. */
+const decisao = pagina.locator('[data-quadro="fluxo"] >> text=Endereço existe?').first().locator('xpath=..');
+await circulo.click();
+await triangulo.click({ modifiers: ['Shift'] });
+await decisao.click({ modifiers: ['Shift'] });
+await pagina.waitForTimeout(200);
+await pagina.getByTitle('Alinhar pelo topo').click();
+await pagina.waitForTimeout(300);
+const topos = [
+  (await circulo.boundingBox())?.y ?? 0,
+  (await triangulo.boundingBox())?.y ?? 0,
+  (await decisao.boundingBox())?.y ?? 0,
+];
+if (Math.max(...topos) - Math.min(...topos) > 2) {
+  console.error(`FALHOU: alinhar pelo topo deixou o losango fora da linha (${topos.join(' / ')}).`);
   process.exitCode = 1;
 }
 

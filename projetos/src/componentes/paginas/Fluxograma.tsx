@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   bordaMaisProxima, CORES_DO_FLUXO, ESPESSURAS, escreverFluxo, espessuraDo, fluxoVazio, lerFluxo,
   alinharNos, colarNoFluxo, limitesDoFluxo, noDeImagem, noNovo, proximaPosicao, proximoZoom,
-  recortarSelecao, rotuloDaForma, rotuloDoAlinhamento, ZOOM_PADRAO, ZOOMS, zoomValido,
+  recortarSelecao, recorteDoTexto, recorteParaTexto, rotuloDaForma, rotuloDoAlinhamento,
+  ZOOM_PADRAO, ZOOMS, zoomValido,
 } from '@/dominio/fluxo';
 import { imagemDoEvento, reduzirImagem } from '@/lib/imagemColada';
 import type { Alinhamento, Fluxo, FormaDoNo, NoDoFluxo } from '@/dominio/fluxo';
@@ -255,22 +256,30 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
 
   function copiar(recortando: boolean) {
     if (!selecionados.length) return;
-    copia.current = recortarSelecao(fluxo, selecionados);
+    const recorte = recortarSelecao(fluxo, selecionados);
+    copia.current = recorte;
     setTemCopia(true);
+    /* Vai tambem para a area de transferencia do sistema: e o que faz o
+       Ctrl+V de agora valer mais do que o print copiado meia hora atras.
+       Se o navegador recusar (permissao, pagina sem foco), a copia de
+       dentro continua valendo. */
+    void navigator.clipboard?.writeText?.(recorteParaTexto(recorte)).catch(() => { /* fica só a de dentro */ });
     if (recortando) removerNos(selecionados);
   }
 
-  function colarBlocos() {
-    if (!copia.current?.nos.length) return;
-    const { fluxo: novo, ids } = colarNoFluxo(fluxo, copia.current, PASSO_DA_COLAGEM);
+  function colarBlocos(recorte?: Fluxo) {
+    const fonte = recorte ?? copia.current;
+    if (!fonte?.nos.length) return;
+    const { fluxo: novo, ids } = colarNoFluxo(fluxo, fonte, PASSO_DA_COLAGEM);
     gravar(novo);
     setSelecionados(ids);
     /* Colar de novo cai mais adiante, e nao de volta no mesmo lugar: e o
        que se espera quando se cola tres vezes seguidas. */
     copia.current = {
-      ...copia.current,
-      nos: copia.current.nos.map((n) => ({ ...n, x: n.x + PASSO_DA_COLAGEM, y: n.y + PASSO_DA_COLAGEM })),
+      ...fonte,
+      nos: fonte.nos.map((n) => ({ ...n, x: n.x + PASSO_DA_COLAGEM, y: n.y + PASSO_DA_COLAGEM })),
     };
+    setTemCopia(true);
   }
 
   function ligar(paraId: string) {
@@ -291,10 +300,23 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
      como qualquer outro. */
   async function colar(evento: React.ClipboardEvent) {
     if (!editando) return;
+
+    /* Ordem das perguntas: primeiro "isto e um bloco deste quadro?".
+       Copiar um bloco escreve na area do sistema, entao um bloco copiado
+       agora chega aqui na frente de qualquer print copiado antes — era
+       justamente o print velho que colava no lugar do bloco. */
+    const texto = evento.clipboardData?.getData('text/plain') ?? '';
+    const doSistema = recorteDoTexto(texto);
+    if (doSistema?.nos.length) {
+      evento.preventDefault();
+      colarBlocos(doSistema);
+      return;
+    }
+
     const arquivo = imagemDoEvento(evento);
     if (!arquivo) {
-      /* Sem imagem na area do sistema, o Ctrl+V cola o que foi copiado
-         aqui dentro. */
+      /* Sem imagem e sem bloco na area do sistema, vale o que foi
+         copiado aqui dentro (o navegador pode ter recusado a escrita). */
       if (copia.current?.nos.length) {
         evento.preventDefault();
         colarBlocos();
@@ -603,7 +625,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
             >Recortar</button>
             <button
               className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro disabled:opacity-40"
-              onClick={colarBlocos} disabled={!temCopia} title="Colar (Ctrl+V)"
+              onClick={() => colarBlocos()} disabled={!temCopia} title="Colar (Ctrl+V)"
             >Colar</button>
           </span>
 
@@ -739,15 +761,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
                 onClick={() => removerNos([noSelecionado.id])}
               >Excluir bloco</button>
             </>
-          ) : (
-            <span className="text-[11px] text-tinta-suave">
-              Clique num bloco para editar o texto, mudar a cor ou ligar a outro. Arraste ou use as
-              setas do teclado para mover, Delete para apagar o que estiver selecionado, Ctrl+V
-              para colar um print e Ctrl+Z para desfazer. Shift+clique escolhe vários blocos (Ctrl+A
-              pega todos), a barra alinha o grupo, e Ctrl+C, Ctrl+X e Ctrl+V copiam, recortam e
-              colam os blocos escolhidos.
-            </span>
-          )}
+          ) : null}
         </div>
       )}
 

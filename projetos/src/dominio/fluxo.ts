@@ -189,32 +189,75 @@ export const rotuloDoAlinhamento: Record<Alinhamento, string> = {
   base: 'Alinhar pela base',
 };
 
+/* O giro com que o bloco aparece na tela: a decisao ja nasce virada 45
+   graus pela forma, e por cima disso vem o giro dado a mao. */
+export const giroDo = (no: NoDoFluxo): number => (no.forma === 'decisao' ? 45 : 0) + (no.rotacao ?? 0);
+
+/* A caixa que o bloco ocupa na tela, e nao o retangulo guardado nele.
+
+   Um losango de 170x96 girado 45 graus ocupa 188x188 na tela, e o canto
+   de cima fica bem acima do y guardado. Alinhar pelo retangulo do modelo
+   deixava a decisao visivelmente fora da linha das caixas — para quem
+   esta olhando, o alinhamento simplesmente nao funcionava. */
+export function caixaVisual(no: NoDoFluxo): { x: number; y: number; largura: number; altura: number } {
+  const giro = (giroDo(no) * Math.PI) / 180;
+  const seno = Math.abs(Math.sin(giro));
+  const cosseno = Math.abs(Math.cos(giro));
+  const largura = no.largura * cosseno + no.altura * seno;
+  const altura = no.largura * seno + no.altura * cosseno;
+  /* O giro e em torno do centro, que nao se move: a caixa cresce para os
+     dois lados a partir dele. */
+  const centroX = no.x + no.largura / 2;
+  const centroY = no.y + no.altura / 2;
+  return { x: centroX - largura / 2, y: centroY - altura / 2, largura, altura };
+}
+
 export function alinharNos(nos: NoDoFluxo[], ids: string[], como: Alinhamento): NoDoFluxo[] {
   const alvo = nos.filter((n) => ids.includes(n.id));
   /* Com um bloco so nao ha a quem se alinhar: o desenho fica como esta. */
   if (alvo.length < 2) return nos;
 
-  const esquerda = Math.min(...alvo.map((n) => n.x));
-  const direita = Math.max(...alvo.map((n) => n.x + n.largura));
-  const topo = Math.min(...alvo.map((n) => n.y));
-  const base = Math.max(...alvo.map((n) => n.y + n.altura));
+  const caixas = alvo.map(caixaVisual);
+  const esquerda = Math.min(...caixas.map((c) => c.x));
+  const direita = Math.max(...caixas.map((c) => c.x + c.largura));
+  const topo = Math.min(...caixas.map((c) => c.y));
+  const base = Math.max(...caixas.map((c) => c.y + c.altura));
   /* O centro do grupo e o meio entre as bordas extremas, e nao a media
      das posicoes: com blocos de larguras diferentes, a media puxaria a
      coluna para o lado de quem tem mais vizinhos. */
   const centroX = (esquerda + direita) / 2;
   const centroY = (topo + base) / 2;
 
-  return nos.map((n) => {
+  const movidos = nos.map((n) => {
     if (!ids.includes(n.id)) return n;
+    const caixa = caixaVisual(n);
+    /* O que se alinha e a caixa da tela; o x/y guardado anda junto com
+       ela, pela diferenca entre os dois. */
+    const folgaX = n.x - caixa.x;
+    const folgaY = n.y - caixa.y;
+    const emX = (novoX: number) => ({ ...n, x: Math.round(novoX + folgaX) });
+    const emY = (novoY: number) => ({ ...n, y: Math.round(novoY + folgaY) });
     switch (como) {
-      case 'esquerda': return { ...n, x: esquerda };
-      case 'direita': return { ...n, x: direita - n.largura };
-      case 'centro': return { ...n, x: Math.round(centroX - n.largura / 2) };
-      case 'topo': return { ...n, y: topo };
-      case 'base': return { ...n, y: base - n.altura };
-      case 'meio': return { ...n, y: Math.round(centroY - n.altura / 2) };
+      case 'esquerda': return emX(esquerda);
+      case 'direita': return emX(direita - caixa.largura);
+      case 'centro': return emX(centroX - caixa.largura / 2);
+      case 'topo': return emY(topo);
+      case 'base': return emY(base - caixa.altura);
+      case 'meio': return emY(centroY - caixa.altura / 2);
     }
   });
+
+  /* Alinhar pela borda de um losango pode jogar o grupo para fora do
+     quadro — a caixa girada comeca acima do y guardado, e ali nao ha
+     como clicar no bloco de novo. Quando isso acontece, o grupo inteiro
+     volta para dentro pelo mesmo tanto, e o alinhamento se mantem. */
+  const alinhados = movidos.filter((n) => ids.includes(n.id)).map(caixaVisual);
+  const faltaX = Math.max(0, -Math.min(...alinhados.map((c) => c.x)));
+  const faltaY = Math.max(0, -Math.min(...alinhados.map((c) => c.y)));
+  if (!faltaX && !faltaY) return movidos;
+  return movidos.map((n) => (ids.includes(n.id)
+    ? { ...n, x: Math.round(n.x + faltaX), y: Math.round(n.y + faltaY) }
+    : n));
 }
 
 /* Copiar, recortar e colar dentro do quadro.
@@ -231,6 +274,31 @@ export function recortarSelecao(fluxo: Fluxo, ids: string[]): Fluxo {
     nos,
     ligacoes: fluxo.ligacoes.filter((l) => ids.includes(l.de) && ids.includes(l.para)),
   };
+}
+
+/* O recorte tambem vai para a area de transferencia do sistema, como
+   texto. Sem isso, um print copiado antes continuava valendo mais do que
+   o bloco copiado agora: o navegador entrega a imagem antiga junto com o
+   Ctrl+V e era ela que colava. Escrever aqui limpa a imagem de la e deixa
+   claro o que foi copiado por ultimo — e ainda permite levar um bloco de
+   uma pagina para outra. */
+const MARCA_DO_RECORTE = 'fluxo-central-estoque/1';
+
+export function recorteParaTexto(recorte: Fluxo): string {
+  return JSON.stringify({ marca: MARCA_DO_RECORTE, ...recorte });
+}
+
+export function recorteDoTexto(texto: string): Fluxo | null {
+  const limpo = texto.trim();
+  if (!limpo.startsWith('{') || !limpo.includes(MARCA_DO_RECORTE)) return null;
+  try {
+    const lido = JSON.parse(limpo) as { marca?: string } & Partial<Fluxo>;
+    if (lido.marca !== MARCA_DO_RECORTE) return null;
+    if (!Array.isArray(lido.nos) || !Array.isArray(lido.ligacoes)) return null;
+    return { nos: lido.nos, ligacoes: lido.ligacoes };
+  } catch {
+    return null;
+  }
 }
 
 export interface Colagem {
@@ -289,10 +357,13 @@ export function proximaPosicao(fluxo: Fluxo): Ponto {
    daqui para um arquivo — meia tela de vazio embaixo do desenho. */
 export function limitesJustos(fluxo: Fluxo, margem = 24): { x: number; y: number; largura: number; altura: number } {
   if (!fluxo.nos.length) return { x: 0, y: 0, largura: 2 * margem, altura: 2 * margem };
-  const x = Math.min(...fluxo.nos.map((n) => n.x)) - margem;
-  const y = Math.min(...fluxo.nos.map((n) => n.y)) - margem;
-  const direita = Math.max(...fluxo.nos.map((n) => n.x + n.largura)) + margem;
-  const base = Math.max(...fluxo.nos.map((n) => n.y + n.altura)) + margem;
+  /* Pela caixa da tela: o losango girado passa do retangulo guardado, e
+     recortar pelo retangulo cortaria as pontas dele no arquivo. */
+  const caixas = fluxo.nos.map(caixaVisual);
+  const x = Math.min(...caixas.map((c) => c.x)) - margem;
+  const y = Math.min(...caixas.map((c) => c.y)) - margem;
+  const direita = Math.max(...caixas.map((c) => c.x + c.largura)) + margem;
+  const base = Math.max(...caixas.map((c) => c.y + c.altura)) + margem;
   return { x, y, largura: direita - x, altura: base - y };
 }
 
