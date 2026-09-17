@@ -260,6 +260,65 @@ export function alinharNos(nos: NoDoFluxo[], ids: string[], como: Alinhamento): 
     : n));
 }
 
+/* Distribuir: mesma distancia entre um bloco e o proximo.
+
+   Alinhar poe todos na mesma linha; isto arruma o espaco entre eles. Sao
+   coisas diferentes e as duas fazem falta: tres caixas alinhadas com
+   80 px entre a primeira e a segunda e 200 px entre a segunda e a
+   terceira continuam parecendo tortas.
+
+   O primeiro e o ultimo ficam onde estao — eles definem o trecho —, e os
+   do meio se espalham com folgas iguais entre as bordas, e nao entre os
+   centros: com blocos de larguras diferentes, centros igualmente
+   espacados deixam os vaos visivelmente desiguais. */
+export type Eixo = 'horizontal' | 'vertical';
+
+export const rotuloDaDistribuicao: Record<Eixo, string> = {
+  horizontal: 'Mesma distância na horizontal',
+  vertical: 'Mesma distância na vertical',
+};
+
+export function distribuirNos(nos: NoDoFluxo[], ids: string[], eixo: Eixo): NoDoFluxo[] {
+  const alvo = nos.filter((n) => ids.includes(n.id));
+  /* Com dois blocos nao ha vao do meio para acertar. */
+  if (alvo.length < 3) return nos;
+
+  const deitado = eixo === 'horizontal';
+  const inicio = (c: { x: number; y: number }) => (deitado ? c.x : c.y);
+  const tamanho = (c: { largura: number; altura: number }) => (deitado ? c.largura : c.altura);
+
+  const emOrdem = alvo
+    .map((n) => ({ no: n, caixa: caixaVisual(n) }))
+    .sort((a, b) => inicio(a.caixa) - inicio(b.caixa));
+
+  const primeiro = emOrdem[0];
+  const ultimo = emOrdem[emOrdem.length - 1];
+  const trecho = inicio(ultimo.caixa) + tamanho(ultimo.caixa) - inicio(primeiro.caixa);
+  const ocupado = emOrdem.reduce((soma, item) => soma + tamanho(item.caixa), 0);
+  /* Vao negativo (blocos sobrepostos) viraria uma pilha: ali o melhor
+     que se pode fazer e encostar um no outro. */
+  const vao = Math.max(0, (trecho - ocupado) / (emOrdem.length - 1));
+
+  const posicoes = new Map<string, number>();
+  let caminhado = inicio(primeiro.caixa);
+  for (const item of emOrdem) {
+    posicoes.set(item.no.id, caminhado);
+    caminhado += tamanho(item.caixa) + vao;
+  }
+
+  return nos.map((n) => {
+    const destino = posicoes.get(n.id);
+    if (destino === undefined) return n;
+    const caixa = caixaVisual(n);
+    /* O x/y guardado anda junto com a caixa da tela, pela diferenca
+       entre os dois — o mesmo que o alinhamento faz. */
+    const folga = deitado ? n.x - caixa.x : n.y - caixa.y;
+    return deitado
+      ? { ...n, x: Math.round(destino + folga) }
+      : { ...n, y: Math.round(destino + folga) };
+  });
+}
+
 /* Copiar, recortar e colar dentro do quadro.
 
    Redesenhar a mao um bloco que ja existe — mesma cor, mesma espessura,

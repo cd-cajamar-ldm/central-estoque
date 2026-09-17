@@ -252,6 +252,14 @@ falhar pela metade. Dois tipos de bloco:
   entre as bordas extremas — e não à média das posições, que com larguras
   diferentes puxaria a coluna para o lado de quem tem mais vizinhos.
 
+  Com **três ou mais**, aparecem também os dois botões de **mesma distância**
+  (`distribuirNos`): o primeiro e o último ficam onde estão — eles definem o
+  trecho — e os do meio se espalham com folgas iguais **entre as bordas**, e não
+  entre os centros, que com larguras diferentes deixa os vãos visivelmente
+  desiguais. Alinhar e distribuir são coisas diferentes, e as duas fazem falta:
+  três caixas alinhadas com 80 px de um lado e 200 px do outro continuam
+  parecendo tortas.
+
   O que se alinha é a **caixa que aparece na tela** (`caixaVisual`), e não o
   retângulo guardado no bloco: um losango de 170×96 girado 45° ocupa 188×188 e
   começa bem acima do `y` gravado, então alinhar pelo retângulo deixava a decisão
@@ -275,6 +283,14 @@ falhar pela metade. Dois tipos de bloco:
   O recorte leva as setas **entre** os blocos copiados, e só elas — uma seta que
   sai do grupo não teria de onde sair depois de colada. A cópia entra deslocada
   30 px, e colar de novo cai mais adiante, em vez de voltar ao mesmo lugar.
+
+- **arrastar o fundo rola o quadro** — com o zoom aproximado o desenho passa da
+  janela, e a única saída era a barra de rolagem lá embaixo, longe da mão.
+  Puxando o próprio fundo, o fluxo anda para os dois lados sem sair de perto do
+  que se está desenhando; vale também fora do modo de edição, para quem só está
+  lendo. Puxar a folha não é clicar nela: a seleção continua onde estava.
+  Arrastando um bloco até a beirada, a janela acompanha sozinha, em vez de o
+  gesto morrer ali.
 
 #### Compartilhar a página
 
@@ -303,12 +319,13 @@ Três decisões sobre como o arquivo se lê:
   meia folha em branco embaixo do fluxo. O documento em Word continua no
   enquadramento de sempre, para o desenho não mudar de tamanho de uma proposta
   para a outra;
-- **o fluxo vem em tamanho real**, com rolagem lateral quando não cabe, e um
-  controle *Ajustar à largura da página* ao lado. Encolhido para caber, o texto
-  dentro das caixas fica ilegível; o desenho é vetorial, então nos dois tamanhos
-  continua nítido. O controle é um checkbox com rótulo em forma de botão, sem
-  uma linha de script: o arquivo abre em navegador de terceiro, às vezes com
-  script bloqueado. Na impressão ele some e o fluxo cabe na folha.
+- **o fluxo chega ajustado à largura da folha** (*Ajustar à largura da página*
+  já marcado), que é como se vê o fluxo inteiro de uma vez; desmarcar devolve o
+  tamanho real, com rolagem lateral, para ler o texto dentro das caixas de um
+  fluxo grande. O desenho é vetorial: nos dois tamanhos continua nítido. O
+  controle é um checkbox com rótulo em forma de botão, sem uma linha de script:
+  o arquivo abre em navegador de terceiro, às vezes com script bloqueado. Na
+  impressão ele some e o fluxo cabe na folha.
 
 Cada página tem **situação** própria: rascunho, em revisão, aprovada, concluída
 ou cancelada. O seletor fica no canto superior direito da página e grava na hora,
