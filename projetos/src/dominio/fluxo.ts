@@ -217,6 +217,57 @@ export function alinharNos(nos: NoDoFluxo[], ids: string[], como: Alinhamento): 
   });
 }
 
+/* Copiar, recortar e colar dentro do quadro.
+
+   Redesenhar a mao um bloco que ja existe — mesma cor, mesma espessura,
+   mesmo texto quase igual — e trabalho que a copia resolve. O recorte
+   leva junto as setas entre os blocos copiados (e so essas: uma seta que
+   sai do grupo nao teria de onde sair depois de colada), e a colagem
+   entra deslocada, para o bloco novo nao nascer exatamente por cima do
+   original e parecer que nada aconteceu. */
+export function recortarSelecao(fluxo: Fluxo, ids: string[]): Fluxo {
+  const nos = fluxo.nos.filter((n) => ids.includes(n.id));
+  return {
+    nos,
+    ligacoes: fluxo.ligacoes.filter((l) => ids.includes(l.de) && ids.includes(l.para)),
+  };
+}
+
+export interface Colagem {
+  fluxo: Fluxo;
+  /* Os blocos colados ja nascem selecionados: e neles que a pessoa vai
+     mexer em seguida. */
+  ids: string[];
+}
+
+export function colarNoFluxo(
+  fluxo: Fluxo,
+  recorte: Fluxo,
+  deslocamento: number,
+  novoId: () => string = () => crypto.randomUUID(),
+): Colagem {
+  if (!recorte.nos.length) return { fluxo, ids: [] };
+  /* Id novo para cada bloco, e o de-para para as setas apontarem para as
+     copias, e nao para os originais. */
+  const dePara = new Map(recorte.nos.map((n) => [n.id, novoId()]));
+  const nos = recorte.nos.map((n) => ({
+    ...n,
+    id: dePara.get(n.id) as string,
+    x: n.x + deslocamento,
+    y: n.y + deslocamento,
+  }));
+  const ligacoes = recorte.ligacoes.map((l) => ({
+    ...l,
+    id: novoId(),
+    de: dePara.get(l.de) as string,
+    para: dePara.get(l.para) as string,
+  }));
+  return {
+    fluxo: { nos: [...fluxo.nos, ...nos], ligacoes: [...fluxo.ligacoes, ...ligacoes] },
+    ids: nos.map((n) => n.id),
+  };
+}
+
 export function limitesDoFluxo(fluxo: Fluxo): { largura: number; altura: number } {
   const largura = Math.max(900, ...fluxo.nos.map((n) => n.x + n.largura + 60));
   const altura = Math.max(420, ...fluxo.nos.map((n) => n.y + n.altura + 60));
@@ -232,11 +283,32 @@ export function proximaPosicao(fluxo: Fluxo): Ponto {
   return { x: 60 + coluna * 260, y: 40 + linha * 110 };
 }
 
+/* A moldura justa em volta do desenho: onde ele comeca e onde termina,
+   com uma margem de folga. A prancheta da tela tem chao de sobra para
+   arrastar bloco, e esse chao vira papel em branco quando o fluxo sai
+   daqui para um arquivo — meia tela de vazio embaixo do desenho. */
+export function limitesJustos(fluxo: Fluxo, margem = 24): { x: number; y: number; largura: number; altura: number } {
+  if (!fluxo.nos.length) return { x: 0, y: 0, largura: 2 * margem, altura: 2 * margem };
+  const x = Math.min(...fluxo.nos.map((n) => n.x)) - margem;
+  const y = Math.min(...fluxo.nos.map((n) => n.y)) - margem;
+  const direita = Math.max(...fluxo.nos.map((n) => n.x + n.largura)) + margem;
+  const base = Math.max(...fluxo.nos.map((n) => n.y + n.altura)) + margem;
+  return { x, y, largura: direita - x, altura: base - y };
+}
+
 /* O Word nao desenha o quadro: o fluxo vira imagem. Gerar o SVG aqui,
    longe da tela, mantem o desenho do documento igual ao que se ve no
-   app e deixa a funcao testavel sem navegador. */
-export function fluxoParaSvg(fluxo: Fluxo): string {
-  const { largura, altura } = limitesDoFluxo(fluxo);
+   app e deixa a funcao testavel sem navegador.
+
+   `justo` corta o papel em branco em volta: e o que se quer num arquivo
+   que alguem vai ler. O documento em Word continua no enquadramento de
+   sempre, para o desenho nao mudar de tamanho de uma proposta para a
+   outra. */
+export function fluxoParaSvg(fluxo: Fluxo, opcoes: { justo?: boolean } = {}): string {
+  const moldura = opcoes.justo
+    ? limitesJustos(fluxo)
+    : { x: 0, y: 0, ...limitesDoFluxo(fluxo) };
+  const { largura, altura } = moldura;
   const escapar = (t: string) => t
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -288,10 +360,12 @@ export function fluxoParaSvg(fluxo: Fluxo): string {
     return forma + texto;
   }).join('');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${largura}" height="${altura}" viewBox="0 0 ${largura} ${altura}">`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${largura}" height="${altura}"`
+    + ` viewBox="${moldura.x} ${moldura.y} ${largura} ${altura}">`
     + '<defs><marker id="ponta" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">'
     + '<path d="M0,0 L9,4.5 L0,9 z" fill="#6A6F94"/></marker>'
     + '<marker id="ponta-inicio" markerWidth="9" markerHeight="9" refX="1" refY="4.5" orient="auto">'
     + '<path d="M9,0 L0,4.5 L9,9 z" fill="#6A6F94"/></marker></defs>'
-    + `<rect width="${largura}" height="${altura}" fill="#FFFFFF"/>${setas}${blocos}</svg>`;
+    + `<rect x="${moldura.x}" y="${moldura.y}" width="${largura}" height="${altura}" fill="#FFFFFF"/>`
+    + `${setas}${blocos}</svg>`;
 }

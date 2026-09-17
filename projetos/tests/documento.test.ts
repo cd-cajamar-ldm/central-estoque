@@ -265,3 +265,109 @@ describe('compartilhar a página em HTML', () => {
     expect(html).toContain('graph TD; A--&gt;B;');
   });
 });
+
+describe('copiar, recortar e colar blocos', () => {
+  const bloco = (id: string, x = 0, y = 0) => ({
+    id, texto: id, x, y, largura: 100, altura: 50, forma: 'caixa' as const, cor: '#7C3AED',
+  });
+
+  it('o recorte leva as setas entre os blocos copiados, e só elas', async () => {
+    const { recortarSelecao } = await import('../src/dominio/fluxo');
+    const fluxo = {
+      nos: [bloco('a'), bloco('b'), bloco('c')],
+      ligacoes: [
+        { id: 'l1', de: 'a', para: 'b', rotulo: '' },
+        { id: 'l2', de: 'b', para: 'c', rotulo: '' },
+      ],
+    };
+    const recorte = recortarSelecao(fluxo, ['a', 'b']);
+    expect(recorte.nos.map((n) => n.id)).toEqual(['a', 'b']);
+    // A seta para "c" ficaria sem destino depois de colada.
+    expect(recorte.ligacoes.map((l) => l.id)).toEqual(['l1']);
+  });
+
+  it('colar cria blocos novos, deslocados, com as setas apontando para as cópias', async () => {
+    const { colarNoFluxo, recortarSelecao } = await import('../src/dominio/fluxo');
+    const fluxo = {
+      nos: [bloco('a', 10, 20), bloco('b', 200, 20)],
+      ligacoes: [{ id: 'l1', de: 'a', para: 'b', rotulo: 'Sim' }],
+    };
+    let n = 0;
+    const { fluxo: depois, ids } = colarNoFluxo(
+      fluxo, recortarSelecao(fluxo, ['a', 'b']), 30, () => `novo${(n += 1)}`,
+    );
+    expect(depois.nos).toHaveLength(4);
+    expect(ids).toEqual(['novo1', 'novo2']);
+    // O original fica onde estava; a cópia entra deslocada.
+    expect(depois.nos[0]).toEqual(fluxo.nos[0]);
+    expect(depois.nos[2]).toMatchObject({ id: 'novo1', x: 40, y: 50, texto: 'a' });
+    const colada = depois.ligacoes[1];
+    expect(colada).toMatchObject({ de: 'novo1', para: 'novo2', rotulo: 'Sim' });
+    expect(colada.id).not.toBe('l1');
+  });
+
+  it('colar nada não mexe no fluxo', async () => {
+    const { colarNoFluxo } = await import('../src/dominio/fluxo');
+    const fluxo = { nos: [bloco('a')], ligacoes: [] };
+    const { fluxo: depois, ids } = colarNoFluxo(fluxo, { nos: [], ligacoes: [] }, 30);
+    expect(depois).toBe(fluxo);
+    expect(ids).toEqual([]);
+  });
+});
+
+describe('conforto de leitura do HTML compartilhado', () => {
+  it('cada fluxograma vem com o controle de ajustar à largura, sem script', async () => {
+    const { paginaParaHtml } = await import('../src/exportar/paginaHtml');
+    const { escreverFluxo, noNovo } = await import('../src/dominio/fluxo');
+    const html = paginaParaHtml({
+      titulo: 'Duas telas',
+      blocos: [
+        { id: 'b1', tipo: 'fluxo', conteudo: escreverFluxo({ nos: [noNovo('caixa', 0, 0)], ligacoes: [] }) },
+        { id: 'b2', tipo: 'fluxo', conteudo: escreverFluxo({ nos: [noNovo('caixa', 0, 0)], ligacoes: [] }) },
+      ],
+    }, (h) => h);
+    // Um controle por fluxograma, cada um com o seu id.
+    expect(html).toContain('id="ajustar-0"');
+    expect(html).toContain('for="ajustar-1"');
+    // O arquivo abre em navegador de terceiro: nada de script nele.
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('onclick');
+  });
+
+  it('o fluxo nasce em tamanho real e o controle é que o ajusta', async () => {
+    const { paginaParaHtml } = await import('../src/exportar/paginaHtml');
+    const html = paginaParaHtml({ titulo: 'x', blocos: [] }, (h) => h);
+    expect(html).toContain('.fluxo svg { display: block; height: auto; max-width: none; }');
+    expect(html).toContain('.ajustar:checked ~ .fluxo svg { max-width: 100%; }');
+  });
+});
+
+describe('o arquivo compartilhado abre sozinho', () => {
+  it('a imagem do texto entra embutida no arquivo', async () => {
+    const { embutirImagens } = await import('../src/exportar/paginaHtml');
+    const html = '<p>antes</p><img src="https://exemplo/anexos/print.png" alt="print">';
+    const buscar = async () => ({ ok: true, blob: async () => new Blob(['xyz'], { type: 'image/png' }) });
+    const saida = await embutirImagens(html, buscar as unknown as typeof fetch);
+    expect(saida).toContain('src="data:image/png;base64,');
+    expect(saida).not.toContain('https://exemplo/anexos/print.png');
+    expect(saida).toContain('<p>antes</p>');
+  });
+
+  it('imagem que não baixa fica com a URL, em vez de derrubar o compartilhar', async () => {
+    const { embutirImagens } = await import('../src/exportar/paginaHtml');
+    const html = '<img src="https://exemplo/some.png">';
+    const buscar = async () => { throw new Error('sem rede'); };
+    expect(await embutirImagens(html, buscar as unknown as typeof fetch)).toBe(html);
+  });
+
+  it('o desenho exportado é recortado no conteúdo, sem papel em branco', async () => {
+    const { fluxoParaSvg, limitesJustos, noNovo } = await import('../src/dominio/fluxo');
+    const fluxo = { nos: [{ ...noNovo('caixa', 300, 400) }], ligacoes: [] };
+    const justo = limitesJustos(fluxo);
+    // A caixa é 180x64: com 24 px de margem dos dois lados, 228x112.
+    expect(justo).toEqual({ x: 276, y: 376, largura: 228, altura: 112 });
+    expect(fluxoParaSvg(fluxo, { justo: true })).toContain('viewBox="276 376 228 112"');
+    // O documento em Word continua no enquadramento de sempre.
+    expect(fluxoParaSvg(fluxo)).toContain('viewBox="0 0 900 524"');
+  });
+});

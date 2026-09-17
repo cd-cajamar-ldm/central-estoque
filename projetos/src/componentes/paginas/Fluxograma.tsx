@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   bordaMaisProxima, CORES_DO_FLUXO, ESPESSURAS, escreverFluxo, espessuraDo, fluxoVazio, lerFluxo,
-  alinharNos, limitesDoFluxo, noDeImagem, noNovo, proximaPosicao, proximoZoom, rotuloDaForma,
-  rotuloDoAlinhamento, ZOOM_PADRAO, ZOOMS, zoomValido,
+  alinharNos, colarNoFluxo, limitesDoFluxo, noDeImagem, noNovo, proximaPosicao, proximoZoom,
+  recortarSelecao, rotuloDaForma, rotuloDoAlinhamento, ZOOM_PADRAO, ZOOMS, zoomValido,
 } from '@/dominio/fluxo';
 import { imagemDoEvento, reduzirImagem } from '@/lib/imagemColada';
 import type { Alinhamento, Fluxo, FormaDoNo, NoDoFluxo } from '@/dominio/fluxo';
@@ -240,6 +240,39 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
     gravar({ ...fluxo, nos: alinharNos(fluxo.nos, selecionados, como) });
   }
 
+  /* Copiar, recortar e colar dentro do quadro.
+
+     A area de transferencia e do proprio quadro, e nao a do sistema: o
+     Ctrl+V do sistema ja tem dono aqui (colar print do coletor), e um
+     bloco desenhado nao e texto nem imagem que o navegador saiba levar
+     de um lado para o outro. Colar so entra em acao quando nao veio
+     imagem nenhuma na area do sistema, entao um gesto nao atrapalha o
+     outro. Ela vive num ref porque ninguem na tela depende dela para
+     desenhar, so os botoes — que leem o estado ao lado. */
+  const copia = useRef<Fluxo | null>(null);
+  const [temCopia, setTemCopia] = useState(false);
+  const PASSO_DA_COLAGEM = 30;
+
+  function copiar(recortando: boolean) {
+    if (!selecionados.length) return;
+    copia.current = recortarSelecao(fluxo, selecionados);
+    setTemCopia(true);
+    if (recortando) removerNos(selecionados);
+  }
+
+  function colarBlocos() {
+    if (!copia.current?.nos.length) return;
+    const { fluxo: novo, ids } = colarNoFluxo(fluxo, copia.current, PASSO_DA_COLAGEM);
+    gravar(novo);
+    setSelecionados(ids);
+    /* Colar de novo cai mais adiante, e nao de volta no mesmo lugar: e o
+       que se espera quando se cola tres vezes seguidas. */
+    copia.current = {
+      ...copia.current,
+      nos: copia.current.nos.map((n) => ({ ...n, x: n.x + PASSO_DA_COLAGEM, y: n.y + PASSO_DA_COLAGEM })),
+    };
+  }
+
   function ligar(paraId: string) {
     if (!ligandoDe || ligandoDe === paraId) { setLigandoDe(null); return; }
     const repetida = fluxo.ligacoes.some((l) => l.de === ligandoDe && l.para === paraId);
@@ -259,7 +292,15 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
   async function colar(evento: React.ClipboardEvent) {
     if (!editando) return;
     const arquivo = imagemDoEvento(evento);
-    if (!arquivo) return;
+    if (!arquivo) {
+      /* Sem imagem na area do sistema, o Ctrl+V cola o que foi copiado
+         aqui dentro. */
+      if (copia.current?.nos.length) {
+        evento.preventDefault();
+        colarBlocos();
+      }
+      return;
+    }
     evento.preventDefault();
     setAvisoDaImagem(null);
     try {
@@ -312,6 +353,13 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
         setLigacaoSelecionada(null);
         return;
       }
+      if ((tecla === 'c' || tecla === 'x') && selecionados.length) {
+        e.preventDefault();
+        copiar(tecla === 'x');
+        return;
+      }
+      /* O Ctrl+V nao e tratado aqui: ele chega como evento de colagem,
+         onde da para ver se o sistema trouxe uma imagem junto. */
     }
 
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -541,6 +589,26 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
 
           <span className="mx-1 h-4 w-px bg-linha" />
 
+          {/* Copiar, recortar e colar tambem em botao, pelo mesmo motivo
+              dos de desfazer: o atalho existe, mas quem esta com o mouse
+              na mao quer o botao. */}
+          <span className="flex items-center gap-1">
+            <button
+              className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro disabled:opacity-40"
+              onClick={() => copiar(false)} disabled={!selecionados.length} title="Copiar (Ctrl+C)"
+            >Copiar</button>
+            <button
+              className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro disabled:opacity-40"
+              onClick={() => copiar(true)} disabled={!selecionados.length} title="Recortar (Ctrl+X)"
+            >Recortar</button>
+            <button
+              className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro disabled:opacity-40"
+              onClick={colarBlocos} disabled={!temCopia} title="Colar (Ctrl+V)"
+            >Colar</button>
+          </span>
+
+          <span className="mx-1 h-4 w-px bg-linha" />
+
           {/* Desfazer e refazer tambem em botao: quem desenha com o mouse
               nao larga dele para procurar o atalho. */}
           <span className="flex items-center gap-1">
@@ -676,7 +744,8 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
               Clique num bloco para editar o texto, mudar a cor ou ligar a outro. Arraste ou use as
               setas do teclado para mover, Delete para apagar o que estiver selecionado, Ctrl+V
               para colar um print e Ctrl+Z para desfazer. Shift+clique escolhe vários blocos (Ctrl+A
-              pega todos) e a barra alinha o grupo.
+              pega todos), a barra alinha o grupo, e Ctrl+C, Ctrl+X e Ctrl+V copiam, recortam e
+              colam os blocos escolhidos.
             </span>
           )}
         </div>
