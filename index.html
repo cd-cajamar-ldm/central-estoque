@@ -73,6 +73,7 @@
   .card-elevadores .card-top{ background:linear-gradient(135deg,#0E9488 0%,#2DD4BF 100%); }
   .card-projetos .card-top{ background:linear-gradient(135deg,#8B5CF6 0%,#C4B5FD 100%); }
   .card-transitorios .card-top{ background:linear-gradient(135deg,#D97706 0%,#FBBF24 100%); }
+  .card-multiplos .card-top{ background:linear-gradient(135deg,#BE185D 0%,#F472B6 100%); }
   /* "Em breve" fica com a cor do módulo, só esmaecida — mantém cada card
      reconhecível pela cor mesmo antes de ficar disponível. */
   .card.disabled .card-top{ filter:saturate(.4) brightness(1.12); }
@@ -97,6 +98,7 @@
   .card-elevadores .tag{ background:#E3FBF7; color:#0B7A70; }
   .card-projetos .tag{ background:#F1EAFE; color:#6D28D9; }
   .card-transitorios .tag{ background:#FEF3E2; color:#B45309; }
+  .card-multiplos .tag{ background:#FDECF4; color:#9D174D; }
   .card.disabled .tag{ background:#F0F1F8; color:#8890B8; }
   .card-cta{
     display:flex; align-items:center; justify-content:space-between; font-size:12.5px; font-weight:800;
@@ -195,6 +197,20 @@
         <div class="card-body">
           <h3 class="card-title">Gestão de Transitórios</h3>
           <p class="card-desc">Controle e acompanhamento de itens transitórios do CD.</p>
+          <div class="card-tags"><span class="tag">Em preparação</span></div>
+          <div class="card-cta"><span>Em breve</span></div>
+        </div>
+      </div>
+      <div class="card card-multiplos disabled">
+        <div class="card-top">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 7h7"/><path d="M17.5 3.5 21 7l-3.5 3.5"/><path d="M10 17H3"/><path d="M6.5 13.5 3 17l3.5 3.5"/></svg>
+          </div>
+          <span class="card-status"><span class="dot"></span>Em breve</span>
+        </div>
+        <div class="card-body">
+          <h3 class="card-title">Múltiplos Descasados</h3>
+          <p class="card-desc">Itens cujo múltiplo não bate entre as bases do CD.</p>
           <div class="card-tags"><span class="tag">Em preparação</span></div>
           <div class="card-cta"><span>Em breve</span></div>
         </div>
