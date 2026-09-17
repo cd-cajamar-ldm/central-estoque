@@ -15,6 +15,13 @@ name: Guarda dos módulos
 on:
   pull_request:
     branches: [main]
+    # 'labeled' entra porque a etiqueta de confirmação ("remocao-intencional") é
+    # colocada DEPOIS que a verificação já falhou. Sem este gatilho, a etiqueta
+    # não reavalia nada: reexecutar o job repete o evento antigo, com a lista de
+    # etiquetas como estava na abertura do PR (vazia) — e a confirmação nunca
+    # surtia efeito. 'unlabeled' pelo motivo inverso: tirar a etiqueta tem que
+    # fazer a guarda voltar a barrar.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   contents: read
