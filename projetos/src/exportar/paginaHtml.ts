@@ -73,12 +73,11 @@ const ESTILO = `
 
   /* Fluxograma.
 
-     Ele nasce grande: encolhido para caber na folha, o texto dentro das
-     caixas fica ilegivel. Por isso o desenho vem em tamanho real, com
-     rolagem lateral quando nao cabe, e o controle ao lado o ajusta a
-     largura da folha para quem prefere ver o todo. O desenho e vetorial:
-     nos dois tamanhos ele continua nitido, sem borrar como uma foto
-     esticada. */
+     Ele chega ajustado a largura da folha, que e como se ve o fluxo
+     inteiro de uma vez. Desmarcando o controle, o desenho volta ao
+     tamanho real, com rolagem lateral, para ler o texto dentro das caixas
+     de um fluxo grande. O desenho e vetorial: nos dois tamanhos ele
+     continua nitido, sem borrar como uma foto esticada. */
   .quadro { margin: 32px 0; }
   /* O controle e um checkbox escondido com um rotulo em forma de botao:
      assim o estado fica no proprio HTML, sem uma linha de script — o
@@ -147,7 +146,9 @@ export function paginaParaHtml(
     }
     const id = `ajustar-${indice}`;
     return `<div class="bloco quadro">`
-      + `<input class="ajustar" type="checkbox" id="${id}">`
+      /* Ja marcado: quem abre o arquivo quer ver o fluxo inteiro de
+         cara; desmarcar e que e o gesto de quem quer olhar de perto. */
+      + `<input class="ajustar" type="checkbox" id="${id}" checked>`
       + `<label class="controle" for="${id}">Ajustar à largura da página</label>`
       + `<div class="fluxo">${fluxoParaSvg(fluxo, { justo: true })}</div>`
       + '</div>';

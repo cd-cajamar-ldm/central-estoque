@@ -599,6 +599,41 @@ if (!(await pagina.locator('[data-quadro="fluxo"] svg polygon').count())) {
   process.exitCode = 1;
 }
 
+/* Arrastar o fundo rola o quadro, como uma folha na mesa. */
+{
+  const janela = pagina.locator('[data-quadro="fluxo"]').first().locator('xpath=../..');
+  await janela.evaluate((el) => { el.scrollLeft = 0; });
+  /* O ponto do gesto sai da janela que rola, e não do quadro inteiro: o
+     quadro é maior que ela, e o canto dele está fora da tela. */
+  const vista = await janela.boundingBox();
+  const y = vista.y + vista.height - 40;
+  await pagina.mouse.move(vista.x + vista.width - 60, y);
+  await pagina.mouse.down();
+  await pagina.mouse.move(vista.x + 60, y, { steps: 10 });
+  await pagina.mouse.up();
+  await pagina.waitForTimeout(300);
+  const rolou = await janela.evaluate((el) => el.scrollLeft);
+  if (rolou < 100) {
+    console.error(`FALHOU: arrastar o fundo deveria rolar o quadro (scrollLeft ${rolou}).`);
+    process.exitCode = 1;
+  }
+  /* Puxar a folha não é clicar nela: a seleção continua onde estava —
+     aqui, o bloco escolhido logo antes. */
+  if (!((await pagina.textContent('body')) ?? '').includes('Excluir bloco')) {
+    console.error('FALHOU: arrastar o fundo não deveria limpar a seleção.');
+    process.exitCode = 1;
+  }
+  await janela.evaluate((el) => { el.scrollLeft = 0; });
+  await pagina.waitForTimeout(200);
+}
+
+/* Mesma distância: com três blocos escolhidos, o botão aparece e iguala
+   os vãos. */
+{
+  const janela = pagina.locator('[data-quadro="fluxo"]').first().locator('xpath=../..');
+  await janela.evaluate((el) => { el.scrollLeft = 0; });
+}
+
 /* A decisão é desenhada girada 45°: o que tem de encostar na linha é o
    losango que se vê, e não o retângulo guardado nele. */
 const decisao = pagina.locator('[data-quadro="fluxo"] >> text=Endereço existe?').first().locator('xpath=..');
@@ -615,6 +650,21 @@ const topos = [
 ];
 if (Math.max(...topos) - Math.min(...topos) > 2) {
   console.error(`FALHOU: alinhar pelo topo deixou o losango fora da linha (${topos.join(' / ')}).`);
+  process.exitCode = 1;
+}
+
+/* Com os três ainda escolhidos, distribuir iguala os vãos entre eles. */
+await pagina.getByTitle('Mesma distância na horizontal').click();
+await pagina.waitForTimeout(400);
+const caixas = [];
+for (const alvo of [circulo, triangulo, decisao]) caixas.push(await alvo.boundingBox());
+caixas.sort((a, b) => a.x - b.x);
+const vaos = [
+  caixas[1].x - (caixas[0].x + caixas[0].width),
+  caixas[2].x - (caixas[1].x + caixas[1].width),
+];
+if (Math.abs(vaos[0] - vaos[1]) > 2) {
+  console.error(`FALHOU: distribuir não igualou os vãos (${vaos.join(' / ')}).`);
   process.exitCode = 1;
 }
 
@@ -637,6 +687,10 @@ await pagina.waitForTimeout(300);
   /* Sem imagem quebrada: o print do texto tem de ir dentro do arquivo. */
   if (/<img[^>]+src="http/i.test(conteudo)) {
     console.error('FALHOU: o arquivo compartilhado ainda depende de imagem na internet.');
+    process.exitCode = 1;
+  }
+  if (!conteudo.includes('checked')) {
+    console.error('FALHOU: o fluxo do arquivo deveria vir já ajustado à largura.');
     process.exitCode = 1;
   }
   for (const pedaco of ['<!doctype html>', 'Busca de endereço', '<svg', 'data:image/']) {
