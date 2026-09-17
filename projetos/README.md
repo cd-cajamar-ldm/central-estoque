@@ -256,6 +256,14 @@ falhar pela metade. Dois tipos de bloco:
   acontece ao soltar o botão, porque no mousedown ainda não se sabe se o gesto
   é clique ou arrasto.
 
+- **copiar, recortar e colar** — Ctrl+C, Ctrl+X e Ctrl+V (e os botões na barra)
+  sobre os blocos escolhidos. A área de transferência é do próprio quadro: o
+  Ctrl+V do sistema já tem dono aqui (colar print), então colar bloco só entra
+  em ação quando não veio imagem nenhuma junto. O recorte leva as setas **entre**
+  os blocos copiados, e só elas — uma seta que sai do grupo não teria de onde
+  sair depois de colada. A cópia entra deslocada 30 px, e colar de novo cai mais
+  adiante, em vez de voltar ao mesmo lugar.
+
 #### Compartilhar a página
 
 O botão **Compartilhar**, ao lado de *Histórico*, baixa a página como um único
@@ -270,6 +278,25 @@ escrever espera mandar o que acabou de escrever. O HTML do texto passa pela
 mesma limpeza da tela (`limparHtml`, injetada de fora para a função de exportar
 continuar pura e testável sem navegador), e fluxo no formato antigo vai como
 texto em vez de sumir do arquivo.
+
+Três decisões sobre como o arquivo se lê:
+
+- **as imagens vão embutidas** (`embutirImagens`). O print do texto mora no
+  Storage e aparece por URL; num arquivo que vai por e-mail isso é uma imagem
+  quebrada assim que quem abre estiver sem rede — e "abre sem internet" era a
+  razão de existir do botão. Imagem que não baixa fica com a URL, em vez de
+  derrubar o compartilhar;
+- **o desenho é recortado no conteúdo** (`limitesJustos`, `fluxoParaSvg(…, { justo: true })`).
+  A prancheta da tela tem chão de sobra para arrastar bloco, e esse chão virava
+  meia folha em branco embaixo do fluxo. O documento em Word continua no
+  enquadramento de sempre, para o desenho não mudar de tamanho de uma proposta
+  para a outra;
+- **o fluxo vem em tamanho real**, com rolagem lateral quando não cabe, e um
+  controle *Ajustar à largura da página* ao lado. Encolhido para caber, o texto
+  dentro das caixas fica ilegível; o desenho é vetorial, então nos dois tamanhos
+  continua nítido. O controle é um checkbox com rótulo em forma de botão, sem
+  uma linha de script: o arquivo abre em navegador de terceiro, às vezes com
+  script bloqueado. Na impressão ele some e o fluxo cabe na folha.
 
 Cada página tem **situação** própria: rascunho, em revisão, aprovada, concluída
 ou cancelada. O seletor fica no canto superior direito da página e grava na hora,

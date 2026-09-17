@@ -9,7 +9,7 @@ import {
   salvarPagina, usePaginas,
 } from '@/estado/paginas';
 import { limparHtml } from '@/lib/html';
-import { nomeDoArquivoHtml, paginaParaHtml } from '@/exportar/paginaHtml';
+import { embutirImagens, nomeDoArquivoHtml, paginaParaHtml } from '@/exportar/paginaHtml';
 import { formatarData } from '@/dominio/regras';
 import type { Bloco, Pagina, Pessoa, StatusPagina, VersaoDePagina } from '@/dominio/tipos';
 import { STATUS_PAGINA, rotuloStatusPagina } from '@/dominio/tipos';
@@ -44,6 +44,9 @@ export default function Paginas({ projetoId, pessoas }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [versoes, setVersoes] = useState<VersaoDePagina[] | null>(null);
+  /* Baixar as imagens do texto leva um instante: sem esse aviso o botao
+     pareceria nao ter feito nada. */
+  const [compartilhando, setCompartilhando] = useState(false);
   /* Pagina recem-criada ja abre em edicao: quem clicou em "Nova pagina"
      nao devia ter de clicar em "Editar" logo em seguida. Sem esta
      marca, o efeito que roda quando a pagina termina de carregar
@@ -132,7 +135,19 @@ export default function Paginas({ projetoId, pessoas }: Props) {
 
   /* Compartilha o que esta na tela, e nao o que esta no banco: quem
      acabou de escrever espera mandar o que acabou de escrever. */
-  function compartilhar() {
+  async function compartilhar() {
+    if (!aberta) return;
+    setCompartilhando(true);
+    try {
+      await gerarArquivo();
+    } catch (falha) {
+      setErro(mensagemDeErro(falha));
+    } finally {
+      setCompartilhando(false);
+    }
+  }
+
+  async function gerarArquivo() {
     if (!aberta) return;
     const html = paginaParaHtml({
       titulo: titulo.trim() || aberta.titulo,
@@ -141,7 +156,10 @@ export default function Paginas({ projetoId, pessoas }: Props) {
       atualizadoEm: formatarData(aberta.atualizado_em),
       atualizadoPor: aberta.atualizado_por,
     }, limparHtml);
-    baixarHtml(html, nomeDoArquivoHtml(titulo.trim() || aberta.titulo));
+    /* As imagens entram embutidas: o arquivo tem de abrir na maquina de
+       quem recebe, sem rede e sem acesso ao Storage. */
+    const completo = await embutirImagens(html);
+    baixarHtml(completo, nomeDoArquivoHtml(titulo.trim() || aberta.titulo));
   }
 
   function trocarBloco(id: string, conteudo: string) {
@@ -255,9 +273,10 @@ export default function Paginas({ projetoId, pessoas }: Props) {
                   ) : (
                     <>
                       <button
-                        className="botao-neutro" onClick={compartilhar}
+                        className="botao-neutro" onClick={() => void compartilhar()}
+                        disabled={compartilhando}
                         title="Baixar esta página como um arquivo HTML, com o texto e os fluxogramas"
-                      >Compartilhar</button>
+                      >{compartilhando ? 'Preparando…' : 'Compartilhar'}</button>
                       <button className="botao-neutro" onClick={() => void abrirHistorico()}>Histórico</button>
                       <button className="botao-neutro" onClick={() => void excluir(aberta)}>Excluir</button>
                       <button className="botao-primario" onClick={() => setEditando(true)}>Editar</button>

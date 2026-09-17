@@ -243,6 +243,12 @@ await pagina.route('**/storage/v1/object/public/**', async (rota) => {
   await rota.fulfill({ status: 200, contentType: 'image/png', body: PIXEL });
 });
 
+/* O print do bloco de texto: o compartilhar tem de baixá-lo e embutir no
+   arquivo, em vez de deixar a imagem apontando para fora. */
+await pagina.route('https://exemplo/**', async (rota) => {
+  await rota.fulfill({ status: 200, contentType: 'image/png', body: PIXEL });
+});
+
 await pagina.goto(url, { waitUntil: 'networkidle' });
 await pagina.waitForTimeout(1200);
 
@@ -529,6 +535,34 @@ if (Math.abs(xDepois[0] - xDepois[1]) > 1) {
   console.error(`FALHOU: alinhar à esquerda não igualou a borda (${xDepois[0]} / ${xDepois[1]}).`);
   process.exitCode = 1;
 }
+/* Copiar e colar: o par selecionado vira quatro blocos no quadro, e
+   recortar tira os originais de lá. */
+const blocosDoQuadro = () => pagina.locator('[data-quadro="fluxo"] > div').count();
+const antesDaCopia = await blocosDoQuadro();
+await pagina.getByTitle('Copiar (Ctrl+C)').click();
+await pagina.getByTitle('Colar (Ctrl+V)').click();
+await pagina.waitForTimeout(400);
+const depoisDaColagem = await blocosDoQuadro();
+if (depoisDaColagem !== antesDaCopia + 2) {
+  console.error(`FALHOU: colar deveria criar dois blocos (${antesDaCopia} → ${depoisDaColagem}).`);
+  process.exitCode = 1;
+}
+/* O que foi colado nasce selecionado: recortar tira justamente ele. */
+await pagina.getByTitle('Recortar (Ctrl+X)').click();
+await pagina.waitForTimeout(400);
+if ((await blocosDoQuadro()) !== antesDaCopia) {
+  console.error('FALHOU: recortar deveria tirar do quadro os blocos selecionados.');
+  process.exitCode = 1;
+}
+await pagina.getByTitle('Colar (Ctrl+V)').click();
+await pagina.waitForTimeout(400);
+if ((await blocosDoQuadro()) !== antesDaCopia + 2) {
+  console.error('FALHOU: o recortado deveria poder ser colado de volta.');
+  process.exitCode = 1;
+}
+await pagina.keyboard.press('Delete');
+await pagina.waitForTimeout(300);
+
 /* Um bloco só volta a mostrar a barra de propriedades, não a de alinhar. */
 await circulo.click();
 await pagina.waitForTimeout(300);
@@ -561,7 +595,12 @@ await pagina.waitForTimeout(300);
   }
   const caminho = await arquivo.path();
   const conteudo = caminho ? await readFile(caminho, 'utf8') : '';
-  for (const pedaco of ['<!doctype html>', 'Busca de endereço', '<svg']) {
+  /* Sem imagem quebrada: o print do texto tem de ir dentro do arquivo. */
+  if (/<img[^>]+src="http/i.test(conteudo)) {
+    console.error('FALHOU: o arquivo compartilhado ainda depende de imagem na internet.');
+    process.exitCode = 1;
+  }
+  for (const pedaco of ['<!doctype html>', 'Busca de endereço', '<svg', 'data:image/']) {
     if (!conteudo.includes(pedaco)) {
       console.error(`FALHOU: o arquivo compartilhado não tem "${pedaco}".`);
       process.exitCode = 1;
