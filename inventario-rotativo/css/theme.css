@@ -116,6 +116,10 @@ button{ font-family:inherit; cursor:pointer; }
    "Voltar para a Central") pra fora da tela, sem como rolar até ele, já que o
    .shell tem overflow:hidden e só a lista de navegação rola por dentro. */
 .shell{ display:flex; height:100vh; height:100dvh; overflow:hidden; }
+/* --zoom é escrito pelo controle de zoom do app (irApplyZoom). Como o zoom do
+   body também encolhe o dvh, a altura precisa ser dividida por ele pra continuar
+   valendo a tela inteira. Sem a variável (zoom 100%), o valor é o mesmo. */
+.shell{ height:calc(100dvh / var(--zoom, 1)); }
 .sidebar{
   width:230px; flex-shrink:0; background:var(--blue); color:#fff;
   display:flex; flex-direction:column; transition:width .18s;
@@ -232,7 +236,7 @@ button{ font-family:inherit; cursor:pointer; }
   /* !important pra não depender de empate de especificidade com .sidebar.collapsed —
      no celular o menu é um overlay que fica ou 100% fechado (largura 0) ou 100% aberto,
      nunca no meio-termo de 56px do modo "collapsed" do desktop. */
-  .sidebar{ position:fixed; z-index:40; height:100vh; height:100dvh; width:0 !important; box-shadow:0 0 0 rgba(0,0,0,0); transition:width .18s, box-shadow .18s; }
+  .sidebar{ position:fixed; z-index:40; height:100vh; height:calc(100dvh / var(--zoom, 1)); width:0 !important; box-shadow:0 0 0 rgba(0,0,0,0); transition:width .18s, box-shadow .18s; }
   .sidebar.mobile-open{ width:230px !important; box-shadow:4px 0 24px rgba(0,0,0,.25); }
   .content{ width:100%; }
   .page-scroll{ padding:14px; }

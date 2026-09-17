@@ -280,6 +280,11 @@ const IR_ZOOM_MIN = 70, IR_ZOOM_MAX = 150, IR_ZOOM_STEP = 10;
 function irApplyZoom(pct){
   pct = Math.max(IR_ZOOM_MIN, Math.min(IR_ZOOM_MAX, pct));
   document.body.style.zoom = (pct/100);
+  /* O zoom encolhe a unidade de viewport junto com o resto: a 80%, o .shell de
+     100dvh ocupava 80% da tela e sobrava uma faixa branca embaixo — quanto menor
+     o zoom, menos área útil, que é o contrário do que se espera dele. Dividir a
+     altura pelo fator devolve a tela inteira em qualquer zoom. */
+  document.documentElement.style.setProperty('--zoom', pct/100);
   const label = document.getElementById('zoomLabel');
   if(label) label.textContent = pct+'%';
   localStorage.setItem('ir-zoom', pct);
