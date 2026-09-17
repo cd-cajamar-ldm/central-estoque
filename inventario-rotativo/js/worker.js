@@ -283,8 +283,14 @@ function detectarCiclo843(bufs){
     const [top] = Array.from(votos.entries()).sort((a,b)=>b[1]-a[1] || (a[0]===trimestre?-1:1));
     numero = top[0]; origem = 'obs';
   }
+  /* Fim do trimestre do ciclo. A última contagem do arquivo serve de término
+     para ciclo fechado, mas no ciclo em curso ela é "hoje" — e a janela passa a
+     barrar tudo que for contado a partir de amanhã. Quem decide qual dos dois
+     usar é o app (irTerminoDoCiclo), que sabe se o ciclo ainda está aberto. */
+  const fimTri = new Date(Date.UTC(mediana.getUTCFullYear(), trimestre*3, 0));
   return {
     numero, dataAbertura, dataPrevistaTermino, origem,
+    fimTrimestre: iso(fimTri),
     linhas: rows.length, amostraObs,
     votos: Array.from(votos.entries()).map(([n,q])=>({numero:n, linhas:q})).sort((a,b)=>b.linhas-a.linhas),
     trimestre, ano: mediana.getUTCFullYear()
