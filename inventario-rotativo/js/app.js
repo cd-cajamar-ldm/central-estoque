@@ -105,6 +105,24 @@ function irCicloAno(c){
   if(m) return +m[1];
   const d = new Date(s); return isNaN(d.getTime()) ? null : d.getFullYear();
 }
+/* Término previsto de um ciclo recém-detectado.
+
+   A detecção devolve como término a ÚLTIMA data de contagem do arquivo. Para
+   ciclo fechado isso é o certo. Para o ciclo em curso, não: a última contagem é
+   de hoje, a janela passa a terminar hoje e tudo que for contado de amanhã em
+   diante é descartado — sem que nada na tela explique o congelamento dos
+   números (é exatamente o aviso de "janela barrando contagens").
+
+   Então: ciclo que ainda está recebendo contagem (última contagem nos últimos
+   sete dias) usa o fim do trimestre. Nunca encolhe o que já foi detectado —
+   contagem atrasada, depois do fim do trimestre, manda. */
+function irTerminoDoCiclo(det){
+  if(!det || !det.dataPrevistaTermino) return det && det.dataPrevistaTermino;
+  if(!det.fimTrimestre) return det.dataPrevistaTermino;
+  const limite = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+  if(det.dataPrevistaTermino < limite) return det.dataPrevistaTermino;
+  return det.dataPrevistaTermino > det.fimTrimestre ? det.dataPrevistaTermino : det.fimTrimestre;
+}
 function irCicloLabel(c){ const ano = irCicloAno(c); return `Ciclo ${c.numero}${ano?'/'+ano:''}`; }
 // Ordem cronológica de um ciclo: ano e número juntos num número só, pra comparar.
 function irCicloOrdem(c){ return (irCicloAno(c)||0) * 10 + (c.numero||0); }
@@ -585,10 +603,15 @@ function irRenderAvisoJanela(){
                            m.dataMaisRecenteForaDaJanela > m.dataMaisRecenteAceita;
   if(!janelaVencida && !perdendoContagem) return '';
   const d = s => s ? irFmtDate(s) : '—';
+  /* Sem a data que ficou de fora não há o que citar: o aviso ficava com um
+     travessão no meio da frase ("traz contagem de até —"), que não diz nada.
+     Nesse caso só a janela vencida é fato, e é só isso que o texto afirma. */
+  const detalhe = perdendoContagem && m.dataMaisRecenteForaDaJanela
+    ? `, e a 843 traz contagem de até <b>${d(m.dataMaisRecenteForaDaJanela)}</b> que ficou de fora por estar depois do término previsto`
+    : ', que já venceu';
   return `<div class="callout callout-warn">
     <strong>⚠️ A janela deste ciclo está barrando contagens.</strong>
-    O ciclo vai de <b>${d(m.janelaAbertura)}</b> até <b>${d(m.janelaTermino)}</b>, e a 843 traz contagem
-    de até <b>${d(m.dataMaisRecenteForaDaJanela)}</b> que ficou de fora por estar depois do término previsto.
+    O ciclo vai de <b>${d(m.janelaAbertura)}</b> até <b>${d(m.janelaTermino)}</b>${detalhe}.
     Tudo que for contado a partir de agora vai continuar sendo ignorado e os números não vão mudar.
     <b>Corrija o Término Previsto do ciclo</b> na tela de ciclos e reprocesse.
   </div>`;
@@ -669,7 +692,8 @@ function irDetectarCiclo843(){
       if(ev.data.type!=='done843detect') return;
       worker.terminate();
       IR.detectandoCiclo = false;
-      IR.cicloDetectado = ev.data.erro ? {erro:ev.data.erro} : ev.data;
+      IR.cicloDetectado = ev.data.erro ? {erro:ev.data.erro}
+        : Object.assign({}, ev.data, {dataPrevistaTermino: irTerminoDoCiclo(ev.data)});
       irRenderView();
     };
     worker.onerror = ()=>{ worker.terminate(); IR.detectandoCiclo=false; irRenderView(); };
@@ -858,7 +882,7 @@ const IR_INDICADORES_VERSION = 17; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v174';
+const IR_APP_VERSION = 'v175';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2986,18 +3010,22 @@ async function irPastaMapearCiclos(){
     for(const arq of lista843){
       const chave = irPastaChaveArq(arq.file);
       let det = cache[chave];
+      // Detecção gravada antes do fim de trimestre existir não sabe corrigir a
+      // janela do ciclo aberto — vale reler o arquivo uma vez.
+      if(det && !det.erro && !det.fimTrimestre) det = null;
       if(!det){ det = await irPastaDetectar843(arq.file); cache[chave] = det; mudouCache = true; }
       if(det.erro || !det.numero || !det.ano) continue;
+      const termino = irTerminoDoCiclo(det);
       const k = det.numero+'/'+det.ano;
       let g = grupos.get(k);
       if(!g){
         g = {numero:det.numero, ano:det.ano, dataAbertura:det.dataAbertura,
-             dataPrevistaTermino:det.dataPrevistaTermino, origem:det.origem,
+             dataPrevistaTermino:termino, origem:det.origem,
              pastas:new Set(), arquivos:{'843':[]}};
         grupos.set(k, g);
       }
       if(det.dataAbertura < g.dataAbertura) g.dataAbertura = det.dataAbertura;
-      if(det.dataPrevistaTermino > g.dataPrevistaTermino) g.dataPrevistaTermino = det.dataPrevistaTermino;
+      if(termino > g.dataPrevistaTermino) g.dataPrevistaTermino = termino;
       g.pastas.add(arq.pasta);
       g.arquivos['843'].push(arq);
     }
@@ -3061,7 +3089,11 @@ async function irPastaProcessarCiclos(forcarChave){
   IR.pastaProcessando = true;
   try{
     for(const g of fila){
-      IR.pastaFilaAtual = irPastaCicloChave(g); irRenderView();
+      IR.pastaFilaAtual = irPastaCicloChave(g);
+      // O aviso de janela é do ciclo que acabou de rodar; deixá-lo na tela
+      // durante o próximo faz a fila parecer estar barrando contagem que não é dela.
+      IR.importMeta = null;
+      irRenderView();
       const ok = await irProcessarCiclo({
         numero:g.numero, dataAbertura:g.dataAbertura, dataPrevistaTermino:g.dataPrevistaTermino,
         f390:null,
