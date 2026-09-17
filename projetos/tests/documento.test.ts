@@ -142,3 +142,28 @@ describe('fluxo desenhado', () => {
     expect(svg).toContain('Saldo &lt; 10 &amp; pendente');
   });
 });
+
+describe('zoom e cor do quadro', () => {
+  it('o zoom anda de degrau em degrau e para nas pontas', async () => {
+    const { proximoZoom, ZOOMS } = await import('../src/dominio/fluxo');
+    expect(proximoZoom(1, 1)).toBe(1.25);
+    expect(proximoZoom(1, -1)).toBe(0.75);
+    // Nas pontas o botão não leva a lugar nenhum, em vez de sair da lista.
+    expect(proximoZoom(ZOOMS[0], -1)).toBe(ZOOMS[0]);
+    expect(proximoZoom(ZOOMS[ZOOMS.length - 1], 1)).toBe(ZOOMS[ZOOMS.length - 1]);
+  });
+
+  it('zoom guardado fora da lista cai no degrau mais próximo', async () => {
+    const { proximoZoom, zoomValido } = await import('../src/dominio/fluxo');
+    expect(zoomValido(1.37)).toBe(false);
+    expect(proximoZoom(1.37, 1)).toBe(1.25);
+  });
+
+  it('a forma nova nasce na cor escolhida na barra', async () => {
+    const { noNovo } = await import('../src/dominio/fluxo');
+    expect(noNovo('caixa', 0, 0, '#2E8B57').cor).toBe('#2E8B57');
+    // Sem escolha, a anotação continua âmbar e o resto roxo.
+    expect(noNovo('caixa', 0, 0).cor).toBe('#7C3AED');
+    expect(noNovo('nota', 0, 0).cor).toBe('#C79212');
+  });
+});

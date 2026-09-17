@@ -400,30 +400,50 @@ if (!(await pagina.getByTitle('Arraste para mudar o tamanho').count())) {
   console.error('FALHOU: o bloco selecionado deveria ter alça de tamanho.');
   process.exitCode = 1;
 }
-/* Espaço da prancheta: "+" tem de dar mais chão sem encolher o que já
-   foi desenhado. */
-const quadro = pagina.locator('[data-quadro="fluxo"]').first();
-const antes = await quadro.evaluate((el) => ({ largura: el.offsetWidth, escala: getComputedStyle(el).transform }));
+/* Zoom: "+" aproxima o desenho de verdade — o bloco na tela fica maior,
+   e nao apenas o número na barra. */
 const blocoAntes = (await pagina.locator('[data-quadro="fluxo"] >> text=Digita o código').first().boundingBox())?.width ?? 0;
-await pagina.getByTitle('Mais espaço').click();
+await pagina.getByTitle('Aproximar').click();
 await pagina.waitForTimeout(300);
-const depois = await quadro.evaluate((el) => ({ largura: el.offsetWidth, escala: getComputedStyle(el).transform }));
 const blocoDepois = (await pagina.locator('[data-quadro="fluxo"] >> text=Digita o código').first().boundingBox())?.width ?? 0;
-if (!(depois.largura > antes.largura)) {
-  console.error(`FALHOU: "+" não aumentou a área de trabalho (${antes.largura} → ${depois.largura}).`);
+if (!(blocoDepois > blocoAntes + 1)) {
+  console.error(`FALHOU: o zoom não aproximou o desenho (${blocoAntes} → ${blocoDepois}).`);
   process.exitCode = 1;
 }
-if (Math.abs(blocoDepois - blocoAntes) > 1 || depois.escala !== antes.escala) {
-  console.error('FALHOU: dar mais espaço não deveria mexer no tamanho do desenho.');
-  process.exitCode = 1;
-}
-await pagina.getByTitle('Voltar ao espaço do desenho').click();
+await pagina.getByTitle('Afastar').click();
 await pagina.waitForTimeout(300);
+const blocoDeVolta = (await pagina.locator('[data-quadro="fluxo"] >> text=Digita o código').first().boundingBox())?.width ?? 0;
+if (Math.abs(blocoDeVolta - blocoAntes) > 1) {
+  console.error(`FALHOU: afastar não voltou ao tamanho de antes (${blocoAntes} → ${blocoDeVolta}).`);
+  process.exitCode = 1;
+}
 
+/* Seta recolhida: o campo "Sim / Não" só aparece depois de clicar no
+   ponto da seta — antes ele ficava aberto em todas, tapando o desenho. */
+if (await pagina.getByPlaceholder('Sim / Não').count()) {
+  console.error('FALHOU: o rótulo da seta deveria nascer recolhido.');
+  process.exitCode = 1;
+}
+await pagina.getByTitle('Editar esta seta (rótulo, traço, remover)').first().click();
+await pagina.waitForTimeout(300);
+if (!(await pagina.getByPlaceholder('Sim / Não').count())) {
+  console.error('FALHOU: clicar na seta deveria abrir o rótulo.');
+  process.exitCode = 1;
+}
 if (!(await pagina.getByTitle('Ponta dos dois lados').count())) {
   console.error('FALHOU: a seta deveria oferecer ponta dos dois lados.');
   process.exitCode = 1;
 }
+await pagina.getByTitle('Recolher').first().click();
+await pagina.waitForTimeout(300);
+if (await pagina.getByPlaceholder('Sim / Não').count()) {
+  console.error('FALHOU: recolher deveria fechar o rótulo da seta.');
+  process.exitCode = 1;
+}
+
+/* O bloco volta a ser o selecionado depois do passeio pela seta. */
+await pagina.locator('[data-quadro="fluxo"] >> text=Digita o código').first().click();
+await pagina.waitForTimeout(300);
 /* Teclado no quadro: seta move o bloco selecionado e Delete apaga. */
 const posicaoAntes = await pagina.locator('[data-quadro="fluxo"] >> text=Digita o código').first().boundingBox();
 await pagina.keyboard.press('ArrowRight');
@@ -452,10 +472,31 @@ if (!(await pagina.locator('[data-quadro="fluxo"] > div').count() < blocosAntes)
   process.exitCode = 1;
 }
 
-/* Formas novas: entram no quadro e desenham de verdade. */
+/* Desfazer: o bloco apagado pelo Delete tem de voltar com Ctrl+Z, e sair
+   de novo com Ctrl+Y. */
+await pagina.keyboard.press('Control+z');
+await pagina.waitForTimeout(400);
+if (!(await pagina.locator('[data-quadro="fluxo"] >> text=Digita o código').count())) {
+  console.error('FALHOU: Ctrl+Z não trouxe de volta o bloco apagado.');
+  process.exitCode = 1;
+}
+await pagina.keyboard.press('Control+y');
+await pagina.waitForTimeout(400);
+if (await pagina.locator('[data-quadro="fluxo"] >> text=Digita o código').count()) {
+  console.error('FALHOU: Ctrl+Y não refez a exclusão do bloco.');
+  process.exitCode = 1;
+}
+
+/* Formas novas: entram no quadro, na cor escolhida na barra, e desenham
+   de verdade. */
+await pagina.getByTitle('Novas formas em verde').click();
 await pagina.getByRole('button', { name: '+ Círculo', exact: true }).click();
 await pagina.getByRole('button', { name: '+ Triângulo', exact: true }).click();
 await pagina.waitForTimeout(400);
+if (!(await pagina.locator('[data-quadro="fluxo"] svg polygon[stroke="#2E8B57"]').count())) {
+  console.error('FALHOU: a forma nova não nasceu na cor escolhida na barra.');
+  process.exitCode = 1;
+}
 if (!(await pagina.locator('[data-quadro="fluxo"] svg polygon').count())) {
   console.error('FALHOU: o triângulo não desenhou o contorno.');
   process.exitCode = 1;

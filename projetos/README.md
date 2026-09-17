@@ -221,11 +221,31 @@ falhar pela metade. Dois tipos de bloco:
   tabela e imagem. Print colado com Ctrl+V é enviado para o Storage e entra como
   URL, nunca como base64 dentro do HTML.
 - **fluxo** — quadro de desenho livre, no espírito do Miro: a barra cria blocos
-  (início/fim, etapa, decisão, anotação), cada bloco é arrastado com o mouse,
-  tem texto e cor próprios, e *Ligar a outro* traça a seta entre dois blocos,
-  com rótulo editável (`Sim`, `Não`). O quadro é guardado como JSON — blocos e
-  ligações, com posição —, e as setas saem sempre da borda mais próxima, então
-  mover um bloco reacomoda o desenho sozinho.
+  (início/fim, etapa, decisão, círculo, triângulo, anotação), cada bloco é
+  arrastado com o mouse, tem texto e cor próprios, e *Ligar a outro* traça a
+  seta entre dois blocos. O quadro é guardado como JSON — blocos e ligações,
+  com posição —, e as setas saem sempre da borda mais próxima, então mover um
+  bloco reacomoda o desenho sozinho.
+
+#### O quadro de fluxo no dia a dia
+
+- **cor antes da forma** — a fileira de cores ao lado dos botões de forma diz
+  com que cor o próximo bloco nasce (a escolha fica no navegador). A equipe
+  desenha sempre com as mesmas poucas cores; escolher uma vez e sair criando
+  evita repintar bloco a bloco depois.
+- **zoom** — os botões `−  100%  +` (e Ctrl + roda do mouse) aproximam e afastam
+  o desenho inteiro: o fluxo todo numa tela para achar o caminho, de perto para
+  escrever. Antes esses botões mexiam no tamanho da prancheta — o número crescia,
+  o desenho ficava igual e ninguém entendia o que tinha mudado. O chão em volta
+  do desenho agora é uma folga fixa, sem botão.
+- **seta recolhida** — o rótulo (`Sim`/`Não`), o traço e o ✕ só aparecem na seta
+  selecionada; fechada, ela mostra um ponto discreto no meio. Abertos em toda
+  seta, os campos vazios tapavam o desenho, e na maioria dos fluxos ninguém
+  escreve neles.
+- **desfazer** — Ctrl+Z e Ctrl+Y (ou Ctrl+Shift+Z), e os botões `↶ ↷` na barra,
+  andam nos últimos 50 passos. Um arrasto inteiro conta como um passo só, e
+  trocar de página zera o histórico — desfazer ali devolveria o desenho de outra
+  página por cima desta.
 
 Cada página tem **situação** própria: rascunho, em revisão, aprovada, concluída
 ou cancelada. O seletor fica no canto superior direito da página e grava na hora,

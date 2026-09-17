@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   bordaMaisProxima, CORES_DO_FLUXO, ESPESSURAS, escreverFluxo, espessuraDo, fluxoVazio, lerFluxo,
-  limitesDoFluxo, noDeImagem, noNovo, proximaPosicao, rotuloDaForma,
+  limitesDoFluxo, noDeImagem, noNovo, proximaPosicao, proximoZoom, rotuloDaForma, ZOOM_PADRAO,
+  ZOOMS, zoomValido,
 } from '@/dominio/fluxo';
 import { imagemDoEvento, reduzirImagem } from '@/lib/imagemColada';
 import type { Fluxo, FormaDoNo, NoDoFluxo } from '@/dominio/fluxo';
@@ -43,27 +44,84 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
      comecou, isso limpava a selecao que o proprio clique acabara de
      fazer. */
   const comecouNoFundo = useRef(false);
+  /* O desenho como estava quando o arrasto comecou: e ele que volta no
+     Ctrl+Z, e nao cada passo intermediario do gesto. */
+  const antesDoGesto = useRef<Fluxo | null>(null);
   const tela = useRef<HTMLDivElement>(null);
+  /* O quadro inteiro (barra + prancheta): e por ele que o teclado sabe se
+     o Ctrl+Z e deste fluxograma e nao de outro na mesma pagina. */
+  const quadro = useRef<HTMLDivElement>(null);
+  /* A janela que rola em volta da prancheta: e nela que mora o zoom pela
+     roda do mouse. */
+  const janela = useRef<HTMLDivElement>(null);
   const [avisoDaImagem, setAvisoDaImagem] = useState<string | null>(null);
-  /* Tamanho da area de trabalho.
 
-     A tela do quadro cresce sozinha para caber os blocos, mas so ate
-     onde eles estao: para espalhar um fluxo grande falta chao. Estes
-     botoes acrescentam e tiram espaco em volta, como esticar a prancheta
-     — nao encolhem o desenho. A escolha fica no navegador porque e de
-     quem esta desenhando, nao parte do fluxo. */
-  const PASSO_DE_ESPACO = 320;
-  const [espaco, setEspaco] = useState(() => {
-    const guardado = Number(localStorage.getItem('projetos.espaco-fluxo'));
-    return Number.isFinite(guardado) && guardado >= 0 && guardado <= 4000 ? guardado : 0;
+  /* Zoom do quadro.
+
+     Antes estes botoes mexiam no tamanho da prancheta: o numero na barra
+     crescia, o desenho continuava do mesmo tamanho e ninguem entendia o
+     que tinha mudado. Aqui eles aproximam e afastam de verdade — o fluxo
+     inteiro numa tela para achar o caminho, e de perto para escrever. O
+     desenho nao muda, so a lente. A escolha fica no navegador porque e de
+     quem esta olhando, nao parte do fluxo. */
+  const [zoom, setZoom] = useState(() => {
+    const guardado = Number(localStorage.getItem('projetos.zoom-fluxo'));
+    return zoomValido(guardado) ? guardado : ZOOM_PADRAO;
   });
 
-  function mudarEspaco(passo: number) {
-    setEspaco((atual) => {
-      const novo = Math.min(4000, Math.max(0, atual + passo));
-      try { localStorage.setItem('projetos.espaco-fluxo', String(novo)); } catch { /* sem espaço: só não lembra */ }
-      return novo;
-    });
+  function aplicarZoom(valor: number) {
+    setZoom(valor);
+    try { localStorage.setItem('projetos.zoom-fluxo', String(valor)); } catch { /* sem espaço: só não lembra */ }
+  }
+
+  const mudarZoom = (direcao: 1 | -1) => aplicarZoom(proximoZoom(zoom, direcao));
+
+  /* Cor com que a proxima forma nasce. A equipe desenha sempre com as
+     mesmas poucas cores (roxo o caminho, vermelho o problema, verde o que
+     ja roda); escolher uma vez e sair criando evita repintar bloco a
+     bloco depois. */
+  const [corNova, setCorNova] = useState(() => {
+    const guardada = localStorage.getItem('projetos.cor-fluxo');
+    return CORES_DO_FLUXO.some((c) => c.valor === guardada) ? (guardada as string) : CORES_DO_FLUXO[0].valor;
+  });
+
+  function escolherCorNova(valor: string) {
+    setCorNova(valor);
+    try { localStorage.setItem('projetos.cor-fluxo', valor); } catch { /* sem espaço: só não lembra */ }
+  }
+
+  /* Desfazer e refazer.
+
+     Tudo aqui se faz com a mao: um arrasto sem querer, um bloco excluido,
+     uma cor trocada. Sem Ctrl+Z, o unico caminho de volta era o historico
+     de versoes da pagina — que so existe depois de salvar. O limite de 50
+     passos guarda o suficiente para uma sessao de desenho sem encher a
+     memoria com copias do fluxo. */
+  const LIMITE_DO_HISTORICO = 50;
+  const [passado, setPassado] = useState<Fluxo[]>([]);
+  const [futuro, setFuturo] = useState<Fluxo[]>([]);
+
+  function lembrar(anterior: Fluxo) {
+    setPassado((p) => [...p, anterior].slice(-LIMITE_DO_HISTORICO));
+    setFuturo([]);
+  }
+
+  function desfazer() {
+    if (!passado.length) return;
+    const anterior = passado[passado.length - 1];
+    setPassado(passado.slice(0, -1));
+    setFuturo([...futuro, fluxo].slice(-LIMITE_DO_HISTORICO));
+    setFluxo(anterior);
+    aoMudar(escreverFluxo(anterior));
+  }
+
+  function refazer() {
+    if (!futuro.length) return;
+    const proximo = futuro[futuro.length - 1];
+    setFuturo(futuro.slice(0, -1));
+    setPassado([...passado, fluxo].slice(-LIMITE_DO_HISTORICO));
+    setFluxo(proximo);
+    aoMudar(escreverFluxo(proximo));
   }
 
   const legado = lerFluxo(conteudo) === null && conteudo.trim() !== '';
@@ -73,18 +131,25 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
      aqui, senao o bloco piscaria a cada arrastada. */
   useEffect(() => {
     const lido = lerFluxo(conteudo);
-    if (lido && escreverFluxo(lido) !== escreverFluxo(fluxo)) setFluxo(lido);
+    if (lido && escreverFluxo(lido) !== escreverFluxo(fluxo)) {
+      setFluxo(lido);
+      /* Outro desenho, outra historia: desfazer aqui devolveria o fluxo de
+         outra pagina por cima desta. */
+      setPassado([]);
+      setFuturo([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conteudo]);
 
   function gravar(novo: Fluxo) {
+    lembrar(fluxo);
     setFluxo(novo);
     aoMudar(escreverFluxo(novo));
   }
 
   function adicionar(forma: FormaDoNo) {
     const posicao = proximaPosicao(fluxo);
-    const no = noNovo(forma, posicao.x, posicao.y);
+    const no = noNovo(forma, posicao.x, posicao.y, corNova);
     gravar({ ...fluxo, nos: [...fluxo.nos, no] });
     setSelecionado(no.id);
   }
@@ -151,7 +216,8 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
 
   /* Teclado: setas empurram o bloco selecionado de 10 em 10 px, que e o
      encaixe da grade, e com Shift de 1 em 1 para o ajuste fino. Delete
-     apaga o que estiver selecionado, bloco ou seta. */
+     apaga o que estiver selecionado, bloco ou seta. Ctrl+Z e Ctrl+Y (ou
+     Ctrl+Shift+Z, como no resto do mundo) andam no historico. */
   function aoTeclar(e: KeyboardEvent) {
     if (!editando) return;
     /* Quem esta digitando num campo tem prioridade: apagar letra e mover
@@ -162,6 +228,12 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
       || ['INPUT', 'TEXTAREA', 'SELECT'].includes(alvo.tagName)
     );
     if (escrevendo) return;
+
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const tecla = e.key.toLowerCase();
+      if (tecla === 'z' && !e.shiftKey) { e.preventDefault(); desfazer(); return; }
+      if (tecla === 'y' || (tecla === 'z' && e.shiftKey)) { e.preventDefault(); refazer(); return; }
+    }
 
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (ligacaoSelecionada) {
@@ -196,22 +268,49 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
 
   /* O ouvinte fica na janela, e nao no quadro: depois de clicar num
      botao da barra o foco esta nele, e as setas nao chegariam ao
-     desenho. So age quando ha algo selecionado neste quadro. */
+     desenho. So age quando ha algo selecionado neste quadro — ou, para o
+     Ctrl+Z, quando o foco esta dentro deste quadro: desfazer costuma vir
+     logo depois de excluir um bloco, quando ja nao ha selecao nenhuma. */
   useEffect(() => {
-    if (!editando || (!selecionado && !ligacaoSelecionada)) return;
-    const ouvir = (e: KeyboardEvent) => aoTeclar(e);
+    if (!editando) return;
+    const ouvir = (e: KeyboardEvent) => {
+      const meu = selecionado || ligacaoSelecionada
+        || (!!quadro.current && quadro.current.contains(document.activeElement));
+      if (meu) aoTeclar(e);
+    };
     window.addEventListener('keydown', ouvir);
     return () => window.removeEventListener('keydown', ouvir);
+  });
+
+  /* Ctrl + roda do mouse aproxima e afasta, como em qualquer mapa ou
+     prancheta; sem o Ctrl a roda continua rolando a pagina.
+
+     O ouvinte e posto na mao, e nao pelo onWheel do React, porque so
+     assim ele nao e passivo: passivo, o preventDefault nao vale e o Ctrl
+     +roda acabaria dando zoom na pagina inteira do navegador. */
+  useEffect(() => {
+    const area = janela.current;
+    if (!area) return;
+    const rodar = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      mudarZoom(e.deltaY < 0 ? 1 : -1);
+    };
+    area.addEventListener('wheel', rodar, { passive: false });
+    return () => area.removeEventListener('wheel', rodar);
   });
 
   function comecarArrasto(e: React.MouseEvent, no: NoDoFluxo) {
     if (!editando) return;
     const area = tela.current?.getBoundingClientRect();
     if (!area) return;
+    /* Com o quadro afastado, um pixel de tela vale mais de um pixel de
+       desenho: sem dividir pelo zoom o bloco fugiria do ponteiro. */
+    antesDoGesto.current = fluxo;
     arrastando.current = {
       id: no.id,
-      dx: e.clientX - area.left - no.x,
-      dy: e.clientY - area.top - no.y,
+      dx: (e.clientX - area.left) / zoom - no.x,
+      dy: (e.clientY - area.top) / zoom - no.y,
       x: e.clientX,
       y: e.clientY,
       moveu: false,
@@ -226,8 +325,8 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
   function moverArrasto(e: React.MouseEvent) {
     const puxando = esticando.current;
     if (puxando) {
-      const largura = Math.round(Math.min(900, Math.max(60, puxando.largura + (e.clientX - puxando.x))));
-      const altura = Math.round(Math.min(700, Math.max(30, puxando.altura + (e.clientY - puxando.y))));
+      const largura = Math.round(Math.min(900, Math.max(60, puxando.largura + (e.clientX - puxando.x) / zoom)));
+      const altura = Math.round(Math.min(700, Math.max(30, puxando.altura + (e.clientY - puxando.y) / zoom)));
       setFluxo((f) => ({
         ...f,
         nos: f.nos.map((n) => (n.id === puxando.id ? { ...n, largura, altura } : n)),
@@ -242,8 +341,8 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
       if (Math.abs(e.clientX - atual.x) < FOLGA && Math.abs(e.clientY - atual.y) < FOLGA) return;
       atual.moveu = true;
     }
-    const x = Math.max(0, e.clientX - area.left - atual.dx);
-    const y = Math.max(0, e.clientY - area.top - atual.dy);
+    const x = Math.max(0, (e.clientX - area.left) / zoom - atual.dx);
+    const y = Math.max(0, (e.clientY - area.top) / zoom - atual.dy);
     /* Encaixe de 10 em 10 px: alinha os blocos sem precisar de mira. */
     setFluxo((f) => ({
       ...f,
@@ -255,18 +354,26 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
 
   function terminarArrasto() {
     const mexeu = arrastando.current?.moveu || !!esticando.current;
+    const antes = antesDoGesto.current;
     arrastando.current = null;
     esticando.current = null;
+    antesDoGesto.current = null;
     /* Clique sem arrasto nao mudou desenho nenhum: gravar aqui marcaria
        a pagina como alterada so por alguem ter selecionado um bloco. */
-    if (mexeu) aoMudar(escreverFluxo(fluxo));
+    if (!mexeu) return;
+    /* O gesto inteiro e um passo so no historico: o arrasto passa por
+       dezenas de posicoes, e desfazer uma a uma seria inutil. */
+    if (antes) lembrar(antes);
+    aoMudar(escreverFluxo(fluxo));
   }
 
   const medida = limitesDoFluxo(fluxo);
-  /* A altura cresce menos que a largura: o fluxo se espalha mais para os
-     lados, e altura demais so gera rolagem vazia. */
-  const largura = medida.largura + espaco;
-  const altura = medida.altura + Math.round(espaco * 0.6);
+  /* Uma folga fixa em volta do desenho: sem chao sobrando nao da para
+     arrastar um bloco para fora do aglomerado. A altura cresce menos que
+     a largura, porque o fluxo se espalha mais para os lados e altura
+     demais so gera rolagem vazia. */
+  const largura = medida.largura + 400;
+  const altura = medida.altura + 240;
   const noSelecionado = fluxo.nos.find((n) => n.id === selecionado) ?? null;
 
   if (legado) {
@@ -287,7 +394,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
   }
 
   return (
-    <div className="rounded-xl border border-linha bg-white">
+    <div ref={quadro} className="rounded-xl border border-linha bg-white">
       {editando && (
         <div className="flex flex-wrap items-center gap-2 border-b border-linha px-3 py-2">
           {FORMAS.map((forma) => (
@@ -300,23 +407,56 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
 
           <span className="mx-1 h-4 w-px bg-linha" />
 
-          {/* Espaco da prancheta: mais chao para espalhar os blocos, sem
-              mexer no tamanho de nada que ja foi desenhado. */}
-          <span className="flex items-center gap-1" title="Tamanho da área de trabalho">
+          {/* Cor com que a proxima forma nasce. Fica junto dos botoes de
+              forma porque e a mesma decisao: que bloco criar, e de que cor. */}
+          <span className="flex items-center gap-1" title="Cor das novas formas">
+            {CORES_DO_FLUXO.map((c) => (
+              <button
+                key={c.valor}
+                title={`Novas formas em ${c.nome.toLowerCase()}`}
+                onClick={() => escolherCorNova(c.valor)}
+                className={`h-5 w-5 rounded-full border-2 ${
+                  corNova === c.valor ? 'border-navy' : 'border-white'
+                }`}
+                style={{ backgroundColor: c.valor }}
+              />
+            ))}
+          </span>
+
+          <span className="mx-1 h-4 w-px bg-linha" />
+
+          {/* Zoom: aproxima e afasta o desenho inteiro, para caber na tela
+              ou para escrever de perto. Ctrl + roda do mouse faz o mesmo. */}
+          <span className="flex items-center gap-1" title="Zoom (Ctrl + roda do mouse)">
             <button
               className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro"
-              onClick={() => mudarEspaco(-PASSO_DE_ESPACO)} disabled={espaco === 0}
-              title="Menos espaço"
+              onClick={() => mudarZoom(-1)} disabled={zoom === ZOOMS[0]}
+              title="Afastar"
             >−</button>
             <button
               className="rounded-lg px-1 text-[11px] font-bold text-tinta-suave hover:text-roxo-escuro"
-              onClick={() => mudarEspaco(-espaco)} title="Voltar ao espaço do desenho"
-            >{largura} × {altura}</button>
+              onClick={() => aplicarZoom(ZOOM_PADRAO)} title="Voltar a 100%"
+            >{Math.round(zoom * 100)}%</button>
             <button
               className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro"
-              onClick={() => mudarEspaco(PASSO_DE_ESPACO)} disabled={espaco >= 4000}
-              title="Mais espaço"
+              onClick={() => mudarZoom(1)} disabled={zoom === ZOOMS[ZOOMS.length - 1]}
+              title="Aproximar"
             >+</button>
+          </span>
+
+          <span className="mx-1 h-4 w-px bg-linha" />
+
+          {/* Desfazer e refazer tambem em botao: quem desenha com o mouse
+              nao larga dele para procurar o atalho. */}
+          <span className="flex items-center gap-1">
+            <button
+              className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro disabled:opacity-40"
+              onClick={desfazer} disabled={!passado.length} title="Desfazer (Ctrl+Z)"
+            >↶</button>
+            <button
+              className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro disabled:opacity-40"
+              onClick={refazer} disabled={!futuro.length} title="Refazer (Ctrl+Y)"
+            >↷</button>
           </span>
 
           <span className="mx-1 h-4 w-px bg-linha" />
@@ -416,8 +556,8 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
           ) : (
             <span className="text-[11px] text-tinta-suave">
               Clique num bloco para editar o texto, mudar a cor ou ligar a outro. Arraste ou use as
-              setas do teclado para mover, Delete para apagar o que estiver selecionado, e Ctrl+V
-              para colar um print.
+              setas do teclado para mover, Delete para apagar o que estiver selecionado, Ctrl+V
+              para colar um print e Ctrl+Z para desfazer.
             </span>
           )}
         </div>
@@ -432,7 +572,11 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
       {/* A janela e presa a altura da tela: prancheta grande rola por
           dentro, em vez de empurrar o resto da pagina para baixo e levar
           a barra de rolagem lateral para longe. */}
-      <div className="max-h-[70vh] overflow-auto p-2">
+      <div ref={janela} className="max-h-[70vh] overflow-auto p-2">
+        {/* O involucro tem o tamanho ja multiplicado pelo zoom: e ele que
+            manda na barra de rolagem, porque o scale nao muda o espaco
+            que o elemento ocupa no layout. */}
+        <div style={{ width: largura * zoom, height: altura * zoom }}>
         <div
           ref={tela}
           data-quadro="fluxo"
@@ -458,6 +602,8 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
           style={{
             width: largura,
             height: altura,
+            transform: zoom === 1 ? undefined : `scale(${zoom})`,
+            transformOrigin: '0 0',
             backgroundImage: 'radial-gradient(#E7E8F5 1px, transparent 1px)',
             backgroundSize: '20px 20px',
           }}
@@ -496,25 +642,48 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
             })}
           </svg>
 
-          {/* Rótulo da seta e exclusão dela: fora do SVG, para ser clicável. */}
+          {/* Controles da seta: fora do SVG, para serem clicaveis.
+
+              Eles so aparecem na seta selecionada. A caixa de "Sim / Não"
+              ficava aberta em toda seta, o tempo todo, e na maioria dos
+              fluxos ninguem escreve nada nela: o quadro virava um campo
+              de caixinhas vazias tapando o desenho. Fechada, a seta
+              mostra so um ponto discreto; clicar nele abre o rotulo e o
+              resto. */}
           {editando && fluxo.ligacoes.map((l) => {
             const de = fluxo.nos.find((n) => n.id === l.de);
             const para = fluxo.nos.find((n) => n.id === l.para);
             if (!de || !para) return null;
             const inicio = bordaMaisProxima(de, para);
             const fim = bordaMaisProxima(para, de);
+            const meioX = (inicio.x + fim.x) / 2;
+            const meioY = (inicio.y + fim.y) / 2;
+
+            if (ligacaoSelecionada !== l.id) {
+              return (
+                <button
+                  key={l.id}
+                  title="Editar esta seta (rótulo, traço, remover)"
+                  onMouseDown={() => {
+                    setLigacaoSelecionada(l.id);
+                    setSelecionado(null);
+                    tela.current?.focus({ preventScroll: true });
+                  }}
+                  className="absolute z-10 h-3 w-3 rounded-full border border-linha bg-white opacity-40 hover:opacity-100 hover:border-roxo"
+                  style={{ left: meioX - 6, top: meioY + 2 }}
+                />
+              );
+            }
+
             return (
               <div
                 key={l.id}
                 onMouseDown={() => {
-                  setLigacaoSelecionada(l.id);
                   setSelecionado(null);
                   tela.current?.focus({ preventScroll: true });
                 }}
-                className={`absolute flex items-center gap-1 rounded ${
-                  ligacaoSelecionada === l.id ? 'ring-2 ring-roxo' : ''
-                }`}
-                style={{ left: (inicio.x + fim.x) / 2 - 62, top: (inicio.y + fim.y) / 2 + 2 }}
+                className="absolute z-20 flex items-center gap-1 rounded bg-white/90 ring-2 ring-roxo"
+                style={{ left: meioX - 62, top: meioY + 2 }}
               >
                 <input
                   className="w-20 rounded border border-linha bg-white px-1 py-0.5 text-[10px]"
@@ -549,6 +718,11 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
                   title="Remover seta"
                   onClick={() => gravar({ ...fluxo, ligacoes: fluxo.ligacoes.filter((x) => x.id !== l.id) })}
                 >✕</button>
+                <button
+                  className="rounded bg-white px-1 text-[10px] font-bold text-tinta-suave"
+                  title="Recolher"
+                  onClick={() => setLigacaoSelecionada(null)}
+                >⌄</button>
               </div>
             );
           })}
@@ -623,6 +797,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
             <div
               onMouseDown={(e) => {
                 e.stopPropagation();
+                antesDoGesto.current = fluxo;
                 esticando.current = {
                   id: noSelecionado.id,
                   x: e.clientX,
@@ -647,6 +822,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
                 : 'Fluxo ainda vazio.'}
             </p>
           )}
+        </div>
         </div>
       </div>
     </div>
