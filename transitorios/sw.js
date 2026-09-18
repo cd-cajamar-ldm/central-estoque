@@ -4,7 +4,7 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'transitorios-v2';
+const CACHE_VERSION = 'transitorios-v3';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -14,6 +14,7 @@ const PRECACHE_URLS = [
   './js/rules.js',
   './js/worker.js',
   './js/app.js',
+  './js/base.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './brand/Logo_LDM_hor_2.png',
