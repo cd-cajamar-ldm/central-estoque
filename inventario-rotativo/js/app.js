@@ -5621,6 +5621,19 @@ async function irDivGerarAuditoria(){
           descricaoLocal: desc, saldo:s.qtd, diferenca:g.netQtd, valor:g.netValor, ultimaDiv});
       }
     }
+    /* Ordem da folha: descrição do endereço. O auditor confere andando pelo CD, e a
+       ordem que interessa a ele é a do corredor — BLM 010 005, 010 007, 010 009 —, não
+       a ordem em que os itens foram marcados na tela. Endereço sem descrição vai pro
+       fim: sem rótulo não dá pra encaixar na rota, e no meio da lista ele só quebra a
+       sequência. Dentro da mesma descrição, desempata pelo código do local e pelo item,
+       pra folha sair igual toda vez que for gerada. */
+    linhas.sort((a,b)=>{
+      const da = String(a.descricaoLocal||''), db = String(b.descricaoLocal||'');
+      if(!da !== !db) return da ? -1 : 1;
+      return da.localeCompare(db, 'pt-BR')
+          || String(a.local||'').localeCompare(String(b.local||''), 'pt-BR')
+          || String(a.item||'').localeCompare(String(b.item||''), 'pt-BR');
+    });
     IR.divAuditoria = {
       geradoEm: new Date().toLocaleString('pt-BR'),
       escopo: irDivEscopoLabel(),
@@ -5671,19 +5684,39 @@ function irDivExportarItem(item){
   irDivBaixarPlanilha(cab, linhas, 'item_'+String(item).replace(/\W+/g,'_'));
 }
 /* .xlsx pelo SheetJS que o app já carrega; CSV quando ele não estiver disponível. */
+/* Borda fina em volta de TODA célula — cabeçalho e dados. Sem ela a folha da
+   auditoria sai como um bloco de texto corrido, e quem está conferindo endereço por
+   endereço perde a linha no meio do caminho. Quem escreve o estilo é o
+   xlsx-js-style carregado no index.html; a build community do xlsx descarta .s. */
+const IR_XLS_BORDA = {style:'thin', color:{rgb:'FF9AA1B4'}};
+const IR_XLS_GRADE = {top:IR_XLS_BORDA, bottom:IR_XLS_BORDA, left:IR_XLS_BORDA, right:IR_XLS_BORDA};
 function irDivBaixarPlanilha(cabecalho, linhas, nomeBase, colsMoeda){
   if(typeof XLSX!=='undefined' && XLSX.utils){
     const ws = XLSX.utils.aoa_to_sheet([cabecalho, ...linhas]);
     ws['!cols'] = cabecalho.map(h=>({wch: /Descrição/.test(h) ? 40 : Math.max(12, h.length+2)}));
-    if(colsMoeda){
-      for(let c=0;c<cabecalho.length;c++){
-        if(!colsMoeda[c]) continue;
-        for(let r=1;r<=linhas.length;r++){
-          const cel = ws[XLSX.utils.encode_cell({r, c})];
-          if(cel && typeof cel.v === 'number'){ cel.t = 'n'; cel.z = 'R$ #,##0.00;[Red]-R$ #,##0.00'; }
+    // Cabeçalho congelado: rolando 300 linhas de auditoria, sem isso não dá pra saber
+    // mais qual coluna é qual.
+    ws['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
+    ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:linhas.length, c:cabecalho.length-1}})};
+    for(let c=0;c<cabecalho.length;c++){
+      for(let r=0;r<=linhas.length;r++){
+        // Célula vazia não existe na planilha e por isso não ganharia borda — a coluna
+        // "Contagem", que é justamente onde o auditor escreve à mão, sairia sem grade.
+        // Então cria a célula em branco só pra ela receber a moldura.
+        const end = XLSX.utils.encode_cell({r, c});
+        if(!ws[end]) ws[end] = {t:'s', v:''};
+        const cel = ws[end];
+        cel.s = r===0
+          ? {font:{bold:true, sz:10, color:{rgb:'FFFFFFFF'}}, fill:{fgColor:{rgb:'FF001A72'}},
+             alignment:{horizontal:'center', vertical:'center', wrapText:true}, border:IR_XLS_GRADE}
+          : {font:{sz:10}, alignment:{vertical:'center'}, border:IR_XLS_GRADE};
+        if(r>0 && colsMoeda && colsMoeda[c] && typeof cel.v === 'number'){
+          cel.t = 'n'; cel.z = 'R$ #,##0.00;[Red]-R$ #,##0.00';
         }
       }
     }
+    // Garante que o range da planilha cobre as células em branco que acabamos de criar.
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:linhas.length, c:cabecalho.length-1}});
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Dados');
     XLSX.writeFile(wb, nomeBase+'.xlsx');
