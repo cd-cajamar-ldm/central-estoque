@@ -1041,12 +1041,18 @@ function irMesLabel(mes){
   const i = parseInt(m,10)-1;
   return (IR_MES_ABREV[i]||m||'?')+'/'+String(a||'').slice(2);
 }
-/* Gráfico mensal de UMA métrica. `rows` = [{mes, contado, divergente, acuracia}]. */
+// Acurácia null = mês sem base de cálculo. Na tabela vira traço, não "0,0%".
+function irFmtPctOuTraco(v){ return v==null ? '—' : irFmtPct(v); }
+/* Gráfico mensal de UMA métrica. `rows` = [{mes, contado, divergente, acuracia}],
+   com acuracia null quando o mês não tem base pra calcular. */
 /* Piso da faixa de acurácia. Padrão 95%, mas desce se algum mês ficar abaixo
    disso — senão a barrinha do mês pior vira um toco de 3px e não dá pra
    comparar nada (Acurácia Local costuma rodar na casa dos 93%). */
 function irMesAccFloor(rows){
-  const min = Math.min(...rows.map(r=>r.acuracia), 0.95);
+  // Mês sem base (acuracia null) fica de fora: ele não tem acurácia ruim, ele não
+  // tem acurácia nenhuma — e deixá-lo entrar zerava o piso e achatava a régua.
+  const validas = rows.map(r=>r.acuracia).filter(a=>a!=null);
+  const min = Math.min(...validas, 0.95);
   return Math.max(0, Math.floor(min*100)/100 - 0.01);
 }
 function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
@@ -1086,13 +1092,19 @@ function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
          +  `<text x="${x2.toFixed(1)}" y="${(baseY-hD-7).toFixed(1)}" text-anchor="start" class="mes-val">${irEsc(fmtVal(r.divergente))}</text>`
          +  `<text x="${cx.toFixed(1)}" y="${(baseY+22).toFixed(1)}" text-anchor="middle" class="mes-mon">${irEsc(irMesLabel(r.mes))}</text>`;
     // Faixa de acurácia: escala do piso → 100%, com traço na meta.
-    const frac = Math.max(0, Math.min(1, (r.acuracia-lo)/(1-lo)));
-    const tw = Math.min(78, step*0.72), tx = cx-tw/2, ok = r.acuracia>=meta;
+    // Mês sem base de cálculo (acuracia null) não tem acurácia: mostra o trilho vazio
+    // e um traço no lugar do número. Pintar "0,0%" em vermelho aqui dizia que o mês
+    // foi péssimo, quando ele só não tem o que medir ainda.
+    const semDado = r.acuracia == null;
+    const frac = semDado ? 0 : Math.max(0, Math.min(1, (r.acuracia-lo)/(1-lo)));
+    const tw = Math.min(78, step*0.72), tx = cx-tw/2, ok = !semDado && r.acuracia>=meta;
     const mx = tx+tw*Math.max(0, Math.min(1,(meta-lo)/(1-lo)));
-    faixa += `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${tw.toFixed(1)}" height="7" rx="3.5" fill="var(--surface2)"/>`
-          +  `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${Math.max(tw*frac,3).toFixed(1)}" height="7" rx="3.5" fill="${ok?cfg.acc:'var(--danger)'}"><title>Acurácia ${irEsc(irMesLabel(r.mes))}: ${irFmtPct(r.acuracia)} (meta ${irFmtPct(meta)})</title></rect>`
+    const dica = semDado ? `${irEsc(irMesLabel(r.mes))}: sem base de cálculo no mês`
+                         : `Acurácia ${irEsc(irMesLabel(r.mes))}: ${irFmtPct(r.acuracia)} (meta ${irFmtPct(meta)})`;
+    faixa += `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${tw.toFixed(1)}" height="7" rx="3.5" fill="var(--surface2)"><title>${dica}</title></rect>`
+          +  (semDado ? '' : `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${Math.max(tw*frac,3).toFixed(1)}" height="7" rx="3.5" fill="${ok?cfg.acc:'var(--danger)'}"><title>${dica}</title></rect>`)
           +  `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${accTop-3}" y2="${accTop+10}" class="mes-meta"/>`
-          +  `<text x="${cx.toFixed(1)}" y="${accTop+27}" text-anchor="middle" class="mes-acc ${ok?'ok':'bad'}">${irFmtPct(r.acuracia)}</text>`;
+          +  `<text x="${cx.toFixed(1)}" y="${accTop+27}" text-anchor="middle" class="mes-acc ${semDado?'vazio':(ok?'ok':'bad')}">${semDado?'—':irFmtPct(r.acuracia)}</text>`;
   });
   return `<div class="mes-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Acurácia mensal de ${irEsc(cfg.titulo)}">
     ${grid}${bars}
@@ -1132,9 +1144,15 @@ function irPorMesDoAno(ano){
   }
   return Array.from(acc.values()).sort((x,y)=>x.mes.localeCompare(y.mes)).map(a=>({
     ...a,
-    acuraciaPecas:  a.pecasSaldoLogico>0 ? 1-a.pecasDivergentes/a.pecasSaldoLogico : 0,
-    acuraciaLocal:  a.locaisContados>0 ? 1-a.locaisDivergentes/a.locaisContados : 0,
-    acuraciaValor:  a.valorSaldoLogico>0 ? 1-a.valorDivergente/a.valorSaldoLogico : 0
+    /* Sem base de cálculo = null, e não 0. Um mês entra aqui assim que tem local
+       contado, mas Peças e Valor só ganham base quando algum local CONCLUI — então
+       existe mês legítimo com locais contados e nenhuma peça/valor apurado ainda.
+       Devolver 0 nesse caso pintava "0,0%" em vermelho, como se a acurácia fosse
+       péssima, quando o que falta é dado; e ainda puxava o piso da faixa
+       (irMesAccFloor) pra zero, achatando a régua de todos os outros meses. */
+    acuraciaPecas:  a.pecasSaldoLogico>0 ? 1-a.pecasDivergentes/a.pecasSaldoLogico : null,
+    acuraciaLocal:  a.locaisContados>0 ? 1-a.locaisDivergentes/a.locaisContados : null,
+    acuraciaValor:  a.valorSaldoLogico>0 ? 1-a.valorDivergente/a.valorSaldoLogico : null
   }));
 }
 function irRenderEvolucaoMensalPanel(ind){
@@ -1158,9 +1176,9 @@ function irRenderEvolucaoMensalPanel(ind){
         <th>Valor contado</th><th>Valor div.</th><th>Acur. Valor</th></tr></thead>
       <tbody>${meses.map(m=>`<tr>
         <td>${irEsc(irMesLabel(m.mes))}</td>
-        <td class="mono">${irFmtInt(m.pecasContadas)}</td><td class="mono">${irFmtInt(m.pecasDivergentes)}</td><td class="mono">${irFmtPct(m.acuraciaPecas)}</td>
-        <td class="mono">${irFmtInt(m.locaisContados)}</td><td class="mono">${irFmtInt(m.locaisDivergentes)}</td><td class="mono">${irFmtPct(m.acuraciaLocal)}</td>
-        <td class="mono">${irFmtMoneyInt(m.valorContado)}</td><td class="mono">${irFmtMoneyInt(m.valorDivergente)}</td><td class="mono">${irFmtPct(m.acuraciaValor)}</td>
+        <td class="mono">${irFmtInt(m.pecasContadas)}</td><td class="mono">${irFmtInt(m.pecasDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaPecas)}</td>
+        <td class="mono">${irFmtInt(m.locaisContados)}</td><td class="mono">${irFmtInt(m.locaisDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaLocal)}</td>
+        <td class="mono">${irFmtMoneyInt(m.valorContado)}</td><td class="mono">${irFmtMoneyInt(m.valorDivergente)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaValor)}</td>
       </tr>`).join('')}</tbody>
     </table></div>
   </details>`;
