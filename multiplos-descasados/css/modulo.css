@@ -1,0 +1,54 @@
+/* ============================================================
+   Múltiplos Descasados — estilos do módulo
+   ============================================================
+   Só o que não existe no theme.css compartilhado. Fica em arquivo separado de
+   propósito: o theme.css é cópia do mesmo arquivo dos outros módulos e precisa
+   continuar comparável linha a linha com eles.
+   ============================================================ */
+.md-filtros{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.md-busca{
+  flex:1 1 280px; min-width:220px; background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--radius); padding:8px 12px; font-size:12.5px; color:var(--ink);
+}
+.md-busca:focus{ outline:none; border-color:var(--orange); }
+.md-chips{ display:flex; gap:6px; flex-wrap:wrap; }
+
+.md-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+
+.md-left{ text-align:left !important; }
+.md-linha{ cursor:pointer; }
+.md-linha.sel{ background:var(--orange-light); }
+.md-detalhe > td{ padding:0 !important; background:var(--surface2); }
+.md-sub{ padding:12px 14px; }
+.md-sub-head{ font-size:12px; color:var(--ink-soft); margin-bottom:8px; }
+.md-comp-sobra td{ background:var(--orange-light); }
+
+/* Endereços do componente: viram etiquetas em vez de uma coluna de texto corrido,
+   porque a pergunta na tela é "onde eu acho essa peça", e um local por etiqueta
+   é o que se lê de relance com o coletor na mão. */
+.md-local{
+  display:inline-block; background:var(--surface); border:1px solid var(--line);
+  border-radius:100px; padding:2px 8px; margin:2px 4px 2px 0; font-size:10.5px; white-space:nowrap;
+}
+.md-local b{ color:var(--ink); }
+.md-local-mais{ color:var(--ink-soft); font-style:italic; }
+
+.md-tag{
+  display:inline-block; border-radius:100px; padding:1px 7px; font-size:9.5px;
+  font-weight:700; text-transform:uppercase; letter-spacing:.04em; vertical-align:middle;
+}
+.md-tag-bad{ background:var(--danger); color:#fff; }
+.md-tag-info{ background:var(--blue-light); color:var(--blue); }
+
+@media (max-width:640px){
+  .md-filtros{ gap:8px; }
+  .md-busca{ flex:1 1 100%; }
+  /* No celular o cartão fica com metade da largura e o valor em reais estourava
+     a caixa ("R$ 13.002,0"): o número é monoespaçado e não quebra sozinho. */
+  .kpi-card .num{ font-size:19px; overflow-wrap:anywhere; }
+}
+
+/* Aviso de cobertura de preço: fica logo abaixo dos KPIs porque é a ressalva do
+   número de R$ que está ali em cima — separado dele, viraria rodapé que ninguém lê. */
+.md-aviso{ border-left:3px solid var(--orange); font-size:12px; color:var(--ink-soft); padding:10px 14px; }
+.md-aviso strong{ color:var(--ink); }

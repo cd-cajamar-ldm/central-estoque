@@ -45,7 +45,7 @@ jobs:
 
           # Quantas linhas uma pasta pode perder, no líquido, sem levantar a mão.
           LIMITE=400
-          MODULOS="inventario-rotativo acompanhamento-projetos projetos auditoria elevadores equalizacao-elevadores"
+          MODULOS="inventario-rotativo acompanhamento-projetos projetos auditoria elevadores equalizacao-elevadores multiplos-descasados"
 
           if [[ ",$ETIQUETAS," == *",remocao-intencional,"* ]]; then
             echo "Etiqueta 'remocao-intencional' presente — verificação dispensada."
