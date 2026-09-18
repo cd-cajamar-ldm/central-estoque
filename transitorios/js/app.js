@@ -13,7 +13,7 @@
    Consequência a conhecer: em um navegador onde o Inventário nunca importou a
    390, esta tela não tem o que mostrar — e diz isso, em vez de aparecer vazia.
    ============================================================ */
-const IR_APP_VERSION = 'v2';
+const IR_APP_VERSION = 'v3';
 const IR = {
   est390Meta:null, est390Locais:null, _est390Loading:false,
   transSetores:null, transNomes:null, transExpandido:null,
@@ -24,6 +24,9 @@ const IR = {
   net410File:null, net410Processing:false, net410Progress:{stage:'', pct:0},
   net410Anos:[], net410AnoSel:null, net410Data:null,
   tela:'transitorios',
+  // Aba "Base de transitórios": ordenação e filtro por coluna vivem aqui, fora de
+  // tudo que o report usa — mexer neles não muda um número do boletim.
+  baseSort:{col:'valor', dir:'desc'}, baseFiltros:{}, _baseDeParaMapa:null,
   _transGanhos:null, _transGanhosAno:null, _transGanhosLoading:false,
   _transGanhoLocal:null, _transGanhosDiag:null,
   initErro:null
@@ -1169,6 +1172,7 @@ function irRenderBasesAvulsas(){
    não é do ciclo, é do estoque de agora. */
 const IR_TELAS = {
   transitorios:['Gestão de Transitórios','Estoque parado fora do picking, por setor responsável.'],
+  base:['Base de transitórios','Todos os transitórios, X1 e X2 em colunas — consulta, fora do report.'],
   importacao:['Importação','QRY0390, QRY0160 e QRY410 — as bases do transitório.']
 };
 function irRenderView(){
@@ -1178,15 +1182,18 @@ function irRenderView(){
     raiz.innerHTML = irEmptyState('Não consegui abrir o banco do navegador', IR.initErro, null, null);
     return;
   }
-  raiz.innerHTML = IR.tela==='importacao' ? irRenderImportacao() : irRenderTransitorios();
+  raiz.innerHTML = IR.tela==='importacao' ? irRenderImportacao()
+    : IR.tela==='base' ? irRenderBaseTransitorios()
+    : irRenderTransitorios();
 }
 function irRenderImportacao(){
   return irRenderBasesAvulsas();
 }
-// Duas telas só: transitórios e importação. O nome irSwitchTab é o mesmo do
-// Inventário de propósito — é o que a tela de transitórios chama no estado vazio.
+// Três telas: o report por setor, a base pra consultar transitório a transitório e
+// a importação. O nome irSwitchTab é o mesmo do Inventário de propósito — é o que a
+// tela de transitórios chama no estado vazio.
 function irSwitchTab(tela){
-  IR.tela = (tela==='importacao') ? 'importacao' : 'transitorios';
+  IR.tela = IR_TELAS[tela] ? tela : 'transitorios';
   document.querySelectorAll('.nav-item[data-tab]').forEach(b=>b.classList.toggle('active', b.dataset.tab===IR.tela));
   const [titulo, sub] = IR_TELAS[IR.tela];
   const t = document.getElementById('tabTitle'), s2 = document.getElementById('tabSubtitle');
