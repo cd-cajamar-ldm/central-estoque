@@ -543,6 +543,9 @@ table.table-dense tbody td{ padding:3px 10px; font-size:12.5px; }
 .mes-acc{ font-size:11px; font-weight:800; font-family:'SFMono-Regular',Consolas,monospace; }
 .mes-acc.ok{ fill:var(--success); }
 .mes-acc.bad{ fill:var(--danger); }
+/* Mês sem base de cálculo: traço neutro, nem verde nem vermelho — não houve
+   acurácia boa nem ruim, não houve acurácia. */
+.mes-acc.vazio{ fill:var(--ink-soft); font-weight:700; }
 /* ---------- ABA PRODUTIVIDADE ----------
    Reaproveita o chrome do Dashboard (.panel, .kpi-grid, .kpi-card, .table-wrap) —
    aqui só o que é específico da aba. Azul institucional para volume, laranja para
