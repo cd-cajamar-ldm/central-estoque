@@ -294,7 +294,6 @@ const IR_TAB_LABELS = {
   produtividade:['Produtividade','Ritmo, meta, qualidade e capacidade da equipe.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
-  historico:['Histórico','Linha do tempo de todos os ciclos.'],
   comparativo:['Comparativo entre Ciclos','Compare acurácia, produtividade e tendências.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
@@ -327,17 +326,24 @@ function irRenderCycleBadge(){
   // nada" quando o segundo ciclo for processado.
   // Ordena por ano E número: só pelo número, "Ciclo 4/2025" subia acima do
   // "Ciclo 3/2026" e o ciclo em curso aparecia no meio da lista.
-  // Só os ciclos do ano corrente (o ano do ciclo mais novo). Ciclo de ano fechado
-  // não é mais operação, é histórico — e continua acessível na aba Histórico. Se o
-  // ciclo ativo for de um ano anterior (o usuário veio do Histórico), ele entra na
-  // lista pra não sumir o item selecionado.
-  const anoAtual = irCicloAno(irCicloMaisNovo(IR.ciclos));
-  const ordenados = IR.ciclos
-    .filter(c => irCicloAno(c) === anoAtual || (IR.cicloAtivo && c.id === IR.cicloAtivo.id))
-    .sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a));
-  badge.innerHTML = `<select id="cycleFilterSelect" onchange="irFiltrarCiclo(this.value)" title="Filtrar por ciclo">
-    ${ordenados.map(c=>`<option value="${c.id}" ${IR.cicloAtivo && c.id===IR.cicloAtivo.id ? 'selected' : ''}>${irCicloLabel(c)} — ${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</option>`).join('')}
-  </select>`;
+  /* Todos os ciclos, agrupados por ano — o do ano corrente primeiro. Antes a lista
+     era só do ano do ciclo mais novo, e ciclo de ano fechado se alcançava pela aba
+     Histórico; sem ela, este seletor é o único caminho, e esconder ano anterior
+     deixaria o dado preso no banco. O agrupamento por ano evita que a lista vire uma
+     fileira longa sem separação quando houver vários anos. */
+  const ordenados = IR.ciclos.slice().sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a));
+  const porAno = new Map();
+  for(const c of ordenados){
+    const ano = irCicloAno(c) || '—';
+    if(!porAno.has(ano)) porAno.set(ano, []);
+    porAno.get(ano).push(c);
+  }
+  const opcao = c=>`<option value="${c.id}" ${IR.cicloAtivo && c.id===IR.cicloAtivo.id ? 'selected' : ''}>${irCicloLabel(c)} — ${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</option>`;
+  const grupos = Array.from(porAno.entries())
+    .map(([ano, lista]) => porAno.size>1
+      ? `<optgroup label="${irEsc(ano)}">${lista.map(opcao).join('')}</optgroup>`
+      : lista.map(opcao).join('')).join('');
+  badge.innerHTML = `<select id="cycleFilterSelect" onchange="irFiltrarCiclo(this.value)" title="Filtrar por ciclo">${grupos}</select>`;
   irRenderMonthFilter();
 }
 // Filtro de mês do topbar — lista os meses que o ciclo ativo realmente tem contagem
@@ -383,7 +389,7 @@ function irRenderView(){
   if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias');
   // Transitórios não depende de ciclo importado: é um controle próprio, não uma
   // leitura da contagem.
-  const SEM_CICLO = new Set(['importacao','configuracoes','historico']);
+  const SEM_CICLO = new Set(['importacao','configuracoes']);
   const needsCiclo = !SEM_CICLO.has(IR.currentTab);
   if(needsCiclo && !IR.cicloAtivo){
     root.innerHTML = IR.initErro
@@ -396,7 +402,7 @@ function irRenderView(){
   const renderers = {
     dashboard: irRenderDashboard, ciclo: irRenderGestaoCiclo, produtividade: irRenderProdutividade,
     setores: irRenderSetores,
-    divergencias: irRenderDivergencias, historico: irRenderHistorico,
+    divergencias: irRenderDivergencias,
     comparativo: irRenderComparativo, indicadores: irRenderIndicadores,
     importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes
   };
@@ -661,7 +667,7 @@ function irRenderCicloDetectado(){
   return cabecalho+`<div class="det-ciclo ${existente?'regrava':''}">
     <strong>Ciclo ${d.numero}/${d.ano}</strong>
     <span>${irFmtDate(d.dataAbertura)} a ${irFmtDate(d.dataPrevistaTermino)} · identificado pela ${irEsc(fonte)}</span>
-    <span>${existente ? 'Já existe — processar vai <strong>regravar</strong> esse ciclo.' : 'Ciclo novo — será criado no Histórico.'}</span>
+    <span>${existente ? 'Já existe — processar vai <strong>regravar</strong> esse ciclo.' : 'Ciclo novo — será criado na lista de ciclos.'}</span>
   </div>`;
 }
 function irImportToggle(key){ IR.importExpandido = IR.importExpandido===key ? null : key; irRenderView(); }
@@ -6271,25 +6277,6 @@ function irExportarLocaisPendentesCsv(rua){
 /* ============================================================
    HISTÓRICO
    ============================================================ */
-function irRenderHistorico(){
-  if(!IR.ciclos.length) return irEmptyState('Nenhum ciclo no histórico', 'Processe o primeiro ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
-  return `<div class="panel"><h3>Linha do tempo</h3>
-    <div class="table-wrap"><table><thead><tr><th>Ciclo</th><th>Status</th><th>Abertura</th><th>Término previsto</th><th>Encerrado em</th><th></th></tr></thead>
-    <tbody>${IR.ciclos.slice().sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a)).map(c=>`<tr>
-      <td class="mono">${c.numero}${irCicloAno(c)?'/'+irCicloAno(c):''}</td>
-      <td><span class="tag ${irCicloStatus(c)==='aberto'?'tag-orange':'tag-good'}">${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</span></td>
-      <td>${irFmtDate(c.dataAbertura)}</td><td>${irFmtDate(c.dataPrevistaTermino)}</td><td>${irFmtDate(c.dataEncerramento)}</td>
-      <td><button class="btn-link" onclick="irSelecionarCiclo('${c.id}')">Ver indicadores</button></td>
-    </tr>`).join('')}</tbody></table></div>
-  </div>`;
-}
-async function irSelecionarCiclo(cicloId){
-  IR.cicloAtivo = IR.ciclos.find(c=>c.id===cicloId);
-  IR.calMesIdx = null;
-  await irLoadCicloData(cicloId);
-  irSwitchTab('dashboard');
-}
-
 /* ============================================================
    COMPARATIVO ENTRE CICLOS
    ============================================================ */

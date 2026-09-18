@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 17;
+const IR_INDICADORES_VERSION = 18;
 
 function parseNumber(v){
   if(v===undefined || v===null || v==='') return 0;
@@ -1073,30 +1073,33 @@ function irDivergenciasDoCiclo(divergencias){
   }
   return air.filter(d=>irNumInventario(d.inventario) === ultima.get(d.local));
 }
-/* Endereços que não são posição de estoque, e por isso ficam fora dos indicadores
-   do ciclo: os de lançamento de ajuste e os transitórios. A divergência de um
-   endereço de ajuste é o próprio acerto sendo registrado — ela já foi contada no
-   endereço onde o erro aconteceu, e contar de novo é contar em dobro.
+/* O escopo do ciclo é a BASE CONGELADA: local que está nela conta, local que não
+   está não conta. É ela que define quais endereços o ciclo foi orçado pra cobrir, e
+   por isso é o único norte confiável.
 
-   ML não entra na lista: é escada, foi reclassificada como posição do ciclo.
+   Antes o escopo era uma lista de prefixos de endereço (AIN, TID, REV, TR...),
+   montada pra tirar "endereço de ajuste" do cálculo por supor que a divergência
+   lançada ali já tinha sido contada no endereço do erro. A suposição não valia pro
+   AIR: ele é um endereço sistêmico usado justamente quando a posição está com pedido
+   atrelado e o ajuste NÃO pode ser lançado no endereço físico — ou seja, é o único
+   lançamento que existe, não uma segunda via. O efeito era descartar contagem boa:
+   mês em que a equipe trabalhou só nesses endereços aparecia com zero peça e zero
+   valor no painel mensal.
 
-   Vale só aqui. A aba Divergências continua enxergando tudo, porque é auditoria do
-   CD inteiro. */
-const IR_PREFIXOS_FORA_DO_CICLO = new Set([
-  'AIN','AEE','BAI','ANF','LIT','TID','PER','ERR','ERO','GER','NFS','ER','AIR',
-  'REV','REC','INS','ME','TR','ANE','AVA','CAN','QBR'
-]);
-function irForaDoCiclo(x1){
-  return IR_PREFIXOS_FORA_DO_CICLO.has(String(x1||'').trim().toUpperCase());
-}
+   O recorte do Inventário é: motivo AIR (irDivergenciasDoCiclo) e local presente na
+   base congelada do ciclo. Transitório fica de fora porque não é congelado no ciclo —
+   ele é assunto do módulo de Transitórios, não uma exceção escrita em código.
+
+   A aba Divergências continua enxergando tudo, porque é auditoria do CD inteiro. */
 function calcularIndicadores({congelados: congeladosTodos, contagens, divergencias: divergenciasTodas, statusPorLocal: statusPorLocalTodos, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
   locaisComCancelamento, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
   locaisCanceladosAposBater, locaisCanceladosInterrompidos}){
-  // Escopo do ciclo: fora os endereços de ajuste e os transitórios.
-  const congelados = congeladosTodos.filter(l=>!irForaDoCiclo(l.x1));
-  const foraDoCiclo = new Set(congeladosTodos.filter(l=>irForaDoCiclo(l.x1)).map(l=>l.idLocal));
+  // Escopo do ciclo: a base congelada, inteira. Local fora dela não entra em
+  // indicador nenhum; local dentro dela entra, seja qual for o prefixo do endereço.
+  const congelados = congeladosTodos;
+  const noCiclo = new Set(congeladosTodos.map(l=>l.idLocal));
   const statusPorLocal = new Map();
-  for(const [local, st] of statusPorLocalTodos) if(!foraDoCiclo.has(local)) statusPorLocal.set(local, st);
+  for(const [local, st] of statusPorLocalTodos) if(noCiclo.has(local)) statusPorLocal.set(local, st);
   const locaisCongelados = congelados.length;
   // Taxa de recontagem/cancelamento: local que teve trabalho de campo cancelado (não
   // fechou porque foi interrompido) sobre o total de locais orçados do ciclo.
@@ -1105,7 +1108,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
 
   const clamp01 = (n)=>Math.max(0, Math.min(1, n));
   // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo.
-  const divergencias = irDivergenciasDoCiclo(divergenciasTodas).filter(d=>!foraDoCiclo.has(d.local));
+  const divergencias = irDivergenciasDoCiclo(divergenciasTodas).filter(d=>noCiclo.has(d.local));
 
   // Acurácia Peças/Valor e Divergência Peças/Valor só podem considerar locais já
   // CONCLUÍDOS (rodadas bateram = "convergido", ou encerrado após 5 rodadas sem bater
@@ -1265,6 +1268,11 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   const diaFinalPorLocal = new Map(); // local -> {dia, rodada}
   for(const c of contagens){
     if(c.idConferencia<=1 || !c.dataSituacao) continue;
+    // Mesmo norte do resto: só local da base congelada. Sem isso, "locais contados"
+    // saía de um universo maior que o de peças/valor e que o de locais divergentes —
+    // um mês podia mostrar local contado com zero peça e zero valor, e a Acurácia
+    // Local vinha inflada por ter denominador maior que o numerador.
+    if(!noCiclo.has(c.local)) continue;
     const dia = c.dataSituacao.slice(0,10);
     const atual = diaFinalPorLocal.get(c.local);
     if(!atual || c.idConferencia>atual.rodada) diaFinalPorLocal.set(c.local, {dia, rodada:c.idConferencia});
