@@ -180,7 +180,18 @@ async function runPipeline390({buf390}){
         familia: String(getVal(row, r.familia) ?? '').trim(),
         marca: String(getVal(row, r.marca) ?? '').trim(),
         departamento: String(getVal(row, r.departamento) ?? '').trim(),
-        qtde: 0, qtdeDisp: 0, locais: []
+        qtde: 0, qtdeDisp: 0,
+        // Saldo separado por RESTRIÇÃO. É o eixo do módulo: casar só acontece
+        // entre peças vendáveis (WN), e o ajuste é sempre de uma restrição pra
+        // outra. Sem esse corte, um componente com 5 peças em WN e 5 em 86
+        // parece ter 10 disponíveis pra casar.
+        porRestricao: {},
+        // Endereços agregados por LOCAL + RESTRIÇÃO. A 390 quebra a mesma
+        // combinação em várias linhas quando há mais de um lote no endereço;
+        // sem juntar, o mesmo endereço virava duas linhas de coletor com a
+        // mesma quantidade e o operador lançaria o dobro.
+        porLocal: new Map(),
+        locais: []
       };
       porItem.set(item, it);
     }
@@ -188,22 +199,39 @@ async function runPipeline390({buf390}){
     // QTDE_DISP pode não vir na extração antiga; sem ela, o disponível é a
     // própria quantidade, senão a visão "só disponível" zeraria o módulo.
     const disp = r.qtdeDisp ? parseNumber(getVal(row, r.qtdeDisp)) : qtde;
+    const restricao = String(getVal(row, r.restricao) ?? '').trim().toUpperCase();
     it.qtde += qtde;
     it.qtdeDisp += disp;
+    const acc = it.porRestricao[restricao] || (it.porRestricao[restricao] = {qtde:0, qtdeDisp:0});
+    acc.qtde += qtde;
+    acc.qtdeDisp += disp;
     if(!it.valorUnitario) it.valorUnitario = parseNumber(getVal(row, r.valorUnitario));
-    it.locais.push({
-      local: String(getVal(row, r.local) ?? '').trim(),
-      desc: String(getVal(row, r.descLocal) ?? '').trim(),
-      x1: String(getVal(row, r.x1) ?? '').trim(),
-      x2: String(getVal(row, r.x2) ?? '').trim(),
-      predio: String(getVal(row, r.predio) ?? '').trim(),
-      clal: String(getVal(row, r.classeLocal) ?? '').trim(),
-      restricao: String(getVal(row, r.restricao) ?? '').trim(),
-      qtde, qtdeDisp: disp
-    });
+    const local = String(getVal(row, r.local) ?? '').trim();
+    const chave = local + '|' + restricao;
+    let lugar = it.porLocal.get(chave);
+    if(!lugar){
+      lugar = {
+        local,
+        desc: String(getVal(row, r.descLocal) ?? '').trim(),
+        x1: String(getVal(row, r.x1) ?? '').trim(),
+        x2: String(getVal(row, r.x2) ?? '').trim(),
+        predio: String(getVal(row, r.predio) ?? '').trim(),
+        clal: String(getVal(row, r.classeLocal) ?? '').trim(),
+        restricao,
+        qtde: 0, qtdeDisp: 0, lotes: 0
+      };
+      it.porLocal.set(chave, lugar);
+    }
+    lugar.qtde += qtde;
+    lugar.qtdeDisp += disp;
+    lugar.lotes++;
   }
   for(const it of porItem.values()){
-    it.locais.sort((a,b)=>b.qtde - a.qtde);
+    // Map não sobrevive à gravação estruturada do IndexedDB do jeito que a tela
+    // espera ler; vira lista aqui, já ordenada pelo maior saldo — que é a ordem
+    // em que os endereços serão consumidos no plano de ajuste.
+    it.locais = Array.from(it.porLocal.values()).sort((a,b)=>b.qtde - a.qtde);
+    delete it.porLocal;
   }
 
   post('progress', {stage:'Gravando saldos...', pct:80});
