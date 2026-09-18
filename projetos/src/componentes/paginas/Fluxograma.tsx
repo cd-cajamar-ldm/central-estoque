@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   bordaMaisProxima, CORES_DO_FLUXO, ESPESSURAS, escreverFluxo, espessuraDo, fluxoVazio, lerFluxo,
-  alinharNos, colarNoFluxo, limitesDoFluxo, noDeImagem, noNovo, proximaPosicao, proximoZoom,
-  recortarSelecao, rotuloDaForma, rotuloDoAlinhamento, ZOOM_PADRAO, ZOOMS, zoomValido,
+  alinharNos, colarNoFluxo, distribuirNos, limitesDoFluxo, noDeImagem, noNovo, proximaPosicao,
+  proximoZoom, recortarSelecao, recorteDoTexto, recorteParaTexto, rotuloDaDistribuicao,
+  rotuloDaForma, rotuloDoAlinhamento, ZOOM_PADRAO, ZOOMS, zoomValido,
 } from '@/dominio/fluxo';
 import { imagemDoEvento, reduzirImagem } from '@/lib/imagemColada';
-import type { Alinhamento, Fluxo, FormaDoNo, NoDoFluxo } from '@/dominio/fluxo';
+import type { Alinhamento, Eixo, Fluxo, FormaDoNo, NoDoFluxo } from '@/dominio/fluxo';
 
 interface Props {
   conteudo: string;
@@ -20,6 +21,25 @@ const FORMAS: FormaDoNo[] = ['inicio', 'caixa', 'decisao', 'circulo', 'triangulo
    e nao uma seta de texto (⇤, ⤒), porque as setas sao quase iguais entre
    si em fonte pequena — aqui a linha de referencia e as duas barras
    mostram para onde os blocos vao. */
+/* Distribuir: tres barras com os vaos iguais entre elas, que e
+   exatamente o que o botao faz. */
+function IconeDistribuir({ eixo }: { eixo: Eixo }) {
+  const deitado = eixo === 'horizontal';
+  const barras = [0, 5.5, 11];
+  return (
+    <svg viewBox="0 0 15 15" className="h-3.5 w-3.5" aria-hidden="true">
+      {barras.map((p, i) => (
+        <rect
+          key={i}
+          x={deitado ? p + 0.5 : 2} y={deitado ? 2 : p + 0.5}
+          width={deitado ? 3 : 11} height={deitado ? 11 : 3}
+          rx="1" fill="currentColor" opacity={0.75}
+        />
+      ))}
+    </svg>
+  );
+}
+
 function IconeAlinhar({ como }: { como: Alinhamento }) {
   /* Duas barras de tamanhos diferentes, para dar para ver que elas se
      movem ate a guia, e a guia na posicao do alinhamento. */
@@ -90,6 +110,16 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
      comecou, isso limpava a selecao que o proprio clique acabara de
      fazer. */
   const comecouNoFundo = useRef(false);
+  /* Arrastar o fundo rola o quadro, como se fosse uma folha na mesa.
+
+     Com o zoom aproximado o desenho passa da janela, e a unica saida era
+     a barra de rolagem lateral, la embaixo, longe da mao. Puxando o
+     proprio fundo o fluxo anda para os dois lados sem sair de perto do
+     que se esta desenhando. */
+  const arrastandoOFundo = useRef<
+    { x: number; y: number; esquerda: number; topo: number; moveu: boolean } | null
+  >(null);
+  const [rolandoOFundo, setRolandoOFundo] = useState(false);
   /* O desenho como estava quando o arrasto comecou: e ele que volta no
      Ctrl+Z, e nao cada passo intermediario do gesto. */
   const antesDoGesto = useRef<Fluxo | null>(null);
@@ -240,6 +270,10 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
     gravar({ ...fluxo, nos: alinharNos(fluxo.nos, selecionados, como) });
   }
 
+  function distribuir(eixo: Eixo) {
+    gravar({ ...fluxo, nos: distribuirNos(fluxo.nos, selecionados, eixo) });
+  }
+
   /* Copiar, recortar e colar dentro do quadro.
 
      A area de transferencia e do proprio quadro, e nao a do sistema: o
@@ -255,22 +289,30 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
 
   function copiar(recortando: boolean) {
     if (!selecionados.length) return;
-    copia.current = recortarSelecao(fluxo, selecionados);
+    const recorte = recortarSelecao(fluxo, selecionados);
+    copia.current = recorte;
     setTemCopia(true);
+    /* Vai tambem para a area de transferencia do sistema: e o que faz o
+       Ctrl+V de agora valer mais do que o print copiado meia hora atras.
+       Se o navegador recusar (permissao, pagina sem foco), a copia de
+       dentro continua valendo. */
+    void navigator.clipboard?.writeText?.(recorteParaTexto(recorte)).catch(() => { /* fica só a de dentro */ });
     if (recortando) removerNos(selecionados);
   }
 
-  function colarBlocos() {
-    if (!copia.current?.nos.length) return;
-    const { fluxo: novo, ids } = colarNoFluxo(fluxo, copia.current, PASSO_DA_COLAGEM);
+  function colarBlocos(recorte?: Fluxo) {
+    const fonte = recorte ?? copia.current;
+    if (!fonte?.nos.length) return;
+    const { fluxo: novo, ids } = colarNoFluxo(fluxo, fonte, PASSO_DA_COLAGEM);
     gravar(novo);
     setSelecionados(ids);
     /* Colar de novo cai mais adiante, e nao de volta no mesmo lugar: e o
        que se espera quando se cola tres vezes seguidas. */
     copia.current = {
-      ...copia.current,
-      nos: copia.current.nos.map((n) => ({ ...n, x: n.x + PASSO_DA_COLAGEM, y: n.y + PASSO_DA_COLAGEM })),
+      ...fonte,
+      nos: fonte.nos.map((n) => ({ ...n, x: n.x + PASSO_DA_COLAGEM, y: n.y + PASSO_DA_COLAGEM })),
     };
+    setTemCopia(true);
   }
 
   function ligar(paraId: string) {
@@ -291,10 +333,23 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
      como qualquer outro. */
   async function colar(evento: React.ClipboardEvent) {
     if (!editando) return;
+
+    /* Ordem das perguntas: primeiro "isto e um bloco deste quadro?".
+       Copiar um bloco escreve na area do sistema, entao um bloco copiado
+       agora chega aqui na frente de qualquer print copiado antes — era
+       justamente o print velho que colava no lugar do bloco. */
+    const texto = evento.clipboardData?.getData('text/plain') ?? '';
+    const doSistema = recorteDoTexto(texto);
+    if (doSistema?.nos.length) {
+      evento.preventDefault();
+      colarBlocos(doSistema);
+      return;
+    }
+
     const arquivo = imagemDoEvento(evento);
     if (!arquivo) {
-      /* Sem imagem na area do sistema, o Ctrl+V cola o que foi copiado
-         aqui dentro. */
+      /* Sem imagem e sem bloco na area do sistema, vale o que foi
+         copiado aqui dentro (o navegador pode ter recusado a escrita). */
       if (copia.current?.nos.length) {
         evento.preventDefault();
         colarBlocos();
@@ -455,6 +510,20 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
   }
 
   function moverArrasto(e: React.MouseEvent) {
+    const mao = arrastandoOFundo.current;
+    const rolavel = janela.current;
+    if (mao && rolavel) {
+      const dx = e.clientX - mao.x;
+      const dy = e.clientY - mao.y;
+      if (!mao.moveu && Math.abs(dx) < FOLGA && Math.abs(dy) < FOLGA) return;
+      mao.moveu = true;
+      /* O conteudo segue o ponteiro: puxar para a esquerda mostra o que
+         esta a direita, entao a rolagem anda no sentido contrario. */
+      rolavel.scrollLeft = mao.esquerda - dx;
+      rolavel.scrollTop = mao.topo - dy;
+      return;
+    }
+
     const puxando = esticando.current;
     if (puxando) {
       const largura = Math.round(Math.min(900, Math.max(60, puxando.largura + (e.clientX - puxando.x) / zoom)));
@@ -469,6 +538,18 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
     const atual = arrastando.current;
     const area = tela.current?.getBoundingClientRect();
     if (!atual || !area) return;
+    /* Levar um bloco para fora da parte visivel: chegando perto da borda,
+       a janela acompanha, em vez de o gesto morrer ali. */
+    const rolar = janela.current;
+    if (rolar) {
+      const vista = rolar.getBoundingClientRect();
+      const BEIRADA = 40;
+      const PASSO = 14;
+      if (e.clientX > vista.right - BEIRADA) rolar.scrollLeft += PASSO;
+      else if (e.clientX < vista.left + BEIRADA) rolar.scrollLeft -= PASSO;
+      if (e.clientY > vista.bottom - BEIRADA) rolar.scrollTop += PASSO;
+      else if (e.clientY < vista.top + BEIRADA) rolar.scrollTop -= PASSO;
+    }
     if (!atual.moveu) {
       if (Math.abs(e.clientX - atual.x) < FOLGA && Math.abs(e.clientY - atual.y) < FOLGA) return;
       atual.moveu = true;
@@ -494,6 +575,13 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
   }
 
   function terminarArrasto() {
+    if (arrastandoOFundo.current) {
+      /* Puxar o fundo nao e clicar nele: quem arrastou o quadro nao quis
+         limpar a selecao. */
+      if (arrastandoOFundo.current.moveu) comecouNoFundo.current = false;
+      arrastandoOFundo.current = null;
+      setRolandoOFundo(false);
+    }
     const mexeu = arrastando.current?.moveu || !!esticando.current;
     const colapsarEm = !mexeu && arrastando.current?.colapsar ? arrastando.current.id : null;
     if (colapsarEm) setSelecionados([colapsarEm]);
@@ -603,7 +691,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
             >Recortar</button>
             <button
               className="rounded-lg border border-linha px-2 py-1 text-[11px] font-bold text-tinta-suave hover:border-roxo hover:text-roxo-escuro disabled:opacity-40"
-              onClick={colarBlocos} disabled={!temCopia} title="Colar (Ctrl+V)"
+              onClick={() => colarBlocos()} disabled={!temCopia} title="Colar (Ctrl+V)"
             >Colar</button>
           </span>
 
@@ -642,6 +730,22 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
                   ><IconeAlinhar como={como} /></button>
                 ))}
               </span>
+
+              {/* Distribuir: so faz sentido com tres ou mais, porque o que
+                  ele acerta e o vao do meio. */}
+              {selecionados.length > 2 && (
+                <span className="flex items-center gap-1">
+                  {(['horizontal', 'vertical'] as Eixo[]).map((eixo) => (
+                    <button
+                      key={eixo}
+                      title={rotuloDaDistribuicao[eixo]}
+                      onClick={() => distribuir(eixo)}
+                      className="rounded-lg border border-linha px-1.5 py-1.5 text-tinta-suave hover:border-roxo hover:text-roxo-escuro"
+                    ><IconeDistribuir eixo={eixo} /></button>
+                  ))}
+                </span>
+              )}
+
               <button
                 className="rounded-lg px-2 py-1 text-[11px] font-bold text-vermelho hover:bg-vermelho/5"
                 onClick={() => removerNos(selecionados)}
@@ -739,15 +843,7 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
                 onClick={() => removerNos([noSelecionado.id])}
               >Excluir bloco</button>
             </>
-          ) : (
-            <span className="text-[11px] text-tinta-suave">
-              Clique num bloco para editar o texto, mudar a cor ou ligar a outro. Arraste ou use as
-              setas do teclado para mover, Delete para apagar o que estiver selecionado, Ctrl+V
-              para colar um print e Ctrl+Z para desfazer. Shift+clique escolhe vários blocos (Ctrl+A
-              pega todos), a barra alinha o grupo, e Ctrl+C, Ctrl+X e Ctrl+V copiam, recortam e
-              colam os blocos escolhidos.
-            </span>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -778,6 +874,19 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
             /* O quadro precisa do foco para o teclado valer nele, e nao
                na rolagem da pagina. */
             if (editando) tela.current?.focus({ preventScroll: true });
+            /* Mouse no fundo (e nao num bloco) puxa a folha. Vale tambem
+               fora do modo de edicao: quem so esta lendo o fluxo tambem
+               precisa chegar ao outro lado dele. */
+            if (e.target !== e.currentTarget || !janela.current) return;
+            e.preventDefault();
+            arrastandoOFundo.current = {
+              x: e.clientX,
+              y: e.clientY,
+              esquerda: janela.current.scrollLeft,
+              topo: janela.current.scrollTop,
+              moveu: false,
+            };
+            setRolandoOFundo(true);
           }}
           onClick={(e) => {
             if (e.target === e.currentTarget && comecouNoFundo.current) {
@@ -786,7 +895,9 @@ export default function Fluxograma({ conteudo, editando, aoMudar }: Props) {
               setLigandoDe(null);
             }
           }}
-          className="relative rounded-lg outline-none"
+          className={`relative rounded-lg outline-none ${
+            rolandoOFundo ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
           style={{
             width: largura,
             height: altura,
