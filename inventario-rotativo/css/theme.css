@@ -543,6 +543,9 @@ table.table-dense tbody td{ padding:3px 10px; font-size:12.5px; }
 .mes-acc{ font-size:11px; font-weight:800; font-family:'SFMono-Regular',Consolas,monospace; }
 .mes-acc.ok{ fill:var(--success); }
 .mes-acc.bad{ fill:var(--danger); }
+/* Mês sem base de cálculo: traço neutro, nem verde nem vermelho — não houve
+   acurácia boa nem ruim, não houve acurácia. */
+.mes-acc.vazio{ fill:var(--ink-soft); font-weight:700; }
 /* ---------- ABA PRODUTIVIDADE ----------
    Reaproveita o chrome do Dashboard (.panel, .kpi-grid, .kpi-card, .table-wrap) —
    aqui só o que é específico da aba. Azul institucional para volume, laranja para
@@ -738,7 +741,10 @@ table.aud-table th{
   white-space:nowrap; border-bottom:none;
 }
 table.aud-table th.num{ text-align:right; }
-table.aud-table td{ padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+/* Grade fechada, não só a linha de baixo: a folha de auditoria é lida correndo o
+   olho pela coluna, e sem o traço vertical o endereço de uma linha se mistura com
+   a descrição da outra. Mesma divisão que sai na impressão e no Excel. */
+table.aud-table td{ padding:7px 10px; border:1px solid var(--line); vertical-align:top; }
 table.aud-table tbody tr:nth-child(even){ background:var(--surface2); }
 table.aud-table tbody tr:hover{ background:var(--orange-light); }
 table.aud-table td.mono{ text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
@@ -746,7 +752,7 @@ table.aud-table td:nth-child(1), table.aud-table td:nth-child(2){ text-align:lef
 table.aud-table .neg{ color:var(--danger); font-weight:700; }
 table.aud-table .pos{ color:var(--success); font-weight:700; }
 .aud-ult{ font-size:10.5px; color:var(--ink-soft); }
-.aud-vazio{ min-width:120px; border-bottom:1px solid var(--line); background:var(--paper); }
+.aud-vazio{ min-width:120px; border:1px solid var(--line); background:var(--paper); }
 .aud-alerta{
   font-size:11px; font-weight:700; color:var(--danger); background:var(--danger-light);
   padding:5px 10px; border-radius:6px;
@@ -780,7 +786,7 @@ table.aud-table .pos{ color:var(--success); font-weight:700; }
   table.aud-table thead{ display:table-header-group; }
   table.aud-table tr{ break-inside:avoid; page-break-inside:avoid; }
   table.aud-table th, table.aud-table td{
-    border-bottom:1px solid #999 !important; padding:3px 4px;
+    border:1px solid #999 !important; padding:3px 4px;
     white-space:normal; overflow-wrap:anywhere; word-break:break-word; vertical-align:top;
   }
   table.aud-table th{ background:#EEE !important; color:#000 !important; font-size:7.5px;
@@ -790,7 +796,7 @@ table.aud-table .pos{ color:var(--success); font-weight:700; }
   .aud-alerta{ display:none !important; }
   .aud-ult{ font-size:7.5px; }
   .aud-desc{ min-width:0; }
-  .aud-vazio{ border-bottom:1px solid #000 !important; min-width:0; }
+  .aud-vazio{ border:1px solid #000 !important; min-width:0; }
 
   /* Item · EAN · Descrição · Local · Desc. Local · Qtde · Qtde Div. · Valor Div. · Contagem */
   table.aud-t-item th:nth-child(1),  table.aud-t-item td:nth-child(1){ width:6%; }

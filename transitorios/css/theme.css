@@ -1458,3 +1458,70 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .atualiza-bar[hidden]{ display:none; }
 .atualiza-bar button{ background:var(--orange); color:#fff; border:none; border-radius:7px;
   padding:6px 12px; font-size:12px; font-weight:800; font-family:inherit; cursor:pointer; }
+
+/* ---------- BASE DE TRANSITÓRIOS (aba de consulta) ----------
+   Tabela larga de trabalho: título clicável pra ordenar e, logo abaixo dele, o
+   campo que filtra aquela coluna. Filtro e título moram na MESMA célula de
+   propósito — com duas linhas de cabeçalho, só a de cima gruda no topo ao rolar
+   e o filtro sai de vista justo quando ele é mais necessário. */
+table.bt-table{ width:100%; border-collapse:separate; border-spacing:0; font-size:12.5px;
+  table-layout:fixed; min-width:1560px; }
+/* Largura fixa por coluna: é o que deixa X1 e X2 poderem ficar presos à esquerda
+   com deslocamento exato (o "left" do X2 tem que bater com a largura do X1). */
+table.bt-table th:nth-child(1), table.bt-table th:nth-child(2){ width:80px; }
+table.bt-table th:nth-child(3){ width:180px; }
+table.bt-table th:nth-child(4){ width:112px; }
+table.bt-table th:nth-child(5){ width:98px; }
+table.bt-table th:nth-child(6){ width:132px; }
+table.bt-table th:nth-child(7){ width:120px; }
+table.bt-table th:nth-child(8){ width:112px; }
+table.bt-table th:nth-child(9){ width:146px; }
+table.bt-table th:nth-child(10){ width:110px; }
+table.bt-table th:nth-child(11), table.bt-table th:nth-child(12){ width:92px; }
+table.bt-table th:nth-child(13){ width:124px; }
+table.bt-table th:nth-child(14){ width:102px; }
+table.bt-table th.bt-th{
+  position:sticky; top:0; z-index:2; background:var(--surface2); color:var(--ink-soft);
+  text-align:left; padding:7px 9px 8px; border-bottom:1px solid var(--line); vertical-align:top;
+}
+.bt-th-lbl{
+  display:block; font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+  cursor:pointer; user-select:none; white-space:nowrap; padding-bottom:5px;
+}
+.bt-th-lbl:hover{ color:var(--ink); }
+table.bt-table th.num .bt-th-lbl{ text-align:right; }
+.bt-f{
+  width:100%; min-width:76px; border:1px solid var(--line); border-radius:6px; padding:3px 6px;
+  font-size:11px; font-weight:600; font-family:inherit; background:var(--surface); color:var(--ink);
+}
+.bt-f:focus{ outline:1px solid var(--orange); outline-offset:-1px; }
+table.bt-table td{ padding:6px 9px; border-bottom:1px solid var(--line);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+table.bt-table td.mono{ text-align:right; font-variant-numeric:tabular-nums; }
+table.bt-table td.bt-cod{ font-weight:800; font-variant-numeric:tabular-nums; }
+table.bt-table tbody tr:nth-child(even){ background:var(--surface2); }
+table.bt-table tbody tr:hover{ background:var(--orange-light); }
+/* Transitório que a base trouxe e o de-para não conhece: o traço fica laranja pra
+   dar na vista sem precisar filtrar coluna por coluna. */
+table.bt-table td.bt-sem-cad{ color:var(--orange); font-weight:800; }
+table.bt-table td.bt-vazio{ text-align:center; color:var(--ink-soft); padding:22px; white-space:normal; }
+/* X1 e X2 presos à esquerda: rolar até a coluna de valor deixava a linha sem
+   identidade — "TRANSITORIO / CD / RECEBIMENTO" sem dizer de qual transitório. */
+table.bt-table thead th:nth-child(1), table.bt-table tbody td:nth-child(1){ position:sticky; left:0; }
+table.bt-table thead th:nth-child(2), table.bt-table tbody td:nth-child(2){ position:sticky; left:80px;
+  box-shadow:1px 0 0 var(--line); }
+table.bt-table thead th:nth-child(1), table.bt-table thead th:nth-child(2){ z-index:3; }
+table.bt-table tbody td:nth-child(1), table.bt-table tbody td:nth-child(2){ z-index:1; background:var(--surface); }
+table.bt-table tbody tr:nth-child(even) td:nth-child(1),
+table.bt-table tbody tr:nth-child(even) td:nth-child(2){ background:var(--surface2); }
+table.bt-table tbody tr:hover td:nth-child(1),
+table.bt-table tbody tr:hover td:nth-child(2){ background:var(--orange-light); }
+/* A linha de "nenhum resultado" é uma célula só, com colspan: presa à esquerda ela
+   sairia do lugar e ficaria com 80px de largura. */
+table.bt-table tbody td.bt-vazio{ position:static; }
+/* O rodapé gruda embaixo e precisa passar POR CIMA das células presas à esquerda
+   (z-index 1), senão o X1/X2 da última linha aparece em cima do total. */
+table.bt-table tfoot td{
+  position:sticky; bottom:0; z-index:2; background:var(--surface); border-top:2px solid var(--line);
+  border-bottom:none; font-size:12.5px;
+}

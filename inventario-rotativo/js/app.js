@@ -294,7 +294,6 @@ const IR_TAB_LABELS = {
   produtividade:['Produtividade','Ritmo, meta, qualidade e capacidade da equipe.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
-  historico:['Histórico','Linha do tempo de todos os ciclos.'],
   comparativo:['Comparativo entre Ciclos','Compare acurácia, produtividade e tendências.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
@@ -327,17 +326,24 @@ function irRenderCycleBadge(){
   // nada" quando o segundo ciclo for processado.
   // Ordena por ano E número: só pelo número, "Ciclo 4/2025" subia acima do
   // "Ciclo 3/2026" e o ciclo em curso aparecia no meio da lista.
-  // Só os ciclos do ano corrente (o ano do ciclo mais novo). Ciclo de ano fechado
-  // não é mais operação, é histórico — e continua acessível na aba Histórico. Se o
-  // ciclo ativo for de um ano anterior (o usuário veio do Histórico), ele entra na
-  // lista pra não sumir o item selecionado.
-  const anoAtual = irCicloAno(irCicloMaisNovo(IR.ciclos));
-  const ordenados = IR.ciclos
-    .filter(c => irCicloAno(c) === anoAtual || (IR.cicloAtivo && c.id === IR.cicloAtivo.id))
-    .sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a));
-  badge.innerHTML = `<select id="cycleFilterSelect" onchange="irFiltrarCiclo(this.value)" title="Filtrar por ciclo">
-    ${ordenados.map(c=>`<option value="${c.id}" ${IR.cicloAtivo && c.id===IR.cicloAtivo.id ? 'selected' : ''}>${irCicloLabel(c)} — ${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</option>`).join('')}
-  </select>`;
+  /* Todos os ciclos, agrupados por ano — o do ano corrente primeiro. Antes a lista
+     era só do ano do ciclo mais novo, e ciclo de ano fechado se alcançava pela aba
+     Histórico; sem ela, este seletor é o único caminho, e esconder ano anterior
+     deixaria o dado preso no banco. O agrupamento por ano evita que a lista vire uma
+     fileira longa sem separação quando houver vários anos. */
+  const ordenados = IR.ciclos.slice().sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a));
+  const porAno = new Map();
+  for(const c of ordenados){
+    const ano = irCicloAno(c) || '—';
+    if(!porAno.has(ano)) porAno.set(ano, []);
+    porAno.get(ano).push(c);
+  }
+  const opcao = c=>`<option value="${c.id}" ${IR.cicloAtivo && c.id===IR.cicloAtivo.id ? 'selected' : ''}>${irCicloLabel(c)} — ${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</option>`;
+  const grupos = Array.from(porAno.entries())
+    .map(([ano, lista]) => porAno.size>1
+      ? `<optgroup label="${irEsc(ano)}">${lista.map(opcao).join('')}</optgroup>`
+      : lista.map(opcao).join('')).join('');
+  badge.innerHTML = `<select id="cycleFilterSelect" onchange="irFiltrarCiclo(this.value)" title="Filtrar por ciclo">${grupos}</select>`;
   irRenderMonthFilter();
 }
 // Filtro de mês do topbar — lista os meses que o ciclo ativo realmente tem contagem
@@ -383,7 +389,7 @@ function irRenderView(){
   if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias');
   // Transitórios não depende de ciclo importado: é um controle próprio, não uma
   // leitura da contagem.
-  const SEM_CICLO = new Set(['importacao','configuracoes','historico']);
+  const SEM_CICLO = new Set(['importacao','configuracoes']);
   const needsCiclo = !SEM_CICLO.has(IR.currentTab);
   if(needsCiclo && !IR.cicloAtivo){
     root.innerHTML = IR.initErro
@@ -396,7 +402,7 @@ function irRenderView(){
   const renderers = {
     dashboard: irRenderDashboard, ciclo: irRenderGestaoCiclo, produtividade: irRenderProdutividade,
     setores: irRenderSetores,
-    divergencias: irRenderDivergencias, historico: irRenderHistorico,
+    divergencias: irRenderDivergencias,
     comparativo: irRenderComparativo, indicadores: irRenderIndicadores,
     importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes
   };
@@ -661,7 +667,7 @@ function irRenderCicloDetectado(){
   return cabecalho+`<div class="det-ciclo ${existente?'regrava':''}">
     <strong>Ciclo ${d.numero}/${d.ano}</strong>
     <span>${irFmtDate(d.dataAbertura)} a ${irFmtDate(d.dataPrevistaTermino)} · identificado pela ${irEsc(fonte)}</span>
-    <span>${existente ? 'Já existe — processar vai <strong>regravar</strong> esse ciclo.' : 'Ciclo novo — será criado no Histórico.'}</span>
+    <span>${existente ? 'Já existe — processar vai <strong>regravar</strong> esse ciclo.' : 'Ciclo novo — será criado na lista de ciclos.'}</span>
   </div>`;
 }
 function irImportToggle(key){ IR.importExpandido = IR.importExpandido===key ? null : key; irRenderView(); }
@@ -1041,12 +1047,18 @@ function irMesLabel(mes){
   const i = parseInt(m,10)-1;
   return (IR_MES_ABREV[i]||m||'?')+'/'+String(a||'').slice(2);
 }
-/* Gráfico mensal de UMA métrica. `rows` = [{mes, contado, divergente, acuracia}]. */
+// Acurácia null = mês sem base de cálculo. Na tabela vira traço, não "0,0%".
+function irFmtPctOuTraco(v){ return v==null ? '—' : irFmtPct(v); }
+/* Gráfico mensal de UMA métrica. `rows` = [{mes, contado, divergente, acuracia}],
+   com acuracia null quando o mês não tem base pra calcular. */
 /* Piso da faixa de acurácia. Padrão 95%, mas desce se algum mês ficar abaixo
    disso — senão a barrinha do mês pior vira um toco de 3px e não dá pra
    comparar nada (Acurácia Local costuma rodar na casa dos 93%). */
 function irMesAccFloor(rows){
-  const min = Math.min(...rows.map(r=>r.acuracia), 0.95);
+  // Mês sem base (acuracia null) fica de fora: ele não tem acurácia ruim, ele não
+  // tem acurácia nenhuma — e deixá-lo entrar zerava o piso e achatava a régua.
+  const validas = rows.map(r=>r.acuracia).filter(a=>a!=null);
+  const min = Math.min(...validas, 0.95);
   return Math.max(0, Math.floor(min*100)/100 - 0.01);
 }
 function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
@@ -1086,13 +1098,19 @@ function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
          +  `<text x="${x2.toFixed(1)}" y="${(baseY-hD-7).toFixed(1)}" text-anchor="start" class="mes-val">${irEsc(fmtVal(r.divergente))}</text>`
          +  `<text x="${cx.toFixed(1)}" y="${(baseY+22).toFixed(1)}" text-anchor="middle" class="mes-mon">${irEsc(irMesLabel(r.mes))}</text>`;
     // Faixa de acurácia: escala do piso → 100%, com traço na meta.
-    const frac = Math.max(0, Math.min(1, (r.acuracia-lo)/(1-lo)));
-    const tw = Math.min(78, step*0.72), tx = cx-tw/2, ok = r.acuracia>=meta;
+    // Mês sem base de cálculo (acuracia null) não tem acurácia: mostra o trilho vazio
+    // e um traço no lugar do número. Pintar "0,0%" em vermelho aqui dizia que o mês
+    // foi péssimo, quando ele só não tem o que medir ainda.
+    const semDado = r.acuracia == null;
+    const frac = semDado ? 0 : Math.max(0, Math.min(1, (r.acuracia-lo)/(1-lo)));
+    const tw = Math.min(78, step*0.72), tx = cx-tw/2, ok = !semDado && r.acuracia>=meta;
     const mx = tx+tw*Math.max(0, Math.min(1,(meta-lo)/(1-lo)));
-    faixa += `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${tw.toFixed(1)}" height="7" rx="3.5" fill="var(--surface2)"/>`
-          +  `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${Math.max(tw*frac,3).toFixed(1)}" height="7" rx="3.5" fill="${ok?cfg.acc:'var(--danger)'}"><title>Acurácia ${irEsc(irMesLabel(r.mes))}: ${irFmtPct(r.acuracia)} (meta ${irFmtPct(meta)})</title></rect>`
+    const dica = semDado ? `${irEsc(irMesLabel(r.mes))}: sem base de cálculo no mês`
+                         : `Acurácia ${irEsc(irMesLabel(r.mes))}: ${irFmtPct(r.acuracia)} (meta ${irFmtPct(meta)})`;
+    faixa += `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${tw.toFixed(1)}" height="7" rx="3.5" fill="var(--surface2)"><title>${dica}</title></rect>`
+          +  (semDado ? '' : `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${Math.max(tw*frac,3).toFixed(1)}" height="7" rx="3.5" fill="${ok?cfg.acc:'var(--danger)'}"><title>${dica}</title></rect>`)
           +  `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${accTop-3}" y2="${accTop+10}" class="mes-meta"/>`
-          +  `<text x="${cx.toFixed(1)}" y="${accTop+27}" text-anchor="middle" class="mes-acc ${ok?'ok':'bad'}">${irFmtPct(r.acuracia)}</text>`;
+          +  `<text x="${cx.toFixed(1)}" y="${accTop+27}" text-anchor="middle" class="mes-acc ${semDado?'vazio':(ok?'ok':'bad')}">${semDado?'—':irFmtPct(r.acuracia)}</text>`;
   });
   return `<div class="mes-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Acurácia mensal de ${irEsc(cfg.titulo)}">
     ${grid}${bars}
@@ -1132,9 +1150,15 @@ function irPorMesDoAno(ano){
   }
   return Array.from(acc.values()).sort((x,y)=>x.mes.localeCompare(y.mes)).map(a=>({
     ...a,
-    acuraciaPecas:  a.pecasSaldoLogico>0 ? 1-a.pecasDivergentes/a.pecasSaldoLogico : 0,
-    acuraciaLocal:  a.locaisContados>0 ? 1-a.locaisDivergentes/a.locaisContados : 0,
-    acuraciaValor:  a.valorSaldoLogico>0 ? 1-a.valorDivergente/a.valorSaldoLogico : 0
+    /* Sem base de cálculo = null, e não 0. Um mês entra aqui assim que tem local
+       contado, mas Peças e Valor só ganham base quando algum local CONCLUI — então
+       existe mês legítimo com locais contados e nenhuma peça/valor apurado ainda.
+       Devolver 0 nesse caso pintava "0,0%" em vermelho, como se a acurácia fosse
+       péssima, quando o que falta é dado; e ainda puxava o piso da faixa
+       (irMesAccFloor) pra zero, achatando a régua de todos os outros meses. */
+    acuraciaPecas:  a.pecasSaldoLogico>0 ? 1-a.pecasDivergentes/a.pecasSaldoLogico : null,
+    acuraciaLocal:  a.locaisContados>0 ? 1-a.locaisDivergentes/a.locaisContados : null,
+    acuraciaValor:  a.valorSaldoLogico>0 ? 1-a.valorDivergente/a.valorSaldoLogico : null
   }));
 }
 function irRenderEvolucaoMensalPanel(ind){
@@ -1158,9 +1182,9 @@ function irRenderEvolucaoMensalPanel(ind){
         <th>Valor contado</th><th>Valor div.</th><th>Acur. Valor</th></tr></thead>
       <tbody>${meses.map(m=>`<tr>
         <td>${irEsc(irMesLabel(m.mes))}</td>
-        <td class="mono">${irFmtInt(m.pecasContadas)}</td><td class="mono">${irFmtInt(m.pecasDivergentes)}</td><td class="mono">${irFmtPct(m.acuraciaPecas)}</td>
-        <td class="mono">${irFmtInt(m.locaisContados)}</td><td class="mono">${irFmtInt(m.locaisDivergentes)}</td><td class="mono">${irFmtPct(m.acuraciaLocal)}</td>
-        <td class="mono">${irFmtMoneyInt(m.valorContado)}</td><td class="mono">${irFmtMoneyInt(m.valorDivergente)}</td><td class="mono">${irFmtPct(m.acuraciaValor)}</td>
+        <td class="mono">${irFmtInt(m.pecasContadas)}</td><td class="mono">${irFmtInt(m.pecasDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaPecas)}</td>
+        <td class="mono">${irFmtInt(m.locaisContados)}</td><td class="mono">${irFmtInt(m.locaisDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaLocal)}</td>
+        <td class="mono">${irFmtMoneyInt(m.valorContado)}</td><td class="mono">${irFmtMoneyInt(m.valorDivergente)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaValor)}</td>
       </tr>`).join('')}</tbody>
     </table></div>
   </details>`;
@@ -5603,6 +5627,19 @@ async function irDivGerarAuditoria(){
           descricaoLocal: desc, saldo:s.qtd, diferenca:g.netQtd, valor:g.netValor, ultimaDiv});
       }
     }
+    /* Ordem da folha: descrição do endereço. O auditor confere andando pelo CD, e a
+       ordem que interessa a ele é a do corredor — BLM 010 005, 010 007, 010 009 —, não
+       a ordem em que os itens foram marcados na tela. Endereço sem descrição vai pro
+       fim: sem rótulo não dá pra encaixar na rota, e no meio da lista ele só quebra a
+       sequência. Dentro da mesma descrição, desempata pelo código do local e pelo item,
+       pra folha sair igual toda vez que for gerada. */
+    linhas.sort((a,b)=>{
+      const da = String(a.descricaoLocal||''), db = String(b.descricaoLocal||'');
+      if(!da !== !db) return da ? -1 : 1;
+      return da.localeCompare(db, 'pt-BR')
+          || String(a.local||'').localeCompare(String(b.local||''), 'pt-BR')
+          || String(a.item||'').localeCompare(String(b.item||''), 'pt-BR');
+    });
     IR.divAuditoria = {
       geradoEm: new Date().toLocaleString('pt-BR'),
       escopo: irDivEscopoLabel(),
@@ -5653,19 +5690,39 @@ function irDivExportarItem(item){
   irDivBaixarPlanilha(cab, linhas, 'item_'+String(item).replace(/\W+/g,'_'));
 }
 /* .xlsx pelo SheetJS que o app já carrega; CSV quando ele não estiver disponível. */
+/* Borda fina em volta de TODA célula — cabeçalho e dados. Sem ela a folha da
+   auditoria sai como um bloco de texto corrido, e quem está conferindo endereço por
+   endereço perde a linha no meio do caminho. Quem escreve o estilo é o
+   xlsx-js-style carregado no index.html; a build community do xlsx descarta .s. */
+const IR_XLS_BORDA = {style:'thin', color:{rgb:'FF9AA1B4'}};
+const IR_XLS_GRADE = {top:IR_XLS_BORDA, bottom:IR_XLS_BORDA, left:IR_XLS_BORDA, right:IR_XLS_BORDA};
 function irDivBaixarPlanilha(cabecalho, linhas, nomeBase, colsMoeda){
   if(typeof XLSX!=='undefined' && XLSX.utils){
     const ws = XLSX.utils.aoa_to_sheet([cabecalho, ...linhas]);
     ws['!cols'] = cabecalho.map(h=>({wch: /Descrição/.test(h) ? 40 : Math.max(12, h.length+2)}));
-    if(colsMoeda){
-      for(let c=0;c<cabecalho.length;c++){
-        if(!colsMoeda[c]) continue;
-        for(let r=1;r<=linhas.length;r++){
-          const cel = ws[XLSX.utils.encode_cell({r, c})];
-          if(cel && typeof cel.v === 'number'){ cel.t = 'n'; cel.z = 'R$ #,##0.00;[Red]-R$ #,##0.00'; }
+    // Cabeçalho congelado: rolando 300 linhas de auditoria, sem isso não dá pra saber
+    // mais qual coluna é qual.
+    ws['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
+    ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:linhas.length, c:cabecalho.length-1}})};
+    for(let c=0;c<cabecalho.length;c++){
+      for(let r=0;r<=linhas.length;r++){
+        // Célula vazia não existe na planilha e por isso não ganharia borda — a coluna
+        // "Contagem", que é justamente onde o auditor escreve à mão, sairia sem grade.
+        // Então cria a célula em branco só pra ela receber a moldura.
+        const end = XLSX.utils.encode_cell({r, c});
+        if(!ws[end]) ws[end] = {t:'s', v:''};
+        const cel = ws[end];
+        cel.s = r===0
+          ? {font:{bold:true, sz:10, color:{rgb:'FFFFFFFF'}}, fill:{fgColor:{rgb:'FF001A72'}},
+             alignment:{horizontal:'center', vertical:'center', wrapText:true}, border:IR_XLS_GRADE}
+          : {font:{sz:10}, alignment:{vertical:'center'}, border:IR_XLS_GRADE};
+        if(r>0 && colsMoeda && colsMoeda[c] && typeof cel.v === 'number'){
+          cel.t = 'n'; cel.z = 'R$ #,##0.00;[Red]-R$ #,##0.00';
         }
       }
     }
+    // Garante que o range da planilha cobre as células em branco que acabamos de criar.
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:linhas.length, c:cabecalho.length-1}});
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Dados');
     XLSX.writeFile(wb, nomeBase+'.xlsx');
@@ -6220,25 +6277,6 @@ function irExportarLocaisPendentesCsv(rua){
 /* ============================================================
    HISTÓRICO
    ============================================================ */
-function irRenderHistorico(){
-  if(!IR.ciclos.length) return irEmptyState('Nenhum ciclo no histórico', 'Processe o primeiro ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
-  return `<div class="panel"><h3>Linha do tempo</h3>
-    <div class="table-wrap"><table><thead><tr><th>Ciclo</th><th>Status</th><th>Abertura</th><th>Término previsto</th><th>Encerrado em</th><th></th></tr></thead>
-    <tbody>${IR.ciclos.slice().sort((a,b)=>irCicloOrdem(b)-irCicloOrdem(a)).map(c=>`<tr>
-      <td class="mono">${c.numero}${irCicloAno(c)?'/'+irCicloAno(c):''}</td>
-      <td><span class="tag ${irCicloStatus(c)==='aberto'?'tag-orange':'tag-good'}">${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</span></td>
-      <td>${irFmtDate(c.dataAbertura)}</td><td>${irFmtDate(c.dataPrevistaTermino)}</td><td>${irFmtDate(c.dataEncerramento)}</td>
-      <td><button class="btn-link" onclick="irSelecionarCiclo('${c.id}')">Ver indicadores</button></td>
-    </tr>`).join('')}</tbody></table></div>
-  </div>`;
-}
-async function irSelecionarCiclo(cicloId){
-  IR.cicloAtivo = IR.ciclos.find(c=>c.id===cicloId);
-  IR.calMesIdx = null;
-  await irLoadCicloData(cicloId);
-  irSwitchTab('dashboard');
-}
-
 /* ============================================================
    COMPARATIVO ENTRE CICLOS
    ============================================================ */
