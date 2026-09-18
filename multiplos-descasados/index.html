@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Múltiplos Descasados — Loja do Mecânico</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="theme-color" content="#001A72">
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/modulo.css">
+</head>
+<body>
+<div class="atualiza-bar" id="irUpdateBar" hidden>
+  <span>Nova versão disponível.</span>
+  <button onclick="location.reload()">Atualizar agora</button>
+</div>
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <img src="brand/Logo_LDM_vert_branco.png" alt="Loja do Mecânico" class="brand-logo-img">
+      <button class="sidebar-toggle" onclick="irToggleSidebar()" title="Recolher menu">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+    <nav class="sidebar-nav" id="sidebarNav">
+      <div class="nav-section-label">Operação</div>
+      <button class="nav-item active" data-tab="descasados" onclick="irSwitchTab('descasados')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><line x1="14" y1="3" x2="21" y2="10"/><line x1="21" y1="3" x2="14" y2="10"/></svg><span>Descasados</span></button>
+      <button class="nav-item" data-tab="bloqueio" onclick="irSwitchTab('bloqueio')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Bloqueio em 86</span></button>
+
+      <div class="nav-section-label">Sistema</div>
+      <button class="nav-item" data-tab="importacao" onclick="irSwitchTab('importacao')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Importação</span></button>
+    </nav>
+    <div class="sidebar-footer">
+      <a class="theme-toggle" href="../" style="text-decoration:none;margin-bottom:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Voltar para a Central</span>
+      </a>
+      <button class="theme-toggle" onclick="irToggleTheme()" id="themeToggleBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <span id="themeToggleLabel">Modo claro</span>
+      </button>
+      <div class="sidebar-versao" id="sidebarVersao"></div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <button class="mobile-menu-btn" onclick="irToggleSidebar()" title="Abrir menu" aria-label="Abrir menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-titles">
+        <h1 id="tabTitle">Múltiplos Descasados</h1>
+        <p id="tabSubtitle">Componente sem par no estoque: dimensão, onde está e quanto vale.</p>
+      </div>
+    </div>
+    <div class="page-scroll">
+      <div id="viewRoot"><p class="field-hint">Carregando...</p></div>
+    </div>
+  </main>
+  <div class="sidebar-backdrop" onclick="irCloseSidebarMobile()"></div>
+</div>
+
+<div class="zoom-ctrl zoom-ctrl-float" title="Zoom da tela">
+  <button onclick="irZoomOut()" aria-label="Diminuir zoom">−</button>
+  <span id="zoomLabel">100%</span>
+  <button onclick="irZoomIn()" aria-label="Aumentar zoom">+</button>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/db.js"></script>
+<script src="js/rules.js"></script>
+<script src="js/app.js"></script>
+<script>
+  irInit();
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      const tinhaControle = !!navigator.serviceWorker.controller;
+      const carregadoEm = Date.now();
+      navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(reg=>{
+        const avisar = ()=>{ const el = document.getElementById('irUpdateBar'); if(el) el.hidden = false; };
+        reg.addEventListener('updatefound', ()=>{
+          const novo = reg.installing;
+          if(!novo) return;
+          novo.addEventListener('statechange', ()=>{
+            if(novo.state !== 'activated' || !tinhaControle) return;
+            if(Date.now() - carregadoEm < 10000) window.location.reload();
+            else avisar();
+          });
+        });
+        const checar = ()=>{ reg.update().catch(()=>{}); };
+        checar();
+        setInterval(checar, 30*60*1000);
+        document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checar(); });
+      }).catch(err=>console.warn('SW falhou ao registrar', err));
+    });
+  }
+</script>
+</body>
+</html>
