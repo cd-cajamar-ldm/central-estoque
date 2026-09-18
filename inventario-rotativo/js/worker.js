@@ -137,6 +137,13 @@ const ALIAS_410 = {
   item: ['Item'], nomeItem: ['Nome'], dtMov: ['Dt.Mov.','Dt Mov','Data Mov'],
   quantidade: ['Quantidade'], sentido: ['Sentido'], vlMov: ['Vl.Mov.','Vl Mov'],
   idDeposito: ['Id Deposito','Id Depósito'], obsWms: ['Observacao WMS','Observação WMS'],
+  /* A planilha tem DUAS colunas de observação. A WMS é a que traz o código do motivo
+     (AIR, ADE, AIN...), e é por ela que a legenda classifica. Mas parte dos
+     lançamentos vem com a WMS vazia e o motivo escrito só nesta outra — por exemplo
+     "Saida de estoque em atendimento ao chamado #143474 - Estoque desbalanceado", que
+     é baixa manual por chamado e não contagem de inventário. Lendo só a WMS, esses
+     caíam no padrão "sem legenda, considera" e entravam no NET sem ninguém perceber. */
+  observacao: ['Observacao','Observação'],
   // Evidência do lançamento (documento, quem fez, quando) — não entra em nenhum
   // cálculo, só fica junto do item pra provar o movimento quando alguém perguntar
   // "por que esse item mudou" (ex.: "item X, doc 460816, fulano, 13/08 17:38").
@@ -1553,7 +1560,13 @@ async function runPipeline410({buf410}){
     const valor = sinal*vlAbs;
     const qtd = sinal*qtdAbs;
 
-    const cls = irClassificarMotivo410(getVal(row, r410.obsWms), legenda410);
+    /* Observação WMS manda; vazia, cai na coluna Observacao. O texto escolhido é o
+       mesmo que vai pra classificação, pra quebra por motivo e pra evidência — assim
+       o que a tela mostra é o que de fato foi classificado. Vazio nas duas é vazio
+       mesmo: entra como "(sem observação)", que é o caso que precisa aparecer. */
+    const obsRaw = String(getVal(row, r410.obsWms) || '').trim()
+                || String(getVal(row, r410.observacao) || '').trim();
+    const cls = irClassificarMotivo410(obsRaw, legenda410);
 
     // Quebra por Obs: mostra TODOS os motivos (considerados ou não), pra transparência.
     if(!g.porObs.has(cls.id)) g.porObs.set(cls.id, {id:cls.id, legenda:cls.legenda, considerarNet:cls.considerarNet, saida:0, entrada:0});
@@ -1583,7 +1596,7 @@ async function runPipeline410({buf410}){
       usuario: String(getVal(row, r410.usuario)||'').trim(),
       dataHora: isoDateTime(parseDateVal(getVal(row, r410.dataHora))),
       sentido: sinal>0?'Entrada':(sinal<0?'Saída':''),
-      qtd: qtdAbs, valor: vlAbs, obsWms: String(getVal(row, r410.obsWms)||'').trim()
+      qtd: qtdAbs, valor: vlAbs, obsWms: obsRaw
     };
 
     acumularPeriodo(g.porMes, g.porItemMes, mes, sinal, valor, qtd, item, nomeItem, cls.id, evid);
