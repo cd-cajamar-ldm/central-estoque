@@ -10,17 +10,66 @@
    por isso o pai vem sempre da 051, nunca da 390.
 
    O QUE É "DESCASADO"
-   O estoque é registrado nos componentes, não no pai. Com 5 corpos de caneta e
-   4 tampas dá pra montar 4 canetas: o 5º corpo está descasado — ocupa endereço,
-   carrega valor e não pode virar pedido. É essa peça que precisa ser bloqueada
-   em 86 pra não cair em pedido um item que não está completo.
+   O estoque é registrado nos componentes, não no pai, e cada peça carrega uma
+   RESTRIÇÃO. Só o que está em WN (0 — estoque vendável) pode virar pedido, e
+   por isso só o WN casa. Com 5 corpos de caneta e 4 tampas em WN dá pra vender
+   4 canetas: o 5º corpo está descasado e precisa ir pra 86 (AI — múltiplos
+   incompletos dentro do estoque), senão cai pedido de uma caneta que não
+   existe inteira.
 
-   A CONTA
-     múltiplos completos = piso do menor (saldo do componente / qtde por múltiplo)
-     sobra do componente = saldo - completos x qtde
-   Componente da estrutura que não aparece na 390 conta saldo zero — e é o caso
-   mais grave, porque zera os múltiplos completos e deixa TODO o resto descasado.
+   O CAMINHO DE VOLTA
+   O 86 não é destino final. Quando a peça que faltava aparece (recebimento,
+   inventário), o conjunto volta a casar e o que está em 86 tem que voltar pra
+   WN — senão fica estoque bom parado, invisível pra venda. Por isso a conta
+   olha o POTENCIAL (WN + 86) e não só o WN:
+
+     alvo por componente = piso do menor ((WN + 86) / qtde por múltiplo) x qtde
+     WN acima do alvo  -> bloquear   0  -> 86
+     WN abaixo do alvo -> liberar   86  ->  0   (limitado ao saldo em 86)
+
+   Um componente nunca tem as duas ações ao mesmo tempo: ou sobra WN, ou falta.
+   As demais restrições (DT, WA, RT...) ficam de fora — não vendem, não casam e
+   não são mexidas por este módulo.
    ============================================================ */
+
+/* Legenda de restrições do WMS. O coletor pede o CÓDIGO (0, 86), a 390 traz a
+   SIGLA (WN, AI) — o módulo precisa das duas pontas: a sigla pra ler a planilha
+   e o código pra escrever o relatório que vai ser digitado. */
+const MD_RESTRICOES = [
+  {cod:'0',  sigla:'WN', nome:'Estoque vendável'},
+  {cod:'10', sigla:'WA', nome:'Estoque reversa'},
+  {cod:'15', sigla:'WQ', nome:'Sem condições de venda (quebra)'},
+  {cod:'20', sigla:'RT', nome:'Em conferência do recebimento'},
+  {cod:'25', sigla:'WE', nome:'Amostra / correção de cadastro / assistência técnica'},
+  {cod:'35', sigla:'WV', nome:'Fora do prazo de validade'},
+  {cod:'40', sigla:'WL', nome:'Estoque físico não localizado'},
+  {cod:'50', sigla:'WT', nome:'Análise de item'},
+  {cod:'55', sigla:'WR', nome:'Reparo interno'},
+  {cod:'60', sigla:'AT', nome:'Múltiplos incompletos da reversa (componentes)'},
+  {cod:'61', sigla:'SS', nome:'Componentes de peças da marca própria'},
+  {cod:'62', sigla:'DT', nome:'Restrição de triagem'},
+  {cod:'65', sigla:'WD', nome:'Devolução de obsoletos ou acordo comercial'},
+  {cod:'75', sigla:'WS', nome:'Leilão'},
+  {cod:'86', sigla:'AI', nome:'Múltiplos incompletos dentro do estoque'}
+];
+const MD_SIGLA_VENDAVEL = 'WN';   // código 0
+const MD_SIGLA_BLOQUEIO = 'AI';   // código 86
+const MD_COD_POR_SIGLA = MD_RESTRICOES.reduce((m,r)=>{ m[r.sigla] = r.cod; return m; }, {});
+const MD_NOME_POR_SIGLA = MD_RESTRICOES.reduce((m,r)=>{ m[r.sigla] = r.nome; return m; }, {});
+function mdCodRestricao(sigla){ return MD_COD_POR_SIGLA[sigla] ?? ''; }
+function mdNomeRestricao(sigla){ return MD_NOME_POR_SIGLA[sigla] || sigla || '—'; }
+/* Ordem das colunas de restrição na tela: primeiro as duas que mandam no
+   módulo (vendável e bloqueio), depois as outras na ordem da legenda. */
+const MD_ORDEM_RESTRICOES = [MD_SIGLA_VENDAVEL, MD_SIGLA_BLOQUEIO]
+  .concat(MD_RESTRICOES.map(r=>r.sigla).filter(s=>s!==MD_SIGLA_VENDAVEL && s!==MD_SIGLA_BLOQUEIO));
+
+/* O coletor pede o endereço como 5000 + ID do local: o operador digita
+   5000132564 pro local 132564. O relatório já sai assim, pronto pra colar. */
+const MD_PREFIXO_LOCAL = '5000';
+function mdLocalColetor(idLocal){
+  const s = String(idLocal ?? '').trim();
+  return s ? MD_PREFIXO_LOCAL + s : '';
+}
 
 /* Normaliza código de item. A 051 traz o código como número (857513.0) e a 390
    como inteiro; sem isso o cruzamento falha em silêncio e o módulo mostra tudo
@@ -51,9 +100,15 @@ function mdPrecoComponente(comp, saldo, precoPai){
   return 0;
 }
 
+function mdSaldoRestricao(saldo, sigla, campo){
+  if(!saldo || !saldo.porRestricao) return 0;
+  const r = saldo.porRestricao[sigla];
+  return r ? (r[campo] || 0) : 0;
+}
+
 /* Monta a visão por item pai.
    estrutura: linhas da 051 {componente, pai, qtde, inInterface}
-   saldos:    Map item -> {qtde, qtdeDisp, valorUnitario, nome, ...}
+   saldos:    Map item -> {porRestricao, locais, valorUnitario, nome, ...}
    precos:    Map item -> preço de custo (SIGEQ278), pode vir vazio
    base:      'qtde' (tudo que existe) ou 'qtdeDisp' (só o disponível) */
 function mdCalcularPais(estrutura, saldos, precos, base){
@@ -70,14 +125,26 @@ function mdCalcularPais(estrutura, saldos, precos, base){
     let temSaldo = false;
     const linhas = comps.map(c=>{
       const s = saldos.get(c.componente) || null;
-      const saldo = s ? (s[campo] || 0) : 0;
-      if(saldo > 0) temSaldo = true;
+      const total = s ? (s[campo] || 0) : 0;
+      if(total > 0) temSaldo = true;
+      const wn = mdSaldoRestricao(s, MD_SIGLA_VENDAVEL, campo);
+      const bloq = mdSaldoRestricao(s, MD_SIGLA_BLOQUEIO, campo);
+      const porRestricao = {};
+      if(s && s.porRestricao){
+        for(const sigla in s.porRestricao){
+          const v = s.porRestricao[sigla][campo] || 0;
+          if(v) porRestricao[sigla] = v;
+        }
+      }
       return {
         componente: c.componente,
         nome: (s && s.nome) || '',
         inInterface: c.inInterface,
         qtdePorMultiplo: c.qtde > 0 ? c.qtde : 1,
-        saldo,
+        wn, bloqueado: bloq,
+        outras: total - wn - bloq,
+        total,
+        porRestricao,
         preco: mdPrecoComponente(c, s, precoPai),
         semFicha: !s,
         locais: (s && s.locais) || []
@@ -89,14 +156,22 @@ function mdCalcularPais(estrutura, saldos, precos, base){
     // 1.500 linhas zeradas quando só algumas centenas têm peça de verdade.
     if(!temSaldo) continue;
 
-    const completos = Math.floor(Math.min(...linhas.map(l=>l.saldo / l.qtdePorMultiplo)));
-    let sobraPecas = 0, sobraValor = 0, compsComSobra = 0, compsSobraSemPreco = 0;
+    // Casado de hoje: só o que está vendável. Casado possível: contando o que
+    // está preso em 86, que é justamente o que pode voltar.
+    const completos = Math.floor(Math.min(...linhas.map(l=>l.wn / l.qtdePorMultiplo)));
+    const completosPotencial = Math.floor(Math.min(...linhas.map(l=>(l.wn + l.bloqueado) / l.qtdePorMultiplo)));
+
+    let bloquearPecas = 0, liberarPecas = 0, bloquearValor = 0, compsSobraSemPreco = 0, compsComSobra = 0;
     for(const l of linhas){
-      l.sobra = l.saldo - completos * l.qtdePorMultiplo;
-      l.valorSobra = l.sobra * l.preco;
-      sobraPecas += l.sobra;
-      sobraValor += l.valorSobra;
-      if(l.sobra > 0){
+      const alvo = completosPotencial * l.qtdePorMultiplo;
+      l.alvoWn = alvo;
+      l.bloquear = Math.max(0, l.wn - alvo);
+      l.liberar = Math.max(0, Math.min(l.bloqueado, alvo - l.wn));
+      l.valorBloquear = l.bloquear * l.preco;
+      bloquearPecas += l.bloquear;
+      liberarPecas += l.liberar;
+      bloquearValor += l.valorBloquear;
+      if(l.bloquear > 0){
         compsComSobra++;
         // Peça descasada sem preço nenhum: o valor da tela sai subestimado e a
         // tela precisa dizer quanto está faltando, em vez de mostrar um total
@@ -105,11 +180,10 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       }
     }
 
-    // Componente que falta (saldo zero) é o que trava o conjunto: enquanto ele
-    // não chegar, nenhuma peça dos outros vira múltiplo. A tela precisa dizer
-    // isso com todas as letras, porque a ação é diferente — não é bloquear e
-    // esquecer, é ir atrás da peça que falta.
-    const faltantes = linhas.filter(l=>l.saldo === 0).length;
+    // Componente sem nenhuma peça vendável é o que trava o conjunto: enquanto
+    // ele não chegar, nenhuma peça dos outros vira múltiplo. A ação aí é
+    // diferente — é ir atrás da peça que falta, não bloquear.
+    const faltantes = linhas.filter(l=>l.wn === 0 && l.bloqueado === 0).length;
 
     // Valor do múltiplo montado: preço do pai quando a 278 foi importada, senão
     // a soma do que os componentes carregam na própria 390.
@@ -118,61 +192,121 @@ function mdCalcularPais(estrutura, saldos, precos, base){
     pais.push({
       pai,
       nome: (linhas.find(l=>l.inInterface==='S' && l.nome) || linhas.find(l=>l.nome) || {}).nome || '',
-      componentes: linhas.sort((a,b)=>b.sobra - a.sobra || a.componente.localeCompare(b.componente)),
+      componentes: linhas.sort((a,b)=>(b.bloquear + b.liberar) - (a.bloquear + a.liberar) || a.componente.localeCompare(b.componente)),
       nComponentes: linhas.length,
-      completos,
+      completos, completosPotencial,
       faltantes,
       compsComSobra,
       compsSobraSemPreco,
-      sobraPecas,
-      sobraValor,
+      bloquearPecas, liberarPecas,
+      sobraValor: bloquearValor,
       valorMultiplo,
-      pecasTotal: linhas.reduce((a,l)=>a + l.saldo, 0),
-      descasado: sobraPecas > 0
+      wnTotal: linhas.reduce((a,l)=>a + l.wn, 0),
+      bloqueadoTotal: linhas.reduce((a,l)=>a + l.bloqueado, 0),
+      outrasTotal: linhas.reduce((a,l)=>a + l.outras, 0),
+      pecasTotal: linhas.reduce((a,l)=>a + l.total, 0),
+      descasado: bloquearPecas > 0 || liberarPecas > 0
     });
   }
   return pais;
 }
 
-/* Resumo de topo. Valor é sempre o da sobra — o que está imobilizado em peça
+/* Resumo de topo. Valor é o da sobra vendável — o que está imobilizado em peça
    que não pode virar pedido. */
 function mdResumo(pais){
   const r = {
     paisComEstoque: pais.length, paisDescasados: 0,
-    sobraPecas: 0, sobraValor: 0, completos: 0,
-    paisIncompletos: 0, componentesComSobra: 0, componentesSemPreco: 0
+    bloquearPecas: 0, liberarPecas: 0, sobraValor: 0,
+    completos: 0, completosPotencial: 0,
+    paisIncompletos: 0, componentesComSobra: 0, componentesSemPreco: 0,
+    paisABloquear: 0, paisALiberar: 0
   };
   for(const p of pais){
     r.completos += p.completos;
-    r.sobraPecas += p.sobraPecas;
+    r.completosPotencial += p.completosPotencial;
+    r.bloquearPecas += p.bloquearPecas;
+    r.liberarPecas += p.liberarPecas;
     r.sobraValor += p.sobraValor;
     r.componentesComSobra += p.compsComSobra;
     r.componentesSemPreco += p.compsSobraSemPreco;
     if(p.descasado) r.paisDescasados++;
+    if(p.bloquearPecas > 0) r.paisABloquear++;
+    if(p.liberarPecas > 0) r.paisALiberar++;
     if(p.faltantes > 0) r.paisIncompletos++;
   }
   return r;
 }
 
-/* Lista plana pro bloqueio em 86: uma linha por componente com sobra, que é a
-   peça a bloquear. Ordenada por valor, porque é por onde a operação começa. */
-function mdListaBloqueio(pais){
+/* ============================================================
+   PLANO DE AJUSTE
+   ============================================================
+   A alteração de restrição no coletor é POR ENDEREÇO: o operador digita o
+   local, a restrição de origem, a de destino e a quantidade. Então não basta
+   dizer "bloqueie 3 peças deste item" — é preciso dizer de quais endereços
+   sair, porque é assim que a tela 12.MOVI funciona e porque o sistema só
+   aceita a baixa se aquele endereço tiver mesmo o saldo naquela restrição.
+
+   Os endereços são consumidos do maior saldo pro menor: menos linhas pra
+   digitar, e a sobra costuma estar concentrada num endereço só. */
+function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
+  const disponiveis = (locais || [])
+    .filter(l=>String(l.restricao || '').toUpperCase() === sigla && (l[campo] || 0) > 0)
+    .sort((a,b)=>(b[campo] || 0) - (a[campo] || 0));
+  const out = [];
+  let resta = quantidade;
+  for(const l of disponiveis){
+    if(resta <= 0) break;
+    const usa = Math.min(resta, l[campo] || 0);
+    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, saldoLocal: l[campo] || 0, quantidade: usa});
+    resta -= usa;
+  }
+  // Sobrou quantidade sem endereço: a soma por restrição e a soma por endereço
+  // não fecharam. Devolvido como linha "sem endereço" pra aparecer na tela em
+  // vez de sumir da conta.
+  if(resta > 0) out.push({local:'', desc:'', predio:'', clal:'', saldoLocal:0, quantidade: resta, semEndereco:true});
+  return out;
+}
+
+/* Uma linha por endereço e sentido — é exatamente o que será digitado.
+   base: 'qtde' ou 'qtdeDisp', o mesmo corte usado no cálculo. */
+function mdPlanoAjuste(pais, base){
+  const campo = base === 'qtdeDisp' ? 'qtdeDisp' : 'qtde';
   const out = [];
   for(const p of pais){
     for(const c of p.componentes){
-      if(c.sobra <= 0) continue;
-      out.push({
-        pai: p.pai, nomePai: p.nome,
-        componente: c.componente, nome: c.nome,
-        inInterface: c.inInterface,
-        saldo: c.saldo, qtdePorMultiplo: c.qtdePorMultiplo,
-        completos: p.completos, bloquear: c.sobra,
-        preco: c.preco, valor: c.valorSobra,
-        locais: c.locais
-      });
+      const acoes = [];
+      if(c.bloquear > 0) acoes.push({sentido:'bloquear', de: MD_SIGLA_VENDAVEL, para: MD_SIGLA_BLOQUEIO, qtd: c.bloquear});
+      if(c.liberar > 0) acoes.push({sentido:'liberar', de: MD_SIGLA_BLOQUEIO, para: MD_SIGLA_VENDAVEL, qtd: c.liberar});
+      for(const a of acoes){
+        for(const alvo of mdAlocarPorEndereco(c.locais, a.de, a.qtd, campo)){
+          out.push({
+            sentido: a.sentido,
+            de: a.de, para: a.para,
+            codDe: mdCodRestricao(a.de), codPara: mdCodRestricao(a.para),
+            localColetor: mdLocalColetor(alvo.local),
+            local: alvo.local, endereco: alvo.desc, predio: alvo.predio, clal: alvo.clal,
+            saldoLocal: alvo.saldoLocal, semEndereco: !!alvo.semEndereco,
+            quantidade: alvo.quantidade,
+            pai: p.pai, nomePai: p.nome,
+            componente: c.componente, nome: c.nome,
+            inInterface: c.inInterface,
+            qtdePorMultiplo: c.qtdePorMultiplo,
+            wn: c.wn, bloqueado: c.bloqueado, alvoWn: c.alvoWn,
+            completos: p.completos, completosPotencial: p.completosPotencial,
+            preco: c.preco, valor: alvo.quantidade * c.preco
+          });
+        }
+      }
     }
   }
-  return out.sort((a,b)=>b.valor - a.valor || b.bloquear - a.bloquear);
+  // Bloquear antes de liberar: bloqueio é o que evita venda de item incompleto,
+  // e é o que não pode esperar. Dentro de cada sentido, o de maior valor.
+  const peso = {bloquear:0, liberar:1};
+  return out.sort((a,b)=>
+    peso[a.sentido] - peso[b.sentido] ||
+    b.valor - a.valor ||
+    b.quantidade - a.quantidade
+  );
 }
 
 if(typeof self !== 'undefined' && typeof window === 'undefined'){
