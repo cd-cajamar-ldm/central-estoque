@@ -93,7 +93,11 @@
 <div id="irPrintArea"></div>
 <div id="irChartTooltip" class="chart-tooltip hidden"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- xlsx-js-style é o SheetJS 0.18.5 com escrita de estilo (borda, fundo, negrito).
+     A build community do xlsx descarta a propriedade .s das células, então a planilha
+     da auditoria saía sem grade nenhuma. Mesma API e mesma leitura; o worker segue com
+     o xlsx original, que só precisa LER. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="js/db.js"></script>
 <script src="js/rules.js"></script>
