@@ -24,6 +24,7 @@ export default function Acesso() {
   const [erro, setErro] = useState<string | null>(null);
   const [recado, setRecado] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [mostrarSenha, setMostrarSenha] = useState(false);
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -80,12 +81,19 @@ export default function Acesso() {
             {modo !== 'recuperar' && (
               <label className="block">
                 <span className="rotulo">Senha</span>
-                <input
-                  type="password" required minLength={6} className="campo"
-                  autoComplete={modo === 'criar' ? 'new-password' : 'current-password'}
-                  value={senha} onChange={(e) => setSenha(e.target.value)}
-                  placeholder="pelo menos 6 caracteres"
-                />
+                <div className="relative">
+                  <input
+                    type={mostrarSenha ? 'text' : 'password'} required minLength={6} className="campo pr-16"
+                    autoComplete={modo === 'criar' ? 'new-password' : 'current-password'}
+                    value={senha} onChange={(e) => setSenha(e.target.value)}
+                    placeholder="pelo menos 6 caracteres"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-roxo-escuro"
+                    onClick={() => setMostrarSenha((v) => !v)}
+                  >{mostrarSenha ? 'Ocultar' : 'Mostrar'}</button>
+                </div>
               </label>
             )}
 
