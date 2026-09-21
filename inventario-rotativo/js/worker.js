@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 19;
+const IR_INDICADORES_VERSION = 20;
 
 function parseNumber(v){
   if(v===undefined || v===null || v==='') return 0;
@@ -1117,6 +1117,19 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo.
   const divergencias = irDivergenciasDoCiclo(divergenciasTodas).filter(d=>noCiclo.has(d.local));
 
+  /* Base de cada item na Acurácia Peças/Valor = MAIOR entre sistema e físico, não só
+     o sistema. Só o sistema tem um lado cego simétrico ao problema que ele resolve:
+     item sumido (sistema 500, físico 0) carrega seu saldo de 500 na base normalmente,
+     mas item ACHADO do nada (sistema 0, físico 500) carrega ZERO — o erro entra no
+     numerador sem nunca ter contribuído pro denominador, então esse achado empurra a
+     acurácia pra baixo mais do que devia (e em volume grande, também estoura pra
+     negativo/0%, o mesmo problema que usar só a física tinha, na direção oposta).
+     Com o maior dos dois, sumiço e achado pesam igual: erro/base nunca passa de 100%
+     pra nenhum item dos dois lados, sem depender do clamp pra segurar. */
+  const baseQtd = (d)=>Math.max(d.qtdeSistema||0, d.qtdeFisica||0);
+  const valorSistema = (d)=> d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0);
+  const baseValor = (d)=>Math.max(valorSistema(d), d.vlFisico||0);
+
   // Acurácia Peças/Valor e Divergência Peças/Valor só podem considerar locais já
   // CONCLUÍDOS (rodadas bateram = "convergido", ou encerrado após 5 rodadas sem bater
   // = "encerrado_sem_convergencia" — mesmo critério já usado em locaisConcluidos/
@@ -1132,13 +1145,13 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // final física — nunca soma rodada, sempre a última).
   const totalPecasFisicas = divergenciasConcluidas.reduce((s,d)=>s+d.qtdeFisica,0);
   const totalDiferencaAbs = divergenciasConcluidas.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-  /* Denominador = SALDO LÓGICO (Id Conferência 1 da rodada), não a quantidade
-     física contada. Com a física no denominador, um item que sumiu inteiro
-     (sistema 500, físico 0) põe 500 no numerador e ZERO no denominador: o erro
-     passa de 100% e a conta estoura — só não aparecia negativa porque o clamp
-     segurava em 0%. Pelo saldo lógico o erro de um item nunca passa de 100% e o
-     resultado é limitado por construção. */
-  const totalSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+(d.qtdeSistema||0),0);
+  /* Denominador = MAIOR entre sistema e físico de cada item (baseQtd), não só a
+     quantidade física contada nem só o saldo do sistema. Com a física sozinha, um
+     item que sumiu inteiro (sistema 500, físico 0) põe 500 no numerador e ZERO no
+     denominador: o erro passa de 100% e a conta estoura — só não aparecia negativa
+     porque o clamp segurava em 0%. Com o maior dos dois o erro de um item nunca passa
+     de 100% e o resultado é limitado por construção, dos dois lados (sumiço e achado). */
+  const totalSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+baseQtd(d),0);
   const acuraciaPecas = clamp01(totalSaldoLogico>0 ? 1-(totalDiferencaAbs/totalSaldoLogico) : 1);
   const totalItensContados = divergenciasConcluidas.length;
 
@@ -1149,7 +1162,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // (S/N do componente no kit) — não mais pela QRY0114.
   const totalVlFisico = divergenciasConcluidas.reduce((s,d)=>s+d.vlFisico,0);
   const totalVlDivergenciaAbs = divergenciasConcluidas.reduce((s,d)=>s+Math.abs(d.vlDivergencia),0);
-  const totalVlSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+(d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0)),0);
+  const totalVlSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+baseValor(d),0);
   const acuraciaValor = clamp01(totalVlSaldoLogico>0 ? 1-(totalVlDivergenciaAbs/totalVlSaldoLogico) : 1);
   const valorDivergenteLiquido = divergenciasConcluidas.reduce((s,d)=>s+d.vlDivergencia,0);
   const valorDivergenteAbsoluto = totalVlDivergenciaAbs;
@@ -1225,12 +1238,13 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   function calcAcuraciasSubset(divsTodos, divsConcluidos, baseLocais){
     const totalPecasGrupo = divsConcluidos.reduce((s,d)=>s+d.qtdeFisica,0);
     const totalDiferencaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-    // Mesmo denominador do KPI do topo: saldo lógico, não a física contada.
-    const totalSaldoGrupo = divsConcluidos.reduce((s,d)=>s+(d.qtdeSistema||0),0);
+    // Mesmo denominador do KPI do topo: maior entre sistema e físico por item, não só
+    // o sistema nem só a física contada.
+    const totalSaldoGrupo = divsConcluidos.reduce((s,d)=>s+baseQtd(d),0);
     const acuraciaPecas = clamp01(totalSaldoGrupo>0 ? 1-(totalDiferencaAbs/totalSaldoGrupo) : 1);
     const totalVlFisico = divsConcluidos.reduce((s,d)=>s+d.vlFisico,0);
     const totalVlDivergenciaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.vlDivergencia),0);
-    const totalVlSaldoGrupo = divsConcluidos.reduce((s,d)=>s+(d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0)),0);
+    const totalVlSaldoGrupo = divsConcluidos.reduce((s,d)=>s+baseValor(d),0);
     const acuraciaValor = clamp01(totalVlSaldoGrupo>0 ? 1-(totalVlDivergenciaAbs/totalVlSaldoGrupo) : 1);
     const locaisComDivergencia = new Set(divsTodos.filter(d=>d.diferenca!==0).map(d=>d.local));
     const acuraciaPosicoes = clamp01(baseLocais>0 ? 1-(locaisComDivergencia.size/baseLocais) : 1);
@@ -1384,10 +1398,10 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     if(!mes) continue;
     const g = getMes(mes);
     g.pecasContadas   += d.qtdeFisica;
-    g.pecasSaldoLogico += (d.qtdeSistema||0);
+    g.pecasSaldoLogico += baseQtd(d);
     g.pecasDivergentes += Math.abs(d.diferenca);
     g.valorContado    += d.vlFisico;
-    g.valorSaldoLogico += (d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0));
+    g.valorSaldoLogico += baseValor(d);
     g.valorDivergente += Math.abs(d.vlDivergencia);
   }
   for(const d of divergencias){
