@@ -3342,6 +3342,7 @@ function irRenderNet410Resultado(d){
         </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);">Sem movimentos no ano</td></tr>'}</tbody>
       </table></div>
     </div>
+    ${irRenderNet410PorObsMesTable(d)}
     <h3 style="margin:20px 0 -6px;">Itens que mais impactam no ano — ${d.ano}</h3>
     <div class="bi-grid-2">
       ${irRenderNet410ItensPanel(d.topItensPositivos, false, 'Soma do valor no ano ('+d.ano+'), só motivos considerados pro NET.')}
@@ -3349,6 +3350,49 @@ function irRenderNet410Resultado(d){
     </div>
     ${irRenderNet410ItensMesSection(d)}
   `;
+}
+// Ordem fixa pedida pro operacional — mesma sequência sempre, uma linha por
+// observação (só as com Considerar NET = SIM na legenda) mais o Total Geral.
+const IR_NET410_ORDEM_OBS = ['AEE','INV','ADE','AIR','LIT','AIN'];
+function irRenderNet410PorObsMesTable(d){
+  const mes = IR.net410MesSel;
+  const mObj = (d.porMes||[]).find(m=>m.mes===mes);
+  const mapaObsMes = new Map((mObj && mObj.porObs || []).map(o=>[o.id, o]));
+  const legendaViva = IR.net410Legenda||[];
+  const linhas = IR_NET410_ORDEM_OBS.map(codigo=>{
+    const legendaEntry = legendaViva.find(l=>l.id===codigo);
+    const considerarNet = legendaEntry ? legendaEntry.considerarNet!==false : true;
+    if(!considerarNet) return null; // legenda diz pra nao considerar: some da tabela
+    const obs = mapaObsMes.get(codigo);
+    const saida = obs ? obs.saida : 0;
+    const entrada = obs ? obs.entrada : 0;
+    const legendaTexto = (legendaEntry && legendaEntry.legenda) || (obs && obs.legenda) || '';
+    return {id:codigo, legenda:legendaTexto, saida, entrada, net:saida+entrada};
+  }).filter(Boolean);
+  const totalSaida = linhas.reduce((s,o)=>s+o.saida,0);
+  const totalEntrada = linhas.reduce((s,o)=>s+o.entrada,0);
+  const totalNet = totalSaida+totalEntrada;
+  const mesLabel = mObj ? (IR_MES_NOMES[parseInt(mes.slice(5,7),10)-1]+'/'+mes.slice(0,4)) : '—';
+  return `
+    <div class="panel">
+      <h3>NET por Observação (R$) — ${irEsc(mesLabel)}</h3>
+      <p class="panel-sub">Só observações com Considerar NET = SIM. Respeita o mês selecionado acima (não é o total bruto do ano).</p>
+      <div class="table-wrap"><table class="table-wide">
+        <thead><tr><th>OBS</th><th>Saída</th><th>Entrada</th><th>NET</th></tr></thead>
+        <tbody>${linhas.length ? linhas.map(o=>`<tr>
+          <td class="mono">${irEsc(o.id)}</td>
+          <td class="mono" style="color:var(--danger);">${o.saida?irFmtMoney(o.saida):'—'}</td>
+          <td class="mono" style="color:var(--success);">${o.entrada?irFmtMoney(o.entrada):'—'}</td>
+          <td class="mono" style="font-weight:700;color:${o.net>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(o.net)}</td>
+        </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">Sem movimentos no mês selecionado</td></tr>'}</tbody>
+        <tfoot><tr style="font-weight:700;">
+          <td>Total Geral</td>
+          <td class="mono" style="color:var(--danger);">${totalSaida?irFmtMoney(totalSaida):'—'}</td>
+          <td class="mono" style="color:var(--success);">${totalEntrada?irFmtMoney(totalEntrada):'—'}</td>
+          <td class="mono" style="color:${totalNet>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalNet)}</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
 }
 function irRenderNet410ItensPanel(items, negativos, subtitulo){
   items = items||[];

@@ -1479,7 +1479,7 @@ async function runPipeline410({buf410}){
       // porDia = mesma quebra, mas por dia — pra responder "o que aconteceu ontem"
       // rápido, sem esperar o mês fechar pra dar pra investigar.
       porDia:new Map(), porItemDia:new Map(),
-      porObs:new Map(), porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0
+      porObs:new Map(), porObsMes:new Map(), porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0
     });
     return porAno.get(ano);
   }
@@ -1574,6 +1574,15 @@ async function runPipeline410({buf410}){
     if(sinal<0) go.saida += valor;
     else if(sinal>0) go.entrada += valor;
 
+    // Mesma quebra por Obs, mas por mês — alimenta a tabela "NET por Observação" da
+    // aba NET, que precisa respeitar o mês selecionado (a de cima é só do ano inteiro).
+    if(!g.porObsMes.has(mes)) g.porObsMes.set(mes, new Map());
+    const porObsDoMes = g.porObsMes.get(mes);
+    if(!porObsDoMes.has(cls.id)) porObsDoMes.set(cls.id, {id:cls.id, legenda:cls.legenda, considerarNet:cls.considerarNet, saida:0, entrada:0});
+    const goMes = porObsDoMes.get(cls.id);
+    if(sinal<0) goMes.saida += valor;
+    else if(sinal>0) goMes.entrada += valor;
+
     if(!cls.considerarNet) continue; // resto (mês/dia, item) só conta com motivos válidos pro NET
 
     const item = String(getVal(row, r410.item)||'').trim();
@@ -1609,6 +1618,10 @@ async function runPipeline410({buf410}){
   for(const ano of anos){
     const g = porAno.get(ano);
     const porMes = finalizarPeriodos(g.porMes, g.porItemMes, g.porItem, 'mes');
+    porMes.forEach(m=>{
+      const mapaObsMes = g.porObsMes.get(m.mes) || new Map();
+      m.porObs = Array.from(mapaObsMes.values()).map(o=>({...o, totalGeral:o.saida+o.entrada}));
+    });
     const porDia = finalizarPeriodos(g.porDia, g.porItemDia, g.porItem, 'dia');
     const porObs = Array.from(g.porObs.values()).map(o=>({...o, totalGeral: o.saida+o.entrada}))
       .sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral));
