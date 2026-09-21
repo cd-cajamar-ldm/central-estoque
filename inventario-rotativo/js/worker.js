@@ -10,7 +10,21 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 20;
+const IR_INDICADORES_VERSION = 21;
+
+/* A RUA de um endereço é X1 + X2, não X1 sozinho.
+
+   Com só o X1, ruas diferentes que compartilham o prefixo caíam na mesma linha
+   do ranking e da quebra por rua — "MZN" somava o que na operação são endereços
+   de ruas distintas, e o número não batia com o que se vê no chão.
+
+   Separador é o espaço, o mesmo formato do de-para de transitórios ("AIR LOG").
+   Endereço sem X2 continua aparecendo só com o X1. */
+function irRuaDoLocal(l){
+  const x1 = String((l && l.x1) || '').trim();
+  const x2 = String((l && l.x2) || '').trim();
+  return [x1, x2].filter(Boolean).join(' ');
+}
 
 function parseNumber(v){
   if(v===undefined || v===null || v==='') return 0;
@@ -1261,9 +1275,12 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   }
   function agruparPor(campo, rotuloVazio, baseCongelados){
     const base = baseCongelados || congelados;
-    const chaves = Array.from(new Set(base.map(l=>l[campo] || rotuloVazio)));
+    // campo pode ser o nome da coluna ou uma função — a rua é X1 + X2 juntos, não
+    // uma coluna só.
+    const valorDe = typeof campo === 'function' ? campo : (l => l[campo]);
+    const chaves = Array.from(new Set(base.map(l=>valorDe(l) || rotuloVazio)));
     return chaves.map(chave=>{
-      const locaisDoGrupo = base.filter(l=>(l[campo]||rotuloVazio)===chave);
+      const locaisDoGrupo = base.filter(l=>(valorDe(l)||rotuloVazio)===chave);
       const idsGrupo = new Set(locaisDoGrupo.map(l=>l.idLocal));
       const locaisOrcados = locaisDoGrupo.length;
       const locaisContados = locaisDoGrupo.filter(l=>locaisContadosSet.has(l.idLocal)).length;
@@ -1277,7 +1294,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     }).sort((a,b)=>b.locaisOrcados-a.locaisOrcados);
   }
   // AIR entra na quebra por Rua normalmente, como qualquer outro local (sem exclusão).
-  const porRua = agruparPor('x1', '(sem rua)');
+  const porRua = agruparPor(irRuaDoLocal, '(sem rua)');
   const porLog = agruparPor('grupoClasse', '(sem log)');
 
   // Locais distintos contados por dia. Cada local é contado UMA ÚNICA VEZ, no dia da
@@ -1321,7 +1338,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     .map(([dia,total])=>({dia, total}))
     .sort((a,b)=>a.dia.localeCompare(b.dia));
 
-  // Detalhe por dia x Rua (X1), para o tooltip do gráfico "Contados por Dia":
+  // Detalhe por dia x Rua (X1 + X2), para o tooltip do gráfico "Contados por Dia":
   // locais distintos (mesmo critério de dia final acima, recorte AIR), peças contadas
   // (soma do QT_FIS do dia) e peças divergentes (soma de |Diferença| das divergências
   // daquele dia, casadas pelo Local).
@@ -1334,7 +1351,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     return porRuaDoDia.get(rua);
   }
   for(const [local, {dia}] of diaFinalPorLocalAIR){
-    const rua = (congeladosPorId.get(local)||{}).x1 || '(sem rua)';
+    const rua = irRuaDoLocal(congeladosPorId.get(local)) || '(sem rua)';
     const g = getOrInitDiaRua(dia, rua);
     g.locais.add(local);
     g.pecasContadas += pecasFisicasPorLocal.get(local) || 0;
@@ -1342,7 +1359,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   for(const d of divergencias){
     const final = diaFinalPorLocalAIR.get(d.local);
     if(!final) continue;
-    const rua = (congeladosPorId.get(d.local)||{}).x1 || '(sem rua)';
+    const rua = irRuaDoLocal(congeladosPorId.get(d.local)) || '(sem rua)';
     const g = getOrInitDiaRua(final.dia, rua);
     g.pecasDivergentes += Math.abs(d.diferenca);
   }
