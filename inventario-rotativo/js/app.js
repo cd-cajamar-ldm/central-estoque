@@ -122,6 +122,14 @@ function irTerminoDoCiclo(det){
   if(det.dataPrevistaTermino < limite) return det.dataPrevistaTermino;
   return det.dataPrevistaTermino > det.fimTrimestre ? det.dataPrevistaTermino : det.fimTrimestre;
 }
+/* A RUA de um endereço é X1 + X2 — mesma regra do worker (irRuaDoLocal lá).
+   Precisa existir dos dois lados: o worker agrupa os indicadores, e a tela usa a
+   mesma chave pra filtrar os locais pendentes de uma rua. */
+function irRuaDoLocal(l){
+  const x1 = String((l && l.x1) || '').trim();
+  const x2 = String((l && l.x2) || '').trim();
+  return [x1, x2].filter(Boolean).join(' ');
+}
 function irCicloLabel(c){ const ano = irCicloAno(c); return `Ciclo ${c.numero}${ano?'/'+ano:''}`; }
 // Ordem cronológica de um ciclo: ano e número juntos num número só, pra comparar.
 function irCicloOrdem(c){ return (irCicloAno(c)||0) * 10 + (c.numero||0); }
@@ -882,13 +890,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <div class="kpi-block-body">${tilesHtml}</div>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 20; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 21; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v180';
+const IR_APP_VERSION = 'v181';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -6238,10 +6246,10 @@ function irLocaisPendentesContagem(rua){
   // Só rodada FÍSICA (idConferencia >= 2) conta como "local contado". A rodada 1 é o
   // congelamento automático do sistema na abertura do inventário — local que só tem
   // rodada 1 foi aberto e liquidado sem ninguém contar, então continua pendente.
-  return irLocaisPendentesPor('x1', rua);
+  return irLocaisPendentesPor(irRuaDoLocal, rua);
 }
 /* Mesma regra de pendente, recortando por qualquer campo da base congelada —
-   'x1' pro Resumo por Setor, 'grupoClasse' pra Acurácia por Log. */
+   a rua (X1 + X2) pro Resumo por Setor, 'grupoClasse' pra Acurácia por Log. */
 function irLocaisContadosSet(){
   // Memoizado por ciclo: montar esse Set varre TODAS as contagens do ciclo (milhões
   // de linhas na base real) e ele era remontado uma vez por rua e por log, a cada
@@ -6262,8 +6270,10 @@ function irLocaisContadosSet(){
 }
 function irLocaisPendentesPor(campo, valor){
   const contadosSet = irLocaisContadosSet();
+  // campo pode ser coluna ou função: a rua é X1 + X2, não uma coluna só.
+  const valorDe = typeof campo === 'function' ? campo : (l => l[campo]);
   let base = (IR.locais||[]).filter(l=>!contadosSet.has(l.idLocal));
-  if(valor) base = base.filter(l=>l[campo]===valor);
+  if(valor) base = base.filter(l=>valorDe(l)===valor);
   return base.sort((a,b)=>String(a.descricao||'').localeCompare(String(b.descricao||''), undefined, {numeric:true}));
 }
 /* Seleção por linha no Resumo por Setor: quem cobra a contagem cobra rua por rua,
@@ -6295,7 +6305,7 @@ function irExportarLocaisPendentesCsv(rua){
   const ruas = rua ? [rua] : irPendRuasMarcadas();
   const filtro = ruas.length ? new Set(ruas) : null;
   const pendentes = irLocaisPendentesContagem()
-    .filter(l => !filtro || filtro.has(l.x1));
+    .filter(l => !filtro || filtro.has(irRuaDoLocal(l)));
   if(!pendentes.length){
     // Distingue "não há pendente" de "não dá pra listar": o segundo caso tem
     // pendente na tela e some sem explicação se o aviso for o mesmo.
@@ -6307,7 +6317,7 @@ function irExportarLocaisPendentesCsv(rua){
   const header = 'Rua;Local;Descrição';
   const lines = pendentes.map(l=>{
     const desc = '"'+String(l.descricao||'').replace(/"/g,'""')+'"';
-    return (l.x1||'')+';'+l.idLocal+';'+desc;
+    return irRuaDoLocal(l)+';'+l.idLocal+';'+desc;
   });
   const csv = '﻿'+header+'\n'+lines.join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
