@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 18;
+const IR_INDICADORES_VERSION = 19;
 
 function parseNumber(v){
   if(v===undefined || v===null || v==='') return 0;
@@ -1284,8 +1284,23 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     const atual = diaFinalPorLocal.get(c.local);
     if(!atual || c.idConferencia>atual.rodada) diaFinalPorLocal.set(c.local, {dia, rodada:c.idConferencia});
   }
+  // Variante só do gráfico "Contados por Dia" (barras + tooltip por rua): aqui SÓ
+  // conta local liquidado com ajuste de motivo AIR, igual ao recorte que fecha local
+  // no Dashboard/Setores (irLocaisContadosSet). Local sem divergência ("sem
+  // observação") ou liquidado com outro motivo não entra nessas barras — mas segue
+  // entrando em Divergentes por Dia e na Evolução Mensal, que usam diaFinalPorLocal
+  // sem esse recorte, de propósito.
+  const diaFinalPorLocalAIR = new Map(); // local -> {dia, rodada}
+  for(const c of contagens){
+    if(c.idConferencia<2 || !c.dataSituacao) continue;
+    if(String(c.motivo||'').trim().toUpperCase()!=='AIR') continue;
+    if(!noCiclo.has(c.local)) continue;
+    const dia = c.dataSituacao.slice(0,10);
+    const atual = diaFinalPorLocalAIR.get(c.local);
+    if(!atual || c.idConferencia>atual.rodada) diaFinalPorLocalAIR.set(c.local, {dia, rodada:c.idConferencia});
+  }
   const porDiaMap = new Map();
-  for(const {dia} of diaFinalPorLocal.values()){
+  for(const {dia} of diaFinalPorLocalAIR.values()){
     porDiaMap.set(dia, (porDiaMap.get(dia)||0)+1);
   }
   const contadosPorDia = Array.from(porDiaMap.entries())
@@ -1293,9 +1308,9 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     .sort((a,b)=>a.dia.localeCompare(b.dia));
 
   // Detalhe por dia x Rua (X1), para o tooltip do gráfico "Contados por Dia":
-  // locais distintos (mesmo critério de dia final acima), peças contadas (soma do
-  // QT_FIS do dia) e peças divergentes (soma de |Diferença| das divergências daquele dia,
-  // casadas pelo Local).
+  // locais distintos (mesmo critério de dia final acima, recorte AIR), peças contadas
+  // (soma do QT_FIS do dia) e peças divergentes (soma de |Diferença| das divergências
+  // daquele dia, casadas pelo Local).
   const congeladosPorId = new Map(congelados.map(l=>[l.idLocal, l]));
   const diaRuaMap = new Map(); // dia -> Map(rua -> {locais:Set, pecasContadas, pecasDivergentes})
   function getOrInitDiaRua(dia, rua){
@@ -1304,14 +1319,14 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     if(!porRuaDoDia.has(rua)) porRuaDoDia.set(rua, {locais:new Set(), pecasContadas:0, pecasDivergentes:0});
     return porRuaDoDia.get(rua);
   }
-  for(const [local, {dia}] of diaFinalPorLocal){
+  for(const [local, {dia}] of diaFinalPorLocalAIR){
     const rua = (congeladosPorId.get(local)||{}).x1 || '(sem rua)';
     const g = getOrInitDiaRua(dia, rua);
     g.locais.add(local);
     g.pecasContadas += pecasFisicasPorLocal.get(local) || 0;
   }
   for(const d of divergencias){
-    const final = diaFinalPorLocal.get(d.local);
+    const final = diaFinalPorLocalAIR.get(d.local);
     if(!final) continue;
     const rua = (congeladosPorId.get(d.local)||{}).x1 || '(sem rua)';
     const g = getOrInitDiaRua(final.dia, rua);
