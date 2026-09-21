@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 19;
+const IR_INDICADORES_VERSION = 21;
 
 function parseNumber(v){
   if(v===undefined || v===null || v==='') return 0;
