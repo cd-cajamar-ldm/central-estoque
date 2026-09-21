@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 21;
+const IR_INDICADORES_VERSION = 22;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1131,18 +1131,16 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo.
   const divergencias = irDivergenciasDoCiclo(divergenciasTodas).filter(d=>noCiclo.has(d.local));
 
-  /* Base de cada item na Acurácia Peças/Valor = MAIOR entre sistema e físico, não só
-     o sistema. Só o sistema tem um lado cego simétrico ao problema que ele resolve:
-     item sumido (sistema 500, físico 0) carrega seu saldo de 500 na base normalmente,
-     mas item ACHADO do nada (sistema 0, físico 500) carrega ZERO — o erro entra no
-     numerador sem nunca ter contribuído pro denominador, então esse achado empurra a
-     acurácia pra baixo mais do que devia (e em volume grande, também estoura pra
-     negativo/0%, o mesmo problema que usar só a física tinha, na direção oposta).
-     Com o maior dos dois, sumiço e achado pesam igual: erro/base nunca passa de 100%
-     pra nenhum item dos dois lados, sem depender do clamp pra segurar. */
-  const baseQtd = (d)=>Math.max(d.qtdeSistema||0, d.qtdeFisica||0);
+  /* Base de cada item na Acurácia Peças/Valor = SALDO DO SISTEMA (a rodada 1, o que
+     o WMS dizia ter antes da contagem). É a régua pedida pela operação: acurácia é
+     quanto do saldo que o sistema afirmava ter se confirmou na contagem.
+
+     Lado cego conhecido e aceito: item ACHADO do nada (sistema 0, físico 500) entra
+     no numerador com base zero — pesa no erro sem somar na base. O clamp01 segura o
+     resultado entre 0% e 100%. */
+  const baseQtd = (d)=>(d.qtdeSistema||0);
   const valorSistema = (d)=> d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0);
-  const baseValor = (d)=>Math.max(valorSistema(d), d.vlFisico||0);
+  const baseValor = (d)=>valorSistema(d);
 
   // Acurácia Peças/Valor e Divergência Peças/Valor só podem considerar locais já
   // CONCLUÍDOS (rodadas bateram = "convergido", ou encerrado após 5 rodadas sem bater
@@ -1252,8 +1250,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   function calcAcuraciasSubset(divsTodos, divsConcluidos, baseLocais){
     const totalPecasGrupo = divsConcluidos.reduce((s,d)=>s+d.qtdeFisica,0);
     const totalDiferencaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-    // Mesmo denominador do KPI do topo: maior entre sistema e físico por item, não só
-    // o sistema nem só a física contada.
+    // Mesmo denominador do KPI do topo: o saldo do sistema.
     const totalSaldoGrupo = divsConcluidos.reduce((s,d)=>s+baseQtd(d),0);
     const acuraciaPecas = clamp01(totalSaldoGrupo>0 ? 1-(totalDiferencaAbs/totalSaldoGrupo) : 1);
     const totalVlFisico = divsConcluidos.reduce((s,d)=>s+d.vlFisico,0);
