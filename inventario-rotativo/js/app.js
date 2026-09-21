@@ -882,13 +882,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <div class="kpi-block-body">${tilesHtml}</div>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 19; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 20; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v179';
+const IR_APP_VERSION = 'v180';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -981,9 +981,10 @@ function irRenderDashboard(){
   // estava errado — recontagem é local que passou da rodada 2 (ind.qtdRecontagens,
   // exibido no bloco Locais). São coisas diferentes e não devem dividir o rótulo.
   const cancelHint = `Cancelamento: ${irFmtPct(ind.taxaCancelamento||0)}`;
-  // Denominador das acurácias = SALDO LÓGICO (rodada 1), não o total contado exibido
-  // ao lado. Sem essa dica o card mostra dois números com que é impossível refazer a
-  // conta: 1 − divergentes ÷ contadas não reproduz a acurácia. Mostra a base junto.
+  // Denominador das acurácias = MAIOR entre sistema e físico de cada item, não o
+  // total contado exibido ao lado. Sem essa dica o card mostra dois números com que é
+  // impossível refazer a conta: 1 − divergentes ÷ contadas não reproduz a acurácia.
+  // Mostra a base junto.
   const basePecasHint = ind.pecasSaldoLogico ? `base: ${irFmtInt(ind.pecasSaldoLogico)} pç` : '';
   const baseValorHint = ind.valorSaldoLogico ? `base: ${irFmtMoneyInt(ind.valorSaldoLogico)}` : '';
   const blocoPecas = irKpiBlock('orange','📦','Peças',
@@ -1453,7 +1454,7 @@ function irFiltrarLogsValidos(porLog){
 function irCalcLogTotal(rows){
   const sum = k => rows.reduce((s,r)=>s+(r[k]||0), 0);
   const pecasContadas = sum('pecasContadas'), pecasDivergentes = sum('pecasDivergentes');
-  // Denominador da acurácia é o saldo lógico, igual ao KPI do topo.
+  // Denominador da acurácia é o maior entre sistema e físico por item, igual ao KPI do topo.
   const pecasSaldoLogico = sum('pecasSaldoLogico') || pecasContadas;
   const vlFisicoTotal = sum('vlFisicoTotal'), valorDivergenteAbsoluto = sum('valorDivergenteAbsoluto');
   const vlSaldoLogico = sum('vlSaldoLogico') || vlFisicoTotal;
@@ -6460,7 +6461,9 @@ function irComposicaoDivergencia(){
   const abs = d => Math.abs(d.diferenca||0);
   const total = divs.reduce((s,d)=>s+abs(d),0);
   const contadas = divs.reduce((s,d)=>s+(d.qtdeFisica||0),0);
-  const saldo = divs.reduce((s,d)=>s+(d.qtdeSistema||0),0);
+  // Mesmo denominador do KPI do topo: maior entre sistema e físico por item, não só
+  // o sistema — sobra pura (sistema=0, físico>0) senão ficava fora da base.
+  const saldo = divs.reduce((s,d)=>s+Math.max(d.qtdeSistema||0, d.qtdeFisica||0),0);
   const soma = f => divs.filter(f).reduce((s,d)=>s+abs(d),0);
   const conta = f => divs.filter(f).length;
 
@@ -6483,7 +6486,7 @@ function irComposicaoDivergencia(){
     ['Locais encerrados sem as rodadas baterem', d=>d.statusLocal==='encerrado_sem_convergencia']
   ].map(([rot,f])=>{
     const pecas = soma(f);
-    const saldoFora = divs.filter(f).reduce((s,d)=>s+(d.qtdeSistema||0),0);
+    const saldoFora = divs.filter(f).reduce((s,d)=>s+Math.max(d.qtdeSistema||0, d.qtdeFisica||0),0);
     const restoSaldo = saldo - saldoFora;
     return {rot, pecas, itens:conta(f),
       divSem: total - pecas,
@@ -6522,7 +6525,7 @@ function irRenderComposicaoDivergenciaPanel(){
         <td class="mono">${h.accSem==null?'—':irFmtPct(h.accSem)}</td>
       </tr>`).join('')}</tbody>
     </table></div>
-    <p class="field-hint" style="margin-top:10px;">Hoje: ${irFmtInt(c.saldo)} peças de saldo lógico (base da acurácia) · ${irFmtInt(c.contadas)} contadas · ${irFmtInt(c.total)} divergentes · ${c.acuracia==null?'—':irFmtPct(c.acuracia)} de acurácia.${
+    <p class="field-hint" style="margin-top:10px;">Hoje: ${irFmtInt(c.saldo)} peças de base (maior entre sistema e físico) · ${irFmtInt(c.contadas)} contadas · ${irFmtInt(c.total)} divergentes · ${c.acuracia==null?'—':irFmtPct(c.acuracia)} de acurácia.${
       (c.foraMotivo||c.foraRodada) ? ' Fora do recorte do ciclo rotativo: '+irFmtInt(c.foraMotivo)+' peças em ajustes que não são AIR e '+irFmtInt(c.foraRodada)+' em rodadas anteriores do mesmo local.' : ''}</p>
   </div>`;
 }
