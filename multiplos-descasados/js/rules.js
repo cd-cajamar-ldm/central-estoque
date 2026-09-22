@@ -139,6 +139,7 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       return {
         componente: c.componente,
         nome: (s && s.nome) || '',
+        ean: (s && s.ean) || '',
         inInterface: c.inInterface,
         qtdePorMultiplo: c.qtde > 0 ? c.qtde : 1,
         wn, bloqueado: bloq,
@@ -288,7 +289,7 @@ function mdPlanoAjuste(pais, base){
             saldoLocal: alvo.saldoLocal, semEndereco: !!alvo.semEndereco,
             quantidade: alvo.quantidade,
             pai: p.pai, nomePai: p.nome,
-            componente: c.componente, nome: c.nome,
+            componente: c.componente, nome: c.nome, ean: c.ean,
             inInterface: c.inInterface,
             qtdePorMultiplo: c.qtdePorMultiplo,
             wn: c.wn, bloqueado: c.bloqueado, alvoWn: c.alvoWn,
