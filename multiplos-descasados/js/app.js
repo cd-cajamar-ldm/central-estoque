@@ -404,20 +404,45 @@ function mdPlanoCorrecaoRestricao(){
         : (regra.length===1 ? regra[0] : null);
       if(!destino) continue;
       const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
+      const preco = s.valorUnitario || 0;
       for(const ref of refs){
         const quantidade = ref[campo] || 0;
         if(!quantidade) continue;
         out.push({
+          de: loc.restricao, para: destino,
           codDe: mdCodRestricao(loc.restricao), codPara: mdCodRestricao(destino),
           localColetor: mdLocalColetor(loc.local),
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
-          componente: s.item, ean: s.ean, quantidade
+          componente: s.item, ean: s.ean, quantidade,
+          preco, valor: quantidade * preco
         });
       }
     }
   }
   return out;
+}
+
+/* KPIs da aba Ajustes de Restrição, mesma lógica dos cartões de Descasados
+   (contagem + peças + valor), mas olhando só pro estoque vendável (WN)
+   bloqueado por engano numa restrição fora da regra. 86 fica de fora da
+   conta de propósito: é normal um componente estar lá num momento e não
+   estar no outro — quem decide isso é o pareamento da aba Descasados, não
+   é erro de configuração desta tela. */
+function mdResumoCorrecao(){
+  const plano = mdPlanoCorrecaoRestricao().filter(l=>l.de !== MD_SIGLA_BLOQUEIO);
+  return {
+    itens: new Set(plano.map(l=>l.componente)).size,
+    pecas: plano.reduce((a,l)=>a+l.quantidade, 0),
+    valor: plano.reduce((a,l)=>a+l.valor, 0)
+  };
+}
+function mdKpisCorrecao(resumo){
+  return `<div class="kpi-grid" style="margin-bottom:18px;">
+    <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.itens)}</div><div class="label">Itens com restrição a corrigir</div></div>
+    <div class="kpi-card good"><div class="num">${irFmtInt(resumo.pecas)}</div><div class="label">Peças vendáveis bloqueadas a liberar</div></div>
+    <div class="kpi-card good"><div class="num num-money">${irFmtMoney(resumo.valor)}</div><div class="label">Valor bloqueado a liberar</div></div>
+  </div>`;
 }
 
 function mdValorMarcado(chave, valor){
@@ -524,6 +549,7 @@ function mdRenderAjustes(){
       <h3>Ajustes de Restrição</h3>
       <button class="btn btn-primary" onclick="mdExportarAjusteClasses()">Baixar relatório de ajuste</button>
     </div>
+    ${mdKpisCorrecao(mdResumoCorrecao())}
     <div class="md-filtros">
       <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar classe, X1 ou X2..."
              value="${irEsc(MD.busca)}" oninput="mdBuscar(this.value)">
