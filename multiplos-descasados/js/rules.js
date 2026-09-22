@@ -162,16 +162,18 @@ function mdCalcularPais(estrutura, saldos, precos, base){
     const completos = Math.floor(Math.min(...linhas.map(l=>l.wn / l.qtdePorMultiplo)));
     const completosPotencial = Math.floor(Math.min(...linhas.map(l=>(l.wn + l.bloqueado) / l.qtdePorMultiplo)));
 
-    let bloquearPecas = 0, liberarPecas = 0, bloquearValor = 0, compsSobraSemPreco = 0, compsComSobra = 0;
+    let bloquearPecas = 0, liberarPecas = 0, bloquearValor = 0, liberarValor = 0, compsSobraSemPreco = 0, compsComSobra = 0;
     for(const l of linhas){
       const alvo = completosPotencial * l.qtdePorMultiplo;
       l.alvoWn = alvo;
       l.bloquear = Math.max(0, l.wn - alvo);
       l.liberar = Math.max(0, Math.min(l.bloqueado, alvo - l.wn));
       l.valorBloquear = l.bloquear * l.preco;
+      l.valorLiberar = l.liberar * l.preco;
       bloquearPecas += l.bloquear;
       liberarPecas += l.liberar;
       bloquearValor += l.valorBloquear;
+      liberarValor += l.valorLiberar;
       if(l.bloquear > 0){
         compsComSobra++;
         // Peça descasada sem preço nenhum: o valor da tela sai subestimado e a
@@ -201,6 +203,7 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       compsSobraSemPreco,
       bloquearPecas, liberarPecas,
       sobraValor: bloquearValor,
+      liberarValor,
       valorMultiplo,
       wnTotal: linhas.reduce((a,l)=>a + l.wn, 0),
       bloqueadoTotal: linhas.reduce((a,l)=>a + l.bloqueado, 0),
@@ -217,7 +220,7 @@ function mdCalcularPais(estrutura, saldos, precos, base){
 function mdResumo(pais){
   const r = {
     paisComEstoque: pais.length, paisDescasados: 0,
-    bloquearPecas: 0, liberarPecas: 0, sobraValor: 0,
+    bloquearPecas: 0, liberarPecas: 0, sobraValor: 0, liberarValor: 0,
     completos: 0, completosPotencial: 0,
     paisIncompletos: 0, componentesComSobra: 0, componentesSemPreco: 0,
     paisABloquear: 0, paisALiberar: 0
@@ -228,6 +231,7 @@ function mdResumo(pais){
     r.bloquearPecas += p.bloquearPecas;
     r.liberarPecas += p.liberarPecas;
     r.sobraValor += p.sobraValor;
+    r.liberarValor += p.liberarValor;
     r.componentesComSobra += p.compsComSobra;
     r.componentesSemPreco += p.compsSobraSemPreco;
     if(p.descasado) r.paisDescasados++;

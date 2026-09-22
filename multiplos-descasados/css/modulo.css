@@ -75,3 +75,14 @@ tr.md-piv-pai:hover td, tr.md-piv-comp:hover td, tr.md-piv-leaf:hover td{ filter
   line-height:1; cursor:pointer; color:var(--ink-soft); margin-right:6px;
 }
 .md-piv-toggle:hover{ border-color:var(--orange); color:var(--orange); }
+
+/* Célula com restrição fora da regra configurada (Configurações): vermelho
+   cheio, some qualquer outro destaque (WN/AI) — é o alerta que manda. */
+table.md-piv td.md-cel-erro{ background:var(--danger); color:#fff; font-weight:800; }
+
+/* Checkbox de seleção de classe (matriz de Ajustes) e da tabela de
+   Configurações: centralizado, sem herdar o alinhamento numérico da coluna. */
+table.md-piv td.md-piv-check{ text-align:center; }
+table.md-piv input[type="checkbox"]{ accent-color:var(--orange); width:14px; height:14px; cursor:pointer; }
+table.md-config-table td{ text-align:center; }
+table.md-config-table td.md-left{ text-align:left; }

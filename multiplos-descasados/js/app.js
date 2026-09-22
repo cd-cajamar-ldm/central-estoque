@@ -19,12 +19,13 @@ const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
-  soDescasados:true,
+  equalizado:'nao',     // 'todos' | 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
   ordem:'valor',
   pivotExpandido:new Set(),
   tela:'descasados',
-  sentido:'todos',      // filtro da tela de ajuste: bloquear, liberar ou os dois
+  regrasClasse:{},        // classe (CLAL) -> [siglas de restrição permitidas]
+  classesSelecionadas:null, // null = todas; Set() = só as marcadas
   f051:null, f390:null, f278:null,
   proc:{'051':false,'390':false,'278':false},
   progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0}},
@@ -114,7 +115,8 @@ function mdInvalidarCache(){ MD._cache = null; MD._cacheBase = null; MD._plano =
 function mdPaisFiltrados(){
   const termo = MD.busca.trim().toLowerCase();
   let lista = mdPais();
-  if(MD.soDescasados) lista = lista.filter(p=>p.descasado);
+  if(MD.equalizado === 'sim') lista = lista.filter(p=>!p.descasado);
+  else if(MD.equalizado === 'nao') lista = lista.filter(p=>p.descasado);
   if(termo){
     lista = lista.filter(p=>
       p.pai.includes(termo) ||
@@ -139,7 +141,7 @@ function mdTemDados(){ return !!(MD.estrutura && MD.estrutura.length && MD.saldo
 
 function mdSetBase(base){ MD.base = base; mdInvalidarCache(); irRenderView(); }
 function mdSetOrdem(o){ MD.ordem = o; irRenderView(); }
-function mdToggleSoDescasados(){ MD.soDescasados = !MD.soDescasados; irRenderView(); }
+function mdSetEqualizado(v){ MD.equalizado = v; irRenderView(); }
 function mdBuscar(v){
   MD.busca = v;
   clearTimeout(window.__mdBuscaTimer);
@@ -151,7 +153,7 @@ function mdKpis(resumo){
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.bloquearPecas)}</div><div class="label">Peças a bloquear (0 → 86)</div></div>
     <div class="kpi-card good"><div class="num">${irFmtInt(resumo.liberarPecas)}</div><div class="label">Peças a liberar (86 → 0)</div></div>
     <div class="kpi-card bad"><div class="num num-money">${irFmtMoney(resumo.sobraValor)}</div><div class="label">Valor descasado</div></div>
-    <div class="kpi-card good"><div class="num">${irFmtInt(resumo.completos)}</div><div class="label">Múltiplos vendáveis</div></div>
+    <div class="kpi-card good"><div class="num num-money">${irFmtMoney(resumo.liberarValor)}</div><div class="label">Valor a liberar</div></div>
   </div>` + mdAvisoPreco(resumo);
 }
 
@@ -180,7 +182,9 @@ function mdBarraFiltros(){
         ${chip(MD.base==='qtdeDisp', "mdSetBase('qtdeDisp')", 'Só disponível')}
       </div>
       <div class="md-chips">
-        ${chip(MD.soDescasados, 'mdToggleSoDescasados()', MD.soDescasados ? 'Só com ajuste' : 'Todos os múltiplos')}
+        ${chip(MD.equalizado==='todos', "mdSetEqualizado('todos')", 'Equalizado: Todos')}
+        ${chip(MD.equalizado==='sim', "mdSetEqualizado('sim')", 'Equalizado: Sim')}
+        ${chip(MD.equalizado==='nao', "mdSetEqualizado('nao')", 'Equalizado: Não')}
       </div>
       <div class="md-chips">
         ${chip(MD.ordem==='valor', "mdSetOrdem('valor')", 'Por valor')}
@@ -188,15 +192,7 @@ function mdBarraFiltros(){
         ${chip(MD.ordem==='completos', "mdSetOrdem('completos')", 'Menos completos')}
       </div>
     </div>
-    <p class="field-hint">${irEsc(mdLegendaBase())}</p>
   </div>`;
-}
-function mdLegendaBase(){
-  const b = MD.base==='qtdeDisp'
-    ? 'Saldo disponível (QTDE_DISP): desconta o que já está reservado em romaneio.'
-    : 'Saldo total (QTDE): tudo que existe no endereço, reservado ou não.';
-  return b + ' Só o que está em WN (0) casa e conta como vendável; o 86 (AI) é o descasado bloqueado, que volta pra WN quando o par aparece.'
-    + ' O pai vem sempre da ZBIQ0051 — item que não está nela não é múltiplo e não aparece aqui.';
 }
 
 /* Colunas de restrição da tela: as que realmente aparecem no estoque destes
@@ -305,7 +301,7 @@ function mdRenderPivot(){
       <div class="md-piv-acoes">
         <button class="btn-link" onclick="mdPivExpandirTudo()">Expandir tudo</button>
         <button class="btn-link" onclick="mdPivRecolherTudo()">Recolher tudo</button>
-        <button class="btn btn-primary" onclick="mdExportarAjuste()">Baixar planilha de ajuste</button>
+        <button class="btn btn-primary" onclick="mdExportarAjustePivot()">Baixar planilha de ajuste</button>
       </div>
     </div>
     <p class="field-hint">${irFmtInt(lista.length)} ${lista.length===1?'múltiplo':'múltiplos'} · item pai → componente → endereço, clique em + para expandir</p>
@@ -372,6 +368,27 @@ function mdMatrizClasses(){
   return porClasse;
 }
 
+/* Restrição fora da regra configurada em Configurações (Configurações →
+   Restrições permitidas por classe). Sem regra salva pra essa classe, não dá
+   pra dizer se está certo ou errado — não valida. */
+function mdRestricaoPermitida(classe, sigla){
+  const regra = MD.regrasClasse && MD.regrasClasse[classe];
+  if(!regra || !regra.length) return true;
+  return regra.includes(sigla);
+}
+
+function mdClasseMarcada(classe){
+  return MD.classesSelecionadas === null || MD.classesSelecionadas.has(classe);
+}
+function mdToggleClasse(classe){
+  if(MD.classesSelecionadas === null) MD.classesSelecionadas = new Set(mdMatrizClasses().keys());
+  if(MD.classesSelecionadas.has(classe)) MD.classesSelecionadas.delete(classe);
+  else MD.classesSelecionadas.add(classe);
+  irRenderView();
+}
+function mdMarcarTodasClasses(){ MD.classesSelecionadas = null; irRenderView(); }
+function mdDesmarcarTodasClasses(){ MD.classesSelecionadas = new Set(); irRenderView(); }
+
 function mdRenderMatrizClasses(){
   const porClasse = mdMatrizClasses();
   const restricoes = mdRestricoesPresentes();
@@ -382,7 +399,7 @@ function mdRenderMatrizClasses(){
   classes.sort((a,b)=>totalDe(b)-totalDe(a));
 
   if(!classes.length){
-    return `<div class="panel"><p class="field-hint">Nenhuma classe bate com o filtro atual.</p></div>`;
+    return { html: `<div class="panel"><p class="field-hint">Nenhuma classe bate com o filtro atual.</p></div>`, classesComErro: 0 };
   }
 
   const headerCols = restricoes.map(s=>{
@@ -392,22 +409,32 @@ function mdRenderMatrizClasses(){
 
   const totalPorRestricao = {};
   for(const s of restricoes) totalPorRestricao[s] = 0;
-  let totalGeral = 0;
+  let totalGeral = 0, classesComErro = 0;
 
   const linhas = classes.map(c=>{
     const bucket = porClasse.get(c);
+    let temErro = false;
     const cels = restricoes.map(s=>{
       const v = bucket[s] || 0;
       totalPorRestricao[s] += v;
-      const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-      return `<td class="${cls}">${v ? irFmtInt(v) : ''}</td>`;
+      const erro = v > 0 && !mdRestricaoPermitida(c, s);
+      if(erro) temErro = true;
+      const cls = erro ? 'md-cel-erro' : (s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : ''));
+      const titulo = erro ? ` title="${irEsc('Restrição '+mdCodRestricao(s)+' ('+s+') não está nas restrições permitidas de '+c+' — configure em Configurações')}"` : '';
+      return `<td class="${cls}"${titulo}>${v ? irFmtInt(v) : ''}</td>`;
     }).join('');
+    if(temErro) classesComErro++;
     const total = totalDe(c);
     totalGeral += total;
-    return `<tr><td class="md-left mono">${irEsc(c)}</td>${cels}<td class="md-piv-total">${irFmtInt(total)}</td></tr>`;
+    const marcado = mdClasseMarcada(c);
+    return `<tr>
+      <td class="md-piv-check"><input type="checkbox" ${marcado?'checked':''} onchange="mdToggleClasse('${irEsc(c)}')"></td>
+      <td class="md-left mono">${irEsc(c)}</td>${cels}<td class="md-piv-total">${irFmtInt(total)}</td>
+    </tr>`;
   }).join('');
 
   const rodape = `<tr class="md-piv-pai">
+    <td></td>
     <td class="md-left">Total Geral</td>
     ${restricoes.map(s=>{
       const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
@@ -416,9 +443,10 @@ function mdRenderMatrizClasses(){
     <td class="md-piv-total">${irFmtInt(totalGeral)}</td>
   </tr>`;
 
-  return `<div class="md-piv-wrap">
+  const html = `<div class="md-piv-wrap">
     <table class="md-piv">
       <thead><tr>
+        <th></th>
         <th class="md-left">Classe</th>
         ${headerCols}
         <th class="md-piv-total">Total Geral</th>
@@ -426,6 +454,7 @@ function mdRenderMatrizClasses(){
       <tbody>${linhas}${rodape}</tbody>
     </table>
   </div>`;
+  return { html, classesComErro };
 }
 
 function mdRenderAjustes(){
@@ -437,11 +466,16 @@ function mdRenderAjustes(){
   const bloquear = plano.filter(l=>l.sentido==='bloquear').reduce((a,l)=>a+l.quantidade, 0);
   const liberar = plano.filter(l=>l.sentido==='liberar').reduce((a,l)=>a+l.quantidade, 0);
   const semEndereco = plano.filter(l=>l.semEndereco).length;
+  const matriz = mdRenderMatrizClasses();
 
   return `<div class="panel">
     <div class="md-head">
       <h3>Restrição por classe</h3>
-      <button class="btn btn-primary" onclick="mdExportarAjuste()">Baixar relatório de ajuste</button>
+      <div class="md-piv-acoes">
+        <button class="btn-link" onclick="mdMarcarTodasClasses()">Marcar todas</button>
+        <button class="btn-link" onclick="mdDesmarcarTodasClasses()">Desmarcar todas</button>
+        <button class="btn btn-primary" onclick="mdExportarAjusteClasses()">Baixar relatório de ajuste</button>
+      </div>
     </div>
     <div class="md-filtros">
       <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar classe..."
@@ -453,16 +487,26 @@ function mdRenderAjustes(){
     </div>
     <p class="field-hint">
       ${plano.length
-        ? `${irFmtInt(bloquear)} peças a bloquear (0 → 86) e ${irFmtInt(liberar)} a liberar (86 → 0) — a planilha traz isso endereço por endereço, pronta pro coletor (tela 12.MOVI).`
+        ? `${irFmtInt(bloquear)} peças a bloquear (0 → 86) e ${irFmtInt(liberar)} a liberar (86 → 0) — a planilha traz isso endereço por endereço, pronta pro coletor (tela 12.MOVI), só das classes marcadas.`
         : `Nenhum múltiplo precisa de ajuste na base ${MD.base==='qtdeDisp'?'disponível':'total'} agora.`}
       ${semEndereco ? ` <strong class="neg">${irFmtInt(semEndereco)} linha(s) sem endereço</strong> na planilha: o saldo da restrição não fechou com a soma dos endereços na 390.` : ''}
+      ${matriz.classesComErro ? ` <strong class="neg">${irFmtInt(matriz.classesComErro)} classe(s)</strong> com restrição fora da regra configurada — célula em vermelho.` : ''}
     </p>
-    ${mdRenderMatrizClasses()}
+    ${matriz.html}
   </div>`;
 }
 
-function mdExportarAjuste(){
-  const lista = mdPlano();
+/* Descasados: respeita a busca, o base (total/disponível) e o filtro
+   Equalizado da tela — exporta só o que está sendo mostrado ali. */
+function mdExportarAjustePivot(){
+  mdGerarCsvAjuste(mdPlanoAjuste(mdPaisFiltrados(), MD.base));
+}
+/* Ajustes: respeita as classes marcadas na matriz (checkbox por linha). */
+function mdExportarAjusteClasses(){
+  mdGerarCsvAjuste(mdPlano().filter(l=>mdClasseMarcada(l.clal)));
+}
+
+function mdGerarCsvAjuste(lista){
   if(!lista.length){ irShowToast('Não há ajuste para exportar.'); return; }
   // As quatro primeiras colunas são, na ordem, o que se digita no coletor:
   // local (5000+id), restrição de origem, restrição de destino e quantidade.
@@ -633,11 +677,64 @@ function mdRenderImportacao(){
 }
 
 /* ============================================================
+   TELA — CONFIGURAÇÕES
+   ============================================================
+   Regra por classe local (CLAL): quais restrições podem existir ali. É a
+   base da validação da matriz em Ajustes de Restrição — sem marcar nada pra
+   uma classe, ela não é validada (não dá pra saber o que é errado sem
+   regra). Persistido no banco do módulo (config), não se perde ao reimportar. */
+function mdClassesConhecidas(){
+  const set = new Set();
+  for(const s of (MD.saldos||[])) for(const loc of (s.locais||[])) if(loc.clal) set.add(loc.clal);
+  for(const c in (MD.regrasClasse||{})) set.add(c);
+  return Array.from(set).sort();
+}
+function mdSetRegraClasse(classe, sigla, permitido){
+  if(!MD.regrasClasse) MD.regrasClasse = {};
+  const atual = new Set(MD.regrasClasse[classe] || []);
+  if(permitido) atual.add(sigla); else atual.delete(sigla);
+  MD.regrasClasse[classe] = Array.from(atual);
+  mdSetConfig('regras-classe', MD.regrasClasse);
+  irRenderView();
+}
+function mdRenderConfiguracoes(){
+  const classes = mdClassesConhecidas();
+  if(!classes.length){
+    return irEmptyState('Sem classes ainda', 'Importe a QRY0390 para ver as classes de local (CLAL) dos componentes de múltiplo.', "irSwitchTab('importacao')", 'Ir para a importação');
+  }
+  const headerCols = MD_RESTRICOES.map(r=>
+    `<th title="${irEsc(r.sigla+' — '+r.nome)}">${irEsc(r.cod)}</th>`
+  ).join('');
+  const linhas = classes.map(c=>{
+    const regra = MD.regrasClasse[c] || [];
+    const cels = MD_RESTRICOES.map(r=>{
+      const marcado = regra.includes(r.sigla);
+      return `<td><input type="checkbox" ${marcado?'checked':''} onchange="mdSetRegraClasse('${irEsc(c)}','${r.sigla}', this.checked)"></td>`;
+    }).join('');
+    return `<tr><td class="md-left mono">${irEsc(c)}</td>${cels}</tr>`;
+  }).join('');
+  return `<div class="panel">
+    <div class="md-head"><h3>Restrições permitidas por classe</h3></div>
+    <p class="field-hint">
+      Marque, por classe local (CLAL), quais restrições podem existir ali. O que uma classe tiver fora
+      disso aparece em vermelho na matriz da aba Ajustes de Restrição. Classe sem nenhuma marcação não é validada.
+    </p>
+    <div class="md-piv-wrap">
+      <table class="md-piv md-config-table">
+        <thead><tr><th class="md-left">Classe</th>${headerCols}</tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
    SHELL
    ============================================================ */
 const MD_TELAS = {
   descasados:['Múltiplos Descasados','Componente sem par no estoque: dimensão, onde está e quanto vale.'],
   ajustes:['Ajustes de Restrição','O que bloquear em 86 e o que devolver para venda, linha a linha.'],
+  configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
   importacao:['Importação','ZBIQ0051, QRY0390 e SIGEQ278 — as bases do módulo.']
 };
 function irRenderView(){
@@ -647,8 +744,9 @@ function irRenderView(){
     raiz.innerHTML = irEmptyState('Não consegui abrir o banco do navegador', MD.initErro, null, null);
     return;
   }
-  raiz.innerHTML = MD.tela==='importacao' ? mdRenderImportacao()
-                 : MD.tela==='ajustes'    ? mdRenderAjustes()
+  raiz.innerHTML = MD.tela==='importacao'    ? mdRenderImportacao()
+                 : MD.tela==='ajustes'       ? mdRenderAjustes()
+                 : MD.tela==='configuracoes' ? mdRenderConfiguracoes()
                  : mdRenderDescasados();
 }
 function irSwitchTab(tela){
@@ -668,6 +766,7 @@ async function mdRecarregar(){
   MD.estruturaMeta = await mdGetEstruturaMeta();
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
+  MD.regrasClasse = (await mdGetConfig('regras-classe')) || {};
   mdInvalidarCache();
 }
 async function irInit(){
