@@ -66,3 +66,36 @@
 .md-end-titulo{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin-bottom:5px; }
 .md-end-linha{ display:flex; align-items:baseline; flex-wrap:wrap; gap:4px; margin-bottom:3px; }
 .md-end-item{ font-size:11px; font-weight:700; color:var(--ink); min-width:74px; }
+
+/* ---------- PIVÔ (Descasados): item pai → componente → endereço ----------
+   Estilo tabela dinâmica, recolhido por padrão — um múltiplo com muitos
+   endereços por componente não deve abrir a tela inteira de largura/altura. */
+.md-piv-acoes{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.md-piv-wrap{ overflow:auto; max-height:68vh; border:1px solid var(--line); border-radius:var(--radius); }
+table.md-piv{ width:100%; border-collapse:collapse; font-size:12px; }
+table.md-piv thead th{
+  position:sticky; top:0; background:var(--orange); color:#fff; padding:6px 8px;
+  text-align:right; white-space:nowrap; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; z-index:1;
+}
+table.md-piv thead th.md-left{ text-align:left; }
+table.md-piv thead th.md-piv-total{ background:var(--blue); }
+table.md-piv thead th.md-col-wn{ background:var(--success); }
+table.md-piv thead th.md-col-86{ background:var(--danger); }
+table.md-piv td{ padding:3px 8px; border-bottom:1px solid var(--line); text-align:right; font-family:'SFMono-Regular',Consolas,monospace; font-size:11.5px; white-space:nowrap; }
+table.md-piv td.md-left{ text-align:left; font-family:inherit; white-space:normal; }
+table.md-piv td.md-piv-total{ font-weight:800; }
+tr.md-piv-pai td{ background:var(--orange-light); font-weight:800; }
+tr.md-piv-comp td{ background:var(--blue-light); font-weight:700; }
+tr.md-piv-comp td.md-left{ padding-left:26px; }
+tr.md-piv-leaf td{ background:var(--surface); color:var(--ink-soft); font-weight:400; }
+tr.md-piv-leaf td.md-left{ padding-left:48px; }
+tr.md-piv-pai:hover td, tr.md-piv-comp:hover td, tr.md-piv-leaf:hover td{ filter:brightness(.97); }
+.md-piv-toggle{
+  width:15px; height:15px; border-radius:3px; border:1px solid var(--line); background:var(--surface);
+  display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:800;
+  line-height:1; cursor:pointer; color:var(--ink-soft); margin-right:6px;
+}
+.md-piv-toggle:hover{ border-color:var(--orange); color:var(--orange); }
+.md-piv-legend{ display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 12px; }
+.md-piv-legend span{ font-size:10.5px; background:var(--surface); border:1px solid var(--line); border-radius:100px; padding:3px 9px; color:var(--ink-soft); }
+.md-piv-legend b{ color:var(--ink); font-family:'SFMono-Regular',Consolas,monospace; }

@@ -22,7 +22,7 @@ const MD = {
   soDescasados:true,
   busca:'',
   ordem:'valor',
-  expandido:null,
+  pivotExpandido:new Set(),
   tela:'descasados',
   sentido:'todos',      // filtro da tela de ajuste: bloquear, liberar ou os dois
   f051:null, f390:null, f278:null,
@@ -145,8 +145,6 @@ function mdBuscar(v){
   clearTimeout(window.__mdBuscaTimer);
   window.__mdBuscaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBusca')?.focus(); }, 220);
 }
-function mdToggleLinha(pai){ MD.expandido = MD.expandido===pai ? null : pai; irRenderView(); }
-
 function mdKpis(resumo){
   return `<div class="kpi-grid">
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.paisDescasados)}</div><div class="label">Múltiplos a ajustar</div></div>
@@ -214,118 +212,120 @@ function mdRestricoesPresentes(){
   return ordenadas;
 }
 
-function mdTabelaPais(){
+/* Nome comprido não cabe numa linha compacta: mostra o início e o fim, que é
+   o trecho que costuma diferenciar um item do outro (cor, medida, modelo). */
+function mdTruncarNome(nome, max){
+  if(!nome || nome.length <= max) return nome || '';
+  const inicio = nome.slice(0, Math.ceil(max*0.65));
+  const fim = nome.slice(-Math.floor(max*0.28));
+  return inicio.trim() + '…' + fim.trim();
+}
+
+/* Soma por restrição no nível do pai: cada componente já traz o próprio total
+   (porRestricao, no corte de base escolhido); aqui só agrega os componentes. */
+function mdPaiTotaisPorSigla(p, restricoes){
+  const out = {};
+  for(const s of restricoes) out[s] = p.componentes.reduce((a,c)=>a+(c.porRestricao[s]||0),0);
+  return out;
+}
+
+function mdPivColunas(totais, restricoes, total){
+  return restricoes.map(s=>{
+    const v = totais[s] || 0;
+    const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
+    return `<td class="${cls}">${v ? irFmtInt(v) : ''}</td>`;
+  }).join('') + `<td class="md-piv-total">${irFmtInt(total)}</td>`;
+}
+
+function mdPivToggle(id){
+  if(MD.pivotExpandido.has(id)) MD.pivotExpandido.delete(id); else MD.pivotExpandido.add(id);
+  irRenderView();
+}
+function mdPivExpandirTudo(){
+  for(const p of mdPaisFiltrados()){
+    MD.pivotExpandido.add('p-'+p.pai);
+    for(const c of p.componentes) MD.pivotExpandido.add('p-'+p.pai+'-c-'+c.componente);
+  }
+  irRenderView();
+}
+function mdPivRecolherTudo(){ MD.pivotExpandido.clear(); irRenderView(); }
+
+/* Pivô item pai → componente → endereço, no estilo tabela dinâmica: uma
+   coluna por restrição — o CÓDIGO do WMS, não a sigla, porque é o que se
+   digita no coletor. WN e AI destacados. Recolhido por padrão: um múltiplo
+   grande pode ter dezenas de endereços por componente, e abrir tudo de cara
+   afoga a tela. */
+function mdRenderPivot(){
   const lista = mdPaisFiltrados();
   if(!lista.length){
     return `<div class="panel"><p class="field-hint">Nenhum múltiplo bate com o filtro atual.</p></div>`;
   }
-  const linhas = lista.map(p=>{
-    const aberto = MD.expandido === p.pai;
+  const restricoes = mdRestricoesPresentes();
+  const outras = restricoes.filter(s=>s!==MD_SIGLA_VENDAVEL && s!==MD_SIGLA_BLOQUEIO);
+  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+
+  let linhas = '';
+  for(const p of lista){
+    const idPai = 'p-'+p.pai;
+    const paiAberto = MD.pivotExpandido.has(idPai);
     const alerta = p.faltantes > 0
       ? `<span class="md-tag md-tag-bad">${p.faltantes} sem peça</span>`
       : (p.completos === 0 ? `<span class="md-tag md-tag-bad">0 vendáveis</span>` : '');
-    const principal = `<tr class="md-linha ${aberto?'sel':''}" onclick="mdToggleLinha('${irEsc(p.pai)}')">
-      <td class="mono md-left">${irEsc(p.pai)}</td>
-      <td class="md-left">${irEsc(p.nome || '—')} ${alerta}</td>
-      <td class="mono">${irFmtInt(p.nComponentes)}</td>
-      <td class="mono">${irFmtInt(p.wnTotal)}</td>
-      <td class="mono ${p.bloqueadoTotal?'md-col-86':''}">${irFmtInt(p.bloqueadoTotal)}</td>
-      <td class="mono">${irFmtInt(p.outrasTotal)}</td>
-      <td class="mono ${p.completos?'pos':'neg'}">${irFmtInt(p.completos)}</td>
-      <td class="mono ${p.bloquearPecas?'neg':''}">${irFmtInt(p.bloquearPecas)}</td>
-      <td class="mono ${p.liberarPecas?'pos':''}">${irFmtInt(p.liberarPecas)}</td>
-      <td class="mono ${p.sobraValor?'neg':''}">${irFmtMoney(p.sobraValor)}</td>
+    linhas += `<tr class="md-piv-pai">
+      <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome,46))} ${alerta}</td>
+      ${mdPivColunas(mdPaiTotaisPorSigla(p, restricoes), restricoes, p.pecasTotal)}
     </tr>`;
-    if(!aberto) return principal;
-    return principal + `<tr class="md-detalhe"><td colspan="10">${mdDetalhePai(p)}</td></tr>`;
+    if(!paiAberto) continue;
+    for(const c of p.componentes){
+      const idComp = idPai+'-c-'+c.componente;
+      const compAberto = MD.pivotExpandido.has(idComp);
+      const tagValor = c.inInterface==='S' ? ' <span class="md-tag md-tag-info" title="Carrega o valor do múltiplo (in_interface = S)">valor</span>' : '';
+      linhas += `<tr class="md-piv-comp">
+        <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idComp}')">${compAberto?'−':'+'}</button><span class="mono">${irEsc(c.componente)}</span> ${irEsc(mdTruncarNome(c.nome,46))}${tagValor}</td>
+        ${mdPivColunas(c.porRestricao, restricoes, c.total)}
+      </tr>`;
+      if(!compAberto) continue;
+      for(const loc of (c.locais||[])){
+        const v = loc[campo] || 0;
+        if(!v) continue;
+        linhas += `<tr class="md-piv-leaf">
+          <td class="md-left">${irEsc(loc.desc || loc.local)}</td>
+          ${mdPivColunas({[loc.restricao]: v}, restricoes, v)}
+        </tr>`;
+      }
+    }
+  }
+
+  const headerCols = restricoes.map(s=>{
+    const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
+    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${irEsc(mdCodRestricao(s))}</th>`;
   }).join('');
+  const legendaChips = outras.map(s=>
+    `<span><b>${irEsc(mdCodRestricao(s))}</b> ${irEsc(s)} — ${irEsc(mdNomeRestricao(s))}</span>`
+  ).join('');
 
   return `<div class="panel">
     <div class="md-head">
       <h3>Múltiplos por item pai</h3>
-      <span class="field-hint">${irFmtInt(lista.length)} ${lista.length===1?'múltiplo':'múltiplos'} · clique na linha para ver componentes, restrições e endereços</span>
+      <div class="md-piv-acoes">
+        <button class="btn-link" onclick="mdPivExpandirTudo()">Expandir tudo</button>
+        <button class="btn-link" onclick="mdPivRecolherTudo()">Recolher tudo</button>
+        <button class="btn btn-primary" onclick="mdExportarAjuste()">Baixar planilha de ajuste</button>
+      </div>
     </div>
-    <div class="table-wrap">
-      <table class="aud-table">
+    <p class="field-hint">${irFmtInt(lista.length)} ${lista.length===1?'múltiplo':'múltiplos'} · item pai → componente → endereço, clique em + para expandir</p>
+    ${legendaChips ? `<div class="md-piv-legend">${legendaChips}</div>` : ''}
+    <div class="md-piv-wrap">
+      <table class="md-piv">
         <thead><tr>
-          <th>Item pai</th><th>Descrição</th><th class="num">Comp.</th>
-          <th class="num" title="Estoque vendável">WN (0)</th>
-          <th class="num" title="Múltiplos incompletos dentro do estoque">AI (86)</th>
-          <th class="num" title="Demais restrições: não vendem e não casam">Outras</th>
-          <th class="num" title="Múltiplos completos em WN">Vendáveis</th>
-          <th class="num" title="Peças a mandar de 0 para 86">Bloquear</th>
-          <th class="num" title="Peças a devolver de 86 para 0">Liberar</th>
-          <th class="num">Valor descasado</th>
+          <th class="md-left">Item pai / Componente / Endereço</th>
+          ${headerCols}
+          <th class="md-piv-total">Total Geral</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
     </div>
   </div>`;
-}
-
-function mdDetalhePai(p){
-  const restricoes = mdRestricoesPresentes();
-  const comps = p.componentes.map(c=>{
-    const cels = restricoes.map(s=>{
-      const v = c.porRestricao[s] || 0;
-      const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-      return `<td class="mono ${cls}">${v ? irFmtInt(v) : ''}</td>`;
-    }).join('');
-    const acao = c.bloquear > 0
-      ? `<span class="md-tag md-tag-bad" title="Mandar de 0 (WN) para 86 (AI)">bloquear ${irFmtInt(c.bloquear)}</span>`
-      : (c.liberar > 0 ? `<span class="md-tag md-tag-good" title="Devolver de 86 (AI) para 0 (WN)">liberar ${irFmtInt(c.liberar)}</span>` : '');
-    return `<tr class="${c.bloquear>0?'md-comp-sobra':(c.liberar>0?'md-comp-liberar':'')}">
-      <td class="mono md-left">${irEsc(c.componente)}${c.inInterface==='S' ? ' <span class="md-tag md-tag-info" title="Componente que carrega o valor do múltiplo (in_interface = S)">valor</span>' : ''}</td>
-      <td class="md-left">${irEsc(c.nome || (c.semFicha ? 'sem saldo na QRY0390' : '—'))}</td>
-      <td class="mono">${irFmtInt(c.qtdePorMultiplo)}</td>
-      ${cels}
-      <td class="mono">${irFmtInt(c.total)}</td>
-      <td class="md-left">${acao}</td>
-    </tr>`;
-  }).join('');
-  const cabRestr = restricoes.map(s=>{
-    const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${irEsc(s)}</th>`;
-  }).join('');
-  const potencial = p.completosPotencial > p.completos
-    ? ` · <strong class="pos">${irFmtInt(p.completosPotencial)}</strong> se o 86 voltar`
-    : '';
-  return `<div class="md-sub">
-    <div class="md-sub-head">
-      <strong>${irFmtInt(p.completos)}</strong> múltiplos vendáveis${potencial}
-      ${p.bloquearPecas ? ' · <strong class="neg">'+irFmtInt(p.bloquearPecas)+'</strong> peças a bloquear' : ''}
-      ${p.liberarPecas ? ' · <strong class="pos">'+irFmtInt(p.liberarPecas)+'</strong> peças a liberar' : ''}
-      ${p.valorMultiplo ? ' · múltiplo montado a '+irFmtMoney(p.valorMultiplo) : ''}
-    </div>
-    <div class="table-wrap">
-      <table class="ofe-sub">
-        <thead><tr>
-          <th>Componente</th><th>Descrição</th><th>Por múlt.</th>${cabRestr}<th>Total</th><th>Ação</th>
-        </tr></thead>
-        <tbody>${comps}</tbody>
-      </table>
-    </div>
-    ${mdEnderecosPai(p)}
-  </div>`;
-}
-
-/* Onde as peças que serão mexidas estão, endereço por endereço. Só dos
-   componentes com ação — a lista completa de endereços de um múltiplo grande
-   tem dezenas de linhas e esconde justamente o que interessa. */
-function mdEnderecosPai(p){
-  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
-  const comAcao = p.componentes.filter(c=>c.bloquear > 0 || c.liberar > 0);
-  if(!comAcao.length) return '';
-  const blocos = comAcao.map(c=>{
-    const sigla = c.bloquear > 0 ? MD_SIGLA_VENDAVEL : MD_SIGLA_BLOQUEIO;
-    const alvos = mdAlocarPorEndereco(c.locais, sigla, c.bloquear > 0 ? c.bloquear : c.liberar, campo);
-    const chips = alvos.map(a=>a.semEndereco
-      ? `<span class="md-local md-local-mais">${irFmtInt(a.quantidade)} sem endereço em ${irEsc(sigla)}</span>`
-      : `<span class="md-local mono" title="${irEsc('Local '+a.local+' · saldo '+a.saldoLocal+' em '+sigla)}">${irEsc(a.desc || a.local)} <b>${irFmtInt(a.quantidade)}</b></span>`
-    ).join('');
-    return `<div class="md-end-linha"><span class="mono md-end-item">${irEsc(c.componente)}</span> ${chips}</div>`;
-  }).join('');
-  return `<div class="md-enderecos"><div class="md-end-titulo">De onde sai</div>${blocos}</div>`;
 }
 
 function mdRenderDescasados(){
@@ -335,7 +335,7 @@ function mdRenderDescasados(){
       : 'A estrutura já está aqui. Falta a QRY0390 com o saldo dos componentes.';
     return irEmptyState('Sem bases importadas', falta, "irSwitchTab('importacao')", 'Ir para a importação');
   }
-  return mdKpis(mdResumo(mdPais())) + mdBarraFiltros() + mdTabelaPais();
+  return mdKpis(mdResumo(mdPais())) + mdBarraFiltros() + mdRenderPivot();
 }
 
 /* ============================================================
