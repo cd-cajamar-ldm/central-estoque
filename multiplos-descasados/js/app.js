@@ -161,20 +161,6 @@ function mdKpis(resumo){
     <div class="kpi-card good"><div class="num">${irFmtInt(resumo.liberarPecas)}</div><div class="label">Peças a liberar (86 → 0)</div></div>
     <div class="kpi-card bad"><div class="num num-money">${irFmtMoney(resumo.sobraValor)}</div><div class="label">Valor descasado</div></div>
     <div class="kpi-card good"><div class="num num-money">${irFmtMoney(resumo.liberarValor)}</div><div class="label">Valor a liberar</div></div>
-  </div>` + mdAvisoPreco(resumo);
-}
-
-/* O valor da tela só é o valor de verdade se as peças descasadas tiverem preço.
-   Hoje a QRY0390 traz VALOR_UNITARIO zerado na quase totalidade dos componentes
-   de múltiplo — sem a SIGEQ278, o total sai muito abaixo do real. Em vez de
-   esconder o número atrás de um travessão (que some com os R$ que EXISTEM), a
-   tela mostra o total e diz, com número, o quanto dele não pôde ser valorado. */
-function mdAvisoPreco(resumo){
-  if(!resumo.componentesSemPreco) return '';
-  const semBase = !(MD.precos && MD.precos.length);
-  return `<div class="panel md-aviso">
-    <strong>${irFmtInt(resumo.componentesSemPreco)}</strong> dos ${irFmtInt(resumo.componentesComSobra)} componentes descasados estão sem preço${semBase ? '' : ' mesmo com a SIGEQ278 importada'} —
-    o valor acima é o piso, não o total. ${semBase ? 'Importe a SIGEQ278 para valorar pelo preço de custo do item pai.' : ''}
   </div>`;
 }
 
