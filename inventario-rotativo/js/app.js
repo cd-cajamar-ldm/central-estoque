@@ -898,7 +898,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v190';
+const IR_APP_VERSION = 'v191';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1597,8 +1597,10 @@ function irBuildContadosPorDiaSvg(rows, meta, opts){
   // espremer todo mundo até ficar ilegível, mostra só os últimos N dias, que são os
   // mais relevantes pro acompanhamento do ciclo. Rótulo em R$ é bem mais largo que um
   // inteiro simples ("R$ 1.234,56" vs "12") — precisa de mais espaço por dia, senão os
-  // rótulos vizinhos colam um no outro.
-  const MIN_SLOT = opts.minSlot || (fmt===irFmtMoney ? 56 : 34);
+  // rótulos vizinhos colam um no outro. O compacto ("R$643,7K") é mais curto que o
+  // cheio, mas ainda mais largo que um inteiro puro — errar pro lado de menos dias
+  // é sempre melhor que rótulo colando no vizinho.
+  const MIN_SLOT = opts.minSlot || (fmt===irFmtMoney ? 56 : (fmt===irFmtMoneyCompact ? 50 : 34));
   const maxDias = Math.max(1, Math.floor(plotW/MIN_SLOT));
   const rowsVisiveis = rows.length > maxDias ? rows.slice(rows.length-maxDias) : rows;
   const omitidos = rows.length - rowsVisiveis.length;
