@@ -23,9 +23,8 @@ const MD = {
   busca:'',
   pivotExpandido:new Set(),
   tela:'descasados',
-  regras:{clal:{}, x1:{}, x2:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
-  selecionadas:{clal:null, x1:null, x2:null}, // dimensão -> null (todas) | Set() (só as marcadas)
-  execucaoAjuste:new Set(), // linhas do ajuste já feitas no coletor (checklist)
+  regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
+  selecionadas:{clal:null, x1:null}, // dimensão -> null (todas) | Set() (só as marcadas)
   f051:null, f390:null, f278:null,
   proc:{'051':false,'390':false,'278':false},
   progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0}},
@@ -35,18 +34,20 @@ const MD = {
 
 const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
 
-/* As três dimensões de local usadas nas matrizes de Ajustes e Configurações —
-   mesma lógica pras três, só troca o campo do endereço (CLAL, X1, X2) que a
-   QRY0390 traz. Chave de config própria por dimensão pra não perder a regra
-   de classe (CLAL) já salva quando X1/X2 foram adicionados depois. */
+/* As duas dimensões de local usadas nas matrizes de Ajustes e Configurações —
+   mesma lógica pras duas, só troca o valor do endereço que a QRY0390 traz.
+   X1 (setor) e X2 (rua) andam juntos num endereço físico — "PP 001" é um
+   setor só, não dois — por isso viram uma dimensão combinada só, em vez de
+   duas matrizes separadas. Chave de config própria por dimensão pra não
+   perder a regra de classe (CLAL) já salva quando X1/X2 foram adicionados
+   depois. */
 const MD_DIMENSOES = [
-  {chave:'clal', campo:'clal', titulo:'Classe'},
-  {chave:'x1', campo:'x1', titulo:'X1'},
-  {chave:'x2', campo:'x2', titulo:'X2'}
+  {chave:'clal', titulo:'Classe', valor:o=>o.clal || '—'},
+  {chave:'x1', titulo:'X1/X2', valor:o=>[o.x1, o.x2].filter(Boolean).join(' ') || '—'}
 ];
 const MD_DIM_POR_CHAVE = {};
 MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
-const MD_CONFIG_KEY_POR_DIM = {clal:'regras-classe', x1:'regras-x1', x2:'regras-x2'};
+const MD_CONFIG_KEY_POR_DIM = {clal:'regras-classe', x1:'regras-x1'};
 
 function irEsc(v){ if(v===undefined||v===null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function irFmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
@@ -347,8 +348,8 @@ function mdPlano(){
    restrição, valor = quantidade) — só que aqui é o recorte deste módulo: só
    os componentes de múltiplo, não o estoque vendável inteiro. A tabela linha
    a linha (endereço por endereço, pronta pra colar no coletor) fica só na
-   planilha exportada — aqui é só a visão gerencial. As três dimensões
-   compartilham a mesma lógica, só troca o campo do endereço. */
+   planilha exportada — aqui é só a visão gerencial. As duas dimensões
+   compartilham a mesma lógica, só troca o valor do endereço. */
 function mdMatrizPor(chave){
   const dim = MD_DIM_POR_CHAVE[chave];
   const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
@@ -357,7 +358,7 @@ function mdMatrizPor(chave){
     for(const loc of (s.locais||[])){
       const v = loc[campo] || 0;
       if(!v) continue;
-      const valor = loc[dim.campo] || '—';
+      const valor = dim.valor(loc);
       if(!porValor.has(valor)) porValor.set(valor, {});
       const bucket = porValor.get(valor);
       bucket[loc.restricao] = (bucket[loc.restricao] || 0) + v;
@@ -462,79 +463,11 @@ function mdRenderMatrizPor(chave){
   return { html, comErro };
 }
 
-/* Checklist de execução: cada linha do ajuste marcada conforme o operador vai
-   digitando no coletor/PuTTY. Chave por componente+local+sentido (não muda
-   entre reimportações do mesmo cenário); quantidade não entra na chave —
-   senão um recálculo por 1 peça já desmarcaria tudo. Persistido no banco do
-   módulo pra sobreviver a fechar a aba no meio da execução. */
-function mdChaveExecucao(l){ return l.componente+'|'+l.localColetor+'|'+l.sentido; }
-function mdToggleExecutado(chave){
-  if(MD.execucaoAjuste.has(chave)) MD.execucaoAjuste.delete(chave);
-  else MD.execucaoAjuste.add(chave);
-  mdSetConfig('execucao-ajuste', Array.from(MD.execucaoAjuste));
-  irRenderView();
-}
-
-/* Local(10) + EAN(13) + Orig(2) + Dest(2) + Qtde, sem separador — cola direto
-   no campo Local da tela Altera Restrição (12.MOVI) e o cursor pula sozinho
-   de campo em campo, testado com o coletor de verdade. Falta só o Shift+F6,
-   que é tecla de controle e não vai em texto colado — isso fica por conta
-   de quem está digitando, depois de conferir os campos preenchidos. */
-function mdTextoColarLinha(l){
-  const orig = String(l.codDe ?? '').padStart(2,'0');
-  const dest = String(l.codPara ?? '').padStart(2,'0');
-  const ean = String(l.ean ?? '').padStart(13,'0');
-  return l.localColetor + ean + orig + dest + irFmtInt(l.quantidade);
-}
-function mdCopiarTexto(texto){
-  navigator.clipboard.writeText(texto).then(()=>{
-    irShowToast('Copiado — cola no campo Local (Ctrl+Shift+V) e confere antes do Shift+F6.');
-  }).catch(()=>{
-    irShowToast('Não consegui copiar automaticamente: '+texto, true);
-  });
-}
-
-function mdRenderChecklistAjuste(lista){
-  if(!lista.length) return '';
-  const feitas = lista.filter(l=>MD.execucaoAjuste.has(mdChaveExecucao(l))).length;
-  const linhas = lista.map(l=>{
-    const chave = mdChaveExecucao(l);
-    const marcado = MD.execucaoAjuste.has(chave);
-    const textoColar = mdTextoColarLinha(l);
-    return `<tr class="${marcado?'md-exec-feita':''}">
-      <td><input type="checkbox" ${marcado?'checked':''} onchange="mdToggleExecutado('${irEsc(chave)}')"></td>
-      <td class="mono md-left">${irEsc(l.localColetor)}</td>
-      <td class="mono">${irEsc(l.ean || '—')}</td>
-      <td class="mono">${irEsc(l.codDe)}</td>
-      <td class="mono">${irEsc(l.codPara)}</td>
-      <td class="mono">${irFmtInt(l.quantidade)}</td>
-      <td class="md-left">${irEsc(l.endereco || '—')}</td>
-      <td><button class="btn-link" onclick="mdCopiarTexto('${irEsc(textoColar)}')" title="Copia Local+EAN+Orig+Dest+Qtde pronto pra colar no campo Local">Copiar</button></td>
-    </tr>`;
-  }).join('');
-  return `<div class="md-head" style="margin-top:18px;">
-      <h3>Checklist de execução</h3>
-      <span class="field-hint">${irFmtInt(feitas)} de ${irFmtInt(lista.length)} concluídas — copia, cola no campo Local, confere e Shift+F6</span>
-    </div>
-    <div class="table-wrap">
-      <table class="aud-table table-dense">
-        <thead><tr>
-          <th></th><th>Local (coletor)</th><th>EAN</th><th class="num">Orig</th><th class="num">Dest</th><th class="num">Qtde</th><th>Endereço</th><th>Colar</th>
-        </tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
-    </div>`;
-}
-
 function mdRenderAjustes(){
   if(!mdTemDados()){
     return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 para montar o plano de ajuste.', "irSwitchTab('importacao')", 'Ir para a importação');
   }
   const chip = (ativo, onclick, texto)=>`<button class="chip ${ativo?'active':''}" onclick="${onclick}">${irEsc(texto)}</button>`;
-  const plano = mdPlano();
-  const planoMarcado = plano.filter(l=>
-    mdValorMarcado('clal', l.clal) && mdValorMarcado('x1', l.x1) && mdValorMarcado('x2', l.x2)
-  );
 
   const blocosMatriz = MD_DIMENSOES.map(dim=>{
     const m = mdRenderMatrizPor(dim.chave);
@@ -555,7 +488,6 @@ function mdRenderAjustes(){
       </div>
     </div>
     ${blocosMatriz}
-    ${mdRenderChecklistAjuste(planoMarcado)}
   </div>`;
 }
 
@@ -564,10 +496,10 @@ function mdRenderAjustes(){
 function mdExportarAjustePivot(){
   mdGerarCsvAjuste(mdPlanoAjuste(mdPaisFiltrados(), MD.base));
 }
-/* Ajustes: respeita classe, X1 e X2 marcados nas três matrizes. */
+/* Ajustes: respeita classe e X1/X2 marcados nas duas matrizes. */
 function mdExportarAjusteClasses(){
   mdGerarCsvAjuste(mdPlano().filter(l=>
-    mdValorMarcado('clal', l.clal) && mdValorMarcado('x1', l.x1) && mdValorMarcado('x2', l.x2)
+    MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
   ));
 }
 
@@ -740,7 +672,7 @@ function mdRenderImportacao(){
 function mdValoresConhecidos(chave){
   const dim = MD_DIM_POR_CHAVE[chave];
   const set = new Set();
-  for(const s of (MD.saldos||[])) for(const loc of (s.locais||[])) if(loc[dim.campo]) set.add(loc[dim.campo]);
+  for(const s of (MD.saldos||[])) for(const loc of (s.locais||[])){ const v = dim.valor(loc); if(v && v!=='—') set.add(v); }
   for(const v in (MD.regras[chave]||{})) set.add(v);
   return Array.from(set).sort();
 }
@@ -827,10 +759,8 @@ async function mdRecarregar(){
   MD.precoMeta = await mdGetPrecoMeta();
   MD.regras = {
     clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || {},
-    x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {},
-    x2: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x2)) || {}
+    x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {}
   };
-  MD.execucaoAjuste = new Set((await mdGetConfig('execucao-ajuste')) || []);
   mdInvalidarCache();
 }
 async function irInit(){
