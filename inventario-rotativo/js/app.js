@@ -300,7 +300,7 @@ function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)|
 
 const IR_TAB_LABELS = {
   dashboard:['Dashboard Executivo','Visão geral do ciclo ativo.'],
-  ciclo:['NET','Aba em reconstrução.'],
+  ciclo:['NET','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
   produtividade:['Produtividade','Ritmo, meta, qualidade e capacidade da equipe.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
@@ -324,6 +324,10 @@ function irSwitchTab(tab){
   // aba não faz.
   const filtros = document.getElementById('topbarFilters');
   if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab);
+  // NET é independente do ciclo rotativo (QRY410 é por ano, não por ciclo) — só o
+  // filtro de Ciclo some nessa aba, o de Mês continua (é de outra tela, não afeta a NET).
+  const filtroCiclo = document.getElementById('tbFilterCiclo');
+  if(filtroCiclo) filtroCiclo.hidden = (tab==='ciclo');
   irRenderCycleBadge();
   irRenderView();
   irCloseSidebarMobile();
@@ -898,7 +902,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v192';
+const IR_APP_VERSION = 'v193';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -3502,17 +3506,90 @@ function irRenderNet410ItensMesSection(d){
 /* ============================================================
    GESTÃO DO CICLO
    ============================================================ */
-/* Aba "NET" — em reconstrução. O conteúdo anterior (meta x realizado, painel da
-   QRY410, "por que o NET está distorcido") foi retirado a pedido do usuário pra
-   essa aba ser refeita do zero; irRenderNet410Panel/irRenderNetDistorcaoPanel
-   continuam definidas abaixo, só não são mais chamadas daqui. */
+/* Aba "NET" — reconstruída a pedido do usuário. Independente do ciclo rotativo
+   (QRY410 é ano-a-ano, não por ciclo — por isso não tem filtro de Ciclo, só
+   Ano/Mês). irRenderNetDistorcaoPanel (auditoria "por que o NET está
+   distorcido") continua definida mais abaixo, só não é mais chamada daqui. */
 function irRenderGestaoCiclo(){
+  const anos = IR.net410Anos||[];
+  if(!anos.length){
+    return `<div class="panel">
+      <h3>NET</h3>
+      <p class="field-hint">Nenhuma QRY410 processada ainda — importe na aba <a href="#" onclick="irSwitchTab('importacao');return false;">Importação</a>.</p>
+    </div>`;
+  }
+  const d = IR.net410Data;
+  const meses = (d && d.porMes) || [];
+  const mesSel = IR.net410MesSel && meses.some(m=>m.mes===IR.net410MesSel) ? IR.net410MesSel : (meses.length ? meses[meses.length-1].mes : null);
+  const mObj = meses.find(m=>m.mes===mesSel);
+  const mesLabel = mObj ? (IR_MES_NOMES[parseInt(mesSel.slice(5,7),10)-1]+'/'+mesSel.slice(0,4)) : '—';
+  // Gráfico de colunas do ano, com uma coluna "Total" no fim — mesmo padrão já
+  // usado no boletim por e-mail (irBuildColunasComBaseZeroSvg).
+  const netMensalRows = meses.map(m=>({mes:m.mes, net:m.net, label: IR_MES_NOMES_ABREV[parseInt(m.mes.slice(5,7),10)-1]}));
+  const netMensalTotal = netMensalRows.reduce((s,r)=>s+r.net,0);
+  const netMensalRowsComTotal = netMensalRows.length ? [...netMensalRows, {mes:'total', net:netMensalTotal, label:'Total'}] : netMensalRows;
+  // Top 10 itens que mais impactam o NET no mês selecionado (positivo/negativo).
+  const topPos = ((mObj && mObj.topItensPositivos) || []).slice(0, 10);
+  const topNeg = ((mObj && mObj.topItensNegativos) || []).slice(0, 10);
   return `
     <div class="panel">
-      <h3>Aba em reconstrução</h3>
-      <p class="field-hint">Essa aba vai ser refeita. Em breve.</p>
+      <div class="two-col" style="max-width:460px;">
+        <div><label>Ano</label><select onchange="irSetNet410Ano(this.value)">
+          ${anos.map(a=>`<option value="${a}" ${a===IR.net410AnoSel?'selected':''}>${a}</option>`).join('')}
+        </select></div>
+        <div><label>Mês</label><select onchange="irSetNet410Mes(this.value)" ${meses.length?'':'disabled'}>
+          ${meses.map(m=>`<option value="${m.mes}" ${m.mes===mesSel?'selected':''}>${irEsc(IR_MES_NOMES[parseInt(m.mes.slice(5,7),10)-1]||m.mes)}</option>`).join('')}
+        </select></div>
+      </div>
+      <p class="field-hint" style="margin-top:8px;">Independente do ciclo rotativo — a QRY410 traz todos os ajustes do CD (AIR é só um dos motivos), organizada por ano e mês.</p>
+    </div>
+    ${netMensalRows.length ? `<div class="panel">
+      <h3>NET Mensal em Colunas — ${d.ano}</h3>
+      <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna.</p>
+      ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B'})}
+    </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
+    ${irRenderNet410PorObsMesTable(d)}
+    ${irRenderNet410PorDeptoMesTable(d)}
+    <h3 style="margin:20px 0 -6px;">Itens que mais impactam o NET — ${irEsc(mesLabel)}</h3>
+    <div class="bi-grid-2">
+      ${irRenderNet410ItensPanel(topPos, false, 'Os 10 itens que mais aumentaram o NET em '+mesLabel+', só motivos considerados pro NET.')}
+      ${irRenderNet410ItensPanel(topNeg, true, 'Os 10 itens que mais reduziram o NET em '+mesLabel+', só motivos considerados pro NET.')}
     </div>
   `;
+}
+// Tabela NET Entrada/Saída por Departamento (coluna "Nome Depto" da QRY410) — mesmo
+// padrão da tabela por Observação: só motivo considerado pro NET, mês selecionado
+// acima, linhas em ordem alfabética pra ficar estável entre meses.
+function irRenderNet410PorDeptoMesTable(d){
+  const mes = IR.net410MesSel;
+  const mObj = (d && d.porMes || []).find(m=>m.mes===mes);
+  const linhas = ((mObj && mObj.porDepto) || []).slice()
+    .sort((a,b)=>a.id.localeCompare(b.id))
+    .map(o=>({...o, net:o.saida+o.entrada}));
+  const totalSaida = linhas.reduce((s,o)=>s+o.saida,0);
+  const totalEntrada = linhas.reduce((s,o)=>s+o.entrada,0);
+  const totalNet = totalSaida+totalEntrada;
+  const mesLabel = mObj ? (IR_MES_NOMES[parseInt(mes.slice(5,7),10)-1]+'/'+mes.slice(0,4)) : '—';
+  return `
+    <div class="panel">
+      <h3>NET por Departamento — ${irEsc(mesLabel)}</h3>
+      <p class="panel-sub">Só observações com Considerar NET = SIM. Respeita o mês selecionado acima.</p>
+      <div class="table-wrap"><table class="table-wide">
+        <thead><tr><th>Depto</th><th>Saída</th><th>Entrada</th><th>NET</th></tr></thead>
+        <tbody>${linhas.length ? linhas.map(o=>`<tr>
+          <td>${irEsc(o.id)}</td>
+          <td class="mono" style="color:var(--danger);">${o.saida?irFmtMoney(o.saida):'—'}</td>
+          <td class="mono" style="color:var(--success);">${o.entrada?irFmtMoney(o.entrada):'—'}</td>
+          <td class="mono" style="font-weight:700;color:${o.net>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(o.net)}</td>
+        </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);">Sem movimentos no mês selecionado</td></tr>'}</tbody>
+        <tfoot><tr style="font-weight:700;">
+          <td>Total Geral</td>
+          <td class="mono" style="color:var(--danger);">${totalSaida?irFmtMoney(totalSaida):'—'}</td>
+          <td class="mono" style="color:var(--success);">${totalEntrada?irFmtMoney(totalEntrada):'—'}</td>
+          <td class="mono" style="color:${totalNet>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalNet)}</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
 }
 async function irEncerrarCiclo(){
   if(!confirm('Encerrar o ciclo '+IR.cicloAtivo.numero+'? Ele ficará registrado no histórico.')) return;
