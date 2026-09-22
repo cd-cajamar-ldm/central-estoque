@@ -255,18 +255,35 @@ function mdResumo(pais){
    sair, porque é assim que a tela 12.MOVI funciona e porque o sistema só
    aceita a baixa se aquele endereço tiver mesmo o saldo naquela restrição.
 
-   Os endereços são consumidos do maior saldo pro menor: menos linhas pra
-   digitar, e a sobra costuma estar concentrada num endereço só. */
+   E precisa ser por LOTE, não só por endereço: quando o mesmo endereço tem
+   mais de um lote (a 390 traz uma linha por lote), o coletor recusa mover
+   uma quantidade que precise juntar dois lotes — dá "IMPOSSÍVEL FUNDIR". Por
+   isso a alocação usa `refs` (um lote por entrada), nunca o total já somado
+   do endereço: cada linha do plano sai do tamanho exato de UM lote, sempre
+   executável num passo só.
+
+   Os lotes são consumidos do maior saldo pro menor: menos linhas pra
+   digitar, e a sobra costuma estar concentrada num lote só. */
 function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
-  const disponiveis = (locais || [])
-    .filter(l=>String(l.restricao || '').toUpperCase() === sigla && (l[campo] || 0) > 0)
-    .sort((a,b)=>(b[campo] || 0) - (a[campo] || 0));
+  const disponiveis = [];
+  for(const l of (locais || [])){
+    if(String(l.restricao || '').toUpperCase() !== sigla) continue;
+    // refs é o normal (um lote por linha da 390); sem ele (dado antigo em
+    // cache), cai pro total do endereço — pior que o ideal, mas não quebra.
+    const refs = (l.refs && l.refs.length) ? l.refs : [{qtde: l.qtde, qtdeDisp: l.qtdeDisp}];
+    for(const ref of refs){
+      const saldo = ref[campo] || 0;
+      if(saldo > 0) disponiveis.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: saldo});
+    }
+  }
+  disponiveis.sort((a,b)=>b.saldoLocal - a.saldoLocal);
+
   const out = [];
   let resta = quantidade;
   for(const l of disponiveis){
     if(resta <= 0) break;
-    const usa = Math.min(resta, l[campo] || 0);
-    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: l[campo] || 0, quantidade: usa});
+    const usa = Math.min(resta, l.saldoLocal);
+    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: l.saldoLocal, quantidade: usa});
     resta -= usa;
   }
   // Sobrou quantidade sem endereço: a soma por restrição e a soma por endereço
