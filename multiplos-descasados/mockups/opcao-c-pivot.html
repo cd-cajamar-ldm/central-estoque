@@ -56,21 +56,35 @@
   }
   .toggle:hover{ border-color:var(--laranja); color:var(--laranja); }
   .row-hidden{ display:none; }
+
+  .kpi-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+  @media(max-width:760px){ .kpi-row{ grid-template-columns:1fr 1fr; } }
+  .kpi{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:10px 14px; border-top:3px solid var(--laranja); }
+  .kpi.azul{ border-top-color:var(--azul); }
+  .kpi.verde{ border-top-color:#1F8A52; }
+  .kpi .num{ font-family:'SFMono-Regular',Consolas,monospace; font-size:20px; font-weight:800; }
+  .kpi .label{ font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin-top:3px; font-weight:600; }
+
+  .legenda-cols{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .legenda-item{ font-size:10.5px; background:var(--surface); border:1px solid var(--line); border-radius:100px; padding:3px 9px; color:var(--ink-soft); }
+  .legenda-item b{ color:var(--ink); font-family:'SFMono-Regular',Consolas,monospace; }
 </style>
 </head>
 <body>
 <div class="topo">
   <h1>Múltiplos Descasados</h1>
-  <p>Item pai → componente → endereço. WN (vendável) e AI (bloqueado) em destaque.</p>
+  <p>Item pai → componente → endereço. Colunas mostram o código de restrição do WMS.</p>
 </div>
 <div class="page">
+  <div class="kpi-row" id="kpis"></div>
   <div class="toolbar">
     <input type="text" placeholder="Buscar item, componente ou endereço...">
     <button class="btn-mini" onclick="expandirTudo()">Expandir tudo</button>
     <button class="btn-mini" onclick="recolherTudo()">Recolher tudo</button>
   </div>
-  <div class="legenda">Verde = <b>WN (0)</b> vendável · Laranja = <b>AI (86)</b> descasado bloqueado</div>
-  <div style="overflow:auto; max-height:78vh;">
+  <div class="legenda">0 = <b>WN</b> vendável (verde) · 86 = <b>AI</b> descasado bloqueado (laranja) · demais códigos abaixo:</div>
+  <div class="legenda-cols" id="legendaCols"></div>
+  <div style="overflow:auto; max-height:74vh;">
     <table id="tbl"></table>
   </div>
 </div>
@@ -81,7 +95,7 @@ const DATA = [
     { codigo:'8817231', nome:'CORPO DA RAMPA ESQUERDA 5T ALINHAMENTO ELÉTRICO VERMELHO JM MÁQUINAS LINHA PESADA', totais:{WN:13, AI:6}, filhos:[
       { codigo:'8817231-A', totais:{WN:7} },
       { codigo:'8817231-B', totais:{WN:6} },
-      { codigo:'8817231-C', totais:{AI:6} }
+      { codigo:'8817231-C', totais:{AI:6}, preco:850 }
     ]},
     { codigo:'8817232', nome:'PINO DE TRAVA', totais:{WN:14}, filhos:[
       { codigo:'8817232-A', totais:{WN:14} }
@@ -99,7 +113,7 @@ const DATA = [
   { codigo:'3311420', totais:{WN:2, AI:7, DT:1}, filhos:[
     { codigo:'5591004', nome:'CILINDRO PNEUMÁTICO KIT ELEVADOR 4T C/BLOQUEIO PRETO REFORÇADO IMPORTADO', totais:{WN:2, AI:7}, filhos:[
       { codigo:'5591004-A', totais:{WN:2} },
-      { codigo:'5591004-B', totais:{AI:7} }
+      { codigo:'5591004-B', totais:{AI:7}, preco:1200 }
     ]},
     { codigo:'5591005', nome:'TRAVA DE SEGURANÇA', totais:{DT:1}, filhos:[
       { codigo:'5591005-A', totais:{DT:1} }
@@ -113,6 +127,25 @@ const DATA = [
     ]}
   ]}
 ];
+
+/* Código do WMS (o que o coletor pede) por sigla — mesma legenda de rules.js. */
+const RESTRICOES = {
+  WN:{cod:0,  nome:'Estoque vendável'},
+  WA:{cod:10, nome:'Estoque reversa'},
+  WQ:{cod:15, nome:'Sem condições de venda (quebra)'},
+  RT:{cod:20, nome:'Em conferência do recebimento'},
+  WE:{cod:25, nome:'Amostra / correção de cadastro / assistência técnica'},
+  WV:{cod:35, nome:'Fora do prazo de validade'},
+  WL:{cod:40, nome:'Estoque físico não localizado'},
+  WT:{cod:50, nome:'Análise de item'},
+  WR:{cod:55, nome:'Reparo interno'},
+  AT:{cod:60, nome:'Múltiplos incompletos da reversa (componentes)'},
+  SS:{cod:61, nome:'Componentes de peças da marca própria'},
+  DT:{cod:62, nome:'Restrição de triagem'},
+  WD:{cod:65, nome:'Devolução de obsoletos ou acordo comercial'},
+  WS:{cod:75, nome:'Leilão'},
+  AI:{cod:86, nome:'Múltiplos incompletos dentro do estoque'}
+};
 
 const COLS = ['AI','DT','SS','WA','WD','WL','WN','WQ','WR','WS','WT'].filter(col=>
   DATA.some(p=>somaCol(p,col) > 0)
@@ -172,7 +205,7 @@ function render(){
   document.getElementById('tbl').innerHTML = `
     <thead><tr>
       <th class="rotulo">Rótulos de Linha</th>
-      ${COLS.map(c=>`<th class="${c==='WN'?'col-wn':c==='AI'?'col-ai':''}">${c}</th>`).join('')}
+      ${COLS.map(c=>`<th class="${c==='WN'?'col-wn':c==='AI'?'col-ai':''}" title="${c} — ${RESTRICOES[c].nome}">${RESTRICOES[c].cod}</th>`).join('')}
       <th class="total">Total Geral</th>
     </tr></thead>
     <tbody>${html}</tbody>`;
@@ -188,6 +221,36 @@ function recolherTudo(){
   render();
 }
 
+function renderLegenda(){
+  const outras = COLS.filter(c=>c!=='WN' && c!=='AI');
+  document.getElementById('legendaCols').innerHTML = outras.map(c=>
+    `<span class="legenda-item"><b>${RESTRICOES[c].cod}</b> ${c} — ${RESTRICOES[c].nome}</span>`
+  ).join('');
+}
+
+/* KPIs: o que está descasado agora (pai com peça presa em 86) e o que está
+   pendente de mexer pra casar de novo (peças em 86 aguardando o par, com
+   preço quando existe). */
+function coletarLeaves(node, out){
+  if(node.filhos) node.filhos.forEach(f=>coletarLeaves(f, out));
+  else out.push(node);
+  return out;
+}
+function renderKpis(){
+  const paisDescasados = DATA.filter(p=>(p.totais.AI||0) > 0).length;
+  const leavesAI = DATA.flatMap(p=>coletarLeaves(p, [])).filter(l=>(l.totais.AI||0) > 0);
+  const pecasPendentes = leavesAI.reduce((a,l)=>a+l.totais.AI, 0);
+  const valorPendente = leavesAI.reduce((a,l)=>a+l.totais.AI*(l.preco||0), 0);
+  const fmtMoney = n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="num">${paisDescasados}</div><div class="label">Múltiplos descasados</div></div>
+    <div class="kpi"><div class="num">${fmtMoney(valorPendente)}</div><div class="label">Valor descasado (em 86)</div></div>
+    <div class="kpi verde"><div class="num">${pecasPendentes}</div><div class="label">Peças pendentes de ajuste</div></div>
+    <div class="kpi azul"><div class="num">${fmtMoney(valorPendente)}</div><div class="label">Valor a movimentar</div></div>`;
+}
+
+renderKpis();
+renderLegenda();
 render();
 </script>
 </body>
