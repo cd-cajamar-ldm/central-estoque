@@ -25,6 +25,11 @@ const MD = {
   tela:'descasados',
   regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
   selecionadas:{clal:null, x1:null}, // dimensão -> null (todas) | Set() (só as marcadas)
+  restricoesSel:null,             // null = todas as colunas | Set() = só estas siglas
+  restricoesAberto:false,         // lista de restrições aberta ou recolhida
+  // Ordenação de cada matriz: por total (padrão), pela descrição da dimensão,
+  // ou por uma coluna de restrição. asc/desc alterna no mesmo cabeçalho.
+  ordemMatriz:{clal:{col:'total', dir:'desc'}, x1:{col:'total', dir:'desc'}},
   f051:null, f390:null, f278:null,
   proc:{'051':false,'390':false,'278':false},
   progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0}},
@@ -190,6 +195,75 @@ function mdRestricoesPresentes(){
   return ordenadas;
 }
 
+/* Colunas que a matriz mostra de fato: as presentes no estoque, menos as que
+   o filtro de restrições desmarcou. A seleção é só de VISÃO — não muda saldo,
+   plano nem exportação; serve pra tirar da frente as restrições que não
+   interessam naquele momento, porque com 10 colunas a tabela rola na
+   horizontal e o que importa sai da tela. */
+function mdRestricoesVisiveis(){
+  const presentes = mdRestricoesPresentes();
+  if(MD.restricoesSel === null) return presentes;
+  const visiveis = presentes.filter(s=>MD.restricoesSel.has(s));
+  // Desmarcar tudo deixaria a matriz sem nenhuma coluna de número: sem isso a
+  // tela vira só a lista de valores, e parece quebrada em vez de filtrada.
+  return visiveis.length ? visiveis : presentes;
+}
+function mdToggleRestricaoCol(sigla){
+  if(MD.restricoesSel === null) MD.restricoesSel = new Set(mdRestricoesPresentes());
+  if(MD.restricoesSel.has(sigla)) MD.restricoesSel.delete(sigla); else MD.restricoesSel.add(sigla);
+  irRenderView();
+}
+function mdTodasRestricoes(){ MD.restricoesSel = null; irRenderView(); }
+function mdSoRestricoesDoModulo(){ MD.restricoesSel = new Set([MD_SIGLA_VENDAVEL, MD_SIGLA_BLOQUEIO]); irRenderView(); }
+function mdToggleListaRestricoes(){ MD.restricoesAberto = !MD.restricoesAberto; irRenderView(); }
+
+/* Lista de restrições em forma de filtro: uma linha por restrição, com o
+   código, a sigla e o nome da legenda — o mesmo vocabulário do coletor, pra
+   quem lembra do número e não da sigla (e vice-versa). */
+function mdRenderFiltroRestricoes(){
+  const presentes = mdRestricoesPresentes();
+  if(!presentes.length) return '';
+  const sel = MD.restricoesSel;
+  const marcadas = sel === null ? presentes.length : presentes.filter(s=>sel.has(s)).length;
+  const itens = presentes.map(s=>{
+    const marcado = sel === null || sel.has(s);
+    return `<label class="md-restr-item ${marcado?'':'off'}">
+      <input type="checkbox" ${marcado?'checked':''} onchange="mdToggleRestricaoCol('${s}')">
+      <span class="md-restr-cod">${irEsc(mdCodRestricao(s))}</span>
+      <span class="md-restr-sigla mono">${irEsc(s)}</span>
+      <span class="md-restr-nome">${irEsc(mdNomeRestricao(s))}</span>
+    </label>`;
+  }).join('');
+  return `<div class="md-restr-filtro ${MD.restricoesAberto?'aberto':''}">
+    <button class="chip md-restr-botao" onclick="mdToggleListaRestricoes()">
+      Restrições: ${marcadas === presentes.length ? 'todas' : irFmtInt(marcadas)+' de '+irFmtInt(presentes.length)}
+      <span class="md-seta">${MD.restricoesAberto ? '▴' : '▾'}</span>
+    </button>
+    ${MD.restricoesAberto ? `<div class="md-restr-lista">
+      <div class="md-restr-acoes">
+        <button class="btn-link" onclick="mdTodasRestricoes()">Todas</button>
+        <button class="btn-link" onclick="mdSoRestricoesDoModulo()">Só 0 e 86</button>
+      </div>
+      ${itens}
+    </div>` : ''}
+  </div>`;
+}
+
+/* Ordenação da matriz. Clicar no mesmo cabeçalho inverte; clicar em outro
+   começa pelo mais útil daquela coluna — a descrição em ordem alfabética
+   (A→Z), os números do maior pro menor, que é como se procura o volume. */
+function mdOrdenarMatriz(chave, col){
+  const atual = MD.ordemMatriz[chave] || {col:'total', dir:'desc'};
+  const dir = atual.col === col ? (atual.dir === 'asc' ? 'desc' : 'asc') : (col === 'valor' ? 'asc' : 'desc');
+  MD.ordemMatriz[chave] = {col, dir};
+  irRenderView();
+}
+function mdSetaOrdem(chave, col){
+  const atual = MD.ordemMatriz[chave] || {col:'total', dir:'desc'};
+  if(atual.col !== col) return '<span class="md-seta md-seta-off">↕</span>';
+  return `<span class="md-seta">${atual.dir === 'asc' ? '↑' : '↓'}</span>`;
+}
+
 /* Nome comprido não cabe numa linha compacta: mostra o início e o fim, que é
    o trecho que costuma diferenciar um item do outro (cor, medida, modelo). */
 function mdTruncarNome(nome, max){
@@ -275,7 +349,8 @@ function mdRenderPivot(){
 
   const headerCols = restricoes.map(s=>{
     const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${irEsc(mdCodRestricao(s))}</th>`;
+    return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
+      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${irEsc(mdCodRestricao(s))}${mdSetaOrdem(chave, s)}</th>`;
   }).join('');
 
   return `<div class="panel">
@@ -423,6 +498,21 @@ function mdResumoCorrecao(){
     valor: plano.reduce((a,l)=>a+l.valor, 0)
   };
 }
+/* Sem nenhuma regra salva em Configurações, os três cartões ficam em zero
+   por construção: a correção compara o que existe contra o que é PERMITIDO
+   naquela classe/X1, e sem régua não há o que comparar. Três zeros sem
+   explicação passam a mensagem oposta — "está tudo certo" — então a tela diz
+   o motivo e aponta pra onde resolver. */
+function mdAvisoSemRegra(){
+  const comRegra = MD_DIMENSOES.reduce((a,dim)=>a + Object.keys(MD.regras[dim.chave] || {}).filter(v=>(MD.regras[dim.chave][v]||[]).length).length, 0);
+  if(comRegra) return '';
+  return `<div class="panel md-aviso">
+    Os cartões acima estão zerados porque <strong>nenhuma regra foi configurada ainda</strong>.
+    Esta tela compara o que existe no estoque contra as restrições permitidas em cada classe e X1/X2 —
+    sem essa régua, nada pode ser apontado como errado.
+    <button class="btn-link" onclick="irSwitchTab('configuracoes')">Configurar agora</button>
+  </div>`;
+}
 function mdKpisCorrecao(resumo){
   return `<div class="kpi-grid" style="margin-bottom:18px;">
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.itens)}</div><div class="label">Itens com restrição a corrigir</div></div>
@@ -452,12 +542,27 @@ function mdToggleCabecalhoSelecao(chave, marcarTudo){
 function mdRenderMatrizPor(chave){
   const dim = MD_DIM_POR_CHAVE[chave];
   const porValor = mdMatrizPor(chave);
-  const restricoes = mdRestricoesPresentes();
+  const restricoes = mdRestricoesVisiveis();
   const totalDe = v => Object.values(porValor.get(v)).reduce((a,x)=>a+x, 0);
   const termo = MD.busca.trim().toLowerCase();
   let valores = Array.from(porValor.keys());
   if(termo) valores = valores.filter(v=>v.toLowerCase().includes(termo));
-  valores.sort((a,b)=>totalDe(b)-totalDe(a));
+
+  // Ordenação escolhida no cabeçalho. O desempate é sempre a descrição, pra
+  // que duas linhas com o mesmo número não troquem de lugar a cada render.
+  // Ordenar por uma coluna que o filtro escondeu deixaria a tabela numa ordem
+  // que a tela não explica — nesse caso volta pro total.
+  let ordem = MD.ordemMatriz[chave] || {col:'total', dir:'desc'};
+  if(ordem.col !== 'total' && ordem.col !== 'valor' && !restricoes.includes(ordem.col)){
+    ordem = {col:'total', dir:'desc'};
+    MD.ordemMatriz[chave] = ordem;
+  }
+  const sinal = ordem.dir === 'asc' ? 1 : -1;
+  const valorDe = v => ordem.col === 'total' ? totalDe(v) : ((porValor.get(v) || {})[ordem.col] || 0);
+  valores.sort((a,b)=>{
+    if(ordem.col === 'valor') return sinal * a.localeCompare(b, 'pt-BR');
+    return sinal * (valorDe(a) - valorDe(b)) || a.localeCompare(b, 'pt-BR');
+  });
 
   if(!valores.length){
     return { html: `<p class="field-hint">Nenhum valor de ${dim.titulo.toLowerCase()} bate com o filtro atual.</p>`, comErro: 0 };
@@ -465,9 +570,13 @@ function mdRenderMatrizPor(chave){
 
   const headerCols = restricoes.map(s=>{
     const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${irEsc(mdCodRestricao(s))}</th>`;
+    return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
+      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${irEsc(mdCodRestricao(s))}${mdSetaOrdem(chave, s)}</th>`;
   }).join('');
 
+  // Com o filtro de restrições ligado, a soma das colunas na tela não fecha
+  // com o Total Geral (que continua sendo o de todas) — o cabeçalho avisa.
+  const filtrando = restricoes.length < mdRestricoesPresentes().length;
   const totalPorRestricao = {};
   for(const s of restricoes) totalPorRestricao[s] = 0;
   let totalGeral = 0, comErro = 0;
@@ -509,9 +618,11 @@ function mdRenderMatrizPor(chave){
     <table class="md-piv">
       <thead><tr>
         <th class="md-piv-check"><input type="checkbox" ${todosMarcados?'checked':''} onchange="mdToggleCabecalhoSelecao('${chave}', this.checked)" title="Marcar/desmarcar todas as linhas"></th>
-        <th class="md-left">${irEsc(dim.titulo)}</th>
+        <th class="md-left md-th-ord" onclick="mdOrdenarMatriz('${chave}','valor')"
+            title="Ordenar pela descrição de ${irEsc(dim.titulo)}">${irEsc(dim.titulo)}${mdSetaOrdem(chave, 'valor')}</th>
         ${headerCols}
-        <th class="md-piv-total">Total Geral</th>
+        <th class="md-piv-total md-th-ord" onclick="mdOrdenarMatriz('${chave}','total')"
+            title="${irEsc(filtrando ? 'Soma de TODAS as restrições, inclusive as escondidas pelo filtro — clique para ordenar' : 'Ordenar pelo total')}">${filtrando ? 'Total (todas)' : 'Total Geral'}${mdSetaOrdem(chave, 'total')}</th>
       </tr></thead>
       <tbody>${linhas}${rodape}</tbody>
     </table>
@@ -536,9 +647,11 @@ function mdRenderAjustes(){
       <button class="btn btn-primary" onclick="mdExportarAjusteClasses()">Baixar relatório de ajuste</button>
     </div>
     ${mdKpisCorrecao(mdResumoCorrecao())}
+    ${mdAvisoSemRegra()}
     <div class="md-filtros">
       <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar classe, X1 ou X2..."
              value="${irEsc(MD.busca)}" oninput="mdBuscar(this.value)">
+      ${mdRenderFiltroRestricoes()}
       <div class="md-chips">
         ${chip(MD.base==='qtde', "mdSetBase('qtde')", 'Estoque total')}
         ${chip(MD.base==='qtdeDisp', "mdSetBase('qtdeDisp')", 'Só disponível')}
