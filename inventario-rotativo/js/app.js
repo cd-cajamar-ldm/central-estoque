@@ -9,6 +9,7 @@ const IR = {
   ciclos:[], cicloAtivo:null,
   indicadores:null, importMeta:null,
   prioridadeConfig:null,
+  boletimEmail:{}, // {para, cc} — destinatários salvos do boletim por e-mail (Configurações)
   net410Legenda:[], // legenda de motivos da 410 (editável em Configurações)
   net410Ignorados:[], // itens ocultos da análise de distorção do NET (motivo já conhecido)
   net410Padroes:[], // trechos da Observação WMS que escondem qualquer item que os carregue (ex.: "SALDO")
@@ -185,6 +186,7 @@ async function irInit(){
     }
     IR.est390Meta = await irGetEstoqueMeta();
     IR.est390Ficha = await irGetConfig('estoque390-ficha');
+    IR.boletimEmail = (await irGetConfig('boletim-email')) || {};
     const ign = await irGetConfig('auditoria-ignorar-virtuais');
     if(ign!=null) IR.audIgnorarVirtuais = ign;
     IR.audPrefixos = await irGetConfig('auditoria-prefixos');
@@ -896,7 +898,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v184';
+const IR_APP_VERSION = 'v186';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1565,9 +1567,9 @@ function irBuildLogBarChartSvg(rows, opts){
       const bx = groupX + si*(barW+gap);
       const by = padT+plotH-bh;
       bars += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${s.color}" rx="2"/>`;
-      labels += `<text x="${(bx+barW/2).toFixed(1)}" y="${(by-6).toFixed(1)}" font-size="12" text-anchor="middle" fill="${s.color}" font-weight="700">${Math.round(val*100)}%</text>`;
+      labels += `<text x="${(bx+barW/2).toFixed(1)}" y="${(by-6).toFixed(1)}" font-size="14.5" text-anchor="middle" fill="${s.color}" font-weight="700">${Math.round(val*100)}%</text>`;
     });
-    xLabels += `<text x="${(padL+i*groupW+groupW/2).toFixed(1)}" y="${H-12}" font-size="13" text-anchor="middle" fill="${colors.axis}" font-weight="600">${r.isTotal?'Total':irEsc(r.chave)}</text>`;
+    xLabels += `<text x="${(padL+i*groupW+groupW/2).toFixed(1)}" y="${H-12}" font-size="14" text-anchor="middle" fill="${colors.axis}" font-weight="600">${r.isTotal?'Total':irEsc(r.chave)}</text>`;
   });
   const gridLines = [0,0.25,0.5,0.75,1].map(t=>{
     const y = padT+plotH-t*plotH;
@@ -1608,16 +1610,16 @@ function irBuildContadosPorDiaSvg(rows, meta, opts){
     // Sem rótulo em dias com valor zero — só polui (um "R$ 0,00" atrás do outro,
     // grudados, ilegível) e não carrega informação nenhuma.
     if(r[campo]){
-      labels += `<text x="${cx.toFixed(1)}" y="${(by-6).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="${colors.label}" font-weight="700">${fmt(r[campo])}</text>`;
+      labels += `<text x="${cx.toFixed(1)}" y="${(by-6).toFixed(1)}" font-size="12.5" text-anchor="middle" fill="${colors.label}" font-weight="700">${fmt(r[campo])}</text>`;
     }
     const dia = new Date(r.dia+'T00:00:00');
-    xLabels += `<text x="${cx.toFixed(1)}" y="${H-12}" font-size="11.5" text-anchor="middle" fill="${colors.axis}" font-weight="600">${String(dia.getDate()).padStart(2,'0')}/${String(dia.getMonth()+1).padStart(2,'0')}</text>`;
+    xLabels += `<text x="${cx.toFixed(1)}" y="${H-12}" font-size="12.5" text-anchor="middle" fill="${colors.axis}" font-weight="600">${String(dia.getDate()).padStart(2,'0')}/${String(dia.getMonth()+1).padStart(2,'0')}</text>`;
   });
   // meta null/undefined = sem linha de meta (gráficos que não têm uma meta diária,
   // como os de divergência — só faz sentido pra "Contados por Dia").
   const metaY = padT+plotH-(meta/max)*plotH;
   const metaLine = (meta!==null && meta!==undefined) ? `<line x1="${padL}" y1="${metaY.toFixed(1)}" x2="${W-padR}" y2="${metaY.toFixed(1)}" stroke="${colors.meta}" stroke-width="1.5" stroke-dasharray="5 4"/>
-    <text x="${W-padR}" y="${(metaY-6).toFixed(1)}" font-size="11.5" text-anchor="end" fill="${colors.meta}" font-weight="700">Meta ${irFmtInt(meta)}</text>` : '';
+    <text x="${W-padR}" y="${(metaY-6).toFixed(1)}" font-size="12.5" text-anchor="end" fill="${colors.meta}" font-weight="700">Meta ${irFmtInt(meta)}</text>` : '';
   const notaOmitidos = omitidos>0 ? `<text x="${padL}" y="14" font-size="11" fill="${colors.axis}">Mostrando os últimos ${n} de ${rows.length} dias</text>` : '';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${notaOmitidos}${bars}${labels}${xLabels}${metaLine}</svg>`;
 }
@@ -1646,8 +1648,8 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
     const by = v>=0 ? baseY-bh : baseY;
     bars += `<rect x="${(cx-barW/2).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${cor}" rx="2"/>`;
     const labelY = v>=0 ? by-6 : by+bh+14;
-    labels += `<text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="11" text-anchor="middle" fill="${corLabel}" font-weight="700">${fmt(v)}</text>`;
-    xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="11.5" text-anchor="middle" fill="${corAxis}" font-weight="600">${irEsc(xLabel(r))}</text>`;
+    labels += `<text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="13" text-anchor="middle" fill="${corLabel}" font-weight="700">${fmt(v)}</text>`;
+    xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="12.5" text-anchor="middle" fill="${corAxis}" font-weight="600">${irEsc(xLabel(r))}</text>`;
   });
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${baseLine}${bars}${labels}${xLabels}</svg>`;
 }
@@ -1805,23 +1807,6 @@ function irDonutSvg(pct, opts){
       stroke-dasharray="${dash.toFixed(2)} ${circ.toFixed(2)}" transform="rotate(-90 ${c} ${c})"/>
     <text x="${c}" y="${c+size*0.065}" text-anchor="middle" font-size="${Math.round(size*0.19)}" font-weight="800" fill="${textColor}">${irFmtPct(pct)}</text>
   </svg>`;
-}
-/* Agrupa contadosPorDia por mês (YYYY-MM) — usado pra preencher o espaço
-   vazio do painel "Status do Inventário" com o total contado por mês. */
-function irAgruparContadosPorMes(rows, dataAbertura){
-  // Só considera meses a partir da abertura do ciclo — evita citar meses
-  // fora do ciclo por causa de algum registro perdido/fora do período.
-  const mesMin = dataAbertura ? String(dataAbertura).slice(0,7) : null;
-  const map = new Map();
-  for(const r of rows||[]){
-    const mes = r.dia.slice(0,7);
-    if(mesMin && mes<mesMin) continue;
-    map.set(mes, (map.get(mes)||0)+r.total);
-  }
-  return Array.from(map.entries()).sort((a,b)=>a[0].localeCompare(b[0])).map(([mes,total])=>{
-    const nomeRaw = new Date(mes+'-01T00:00:00').toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
-    return {mes, label: nomeRaw.charAt(0).toUpperCase()+nomeRaw.slice(1), total};
-  });
 }
 /* Acurácia do ANO, somando todos os ciclos daquele ano. Não é média das
    acurácias dos ciclos: um ciclo pequeno pesaria igual a um grande. Recalcula a
@@ -2212,7 +2197,9 @@ const rpBlock = (theme, icon, title, tilesHtml)=>`<div class="rp-block theme-${t
   <div class="rp-block-header"><span class="rp-bh-icon">${icon}</span><span class="rp-bh-title">${title}</span></div>
   <div class="rp-block-body">${tilesHtml}</div>
 </div>`;
-const rpSectionTitle = (icon, texto, nota)=>`<div class="rp-section-title"><span class="rp-st-icon">${icon}</span><span class="rp-st-text">${texto}</span>${nota?`<span class="rp-st-note">${nota}</span>`:''}</div>`;
+// Sem o texto explicativo (nota) — pedido do usuário: o boletim é pra impressão/
+// e-mail, sem espaço sobrando pra legenda; quem quiser o contexto lê no Dashboard.
+const rpSectionTitle = (icon, texto)=>`<div class="rp-section-title"><span class="rp-st-icon">${icon}</span><span class="rp-st-text">${texto}</span></div>`;
 function irGerarRelatorioEmail(){
   const ind = IR.indicadores, c = IR.cicloAtivo;
   if(!ind || !c){ irShowToast('Sem dados de ciclo pra gerar relatório.', true); return; }
@@ -2239,8 +2226,8 @@ function irGerarRelatorioEmail(){
   );
   const blocoValor = rpBlock('black','💰','Valor',
     rpTile('🎯', irFmtPct(ind.acuraciaValor), 'Acurácia Valor', ind.acuraciaValor>=ind.meta?'good':'bad', metaHint) +
-    rpTile('💰', irFmtMoney(ind.valorFisicoTotal), 'Valor Contado', '', 'total físico') +
-    rpTile('⚠️', irFmtMoney(ind.valorDivergenteAbsoluto), 'Valor Divergente', 'bad', 'soma absoluta')
+    rpTile('💰', irFmtMoneyCompact(ind.valorFisicoTotal), 'Valor Contado', '', 'total físico') +
+    rpTile('⚠️', irFmtMoneyCompact(ind.valorDivergenteAbsoluto), 'Valor Divergente', 'bad', 'soma absoluta')
   );
   const blocoCiclo = rpBlock('neutral','🔄','Ciclo',
     rpTile('📊', irFmtPct(ind.andamentoCiclo), 'Andamento', '', irFmtInt(ind.locaisConcluidos)+' de '+irFmtInt(ind.locaisCongelados)) +
@@ -2249,14 +2236,14 @@ function irGerarRelatorioEmail(){
   );
 
   const rua = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>b.pecasDivergentes-a.pecasDivergentes);
+  const top5Ruas = rua.slice(0, 5);
+  const maxRuaDiv = Math.max(1, ...top5Ruas.map(r=>r.pecasDivergentes));
   const rowsLog = irFiltrarLogsValidos(ind.porLog);
   const rowsLogComTotal = rowsLog.length ? [...rowsLog, irCalcLogTotal(rowsLog)] : [];
   // Mesma base do KPI "Andamento" (locaisConcluidos), pra bater com o card de Ciclo.
   const pctContagem = ind.locaisCongelados>0 ? ind.locaisConcluidos/ind.locaisCongelados : 0;
   const rpDonutColors = {color:'#FA4616', track:'#EEF0F4', textColor:'#1D1F2A'};
   const rpLogColors = {pecas:'#FA4616', posicoes:'#001A72', valor:'#1D1F2A', grid:'#E4E7EE', axis:'#6B7280'};
-  const porMes = irAgruparContadosPorMes(ind.contadosPorDia, c.dataAbertura);
-  const maxMes = Math.max(1, ...porMes.map(m=>m.total));
   // NET mensal (QRY410) — a série do ano inteiro, ganho/perda de TODOS os ajustes do
   // CD (não só o ciclo rotativo). Diferente do "Divergente (líq.)" acima, que é só o
   // líquido do ciclo. Fica de fora se a 410 ainda não foi processada.
@@ -2298,12 +2285,12 @@ function irGerarRelatorioEmail(){
           <div class="rp-donut-stat"><div class="n good">${irFmtInt(ind.locaisConcluidos)}</div><div class="l">Locais concluídos</div></div>
           <div class="rp-donut-stat"><div class="n bad">${irFmtInt(ind.locaisCongelados-ind.locaisConcluidos)}</div><div class="l">Ainda não concluídos</div></div>
         </div>
-        ${porMes.length ? `<div class="rp-month-list">
-          <div class="rp-month-title">Locais contados por mês</div>
-          ${porMes.map(m=>`<div class="rp-month-row">
-            <div class="rp-month-label">${irEsc(m.label)}</div>
-            <div class="rp-month-track"><div class="rp-month-fill" style="width:${Math.round(m.total/maxMes*100)}%;"></div></div>
-            <div class="rp-month-val">${irFmtInt(m.total)}</div>
+        ${top5Ruas.length ? `<div class="rp-month-list">
+          <div class="rp-month-title">Top 5 Ruas mais divergentes</div>
+          ${top5Ruas.map(r=>`<div class="rp-month-row">
+            <div class="rp-month-label">${irEsc(r.chave)}</div>
+            <div class="rp-month-track"><div class="rp-month-fill" style="width:${Math.round(r.pecasDivergentes/maxRuaDiv*100)}%;"></div></div>
+            <div class="rp-month-val">${irFmtInt(r.pecasDivergentes)}</div>
           </div>`).join('')}
         </div>` : ''}
       </div>
@@ -2362,7 +2349,20 @@ function irGerarRelatorioEmail(){
 
     </div>
   </div>`;
-  irBaixarBoletimImagem(html, `Boletim_Ciclo_${c.numero}_${new Date().toISOString().slice(0,10)}.png`);
+  // Destinatários salvos em Configurações (Para/Cc) — com eles configurados, o
+  // rascunho de e-mail já sai pronto (assunto + números do ciclo no corpo), sem
+  // redigitar quem recebe toda vez. Sem envio automático: continua exigindo o
+  // clique manual no e-mail aberto, só o preenchimento é que fica automático.
+  const emailCfg = IR.boletimEmail || {};
+  const corpo = `Segue o boletim do Ciclo ${c.numero}.
+
+Acurácia Peças: ${irFmtPct(ind.acuraciaPecas)} (meta ${irFmtPct(ind.meta)})
+Acurácia Local: ${irFmtPct(ind.acuraciaLocal)} (meta ${irFmtPct(ind.meta)})
+Acurácia Valor: ${irFmtPct(ind.acuraciaValor)} (meta ${irFmtPct(ind.meta)})
+Locais concluídos: ${irFmtInt(ind.locaisConcluidos)} de ${irFmtInt(ind.locaisCongelados)}`;
+  irBaixarBoletimImagem(html, `Boletim_Ciclo_${c.numero}_${new Date().toISOString().slice(0,10)}.png`, {
+    para: emailCfg.para, cc: emailCfg.cc, assunto: `Boletim Inventário — ${irCicloLabel(c)}`, corpo
+  });
 }
 /* Converte cada SVG de um bloco em <img> PNG antes da captura.
 
@@ -6583,6 +6583,16 @@ function irRenderConfiguracoes(){
     </div>
   </div>
   <div class="panel">
+    <h3>Boletim por e-mail — destinatários</h3>
+    <p class="field-hint" style="margin-bottom:12px;">Salvos aqui, todo clique em "Preparar boletim para enviar por e-mail" já abre o rascunho preenchido com esses destinatários — só falta anexar a imagem e enviar.</p>
+    <div class="two-col">
+      <div><label>Para</label><input type="text" id="ir-cfg-email-para" placeholder="fulano@lojadomecanico.com.br" value="${irEsc((IR.boletimEmail||{}).para||'')}"></div>
+      <div><label>Cc (responsáveis)</label><input type="text" id="ir-cfg-email-cc" placeholder="ciclano@lojadomecanico.com.br; beltrano@lojadomecanico.com.br" value="${irEsc((IR.boletimEmail||{}).cc||'')}"></div>
+    </div>
+    <p class="field-hint" style="margin-top:8px;">Vários endereços: separe por ponto e vírgula ou vírgula.</p>
+    <div class="form-actions"><button class="btn btn-primary" onclick="irSalvarBoletimEmailConfig()">Salvar destinatários</button></div>
+  </div>
+  <div class="panel">
     <h3>Índice de Prioridade de Auditoria — pesos</h3>
     <p class="field-hint" style="margin-bottom:12px;">A soma deve ficar em 100%. Ajuste e salve para recalcular a prioridade no próximo processamento.</p>
     <div class="two-col">
@@ -6792,4 +6802,12 @@ async function irSalvarPrioridadeConfig(){
   await irSavePrioridadeConfig(pesos);
   IR.prioridadeConfig = {key:'pesos', ...pesos};
   irShowToast('Pesos salvos. Serão aplicados no próximo processamento de ciclo.');
+}
+async function irSalvarBoletimEmailConfig(){
+  const para = document.getElementById('ir-cfg-email-para').value.trim();
+  const cc = document.getElementById('ir-cfg-email-cc').value.trim();
+  const cfg = {para, cc};
+  await irSetConfig('boletim-email', cfg);
+  IR.boletimEmail = cfg;
+  irShowToast('✓ Destinatários do boletim salvos.');
 }
