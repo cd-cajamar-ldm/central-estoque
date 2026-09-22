@@ -898,7 +898,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v187';
+const IR_APP_VERSION = 'v188';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2358,12 +2358,20 @@ function irGerarRelatorioEmail(){
   // redigitar quem recebe toda vez. Sem envio automático: continua exigindo o
   // clique manual no e-mail aberto, só o preenchimento é que fica automático.
   const emailCfg = IR.boletimEmail || {};
-  const corpo = `Segue o boletim do Ciclo ${c.numero}.
+  const hora = new Date().getHours();
+  const saudacao = hora<12 ? 'Bom dia' : (hora<18 ? 'Boa tarde' : 'Boa noite');
+  const corpo = `${saudacao},
+
+Segue report referente ao ${c.numero}º ciclo do Inventário Rotativo.
 
 Acurácia Peças: ${irFmtPct(ind.acuraciaPecas)} (meta ${irFmtPct(ind.meta)})
 Acurácia Local: ${irFmtPct(ind.acuraciaLocal)} (meta ${irFmtPct(ind.meta)})
 Acurácia Valor: ${irFmtPct(ind.acuraciaValor)} (meta ${irFmtPct(ind.meta)})
-Locais concluídos: ${irFmtInt(ind.locaisConcluidos)} de ${irFmtInt(ind.locaisCongelados)}`;
+Locais concluídos: ${irFmtInt(ind.locaisConcluidos)} de ${irFmtInt(ind.locaisCongelados)}
+
+[Clique aqui e cole a imagem do boletim — Ctrl+V]
+
+Atenciosamente,`;
   irBaixarBoletimImagem(html, `Boletim_Ciclo_${c.numero}_${new Date().toISOString().slice(0,10)}.png`, {
     para: emailCfg.para, cc: emailCfg.cc, assunto: `Boletim Inventário — ${irCicloLabel(c)}`, corpo
   });
@@ -2448,14 +2456,29 @@ async function irBaixarBoletimImagem(html, nomeArquivo, email){
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
 
+    /* Copia a imagem pra área de transferência — o mailto não anexa arquivo
+       (limitação do próprio protocolo, nenhuma página consegue contornar isso),
+       mas com a imagem já copiada o usuário só precisa clicar no corpo do
+       e-mail aberto e colar com Ctrl+V, em vez de ir procurar o arquivo baixado
+       na pasta de downloads. Alguns navegadores bloqueiam a cópia de imagem sem
+       um gesto do usuário bem recente — o clique no botão do boletim conta como
+       esse gesto, mas o try/catch segura qualquer falha e cai pro download. */
+    let copiou = false;
+    try{
+      if(navigator.clipboard && window.ClipboardItem){
+        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+        copiou = true;
+      }
+    }catch(clipErr){ /* segue só com o arquivo baixado */ }
+
     const numero = IR.cicloAtivo ? IR.cicloAtivo.numero : '';
     const assunto = (email && email.assunto) || `Boletim Inventário — Ciclo ${numero}`;
     let compartilhou = false;
     /* Com destinatários configurados o mailto ganha da folha de compartilhamento:
        ela anexa a imagem sozinha, mas não deixa preencher quem recebe — e o
-       pedido aqui é justamente não redigitar os responsáveis todo dia. Anexar
-       fica manual; o corpo leva os números em texto pra o e-mail já valer alguma
-       coisa mesmo antes de anexar. */
+       pedido aqui é justamente não redigitar os responsáveis todo dia. O corpo
+       já vem pronto (saudação, números, marcador de onde colar a imagem e
+       despedida) — só acrescenta onde a imagem ficou disponível. */
     if(email && (email.para || email.cc)){
       // RFC 6068 separa endereços por vírgula; o usuário digita com ponto e
       // vírgula, que é o que o Outlook mostra. Normaliza pra vírgula.
@@ -2463,10 +2486,11 @@ async function irBaixarBoletimImagem(html, nomeArquivo, email){
       const q = [];
       if(email.cc) q.push('cc='+encodeURIComponent(lista(email.cc)));
       q.push('subject='+encodeURIComponent(assunto));
-      q.push('body='+encodeURIComponent((email.corpo||'')+
-        `\n\n— Anexe a imagem "${nomeArquivo}", baixada agora na sua pasta de downloads.`));
+      q.push('body='+encodeURIComponent(email.corpo||''));
       window.open('mailto:'+encodeURIComponent(lista(email.para))+'?'+q.join('&'), '_blank');
-      irShowToast('✓ Boletim baixado e e-mail aberto — anexe a imagem e envie.');
+      irShowToast(copiou
+        ? '✓ E-mail aberto — clique no corpo e cole a imagem (Ctrl+V), depois envie.'
+        : '✓ Boletim baixado e e-mail aberto — anexe a imagem e envie.');
       return;
     }
     // Se o navegador suportar compartilhar arquivo (Web Share API), abre direto
