@@ -21,7 +21,6 @@ const MD = {
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
-  ordem:'valor',
   pivotExpandido:new Set(),
   tela:'descasados',
   regras:{clal:{}, x1:{}, x2:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
@@ -139,13 +138,7 @@ function mdPaisFiltrados(){
     );
   }
   const acoes = p=>p.bloquearPecas + p.liberarPecas;
-  const ordens = {
-    valor: (a,b)=>b.sobraValor - a.sobraValor || acoes(b) - acoes(a),
-    pecas: (a,b)=>acoes(b) - acoes(a) || b.sobraValor - a.sobraValor,
-    completos: (a,b)=>a.completos - b.completos || b.sobraValor - a.sobraValor,
-    item: (a,b)=>a.pai.localeCompare(b.pai)
-  };
-  return lista.slice().sort(ordens[MD.ordem] || ordens.valor);
+  return lista.slice().sort((a,b)=>b.sobraValor - a.sobraValor || acoes(b) - acoes(a));
 }
 
 /* ============================================================
@@ -154,7 +147,6 @@ function mdPaisFiltrados(){
 function mdTemDados(){ return !!(MD.estrutura && MD.estrutura.length && MD.saldos && MD.saldos.length); }
 
 function mdSetBase(base){ MD.base = base; mdInvalidarCache(); irRenderView(); }
-function mdSetOrdem(o){ MD.ordem = o; irRenderView(); }
 function mdSetEqualizado(v){ MD.equalizado = v; irRenderView(); }
 function mdBuscar(v){
   MD.busca = v;
@@ -192,17 +184,8 @@ function mdBarraFiltros(){
       <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar item pai, componente ou descrição..."
              value="${irEsc(MD.busca)}" oninput="mdBuscar(this.value)">
       <div class="md-chips">
-        ${chip(MD.base==='qtde', "mdSetBase('qtde')", 'Estoque total')}
-        ${chip(MD.base==='qtdeDisp', "mdSetBase('qtdeDisp')", 'Só disponível')}
-      </div>
-      <div class="md-chips">
         ${chip(MD.equalizado==='sim', "mdSetEqualizado('sim')", 'Equalizado: Sim')}
         ${chip(MD.equalizado==='nao', "mdSetEqualizado('nao')", 'Equalizado: Não')}
-      </div>
-      <div class="md-chips">
-        ${chip(MD.ordem==='valor', "mdSetOrdem('valor')", 'Por valor')}
-        ${chip(MD.ordem==='pecas', "mdSetOrdem('pecas')", 'Por peças')}
-        ${chip(MD.ordem==='completos', "mdSetOrdem('completos')", 'Menos completos')}
       </div>
     </div>
   </div>`;
@@ -479,26 +462,6 @@ function mdRenderMatrizPor(chave){
   return { html, comErro };
 }
 
-/* Mesmo endereço + mesmo item (EAN) com quantidades diferentes em duas linhas
-   do ajuste: no WMS isso costuma ser dois lotes separados no mesmo local
-   (ver "Detalhes do Estoque"), e mandar as duas linhas pro coletor sem saber
-   disso quebra o estoque — o operador precisa tratar cada lote à parte.
-   Mesmo item+local com a MESMA quantidade não é sinal de nada, só duas linhas
-   iguais por coincidência. */
-function mdMarcarEstoqueDuplo(lista){
-  const porChave = new Map();
-  for(const l of lista){
-    const chave = (l.ean || l.componente) + '|' + l.localColetor;
-    if(!porChave.has(chave)) porChave.set(chave, []);
-    porChave.get(chave).push(l);
-  }
-  for(const grupo of porChave.values()){
-    const duplo = grupo.length > 1 && new Set(grupo.map(l=>l.quantidade)).size > 1;
-    for(const l of grupo) l.estoqueDuplo = duplo ? 'ESTOQUE DUPLO' : 'CONFORME';
-  }
-  return lista;
-}
-
 /* Checklist de execução: cada linha do ajuste marcada conforme o operador vai
    digitando no coletor/PuTTY. Chave por componente+local+sentido (não muda
    entre reimportações do mesmo cenário); quantidade não entra na chave —
@@ -514,13 +477,11 @@ function mdToggleExecutado(chave){
 
 function mdRenderChecklistAjuste(lista){
   if(!lista.length) return '';
-  mdMarcarEstoqueDuplo(lista);
   const feitas = lista.filter(l=>MD.execucaoAjuste.has(mdChaveExecucao(l))).length;
   const linhas = lista.map(l=>{
     const chave = mdChaveExecucao(l);
     const marcado = MD.execucaoAjuste.has(chave);
-    const duplo = l.estoqueDuplo === 'ESTOQUE DUPLO';
-    return `<tr class="${marcado?'md-exec-feita':''} ${duplo?'md-row-duplo':''}">
+    return `<tr class="${marcado?'md-exec-feita':''}">
       <td><input type="checkbox" ${marcado?'checked':''} onchange="mdToggleExecutado('${irEsc(chave)}')"></td>
       <td class="mono md-left">${irEsc(l.localColetor)}</td>
       <td class="mono">${irEsc(l.ean || '—')}</td>
@@ -528,7 +489,6 @@ function mdRenderChecklistAjuste(lista){
       <td class="mono">${irEsc(l.codPara)}</td>
       <td class="mono">${irFmtInt(l.quantidade)}</td>
       <td class="md-left">${irEsc(l.endereco || '—')}</td>
-      <td class="md-left ${duplo?'neg':'pos'}">${irEsc(l.estoqueDuplo)}</td>
     </tr>`;
   }).join('');
   return `<div class="md-head" style="margin-top:18px;">
@@ -538,7 +498,7 @@ function mdRenderChecklistAjuste(lista){
     <div class="table-wrap">
       <table class="aud-table table-dense">
         <thead><tr>
-          <th></th><th>Local (coletor)</th><th>EAN</th><th class="num">Orig</th><th class="num">Dest</th><th class="num">Qtde</th><th>Endereço</th><th>Estoque Duplo</th>
+          <th></th><th>Local (coletor)</th><th>EAN</th><th class="num">Orig</th><th class="num">Dest</th><th class="num">Qtde</th><th>Endereço</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
@@ -596,14 +556,13 @@ function mdExportarAjusteClasses(){
    precisa duplicar na planilha. */
 function mdGerarCsvAjuste(lista){
   if(!lista.length){ irShowToast('Não há ajuste para exportar.'); return; }
-  mdMarcarEstoqueDuplo(lista);
-  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Estoque Duplo'];
+  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço'];
   const cel = v=>{
     const s = String(v ?? '');
     return /[;"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   };
   const linhas = lista.map(l=>[
-    l.localColetor, l.ean, l.codDe, l.codPara, irFmtInt(l.quantidade), l.endereco, l.estoqueDuplo
+    l.localColetor, l.ean, l.codDe, l.codPara, irFmtInt(l.quantidade), l.endereco
   ].map(cel).join(';'));
   // BOM na frente: sem ele o Excel em pt-BR abre o arquivo como Latin-1 e come
   // todos os acentos das descrições.
