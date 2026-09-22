@@ -266,13 +266,13 @@ function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
   for(const l of disponiveis){
     if(resta <= 0) break;
     const usa = Math.min(resta, l[campo] || 0);
-    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, saldoLocal: l[campo] || 0, quantidade: usa});
+    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: l[campo] || 0, quantidade: usa});
     resta -= usa;
   }
   // Sobrou quantidade sem endereço: a soma por restrição e a soma por endereço
   // não fecharam. Devolvido como linha "sem endereço" pra aparecer na tela em
   // vez de sumir da conta.
-  if(resta > 0) out.push({local:'', desc:'', predio:'', clal:'', saldoLocal:0, quantidade: resta, semEndereco:true});
+  if(resta > 0) out.push({local:'', desc:'', predio:'', clal:'', x1:'', x2:'', saldoLocal:0, quantidade: resta, semEndereco:true});
   return out;
 }
 
@@ -293,7 +293,7 @@ function mdPlanoAjuste(pais, base){
             de: a.de, para: a.para,
             codDe: mdCodRestricao(a.de), codPara: mdCodRestricao(a.para),
             localColetor: mdLocalColetor(alvo.local),
-            local: alvo.local, endereco: alvo.desc, predio: alvo.predio, clal: alvo.clal,
+            local: alvo.local, endereco: alvo.desc, predio: alvo.predio, clal: alvo.clal, x1: alvo.x1, x2: alvo.x2,
             saldoLocal: alvo.saldoLocal, semEndereco: !!alvo.semEndereco,
             quantidade: alvo.quantidade,
             pai: p.pai, nomePai: p.nome,
