@@ -19,13 +19,13 @@ const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
-  equalizado:'nao',     // 'todos' | 'sim' (já casado) | 'nao' (precisa de ajuste)
+  equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
   ordem:'valor',
   pivotExpandido:new Set(),
   tela:'descasados',
-  regrasClasse:{},        // classe (CLAL) -> [siglas de restrição permitidas]
-  classesSelecionadas:null, // null = todas; Set() = só as marcadas
+  regras:{clal:{}, x1:{}, x2:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
+  selecionadas:{clal:null, x1:null, x2:null}, // dimensão -> null (todas) | Set() (só as marcadas)
   execucaoAjuste:new Set(), // linhas do ajuste já feitas no coletor (checklist)
   f051:null, f390:null, f278:null,
   proc:{'051':false,'390':false,'278':false},
@@ -35,6 +35,19 @@ const MD = {
 };
 
 const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
+
+/* As três dimensões de local usadas nas matrizes de Ajustes e Configurações —
+   mesma lógica pras três, só troca o campo do endereço (CLAL, X1, X2) que a
+   QRY0390 traz. Chave de config própria por dimensão pra não perder a regra
+   de classe (CLAL) já salva quando X1/X2 foram adicionados depois. */
+const MD_DIMENSOES = [
+  {chave:'clal', campo:'clal', titulo:'Classe'},
+  {chave:'x1', campo:'x1', titulo:'X1'},
+  {chave:'x2', campo:'x2', titulo:'X2'}
+];
+const MD_DIM_POR_CHAVE = {};
+MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
+const MD_CONFIG_KEY_POR_DIM = {clal:'regras-classe', x1:'regras-x1', x2:'regras-x2'};
 
 function irEsc(v){ if(v===undefined||v===null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function irFmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
@@ -183,7 +196,6 @@ function mdBarraFiltros(){
         ${chip(MD.base==='qtdeDisp', "mdSetBase('qtdeDisp')", 'Só disponível')}
       </div>
       <div class="md-chips">
-        ${chip(MD.equalizado==='todos', "mdSetEqualizado('todos')", 'Equalizado: Todos')}
         ${chip(MD.equalizado==='sim', "mdSetEqualizado('sim')", 'Equalizado: Sim')}
         ${chip(MD.equalizado==='nao', "mdSetEqualizado('nao')", 'Equalizado: Não')}
       </div>
@@ -347,60 +359,68 @@ function mdPlano(){
   MD._planoBase = MD.base;
   return MD._plano;
 }
-/* Matriz classe local (CLAL) × restrição, no mesmo espírito da matriz que o
-   usuário usa no PuTTY (linhas = classe, colunas = restrição, valor =
-   quantidade) — só que aqui é o recorte deste módulo: só os componentes de
-   múltiplo, não o estoque vendável inteiro. A tabela linha a linha (endereço
-   por endereço, pronta pra colar no coletor) fica só na planilha exportada —
-   aqui é só a visão gerencial. */
-function mdMatrizClasses(){
+/* Matriz por dimensão de local (classe/X1/X2) × restrição, no mesmo espírito
+   da matriz que o usuário usa no PuTTY (linhas = valor da dimensão, colunas =
+   restrição, valor = quantidade) — só que aqui é o recorte deste módulo: só
+   os componentes de múltiplo, não o estoque vendável inteiro. A tabela linha
+   a linha (endereço por endereço, pronta pra colar no coletor) fica só na
+   planilha exportada — aqui é só a visão gerencial. As três dimensões
+   compartilham a mesma lógica, só troca o campo do endereço. */
+function mdMatrizPor(chave){
+  const dim = MD_DIM_POR_CHAVE[chave];
   const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
-  const porClasse = new Map();
+  const porValor = new Map();
   for(const s of (MD.saldos||[])){
     for(const loc of (s.locais||[])){
       const v = loc[campo] || 0;
       if(!v) continue;
-      const classe = loc.clal || '—';
-      if(!porClasse.has(classe)) porClasse.set(classe, {});
-      const bucket = porClasse.get(classe);
+      const valor = loc[dim.campo] || '—';
+      if(!porValor.has(valor)) porValor.set(valor, {});
+      const bucket = porValor.get(valor);
       bucket[loc.restricao] = (bucket[loc.restricao] || 0) + v;
     }
   }
-  return porClasse;
+  return porValor;
 }
 
-/* Restrição fora da regra configurada em Configurações (Configurações →
-   Restrições permitidas por classe). Sem regra salva pra essa classe, não dá
-   pra dizer se está certo ou errado — não valida. */
-function mdRestricaoPermitida(classe, sigla){
-  const regra = MD.regrasClasse && MD.regrasClasse[classe];
+/* Restrição fora da regra configurada em Configurações. Sem regra salva pra
+   esse valor, não dá pra dizer se está certo ou errado — não valida. */
+function mdRestricaoPermitidaEm(chave, valor, sigla){
+  const regra = MD.regras[chave] && MD.regras[chave][valor];
   if(!regra || !regra.length) return true;
   return regra.includes(sigla);
 }
 
-function mdClasseMarcada(classe){
-  return MD.classesSelecionadas === null || MD.classesSelecionadas.has(classe);
+function mdValorMarcado(chave, valor){
+  const sel = MD.selecionadas[chave];
+  return sel === null || sel.has(valor);
 }
-function mdToggleClasse(classe){
-  if(MD.classesSelecionadas === null) MD.classesSelecionadas = new Set(mdMatrizClasses().keys());
-  if(MD.classesSelecionadas.has(classe)) MD.classesSelecionadas.delete(classe);
-  else MD.classesSelecionadas.add(classe);
+function mdToggleValor(chave, valor){
+  if(MD.selecionadas[chave] === null) MD.selecionadas[chave] = new Set(mdMatrizPor(chave).keys());
+  const sel = MD.selecionadas[chave];
+  if(sel.has(valor)) sel.delete(valor); else sel.add(valor);
   irRenderView();
 }
-function mdMarcarTodasClasses(){ MD.classesSelecionadas = null; irRenderView(); }
-function mdDesmarcarTodasClasses(){ MD.classesSelecionadas = new Set(); irRenderView(); }
+function mdMarcarTodosValores(chave){ MD.selecionadas[chave] = null; irRenderView(); }
+function mdDesmarcarTodosValores(chave){ MD.selecionadas[chave] = new Set(); irRenderView(); }
+/* Checkbox único no cabeçalho da tabela: marca/desmarca tudo de uma vez, sem
+   precisar desmarcar linha por linha pra sobrar só o que interessa. */
+function mdToggleCabecalhoSelecao(chave, marcarTudo){
+  if(marcarTudo) mdMarcarTodosValores(chave); else mdDesmarcarTodosValores(chave);
+}
 
-function mdRenderMatrizClasses(){
-  const porClasse = mdMatrizClasses();
+function mdRenderMatrizPor(chave){
+  const dim = MD_DIM_POR_CHAVE[chave];
+  const porValor = mdMatrizPor(chave);
   const restricoes = mdRestricoesPresentes();
-  const totalDe = c => Object.values(porClasse.get(c)).reduce((a,v)=>a+v, 0);
+  const totalDe = v => Object.values(porValor.get(v)).reduce((a,x)=>a+x, 0);
   const termo = MD.busca.trim().toLowerCase();
-  let classes = Array.from(porClasse.keys());
-  if(termo) classes = classes.filter(c=>c.toLowerCase().includes(termo));
-  classes.sort((a,b)=>totalDe(b)-totalDe(a));
+  let valores = Array.from(porValor.keys());
+  if(termo) valores = valores.filter(v=>v.toLowerCase().includes(termo));
+  valores.sort((a,b)=>totalDe(b)-totalDe(a));
 
-  if(!classes.length){
-    return { html: `<div class="panel"><p class="field-hint">Nenhuma classe bate com o filtro atual.</p></div>`, classesComErro: 0 };
+  if(!valores.length){
+    return { html: `<p class="field-hint">Nenhum valor de ${dim.titulo.toLowerCase()} bate com o filtro atual.</p>`, comErro: 0 };
   }
 
   const headerCols = restricoes.map(s=>{
@@ -410,27 +430,28 @@ function mdRenderMatrizClasses(){
 
   const totalPorRestricao = {};
   for(const s of restricoes) totalPorRestricao[s] = 0;
-  let totalGeral = 0, classesComErro = 0;
+  let totalGeral = 0, comErro = 0;
+  const todosMarcados = valores.every(v=>mdValorMarcado(chave, v));
 
-  const linhas = classes.map(c=>{
-    const bucket = porClasse.get(c);
+  const linhas = valores.map(v=>{
+    const bucket = porValor.get(v);
     let temErro = false;
     const cels = restricoes.map(s=>{
-      const v = bucket[s] || 0;
-      totalPorRestricao[s] += v;
-      const erro = v > 0 && !mdRestricaoPermitida(c, s);
+      const qtd = bucket[s] || 0;
+      totalPorRestricao[s] += qtd;
+      const erro = qtd > 0 && !mdRestricaoPermitidaEm(chave, v, s);
       if(erro) temErro = true;
       const cls = erro ? 'md-cel-erro' : (s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : ''));
-      const titulo = erro ? ` title="${irEsc('Restrição '+mdCodRestricao(s)+' ('+s+') não está nas restrições permitidas de '+c+' — configure em Configurações')}"` : '';
-      return `<td class="${cls}"${titulo}>${v ? irFmtInt(v) : ''}</td>`;
+      const titulo = erro ? ` title="${irEsc('Restrição '+mdCodRestricao(s)+' ('+s+') não está nas restrições permitidas de '+v+' — configure em Configurações')}"` : '';
+      return `<td class="${cls}"${titulo}>${qtd ? irFmtInt(qtd) : ''}</td>`;
     }).join('');
-    if(temErro) classesComErro++;
-    const total = totalDe(c);
+    if(temErro) comErro++;
+    const total = totalDe(v);
     totalGeral += total;
-    const marcado = mdClasseMarcada(c);
+    const marcado = mdValorMarcado(chave, v);
     return `<tr>
-      <td class="md-piv-check"><input type="checkbox" ${marcado?'checked':''} onchange="mdToggleClasse('${irEsc(c)}')"></td>
-      <td class="md-left mono">${irEsc(c)}</td>${cels}<td class="md-piv-total">${irFmtInt(total)}</td>
+      <td class="md-piv-check"><input type="checkbox" ${marcado?'checked':''} onchange="mdToggleValor('${chave}','${irEsc(v)}')"></td>
+      <td class="md-left mono">${irEsc(v)}</td>${cels}<td class="md-piv-total">${irFmtInt(total)}</td>
     </tr>`;
   }).join('');
 
@@ -447,15 +468,15 @@ function mdRenderMatrizClasses(){
   const html = `<div class="md-piv-wrap">
     <table class="md-piv">
       <thead><tr>
-        <th></th>
-        <th class="md-left">Classe</th>
+        <th class="md-piv-check"><input type="checkbox" ${todosMarcados?'checked':''} onchange="mdToggleCabecalhoSelecao('${chave}', this.checked)" title="Marcar/desmarcar todas as linhas"></th>
+        <th class="md-left">${irEsc(dim.titulo)}</th>
         ${headerCols}
         <th class="md-piv-total">Total Geral</th>
       </tr></thead>
       <tbody>${linhas}${rodape}</tbody>
     </table>
   </div>`;
-  return { html, classesComErro };
+  return { html, comErro };
 }
 
 /* Mesmo endereço + mesmo item (EAN) com quantidades diferentes em duas linhas
@@ -530,37 +551,29 @@ function mdRenderAjustes(){
   }
   const chip = (ativo, onclick, texto)=>`<button class="chip ${ativo?'active':''}" onclick="${onclick}">${irEsc(texto)}</button>`;
   const plano = mdPlano();
-  const planoMarcado = plano.filter(l=>mdClasseMarcada(l.clal));
-  const bloquear = plano.filter(l=>l.sentido==='bloquear').reduce((a,l)=>a+l.quantidade, 0);
-  const liberar = plano.filter(l=>l.sentido==='liberar').reduce((a,l)=>a+l.quantidade, 0);
-  const semEndereco = plano.filter(l=>l.semEndereco).length;
-  const matriz = mdRenderMatrizClasses();
+  const planoMarcado = plano.filter(l=>
+    mdValorMarcado('clal', l.clal) && mdValorMarcado('x1', l.x1) && mdValorMarcado('x2', l.x2)
+  );
+
+  const blocosMatriz = MD_DIMENSOES.map(dim=>{
+    const m = mdRenderMatrizPor(dim.chave);
+    return `<div class="md-head" style="margin-top:18px;"><h3>Restrição por ${irEsc(dim.titulo)}</h3></div>${m.html}`;
+  }).join('');
 
   return `<div class="panel">
     <div class="md-head">
-      <h3>Restrição por classe</h3>
-      <div class="md-piv-acoes">
-        <button class="btn-link" onclick="mdMarcarTodasClasses()">Marcar todas</button>
-        <button class="btn-link" onclick="mdDesmarcarTodasClasses()">Desmarcar todas</button>
-        <button class="btn btn-primary" onclick="mdExportarAjusteClasses()">Baixar relatório de ajuste</button>
-      </div>
+      <h3>Ajustes de Restrição</h3>
+      <button class="btn btn-primary" onclick="mdExportarAjusteClasses()">Baixar relatório de ajuste</button>
     </div>
     <div class="md-filtros">
-      <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar classe..."
+      <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar classe, X1 ou X2..."
              value="${irEsc(MD.busca)}" oninput="mdBuscar(this.value)">
       <div class="md-chips">
         ${chip(MD.base==='qtde', "mdSetBase('qtde')", 'Estoque total')}
         ${chip(MD.base==='qtdeDisp', "mdSetBase('qtdeDisp')", 'Só disponível')}
       </div>
     </div>
-    <p class="field-hint">
-      ${plano.length
-        ? `${irFmtInt(bloquear)} peças a bloquear (0 → 86) e ${irFmtInt(liberar)} a liberar (86 → 0) — a planilha traz isso endereço por endereço, pronta pro coletor (tela 12.MOVI), só das classes marcadas.`
-        : `Nenhum múltiplo precisa de ajuste na base ${MD.base==='qtdeDisp'?'disponível':'total'} agora.`}
-      ${semEndereco ? ` <strong class="neg">${irFmtInt(semEndereco)} linha(s) sem endereço</strong> na planilha: o saldo da restrição não fechou com a soma dos endereços na 390.` : ''}
-      ${matriz.classesComErro ? ` <strong class="neg">${irFmtInt(matriz.classesComErro)} classe(s)</strong> com restrição fora da regra configurada — célula em vermelho.` : ''}
-    </p>
-    ${matriz.html}
+    ${blocosMatriz}
     ${mdRenderChecklistAjuste(planoMarcado)}
   </div>`;
 }
@@ -570,9 +583,11 @@ function mdRenderAjustes(){
 function mdExportarAjustePivot(){
   mdGerarCsvAjuste(mdPlanoAjuste(mdPaisFiltrados(), MD.base));
 }
-/* Ajustes: respeita as classes marcadas na matriz (checkbox por linha). */
+/* Ajustes: respeita classe, X1 e X2 marcados nas três matrizes. */
 function mdExportarAjusteClasses(){
-  mdGerarCsvAjuste(mdPlano().filter(l=>mdClasseMarcada(l.clal)));
+  mdGerarCsvAjuste(mdPlano().filter(l=>
+    mdValorMarcado('clal', l.clal) && mdValorMarcado('x1', l.x1) && mdValorMarcado('x2', l.x2)
+  ));
 }
 
 /* Só o que vai pro coletor: local, item, restrição de/para, quantidade,
@@ -738,53 +753,58 @@ function mdRenderImportacao(){
 /* ============================================================
    TELA — CONFIGURAÇÕES
    ============================================================
-   Regra por classe local (CLAL): quais restrições podem existir ali. É a
-   base da validação da matriz em Ajustes de Restrição — sem marcar nada pra
-   uma classe, ela não é validada (não dá pra saber o que é errado sem
+   Regra por valor de classe/X1/X2: quais restrições podem existir ali. É a
+   base da validação das matrizes em Ajustes de Restrição — sem marcar nada
+   pra um valor, ele não é validado (não dá pra saber o que é errado sem
    regra). Persistido no banco do módulo (config), não se perde ao reimportar. */
-function mdClassesConhecidas(){
+function mdValoresConhecidos(chave){
+  const dim = MD_DIM_POR_CHAVE[chave];
   const set = new Set();
-  for(const s of (MD.saldos||[])) for(const loc of (s.locais||[])) if(loc.clal) set.add(loc.clal);
-  for(const c in (MD.regrasClasse||{})) set.add(c);
+  for(const s of (MD.saldos||[])) for(const loc of (s.locais||[])) if(loc[dim.campo]) set.add(loc[dim.campo]);
+  for(const v in (MD.regras[chave]||{})) set.add(v);
   return Array.from(set).sort();
 }
-function mdSetRegraClasse(classe, sigla, permitido){
-  if(!MD.regrasClasse) MD.regrasClasse = {};
-  const atual = new Set(MD.regrasClasse[classe] || []);
+function mdSetRegra(chave, valor, sigla, permitido){
+  if(!MD.regras[chave]) MD.regras[chave] = {};
+  const atual = new Set(MD.regras[chave][valor] || []);
   if(permitido) atual.add(sigla); else atual.delete(sigla);
-  MD.regrasClasse[classe] = Array.from(atual);
-  mdSetConfig('regras-classe', MD.regrasClasse);
+  MD.regras[chave][valor] = Array.from(atual);
+  mdSetConfig(MD_CONFIG_KEY_POR_DIM[chave], MD.regras[chave]);
   irRenderView();
 }
 function mdRenderConfiguracoes(){
-  const classes = mdClassesConhecidas();
-  if(!classes.length){
-    return irEmptyState('Sem classes ainda', 'Importe a QRY0390 para ver as classes de local (CLAL) dos componentes de múltiplo.', "irSwitchTab('importacao')", 'Ir para a importação');
-  }
-  const headerCols = MD_RESTRICOES.map(r=>
-    `<th title="${irEsc(r.sigla+' — '+r.nome)}">${irEsc(r.cod)}</th>`
-  ).join('');
-  const linhas = classes.map(c=>{
-    const regra = MD.regrasClasse[c] || [];
-    const cels = MD_RESTRICOES.map(r=>{
-      const marcado = regra.includes(r.sigla);
-      return `<td><input type="checkbox" ${marcado?'checked':''} onchange="mdSetRegraClasse('${irEsc(c)}','${r.sigla}', this.checked)"></td>`;
+  const secoes = MD_DIMENSOES.map(dim=>{
+    const valores = mdValoresConhecidos(dim.chave);
+    if(!valores.length) return '';
+    const headerCols = MD_RESTRICOES.map(r=>
+      `<th title="${irEsc(r.sigla+' — '+r.nome)}">${irEsc(r.cod)}</th>`
+    ).join('');
+    const linhas = valores.map(v=>{
+      const regra = MD.regras[dim.chave][v] || [];
+      const cels = MD_RESTRICOES.map(r=>{
+        const marcado = regra.includes(r.sigla);
+        return `<td><input type="checkbox" ${marcado?'checked':''} onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)"></td>`;
+      }).join('');
+      return `<tr><td class="md-left mono">${irEsc(v)}</td>${cels}</tr>`;
     }).join('');
-    return `<tr><td class="md-left mono">${irEsc(c)}</td>${cels}</tr>`;
-  }).join('');
-  return `<div class="panel">
-    <div class="md-head"><h3>Restrições permitidas por classe</h3></div>
-    <p class="field-hint">
-      Marque, por classe local (CLAL), quais restrições podem existir ali. O que uma classe tiver fora
-      disso aparece em vermelho na matriz da aba Ajustes de Restrição. Classe sem nenhuma marcação não é validada.
-    </p>
-    <div class="md-piv-wrap">
-      <table class="md-piv md-config-table">
-        <thead><tr><th class="md-left">Classe</th>${headerCols}</tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
-    </div>
-  </div>`;
+    return `<div class="panel">
+      <div class="md-head"><h3>Restrições permitidas por ${irEsc(dim.titulo)}</h3></div>
+      <div class="md-piv-wrap">
+        <table class="md-piv md-config-table">
+          <thead><tr><th class="md-left">${irEsc(dim.titulo)}</th>${headerCols}</tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if(!secoes){
+    return irEmptyState('Sem valores ainda', 'Importe a QRY0390 para ver as classes de local (CLAL, X1, X2) dos componentes de múltiplo.', "irSwitchTab('importacao')", 'Ir para a importação');
+  }
+  return `<p class="field-hint" style="margin-bottom:14px;">
+    Marque, por classe/X1/X2, quais restrições podem existir ali. O que estiver fora disso aparece em vermelho
+    nas matrizes da aba Ajustes de Restrição. Sem marcação nenhuma, não é validado.
+  </p>${secoes}`;
 }
 
 /* ============================================================
@@ -825,7 +845,11 @@ async function mdRecarregar(){
   MD.estruturaMeta = await mdGetEstruturaMeta();
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
-  MD.regrasClasse = (await mdGetConfig('regras-classe')) || {};
+  MD.regras = {
+    clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || {},
+    x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {},
+    x2: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x2)) || {}
+  };
   MD.execucaoAjuste = new Set((await mdGetConfig('execucao-ajuste')) || []);
   mdInvalidarCache();
 }
