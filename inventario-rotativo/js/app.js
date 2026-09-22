@@ -73,9 +73,13 @@ function irFmtMoney(n){ return (n||0).toLocaleString('pt-BR', {style:'currency',
 function irFmtMoneyCompact(n){
   n = n||0;
   const abs = Math.abs(n);
-  if(abs>=1000000) return 'R$'+(n/1000000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'M';
-  if(abs>=1000) return 'R$'+(n/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'K';
-  return 'R$'+n.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});
+  // Sinal antes do "R$" (-R$39,8K), não depois (R$-39,8K) — só aparece de verdade
+  // no gráfico NET Mensal (único lugar que passa valor negativo por aqui hoje; os
+  // outros usos são sempre total/absoluto), mas o -R$ é o padrão certo do "R$" negativo.
+  const sinal = n<0 ? '-' : '';
+  if(abs>=1000000) return sinal+'R$'+(abs/1000000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'M';
+  if(abs>=1000) return sinal+'R$'+(abs/1000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'K';
+  return sinal+'R$'+abs.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});
 }
 // Valor cheio, sem centavos — usado no hint, onde cabe texto maior.
 function irFmtMoneyInt(n){ return (n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:0,maximumFractionDigits:0}); }
@@ -911,7 +915,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v196';
+const IR_APP_VERSION = 'v197';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
