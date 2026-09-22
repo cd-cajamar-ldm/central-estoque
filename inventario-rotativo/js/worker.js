@@ -10,7 +10,21 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 18;
+const IR_INDICADORES_VERSION = 22;
+
+/* A RUA de um endereço é X1 + X2, não X1 sozinho.
+
+   Com só o X1, ruas diferentes que compartilham o prefixo caíam na mesma linha
+   do ranking e da quebra por rua — "MZN" somava o que na operação são endereços
+   de ruas distintas, e o número não batia com o que se vê no chão.
+
+   Separador é o espaço, o mesmo formato do de-para de transitórios ("AIR LOG").
+   Endereço sem X2 continua aparecendo só com o X1. */
+function irRuaDoLocal(l){
+  const x1 = String((l && l.x1) || '').trim();
+  const x2 = String((l && l.x2) || '').trim();
+  return [x1, x2].filter(Boolean).join(' ');
+}
 
 function parseNumber(v){
   if(v===undefined || v===null || v==='') return 0;
@@ -1117,6 +1131,17 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo.
   const divergencias = irDivergenciasDoCiclo(divergenciasTodas).filter(d=>noCiclo.has(d.local));
 
+  /* Base de cada item na Acurácia Peças/Valor = SALDO DO SISTEMA (a rodada 1, o que
+     o WMS dizia ter antes da contagem). É a régua pedida pela operação: acurácia é
+     quanto do saldo que o sistema afirmava ter se confirmou na contagem.
+
+     Lado cego conhecido e aceito: item ACHADO do nada (sistema 0, físico 500) entra
+     no numerador com base zero — pesa no erro sem somar na base. O clamp01 segura o
+     resultado entre 0% e 100%. */
+  const baseQtd = (d)=>(d.qtdeSistema||0);
+  const valorSistema = (d)=> d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0);
+  const baseValor = (d)=>valorSistema(d);
+
   // Acurácia Peças/Valor e Divergência Peças/Valor só podem considerar locais já
   // CONCLUÍDOS (rodadas bateram = "convergido", ou encerrado após 5 rodadas sem bater
   // = "encerrado_sem_convergencia" — mesmo critério já usado em locaisConcluidos/
@@ -1132,13 +1157,13 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // final física — nunca soma rodada, sempre a última).
   const totalPecasFisicas = divergenciasConcluidas.reduce((s,d)=>s+d.qtdeFisica,0);
   const totalDiferencaAbs = divergenciasConcluidas.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-  /* Denominador = SALDO LÓGICO (Id Conferência 1 da rodada), não a quantidade
-     física contada. Com a física no denominador, um item que sumiu inteiro
-     (sistema 500, físico 0) põe 500 no numerador e ZERO no denominador: o erro
-     passa de 100% e a conta estoura — só não aparecia negativa porque o clamp
-     segurava em 0%. Pelo saldo lógico o erro de um item nunca passa de 100% e o
-     resultado é limitado por construção. */
-  const totalSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+(d.qtdeSistema||0),0);
+  /* Denominador = MAIOR entre sistema e físico de cada item (baseQtd), não só a
+     quantidade física contada nem só o saldo do sistema. Com a física sozinha, um
+     item que sumiu inteiro (sistema 500, físico 0) põe 500 no numerador e ZERO no
+     denominador: o erro passa de 100% e a conta estoura — só não aparecia negativa
+     porque o clamp segurava em 0%. Com o maior dos dois o erro de um item nunca passa
+     de 100% e o resultado é limitado por construção, dos dois lados (sumiço e achado). */
+  const totalSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+baseQtd(d),0);
   const acuraciaPecas = clamp01(totalSaldoLogico>0 ? 1-(totalDiferencaAbs/totalSaldoLogico) : 1);
   const totalItensContados = divergenciasConcluidas.length;
 
@@ -1149,7 +1174,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // (S/N do componente no kit) — não mais pela QRY0114.
   const totalVlFisico = divergenciasConcluidas.reduce((s,d)=>s+d.vlFisico,0);
   const totalVlDivergenciaAbs = divergenciasConcluidas.reduce((s,d)=>s+Math.abs(d.vlDivergencia),0);
-  const totalVlSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+(d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0)),0);
+  const totalVlSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+baseValor(d),0);
   const acuraciaValor = clamp01(totalVlSaldoLogico>0 ? 1-(totalVlDivergenciaAbs/totalVlSaldoLogico) : 1);
   const valorDivergenteLiquido = divergenciasConcluidas.reduce((s,d)=>s+d.vlDivergencia,0);
   const valorDivergenteAbsoluto = totalVlDivergenciaAbs;
@@ -1225,12 +1250,12 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   function calcAcuraciasSubset(divsTodos, divsConcluidos, baseLocais){
     const totalPecasGrupo = divsConcluidos.reduce((s,d)=>s+d.qtdeFisica,0);
     const totalDiferencaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-    // Mesmo denominador do KPI do topo: saldo lógico, não a física contada.
-    const totalSaldoGrupo = divsConcluidos.reduce((s,d)=>s+(d.qtdeSistema||0),0);
+    // Mesmo denominador do KPI do topo: o saldo do sistema.
+    const totalSaldoGrupo = divsConcluidos.reduce((s,d)=>s+baseQtd(d),0);
     const acuraciaPecas = clamp01(totalSaldoGrupo>0 ? 1-(totalDiferencaAbs/totalSaldoGrupo) : 1);
     const totalVlFisico = divsConcluidos.reduce((s,d)=>s+d.vlFisico,0);
     const totalVlDivergenciaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.vlDivergencia),0);
-    const totalVlSaldoGrupo = divsConcluidos.reduce((s,d)=>s+(d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0)),0);
+    const totalVlSaldoGrupo = divsConcluidos.reduce((s,d)=>s+baseValor(d),0);
     const acuraciaValor = clamp01(totalVlSaldoGrupo>0 ? 1-(totalVlDivergenciaAbs/totalVlSaldoGrupo) : 1);
     const locaisComDivergencia = new Set(divsTodos.filter(d=>d.diferenca!==0).map(d=>d.local));
     const acuraciaPosicoes = clamp01(baseLocais>0 ? 1-(locaisComDivergencia.size/baseLocais) : 1);
@@ -1247,9 +1272,12 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   }
   function agruparPor(campo, rotuloVazio, baseCongelados){
     const base = baseCongelados || congelados;
-    const chaves = Array.from(new Set(base.map(l=>l[campo] || rotuloVazio)));
+    // campo pode ser o nome da coluna ou uma função — a rua é X1 + X2 juntos, não
+    // uma coluna só.
+    const valorDe = typeof campo === 'function' ? campo : (l => l[campo]);
+    const chaves = Array.from(new Set(base.map(l=>valorDe(l) || rotuloVazio)));
     return chaves.map(chave=>{
-      const locaisDoGrupo = base.filter(l=>(l[campo]||rotuloVazio)===chave);
+      const locaisDoGrupo = base.filter(l=>(valorDe(l)||rotuloVazio)===chave);
       const idsGrupo = new Set(locaisDoGrupo.map(l=>l.idLocal));
       const locaisOrcados = locaisDoGrupo.length;
       const locaisContados = locaisDoGrupo.filter(l=>locaisContadosSet.has(l.idLocal)).length;
@@ -1263,7 +1291,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     }).sort((a,b)=>b.locaisOrcados-a.locaisOrcados);
   }
   // AIR entra na quebra por Rua normalmente, como qualquer outro local (sem exclusão).
-  const porRua = agruparPor('x1', '(sem rua)');
+  const porRua = agruparPor(irRuaDoLocal, '(sem rua)');
   const porLog = agruparPor('grupoClasse', '(sem log)');
 
   // Locais distintos contados por dia. Cada local é contado UMA ÚNICA VEZ, no dia da
@@ -1284,18 +1312,33 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     const atual = diaFinalPorLocal.get(c.local);
     if(!atual || c.idConferencia>atual.rodada) diaFinalPorLocal.set(c.local, {dia, rodada:c.idConferencia});
   }
+  // Variante só do gráfico "Contados por Dia" (barras + tooltip por rua): aqui SÓ
+  // conta local liquidado com ajuste de motivo AIR, igual ao recorte que fecha local
+  // no Dashboard/Setores (irLocaisContadosSet). Local sem divergência ("sem
+  // observação") ou liquidado com outro motivo não entra nessas barras — mas segue
+  // entrando em Divergentes por Dia e na Evolução Mensal, que usam diaFinalPorLocal
+  // sem esse recorte, de propósito.
+  const diaFinalPorLocalAIR = new Map(); // local -> {dia, rodada}
+  for(const c of contagens){
+    if(c.idConferencia<2 || !c.dataSituacao) continue;
+    if(String(c.motivo||'').trim().toUpperCase()!=='AIR') continue;
+    if(!noCiclo.has(c.local)) continue;
+    const dia = c.dataSituacao.slice(0,10);
+    const atual = diaFinalPorLocalAIR.get(c.local);
+    if(!atual || c.idConferencia>atual.rodada) diaFinalPorLocalAIR.set(c.local, {dia, rodada:c.idConferencia});
+  }
   const porDiaMap = new Map();
-  for(const {dia} of diaFinalPorLocal.values()){
+  for(const {dia} of diaFinalPorLocalAIR.values()){
     porDiaMap.set(dia, (porDiaMap.get(dia)||0)+1);
   }
   const contadosPorDia = Array.from(porDiaMap.entries())
     .map(([dia,total])=>({dia, total}))
     .sort((a,b)=>a.dia.localeCompare(b.dia));
 
-  // Detalhe por dia x Rua (X1), para o tooltip do gráfico "Contados por Dia":
-  // locais distintos (mesmo critério de dia final acima), peças contadas (soma do
-  // QT_FIS do dia) e peças divergentes (soma de |Diferença| das divergências daquele dia,
-  // casadas pelo Local).
+  // Detalhe por dia x Rua (X1 + X2), para o tooltip do gráfico "Contados por Dia":
+  // locais distintos (mesmo critério de dia final acima, recorte AIR), peças contadas
+  // (soma do QT_FIS do dia) e peças divergentes (soma de |Diferença| das divergências
+  // daquele dia, casadas pelo Local).
   const congeladosPorId = new Map(congelados.map(l=>[l.idLocal, l]));
   const diaRuaMap = new Map(); // dia -> Map(rua -> {locais:Set, pecasContadas, pecasDivergentes})
   function getOrInitDiaRua(dia, rua){
@@ -1304,16 +1347,16 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     if(!porRuaDoDia.has(rua)) porRuaDoDia.set(rua, {locais:new Set(), pecasContadas:0, pecasDivergentes:0});
     return porRuaDoDia.get(rua);
   }
-  for(const [local, {dia}] of diaFinalPorLocal){
-    const rua = (congeladosPorId.get(local)||{}).x1 || '(sem rua)';
+  for(const [local, {dia}] of diaFinalPorLocalAIR){
+    const rua = irRuaDoLocal(congeladosPorId.get(local)) || '(sem rua)';
     const g = getOrInitDiaRua(dia, rua);
     g.locais.add(local);
     g.pecasContadas += pecasFisicasPorLocal.get(local) || 0;
   }
   for(const d of divergencias){
-    const final = diaFinalPorLocal.get(d.local);
+    const final = diaFinalPorLocalAIR.get(d.local);
     if(!final) continue;
-    const rua = (congeladosPorId.get(d.local)||{}).x1 || '(sem rua)';
+    const rua = irRuaDoLocal(congeladosPorId.get(d.local)) || '(sem rua)';
     const g = getOrInitDiaRua(final.dia, rua);
     g.pecasDivergentes += Math.abs(d.diferenca);
   }
@@ -1369,10 +1412,10 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     if(!mes) continue;
     const g = getMes(mes);
     g.pecasContadas   += d.qtdeFisica;
-    g.pecasSaldoLogico += (d.qtdeSistema||0);
+    g.pecasSaldoLogico += baseQtd(d);
     g.pecasDivergentes += Math.abs(d.diferenca);
     g.valorContado    += d.vlFisico;
-    g.valorSaldoLogico += (d.vlSistema!=null ? d.vlSistema : (d.qtdeSistema||0)*(d.precoUnitario||0));
+    g.valorSaldoLogico += baseValor(d);
     g.valorDivergente += Math.abs(d.vlDivergencia);
   }
   for(const d of divergencias){

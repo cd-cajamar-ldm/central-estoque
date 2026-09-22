@@ -464,7 +464,7 @@ button{ font-family:inherit; cursor:pointer; }
 .bi-cluster{ display:flex; gap:11px; align-items:flex-end; height:100%; }
 .bi-cluster .bi-vbar{ width:24px; max-width:none; }
 .bi-cluster-bar{ display:flex; flex-direction:column; align-items:center; }
-.bi-cluster-val{ font-size:12.5px; font-weight:700; margin-bottom:3px; white-space:nowrap; }
+.bi-cluster-val{ font-size:15px; font-weight:700; margin-bottom:3px; white-space:nowrap; }
 /* Separação visual clara entre um Log e outro (cada um é um grupo de 3 barras) —
    sem isso os clusters ficavam visualmente colados uns nos outros. */
 .bi-vbars-grouped > .bi-vbar-col:not(:last-child){ border-right:1px solid var(--line); padding-right:22px; margin-right:0; }
@@ -534,6 +534,7 @@ table.table-dense tbody td{ padding:3px 10px; font-size:12.5px; }
 .mes-chart svg{ display:block; width:100%; min-width:620px; height:auto; }
 .mes-grid{ stroke:var(--mes-grid); stroke-width:1; }
 .mes-meta{ stroke:var(--ink-soft); stroke-width:1.5; }
+.mes-ciclo-div{ stroke:var(--line); stroke-width:1; stroke-dasharray:3 3; }
 .mes-axis{ fill:var(--ink-soft); font-size:10px; font-family:'SFMono-Regular',Consolas,monospace; }
 /* Contado e divergente usam a MESMA cor de rótulo (tinta cheia) — a cor está
    na coluna, não no número. */
@@ -1042,11 +1043,13 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-donut-stat .l{ font-size:12.5px; color:#6B7280; font-weight:600; margin-top:3px; }
 .rp-month-list{ flex:1.4; min-width:220px; display:flex; flex-direction:column; gap:9px; align-self:stretch; justify-content:center; }
 .rp-month-title{ font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.03em; margin-bottom:2px; }
-.rp-month-row{ display:grid; grid-template-columns:110px 1fr 56px; align-items:center; gap:10px; }
+.rp-month-row{ display:grid; grid-template-columns:100px 1fr 74px; align-items:center; gap:10px; }
 .rp-month-label{ font-size:11.5px; color:#1D1F2A; font-weight:600; }
 .rp-month-track{ background:#EEF0F4; border-radius:5px; height:12px; overflow:hidden; }
 .rp-month-fill{ height:100%; background:#FA4616; border-radius:5px; }
-.rp-month-val{ text-align:right; font-family:'SFMono-Regular',Consolas,monospace; font-size:11.5px; font-weight:700; color:#1D1F2A; }
+.rp-month-val{ text-align:right; font-family:'SFMono-Regular',Consolas,monospace; font-size:11.5px; font-weight:700; color:#1D1F2A; line-height:1.35; white-space:nowrap; }
+.rp-month-val-sub{ display:block; font-size:9.5px; font-weight:600; color:#6B7280; }
+.rp-month-val-head{ text-align:right; font-size:9px; font-weight:700; color:#9098C0; text-transform:uppercase; letter-spacing:.02em; white-space:nowrap; }
 .rp-chart-legend{ margin:8px 0 0; font-size:10.5px; color:#6B7280; }
 .rp-hbar-row{ display:grid; grid-template-columns:70px 1fr 52px; align-items:center; gap:10px; padding:5px 0; font-size:11px; }
 .rp-hbar-row + .rp-hbar-row{ border-top:1px solid #EEF0F4; }
