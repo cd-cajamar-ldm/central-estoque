@@ -898,7 +898,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v188';
+const IR_APP_VERSION = 'v189';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2360,14 +2360,11 @@ function irGerarRelatorioEmail(){
   const emailCfg = IR.boletimEmail || {};
   const hora = new Date().getHours();
   const saudacao = hora<12 ? 'Bom dia' : (hora<18 ? 'Boa tarde' : 'Boa noite');
+  // Os números (Acurácia Peças/Local/Valor, Locais concluídos) saíram daqui —
+  // já estão na imagem do boletim, repetir em texto era redundante.
   const corpo = `${saudacao},
 
 Segue report referente ao ${c.numero}º ciclo do Inventário Rotativo.
-
-Acurácia Peças: ${irFmtPct(ind.acuraciaPecas)} (meta ${irFmtPct(ind.meta)})
-Acurácia Local: ${irFmtPct(ind.acuraciaLocal)} (meta ${irFmtPct(ind.meta)})
-Acurácia Valor: ${irFmtPct(ind.acuraciaValor)} (meta ${irFmtPct(ind.meta)})
-Locais concluídos: ${irFmtInt(ind.locaisConcluidos)} de ${irFmtInt(ind.locaisCongelados)}
 
 [Clique aqui e cole a imagem do boletim — Ctrl+V]
 
