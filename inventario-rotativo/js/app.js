@@ -324,10 +324,19 @@ function irSwitchTab(tab){
   // aba não faz.
   const filtros = document.getElementById('topbarFilters');
   if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab);
-  // NET é independente do ciclo rotativo (QRY410 é por ano, não por ciclo) — só o
-  // filtro de Ciclo some nessa aba, o de Mês continua (é de outra tela, não afeta a NET).
+  // NET é independente do ciclo rotativo (QRY410 é por ano, não por ciclo): troca
+  // Ciclo/Mês (que não têm efeito nenhum sobre a NET) pelo Ano/Mês da própria QRY410
+  // no topo — mesmo lugar de sempre, só que com o filtro certo pra essa aba.
+  const netTab = (tab==='ciclo');
   const filtroCiclo = document.getElementById('tbFilterCiclo');
-  if(filtroCiclo) filtroCiclo.hidden = (tab==='ciclo');
+  if(filtroCiclo) filtroCiclo.hidden = netTab;
+  const filtroMesGeral = document.getElementById('tbFilterMesGeral');
+  if(filtroMesGeral) filtroMesGeral.hidden = netTab;
+  const filtroNetAno = document.getElementById('tbFilterNetAno');
+  if(filtroNetAno) filtroNetAno.hidden = !netTab;
+  const filtroNetMes = document.getElementById('tbFilterNetMes');
+  if(filtroNetMes) filtroNetMes.hidden = !netTab;
+  if(netTab) irRenderNetTopFiltro();
   irRenderCycleBadge();
   irRenderView();
   irCloseSidebarMobile();
@@ -902,7 +911,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v194';
+const IR_APP_VERSION = 'v196';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1641,7 +1650,11 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
   opts = opts||{};
   const corPos = opts.corPos||'#001A72', corNeg = opts.corNeg||'#C0392B', corAxis = opts.corAxis||'#6B7280', corLabel = opts.corLabel||'#1D1F2A';
   const campo = opts.campo||'valor', fmt = opts.fmt||irFmtMoney, xLabel = opts.xLabel||(r=>r.label);
-  const W = 800, H = 260;
+  // W/H por parâmetro (mesma ideia do irBuildAcuraciaCiclosSvg): o boletim usa o
+  // padrão 800x260 (largura fixa da página impressa), mas um painel de tela cheia
+  // (aba NET) pode pedir um W maior pra desenhar já perto do tamanho real do
+  // painel — sem isso o SVG ficava pequeno e centralizado, sobrando vão vazio.
+  const W = opts.W||800, H = opts.H||260;
   const padL = 14, padR = 14, padT = 34, padB = 30;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const n = rows.length;
@@ -1661,13 +1674,7 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
     labels += `<text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="13" text-anchor="middle" fill="${corLabel}" font-weight="700">${fmt(v)}</text>`;
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="12.5" text-anchor="middle" fill="${corAxis}" font-weight="600">${irEsc(xLabel(r))}</text>`;
   });
-  // height:auto (em vez de height="${H}" fixo) — sem isso, num painel bem mais largo
-  // que os 800 do viewBox (caso da aba NET, painel de largura cheia), o navegador
-  // desenhava o gráfico no tamanho original e centralizava, sobrando um vão vazio
-  // enorme dos dois lados em vez de ocupar o painel. Com altura automática, a caixa
-  // do SVG cresce na mesma proporção da largura e o desenho preenche tudo, só maior
-  // (mesma técnica já usada em irBuildAcuraciaCiclosSvg).
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto;">${baseLine}${bars}${labels}${xLabels}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${baseLine}${bars}${labels}${xLabels}</svg>`;
 }
 /* Gráfico de barras agrupadas (3 séries por ciclo: Peças/Locais/Valor) — "Comparativo
    de Acurácias entre Ciclos" do Dashboard. Ciclo sem indicadores ainda (não processado)
@@ -2556,6 +2563,7 @@ async function irSetNet410Ano(ano){
   IR.net410AnoSel = ano;
   IR.net410Data = await irGetNet410(ano);
   irSetNet410MesDefault();
+  irRenderNetTopFiltro();
   irRenderView();
 }
 // Mês "atual" = o mês mais recente com movimento nos dados importados (não a data de
@@ -2564,7 +2572,22 @@ function irSetNet410MesDefault(){
   const rows = (IR.net410Data && IR.net410Data.porMes) || [];
   IR.net410MesSel = rows.length ? rows[rows.length-1].mes : null;
 }
-function irSetNet410Mes(mes){ IR.net410MesSel = mes; irRenderView(); }
+function irSetNet410Mes(mes){ IR.net410MesSel = mes; irRenderNetTopFiltro(); irRenderView(); }
+// Filtro de Ano/Mês da aba NET — fica no topo do site (mesmo lugar do Ciclo/Mês das
+// outras abas, só que trocado quando a aba ativa é a NET), não dentro do corpo da
+// página. Selects vivem no index.html (#netAnoFilterSelect/#netMesFilterSelect);
+// aqui só populam as opções e mantêm o valor selecionado em dia com o estado.
+function irRenderNetTopFiltro(){
+  const selAno = document.getElementById('netAnoFilterSelect');
+  const selMes = document.getElementById('netMesFilterSelect');
+  if(!selAno || !selMes) return;
+  const anos = IR.net410Anos||[];
+  selAno.innerHTML = anos.map(a=>`<option value="${a}" ${a===IR.net410AnoSel?'selected':''}>${a}</option>`).join('');
+  const meses = (IR.net410Data && IR.net410Data.porMes) || [];
+  const mesAtual = IR.net410MesSel && meses.some(m=>m.mes===IR.net410MesSel) ? IR.net410MesSel : (meses.length ? meses[meses.length-1].mes : null);
+  selMes.innerHTML = meses.map(m=>`<option value="${m.mes}" ${m.mes===mesAtual?'selected':''}>${irEsc(IR_MES_NOMES[parseInt(m.mes.slice(5,7),10)-1]||m.mes)}</option>`).join('');
+  selMes.disabled = !meses.length;
+}
 function irProcessar410(){
   if(IR.net410Processing || !IR.net410File) return Promise.resolve(false);
   IR.net410Processing = true; IR.net410Progress = {stage:'Lendo arquivo...', pct:0};
@@ -3538,24 +3561,12 @@ function irRenderGestaoCiclo(){
   const topPos = ((mObj && mObj.topItensPositivos) || []).slice(0, 10);
   const topNeg = ((mObj && mObj.topItensNegativos) || []).slice(0, 10);
   return `
-    <div class="panel">
-      <div class="two-col" style="max-width:460px;">
-        <div><label>Ano</label><select onchange="irSetNet410Ano(this.value)">
-          ${anos.map(a=>`<option value="${a}" ${a===IR.net410AnoSel?'selected':''}>${a}</option>`).join('')}
-        </select></div>
-        <div><label>Mês</label><select onchange="irSetNet410Mes(this.value)" ${meses.length?'':'disabled'}>
-          ${meses.map(m=>`<option value="${m.mes}" ${m.mes===mesSel?'selected':''}>${irEsc(IR_MES_NOMES[parseInt(m.mes.slice(5,7),10)-1]||m.mes)}</option>`).join('')}
-        </select></div>
-      </div>
-      <p class="field-hint" style="margin-top:8px;">Independente do ciclo rotativo — a QRY410 traz todos os ajustes do CD (AIR é só um dos motivos), organizada por ano e mês.</p>
-    </div>
     ${netMensalRows.length ? `<div class="panel">
       <h3>NET Mensal em Colunas — ${d.ano}</h3>
-      <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna.</p>
-      ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B'})}
+      <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
+      ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:1200, H:260})}
     </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
     ${irRenderNet410PorObsMesTable(d)}
-    ${irRenderNet410PorDeptoMesTable(d)}
     <h3 style="margin:20px 0 -6px;">Itens que mais impactam o NET — ${irEsc(mesLabel)}</h3>
     <div class="bi-grid-2">
       ${irRenderNet410ItensPanel(topPos, false, 'Os 10 itens que mais aumentaram o NET em '+mesLabel+', só motivos considerados pro NET.')}

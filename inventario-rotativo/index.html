@@ -69,9 +69,17 @@
           <label>Ciclo</label>
           <div id="cycleBadge">Nenhum ciclo ativo</div>
         </div>
-        <div class="tb-filter">
+        <div class="tb-filter" id="tbFilterMesGeral">
           <label>Mês</label>
           <select id="monthFilterSelect" onchange="irSetMonthFilter(this.value)"><option value="">Todos</option></select>
+        </div>
+        <div class="tb-filter" id="tbFilterNetAno" hidden>
+          <label>Ano</label>
+          <select id="netAnoFilterSelect" onchange="irSetNet410Ano(this.value)"></select>
+        </div>
+        <div class="tb-filter" id="tbFilterNetMes" hidden>
+          <label>Mês</label>
+          <select id="netMesFilterSelect" onchange="irSetNet410Mes(this.value)"></select>
         </div>
       </div>
     </div>
