@@ -26,6 +26,7 @@ const MD = {
   tela:'descasados',
   regrasClasse:{},        // classe (CLAL) -> [siglas de restrição permitidas]
   classesSelecionadas:null, // null = todas; Set() = só as marcadas
+  execucaoAjuste:new Set(), // linhas do ajuste já feitas no coletor (checklist)
   f051:null, f390:null, f278:null,
   proc:{'051':false,'390':false,'278':false},
   progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0}},
@@ -457,12 +458,79 @@ function mdRenderMatrizClasses(){
   return { html, classesComErro };
 }
 
+/* Mesmo endereço + mesmo item (EAN) com quantidades diferentes em duas linhas
+   do ajuste: no WMS isso costuma ser dois lotes separados no mesmo local
+   (ver "Detalhes do Estoque"), e mandar as duas linhas pro coletor sem saber
+   disso quebra o estoque — o operador precisa tratar cada lote à parte.
+   Mesmo item+local com a MESMA quantidade não é sinal de nada, só duas linhas
+   iguais por coincidência. */
+function mdMarcarEstoqueDuplo(lista){
+  const porChave = new Map();
+  for(const l of lista){
+    const chave = (l.ean || l.componente) + '|' + l.localColetor;
+    if(!porChave.has(chave)) porChave.set(chave, []);
+    porChave.get(chave).push(l);
+  }
+  for(const grupo of porChave.values()){
+    const duplo = grupo.length > 1 && new Set(grupo.map(l=>l.quantidade)).size > 1;
+    for(const l of grupo) l.estoqueDuplo = duplo ? 'ESTOQUE DUPLO' : 'CONFORME';
+  }
+  return lista;
+}
+
+/* Checklist de execução: cada linha do ajuste marcada conforme o operador vai
+   digitando no coletor/PuTTY. Chave por componente+local+sentido (não muda
+   entre reimportações do mesmo cenário); quantidade não entra na chave —
+   senão um recálculo por 1 peça já desmarcaria tudo. Persistido no banco do
+   módulo pra sobreviver a fechar a aba no meio da execução. */
+function mdChaveExecucao(l){ return l.componente+'|'+l.localColetor+'|'+l.sentido; }
+function mdToggleExecutado(chave){
+  if(MD.execucaoAjuste.has(chave)) MD.execucaoAjuste.delete(chave);
+  else MD.execucaoAjuste.add(chave);
+  mdSetConfig('execucao-ajuste', Array.from(MD.execucaoAjuste));
+  irRenderView();
+}
+
+function mdRenderChecklistAjuste(lista){
+  if(!lista.length) return '';
+  mdMarcarEstoqueDuplo(lista);
+  const feitas = lista.filter(l=>MD.execucaoAjuste.has(mdChaveExecucao(l))).length;
+  const linhas = lista.map(l=>{
+    const chave = mdChaveExecucao(l);
+    const marcado = MD.execucaoAjuste.has(chave);
+    const duplo = l.estoqueDuplo === 'ESTOQUE DUPLO';
+    return `<tr class="${marcado?'md-exec-feita':''} ${duplo?'md-row-duplo':''}">
+      <td><input type="checkbox" ${marcado?'checked':''} onchange="mdToggleExecutado('${irEsc(chave)}')"></td>
+      <td class="mono md-left">${irEsc(l.localColetor)}</td>
+      <td class="mono">${irEsc(l.ean || '—')}</td>
+      <td class="mono">${irEsc(l.codDe)}</td>
+      <td class="mono">${irEsc(l.codPara)}</td>
+      <td class="mono">${irFmtInt(l.quantidade)}</td>
+      <td class="md-left">${irEsc(l.endereco || '—')}</td>
+      <td class="md-left ${duplo?'neg':'pos'}">${irEsc(l.estoqueDuplo)}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="md-head" style="margin-top:18px;">
+      <h3>Checklist de execução</h3>
+      <span class="field-hint">${irFmtInt(feitas)} de ${irFmtInt(lista.length)} concluídas — marque conforme for digitando no coletor</span>
+    </div>
+    <div class="table-wrap">
+      <table class="aud-table table-dense">
+        <thead><tr>
+          <th></th><th>Local (coletor)</th><th>EAN</th><th class="num">Orig</th><th class="num">Dest</th><th class="num">Qtde</th><th>Endereço</th><th>Estoque Duplo</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>`;
+}
+
 function mdRenderAjustes(){
   if(!mdTemDados()){
     return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 para montar o plano de ajuste.', "irSwitchTab('importacao')", 'Ir para a importação');
   }
   const chip = (ativo, onclick, texto)=>`<button class="chip ${ativo?'active':''}" onclick="${onclick}">${irEsc(texto)}</button>`;
   const plano = mdPlano();
+  const planoMarcado = plano.filter(l=>mdClasseMarcada(l.clal));
   const bloquear = plano.filter(l=>l.sentido==='bloquear').reduce((a,l)=>a+l.quantidade, 0);
   const liberar = plano.filter(l=>l.sentido==='liberar').reduce((a,l)=>a+l.quantidade, 0);
   const semEndereco = plano.filter(l=>l.semEndereco).length;
@@ -493,6 +561,7 @@ function mdRenderAjustes(){
       ${matriz.classesComErro ? ` <strong class="neg">${irFmtInt(matriz.classesComErro)} classe(s)</strong> com restrição fora da regra configurada — célula em vermelho.` : ''}
     </p>
     ${matriz.html}
+    ${mdRenderChecklistAjuste(planoMarcado)}
   </div>`;
 }
 
@@ -506,30 +575,20 @@ function mdExportarAjusteClasses(){
   mdGerarCsvAjuste(mdPlano().filter(l=>mdClasseMarcada(l.clal)));
 }
 
+/* Só o que vai pro coletor: local, item, restrição de/para, quantidade,
+   endereço (pra achar a peça) e o alerta de estoque duplo. O resto (pai,
+   descrição, saldo, preço...) é conferência que já está na tela — não
+   precisa duplicar na planilha. */
 function mdGerarCsvAjuste(lista){
   if(!lista.length){ irShowToast('Não há ajuste para exportar.'); return; }
-  // As quatro primeiras colunas são, na ordem, o que se digita no coletor:
-  // local (5000+id), restrição de origem, restrição de destino e quantidade.
-  // O resto é conferência, e fica depois justamente pra não atrapalhar quem
-  // copia a faixa e cola.
-  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde',
-    'Sentido','Sigla origem','Sigla destino','Item pai','Descrição do pai','Componente','Descrição',
-    'Carrega valor','Por múltiplo','Saldo WN','Saldo 86','Alvo WN','Múltiplos vendáveis','Múltiplos possíveis',
-    'Id do local','Endereço','Prédio','Saldo no endereço','Preço unitário','Valor'];
+  mdMarcarEstoqueDuplo(lista);
+  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Estoque Duplo'];
   const cel = v=>{
     const s = String(v ?? '');
     return /[;"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   };
-  const num = n=>String((n||0).toFixed(2)).replace('.', ',');
   const linhas = lista.map(l=>[
-    l.localColetor, l.ean, l.codDe, l.codPara, irFmtInt(l.quantidade),
-    l.sentido==='bloquear' ? 'Bloquear' : 'Liberar', l.de, l.para,
-    l.pai, l.nomePai, l.componente, l.nome,
-    l.inInterface==='S' ? 'Sim' : 'Não', irFmtInt(l.qtdePorMultiplo),
-    irFmtInt(l.wn), irFmtInt(l.bloqueado), irFmtInt(l.alvoWn),
-    irFmtInt(l.completos), irFmtInt(l.completosPotencial),
-    l.local, l.endereco, l.predio, irFmtInt(l.saldoLocal),
-    num(l.preco), num(l.valor)
+    l.localColetor, l.ean, l.codDe, l.codPara, irFmtInt(l.quantidade), l.endereco, l.estoqueDuplo
   ].map(cel).join(';'));
   // BOM na frente: sem ele o Excel em pt-BR abre o arquivo como Latin-1 e come
   // todos os acentos das descrições.
@@ -767,6 +826,7 @@ async function mdRecarregar(){
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
   MD.regrasClasse = (await mdGetConfig('regras-classe')) || {};
+  MD.execucaoAjuste = new Set((await mdGetConfig('execucao-ajuste')) || []);
   mdInvalidarCache();
 }
 async function irInit(){

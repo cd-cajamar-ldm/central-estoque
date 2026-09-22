@@ -63,12 +63,16 @@ function mdNomeRestricao(sigla){ return MD_NOME_POR_SIGLA[sigla] || sigla || '�
 const MD_ORDEM_RESTRICOES = [MD_SIGLA_VENDAVEL, MD_SIGLA_BLOQUEIO]
   .concat(MD_RESTRICOES.map(r=>r.sigla).filter(s=>s!==MD_SIGLA_VENDAVEL && s!==MD_SIGLA_BLOQUEIO));
 
-/* O coletor pede o endereço como 5000 + ID do local: o operador digita
-   5000132564 pro local 132564. O relatório já sai assim, pronto pra colar. */
-const MD_PREFIXO_LOCAL = '5000';
+/* O coletor pede o endereço com 10 dígitos: ID do local completado com zero à
+   esquerda depois do 5 (5000132564 pro local 132564, de 6 dígitos). Local de
+   7 dígitos usa menos zero (500 em vez de 5000) pra fechar nos mesmos 10 —
+   grudar sempre "5000" na frente estourava o endereço quando o local vinha
+   com um dígito a mais. */
 function mdLocalColetor(idLocal){
   const s = String(idLocal ?? '').trim();
-  return s ? MD_PREFIXO_LOCAL + s : '';
+  if(!s) return '';
+  const prefixo = '5' + '0'.repeat(Math.max(0, 9 - s.length));
+  return prefixo + s;
 }
 
 /* Normaliza código de item. A 051 traz o código como número (857513.0) e a 390

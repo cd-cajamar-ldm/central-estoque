@@ -86,3 +86,11 @@ table.md-piv td.md-piv-check{ text-align:center; }
 table.md-piv input[type="checkbox"]{ accent-color:var(--orange); width:14px; height:14px; cursor:pointer; }
 table.md-config-table td{ text-align:center; }
 table.md-config-table td.md-left{ text-align:left; }
+
+/* Checklist de execução (Ajustes): linha já feita esmaece e risca — some sem
+   sumir, o operador ainda confere se precisar voltar. Estoque duplo (mesmo
+   item+local com quantidade diferente em duas linhas) fica com fundo de
+   alerta, porque é a linha que exige cuidado extra antes de digitar. */
+tr.md-exec-feita td{ opacity:.45; text-decoration:line-through; }
+tr.md-row-duplo td{ background:var(--danger-light); }
+.aud-table input[type="checkbox"]{ accent-color:var(--orange); width:14px; height:14px; cursor:pointer; }
