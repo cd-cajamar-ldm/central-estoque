@@ -367,12 +367,57 @@ function mdMatrizPor(chave){
   return porValor;
 }
 
+function mdRegraDe(chave, valor){
+  const regra = MD.regras[chave] && MD.regras[chave][valor];
+  return (regra && regra.length) ? regra : null;
+}
 /* Restrição fora da regra configurada em Configurações. Sem regra salva pra
    esse valor, não dá pra dizer se está certo ou errado — não valida. */
 function mdRestricaoPermitidaEm(chave, valor, sigla){
-  const regra = MD.regras[chave] && MD.regras[chave][valor];
-  if(!regra || !regra.length) return true;
-  return regra.includes(sigla);
+  const regra = mdRegraDe(chave, valor);
+  return !regra || regra.includes(sigla);
+}
+
+/* Plano de correção de restrição (aba Ajustes de Restrição) — não confundir
+   com o plano de pareamento de múltiplos descasados (aba Descasados, outra
+   lógica, outro botão). Aqui o problema é a REGRA configurada em
+   Configurações: peça numa restrição que não está marcada como permitida
+   pra aquela classe/X1+X2 volta pra uma que está. WN é o destino sempre que
+   WN estiver entre as permitidas (é o normal — 86 fica de fora da correção
+   de propósito, porque quem decide o que vai pra 86 é o pareamento da aba
+   Descasados, não esta tela); com WN fora e mais de uma restrição permitida
+   ao mesmo tempo não dá pra escolher sem chute — a linha fica de fora até o
+   cadastro em Configurações ter só uma opção certa. Sem regra pro valor,
+   nada é corrigido (mesmo critério da validação da matriz). */
+function mdPlanoCorrecaoRestricao(){
+  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+  const out = [];
+  for(const s of (MD.saldos||[])){
+    for(const loc of (s.locais||[])){
+      let regra = null;
+      for(const dim of MD_DIMENSOES){
+        const r = mdRegraDe(dim.chave, dim.valor(loc));
+        if(r && !r.includes(loc.restricao)){ regra = r; break; }
+      }
+      if(!regra) continue;
+      const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
+        : (regra.length===1 ? regra[0] : null);
+      if(!destino) continue;
+      const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
+      for(const ref of refs){
+        const quantidade = ref[campo] || 0;
+        if(!quantidade) continue;
+        out.push({
+          codDe: mdCodRestricao(loc.restricao), codPara: mdCodRestricao(destino),
+          localColetor: mdLocalColetor(loc.local),
+          local: loc.local, endereco: loc.desc, predio: loc.predio,
+          clal: loc.clal, x1: loc.x1, x2: loc.x2,
+          componente: s.item, ean: s.ean, quantidade
+        });
+      }
+    }
+  }
+  return out;
 }
 
 function mdValorMarcado(chave, valor){
@@ -496,9 +541,11 @@ function mdRenderAjustes(){
 function mdExportarAjustePivot(){
   mdGerarCsvAjuste(mdPlanoAjuste(mdPaisFiltrados(), MD.base));
 }
-/* Ajustes: respeita classe e X1/X2 marcados nas duas matrizes. */
+/* Ajustes de Restrição: corrige as células fora da regra (não é o plano de
+   pareamento da aba Descasados — ver mdPlanoCorrecaoRestricao), respeitando
+   classe e X1/X2 marcados nas duas matrizes. */
 function mdExportarAjusteClasses(){
-  mdGerarCsvAjuste(mdPlano().filter(l=>
+  mdGerarCsvAjuste(mdPlanoCorrecaoRestricao().filter(l=>
     MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
   ));
 }
