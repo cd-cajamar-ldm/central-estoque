@@ -898,7 +898,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v189';
+const IR_APP_VERSION = 'v190';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1543,6 +1543,7 @@ function irRenderPorLogPanel(ind){
 function irBuildLogBarChartSvg(rows, opts){
   opts = opts||{};
   const colors = opts.colors || {pecas:'#FA4616', posicoes:'#001A72', valor:'#1D1F2A', grid:'#E4E7EE', axis:'#6B7280'};
+  const meta = opts.meta!=null ? opts.meta : IR_META_ACURACIA;
   // W fixo = largura real do conteúdo dentro de .rp-panel-pad no boletim (920 de
   // .rp-page − 2×40 de padding do .rp-body − 2×20 de padding do .rp-panel-pad).
   // Usando esse valor exato (em vez de escalar por aspect-ratio) o SVG desenha 1:1
@@ -1552,7 +1553,7 @@ function irBuildLogBarChartSvg(rows, opts){
   const padL = 14, padR = 14, padT = 46, padB = 34;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const n = rows.length, groupW = plotW/n;
-  const barW = Math.min(46, groupW/3*0.8), gap = 5;
+  const barW = Math.min(40, groupW/3*0.62), gap = 5;
   const series = [
     {key:'acuraciaPecas', color:colors.pecas},
     {key:'acuraciaPosicoes', color:colors.posicoes},
@@ -1575,7 +1576,10 @@ function irBuildLogBarChartSvg(rows, opts){
     const y = padT+plotH-t*plotH;
     return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="${colors.grid}" stroke-width="1"/>`;
   }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${gridLines}${bars}${labels}${xLabels}</svg>`;
+  const metaY = padT + plotH*(1-meta);
+  const metaLine = `<line x1="${padL}" y1="${metaY.toFixed(1)}" x2="${W-padR}" y2="${metaY.toFixed(1)}" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="${W-padR}" y="${(padT-28).toFixed(1)}" font-size="13" text-anchor="end" fill="#6B7280" font-weight="700">- - Meta ${(meta*100).toFixed(0)}%</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${gridLines}${metaLine}${bars}${labels}${xLabels}</svg>`;
 }
 /* Gráfico de barras (Contados por Dia) pro boletim, com a mesma linha de
    meta tracejada do painel do Dashboard — SVG estático, cores fixas. */
@@ -2251,6 +2255,10 @@ function irGerarRelatorioEmail(){
     mes:m.mes, net:m.net, label: IR_MES_NOMES_ABREV[parseInt(m.mes.slice(5,7),10)-1]
   }));
   const netMensalTotal = netMensalRows.reduce((s,r)=>s+r.net,0);
+  // Coluna de Total no fim do gráfico — a tabela logo abaixo já tinha essa coluna,
+  // mas ela sai da largura fixa do boletim com muitos meses e fica de fora da
+  // imagem gerada. No gráfico ela sempre aparece, porque as barras se reajustam.
+  const netMensalRowsComTotal = netMensalRows.length ? [...netMensalRows, {mes:'total', net:netMensalTotal, label:'Total'}] : netMensalRows;
   const html = `<div class="rp-page">
     <div class="rp-hero">
       <div class="rp-hero-top">
@@ -2269,7 +2277,7 @@ function irGerarRelatorioEmail(){
 
     ${netMensalRows.length ? `${sectionTitle('📈','NET Mensal em Colunas','QRY410 — mesmo valor da tabela abaixo, um mês por coluna pra facilitar a leitura lado a lado')}
     <div class="rp-panel rp-panel-pad">
-      ${irBuildColunasComBaseZeroSvg(netMensalRows, {campo:'net', fmt:irFmtMoney, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B'})}
+      ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B'})}
       <div class="table-wrap" style="margin-top:14px;"><table class="rp-table">
         <thead><tr><th>Indicador</th>${netMensalRows.map(r=>`<th>${irEsc(r.label)}</th>`).join('')}<th>Total ${irEsc(String(IR.net410AnoSel||''))}</th></tr></thead>
         <tbody><tr><td>NET</td>${netMensalRows.map(r=>`<td style="color:${r.net>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(r.net)}</td>`).join('')}<td style="font-weight:800;">${irFmtMoney(netMensalTotal)}</td></tr></tbody>
@@ -2330,17 +2338,17 @@ function irGerarRelatorioEmail(){
     </div>
     ${sectionTitle('💰','Valor Divergente por Dia','soma do valor divergente absoluto (QRY0843), por dia de fechamento do local')}
     <div class="rp-panel rp-panel-pad">
-      ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#1D1F2A', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'valor', fmt:irFmtMoney})}
+      ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#1D1F2A', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'valor', fmt:irFmtMoneyCompact})}
     </div>
     ${sectionTitle('📍','Locais Divergentes por Dia','locais fechados com pelo menos 1 item divergente, por dia')}
     <div class="rp-panel rp-panel-pad">
       ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#001A72', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'locais', fmt:irFmtInt})}
     </div>` : ''}
 
-    ${sectionTitle('🛣️','Ruas mais divergentes','todas as ruas, por peças divergentes')}
+    ${sectionTitle('🛣️','Top 10 Ruas mais divergentes','por peças divergentes')}
     <div class="rp-panel"><table class="rp-table">
       <thead><tr><th>Rua</th><th>Peças divergentes</th><th>Locais divergentes</th><th>Valor divergente</th><th>Acurácia Peças</th><th>Acurácia Locais</th><th>Acurácia Valor</th></tr></thead>
-      <tbody>${rua.map(r=>`<tr>
+      <tbody>${rua.slice(0, 10).map(r=>`<tr>
         <td>${irEsc(r.chave)}</td>
         <td>${irFmtInt(r.pecasDivergentes)}</td>
         <td>${irFmtInt(r.locaisDivergentes)}</td>
