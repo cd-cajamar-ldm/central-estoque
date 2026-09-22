@@ -787,9 +787,18 @@ const MD_TELAS = {
   configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
   importacao:['Importação','ZBIQ0051, QRY0390 e SIGEQ278 — as bases do módulo.']
 };
+let irUltimaTelaRenderizada = null;
 function irRenderView(){
   const raiz = document.getElementById('viewRoot');
   if(!raiz) return;
+  // Expandir/recolher uma linha do pivô (ou qualquer outra ação que force um
+  // re-render dentro da MESMA aba) troca o innerHTML inteiro — e sem isso a
+  // rolagem interna da tabela (.md-piv-wrap tem overflow próprio) voltava pro
+  // topo, jogando fora o lugar onde a pessoa tinha acabado de abrir algo. Numa
+  // troca de aba os wraps são de outra tabela — não faz sentido herdar scroll.
+  const mesmaTela = irUltimaTelaRenderizada === MD.tela;
+  const scrolls = mesmaTela ? Array.from(raiz.querySelectorAll('.md-piv-wrap')).map(el=>el.scrollTop) : [];
+  irUltimaTelaRenderizada = MD.tela;
   if(MD.initErro){
     raiz.innerHTML = irEmptyState('Não consegui abrir o banco do navegador', MD.initErro, null, null);
     return;
@@ -798,6 +807,7 @@ function irRenderView(){
                  : MD.tela==='ajustes'       ? mdRenderAjustes()
                  : MD.tela==='configuracoes' ? mdRenderConfiguracoes()
                  : mdRenderDescasados();
+  if(mesmaTela) raiz.querySelectorAll('.md-piv-wrap').forEach((el, i)=>{ if(scrolls[i]) el.scrollTop = scrolls[i]; });
 }
 function irSwitchTab(tela){
   MD.tela = MD_TELAS[tela] ? tela : 'descasados';
