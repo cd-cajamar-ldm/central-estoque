@@ -902,7 +902,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v193';
+const IR_APP_VERSION = 'v194';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1661,7 +1661,13 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
     labels += `<text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="13" text-anchor="middle" fill="${corLabel}" font-weight="700">${fmt(v)}</text>`;
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="12.5" text-anchor="middle" fill="${corAxis}" font-weight="600">${irEsc(xLabel(r))}</text>`;
   });
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${baseLine}${bars}${labels}${xLabels}</svg>`;
+  // height:auto (em vez de height="${H}" fixo) — sem isso, num painel bem mais largo
+  // que os 800 do viewBox (caso da aba NET, painel de largura cheia), o navegador
+  // desenhava o gráfico no tamanho original e centralizava, sobrando um vão vazio
+  // enorme dos dois lados em vez de ocupar o painel. Com altura automática, a caixa
+  // do SVG cresce na mesma proporção da largura e o desenho preenche tudo, só maior
+  // (mesma técnica já usada em irBuildAcuraciaCiclosSvg).
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto;">${baseLine}${bars}${labels}${xLabels}</svg>`;
 }
 /* Gráfico de barras agrupadas (3 séries por ciclo: Peças/Locais/Valor) — "Comparativo
    de Acurácias entre Ciclos" do Dashboard. Ciclo sem indicadores ainda (não processado)
