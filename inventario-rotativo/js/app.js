@@ -898,7 +898,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v186';
+const IR_APP_VERSION = 'v187';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2287,10 +2287,14 @@ function irGerarRelatorioEmail(){
         </div>
         ${top5Ruas.length ? `<div class="rp-month-list">
           <div class="rp-month-title">Top 5 Ruas mais divergentes</div>
+          <div class="rp-month-row">
+            <div></div><div></div>
+            <div class="rp-month-val-head">Peças div.<span class="rp-month-val-sub">Acurácia</span></div>
+          </div>
           ${top5Ruas.map(r=>`<div class="rp-month-row">
             <div class="rp-month-label">${irEsc(r.chave)}</div>
             <div class="rp-month-track"><div class="rp-month-fill" style="width:${Math.round(r.pecasDivergentes/maxRuaDiv*100)}%;"></div></div>
-            <div class="rp-month-val">${irFmtInt(r.pecasDivergentes)}</div>
+            <div class="rp-month-val">${irFmtInt(r.pecasDivergentes)}<span class="rp-month-val-sub">${irFmtPct(r.acuraciaPecas)}</span></div>
           </div>`).join('')}
         </div>` : ''}
       </div>
