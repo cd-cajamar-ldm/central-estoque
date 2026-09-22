@@ -475,12 +475,32 @@ function mdToggleExecutado(chave){
   irRenderView();
 }
 
+/* Local(10) + EAN(13) + Orig(2) + Dest(2) + Qtde, sem separador — cola direto
+   no campo Local da tela Altera Restrição (12.MOVI) e o cursor pula sozinho
+   de campo em campo, testado com o coletor de verdade. Falta só o Shift+F6,
+   que é tecla de controle e não vai em texto colado — isso fica por conta
+   de quem está digitando, depois de conferir os campos preenchidos. */
+function mdTextoColarLinha(l){
+  const orig = String(l.codDe ?? '').padStart(2,'0');
+  const dest = String(l.codPara ?? '').padStart(2,'0');
+  const ean = String(l.ean ?? '').padStart(13,'0');
+  return l.localColetor + ean + orig + dest + irFmtInt(l.quantidade);
+}
+function mdCopiarTexto(texto){
+  navigator.clipboard.writeText(texto).then(()=>{
+    irShowToast('Copiado — cola no campo Local (Ctrl+Shift+V) e confere antes do Shift+F6.');
+  }).catch(()=>{
+    irShowToast('Não consegui copiar automaticamente: '+texto, true);
+  });
+}
+
 function mdRenderChecklistAjuste(lista){
   if(!lista.length) return '';
   const feitas = lista.filter(l=>MD.execucaoAjuste.has(mdChaveExecucao(l))).length;
   const linhas = lista.map(l=>{
     const chave = mdChaveExecucao(l);
     const marcado = MD.execucaoAjuste.has(chave);
+    const textoColar = mdTextoColarLinha(l);
     return `<tr class="${marcado?'md-exec-feita':''}">
       <td><input type="checkbox" ${marcado?'checked':''} onchange="mdToggleExecutado('${irEsc(chave)}')"></td>
       <td class="mono md-left">${irEsc(l.localColetor)}</td>
@@ -489,16 +509,17 @@ function mdRenderChecklistAjuste(lista){
       <td class="mono">${irEsc(l.codPara)}</td>
       <td class="mono">${irFmtInt(l.quantidade)}</td>
       <td class="md-left">${irEsc(l.endereco || '—')}</td>
+      <td><button class="btn-link" onclick="mdCopiarTexto('${irEsc(textoColar)}')" title="Copia Local+EAN+Orig+Dest+Qtde pronto pra colar no campo Local">Copiar</button></td>
     </tr>`;
   }).join('');
   return `<div class="md-head" style="margin-top:18px;">
       <h3>Checklist de execução</h3>
-      <span class="field-hint">${irFmtInt(feitas)} de ${irFmtInt(lista.length)} concluídas — marque conforme for digitando no coletor</span>
+      <span class="field-hint">${irFmtInt(feitas)} de ${irFmtInt(lista.length)} concluídas — copia, cola no campo Local, confere e Shift+F6</span>
     </div>
     <div class="table-wrap">
       <table class="aud-table table-dense">
         <thead><tr>
-          <th></th><th>Local (coletor)</th><th>EAN</th><th class="num">Orig</th><th class="num">Dest</th><th class="num">Qtde</th><th>Endereço</th>
+          <th></th><th>Local (coletor)</th><th>EAN</th><th class="num">Orig</th><th class="num">Dest</th><th class="num">Qtde</th><th>Endereço</th><th>Colar</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
