@@ -1042,12 +1042,18 @@ function irRenderDashboard(){
    de Peças, um vermelho mais escuro, porque o laranja padrão e o vermelho
    padrão são indistinguíveis lado a lado (inclusive para daltônicos).
    ============================================================ */
+/* rotContado de Peças/Valor mostra o SISTÊMICO (base da acurácia: 1 − divergente ÷
+   sistêmico), não a física contada — senão a % não bate com as duas barras visíveis
+   (pedido explícito do usuário, que reparou a conta não fechando com "contado" na
+   tela). Peças/Valor físico contado continua disponível nos KPIs do topo e nas
+   tabelas por Rua/Log. Locais não muda: a base da Acurácia Local já É o total de
+   locais contados, sem número escondido. */
 const IR_MES_SERIES = {
-  pecas:  {titulo:'Peças',  rotContado:'Peças contadas',  rotDiv:'Peças divergentes',
+  pecas:  {titulo:'Peças',  rotContado:'Peças sistêmicas', rotDiv:'Peças divergentes',
            cont:'var(--mes-pecas-cont)',  div:'var(--mes-pecas-div)',  acc:'var(--mes-pecas-cont)'},
-  locais: {titulo:'Locais', rotContado:'Locais contados', rotDiv:'Locais divergentes',
+  locais: {titulo:'Locais', rotContado:'Locais contados',  rotDiv:'Locais divergentes',
            cont:'var(--mes-locais-cont)', div:'var(--mes-locais-div)', acc:'var(--mes-locais-cont)'},
-  valor:  {titulo:'Valor',  rotContado:'Valor contado',   rotDiv:'Valor divergente',
+  valor:  {titulo:'Valor',  rotContado:'Valor sistêmico',  rotDiv:'Valor divergente',
            cont:'var(--mes-valor-cont)',  div:'var(--mes-valor-div)',  acc:'var(--mes-valor-cont)'}
 };
 const IR_MES_ABREV = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
@@ -1128,6 +1134,14 @@ function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
     ${faixa}
   </svg></div>`;
 }
+// Total do período = soma bruta dos meses, não média das % mensais (mesma
+// metodologia ponderada por volume usada no resto do app — ver irCalcLogTotal).
+function irEvolucaoMensalTotal(rows, cfg, fmtVal){
+  const totalContado = rows.reduce((s,r)=>s+(r.contado||0),0);
+  const totalDivergente = rows.reduce((s,r)=>s+(r.divergente||0),0);
+  const totalAcuracia = totalContado>0 ? Math.max(0,1-totalDivergente/totalContado) : null;
+  return `<p class="field-hint mes-total">Total do período: ${irEsc(cfg.rotContado)} ${irEsc(fmtVal(totalContado))} · ${irEsc(cfg.rotDiv)} ${irEsc(fmtVal(totalDivergente))} · Acurácia ${totalAcuracia==null?'—':irFmtPct(totalAcuracia)}</p>`;
+}
 function irEvolucaoMensalBloco(rows, cfg, fmtVal){
   return `<div class="mes-bloco">
     <div class="mes-legend">
@@ -1136,6 +1150,7 @@ function irEvolucaoMensalBloco(rows, cfg, fmtVal){
       <span class="mes-legend-right">Acurácia na faixa ${irFmtPct(irMesAccFloor(rows))}→100% · traço = meta ${irFmtPct(IR_META_ACURACIA)}</span>
     </div>
     ${irBuildEvolucaoMensalSvg(rows, cfg, fmtVal)}
+    ${irEvolucaoMensalTotal(rows, cfg, fmtVal)}
   </div>`;
 }
 /* Une o porMes de todos os ciclos do ano. Cada ciclo cobre um trimestre, então
@@ -1179,21 +1194,21 @@ function irRenderEvolucaoMensalPanel(ind){
     </div>`;
   }
   const linhas = m => ({
-    pecas:  {mes:m.mes, contado:m.pecasContadas,  divergente:m.pecasDivergentes,  acuracia:m.acuraciaPecas},
-    locais: {mes:m.mes, contado:m.locaisContados, divergente:m.locaisDivergentes, acuracia:m.acuraciaLocal},
-    valor:  {mes:m.mes, contado:m.valorContado,   divergente:m.valorDivergente,   acuracia:m.acuraciaValor}
+    pecas:  {mes:m.mes, contado:m.pecasSaldoLogico, divergente:m.pecasDivergentes,  acuracia:m.acuraciaPecas},
+    locais: {mes:m.mes, contado:m.locaisContados,   divergente:m.locaisDivergentes, acuracia:m.acuraciaLocal},
+    valor:  {mes:m.mes, contado:m.valorSaldoLogico, divergente:m.valorDivergente,   acuracia:m.acuraciaValor}
   });
   const dados = meses.map(linhas);
   const tabela = `<details class="mes-tabela"><summary>Ver os números em tabela</summary>
     <div class="table-wrap"><table>
-      <thead><tr><th>Mês</th><th>Peças contadas</th><th>Peças div.</th><th>Acur. Peças</th>
+      <thead><tr><th>Mês</th><th>Peças sistêmicas</th><th>Peças div.</th><th>Acur. Peças</th>
         <th>Locais contados</th><th>Locais div.</th><th>Acur. Local</th>
-        <th>Valor contado</th><th>Valor div.</th><th>Acur. Valor</th></tr></thead>
+        <th>Valor sistêmico</th><th>Valor div.</th><th>Acur. Valor</th></tr></thead>
       <tbody>${meses.map(m=>`<tr>
         <td>${irEsc(irMesLabel(m.mes))}</td>
-        <td class="mono">${irFmtInt(m.pecasContadas)}</td><td class="mono">${irFmtInt(m.pecasDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaPecas)}</td>
+        <td class="mono">${irFmtInt(m.pecasSaldoLogico)}</td><td class="mono">${irFmtInt(m.pecasDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaPecas)}</td>
         <td class="mono">${irFmtInt(m.locaisContados)}</td><td class="mono">${irFmtInt(m.locaisDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaLocal)}</td>
-        <td class="mono">${irFmtMoneyInt(m.valorContado)}</td><td class="mono">${irFmtMoneyInt(m.valorDivergente)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaValor)}</td>
+        <td class="mono">${irFmtMoneyInt(m.valorSaldoLogico)}</td><td class="mono">${irFmtMoneyInt(m.valorDivergente)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaValor)}</td>
       </tr>`).join('')}</tbody>
     </table></div>
   </details>`;
