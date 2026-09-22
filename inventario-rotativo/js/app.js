@@ -902,7 +902,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v194';
+const IR_APP_VERSION = 'v195';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1641,7 +1641,11 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
   opts = opts||{};
   const corPos = opts.corPos||'#001A72', corNeg = opts.corNeg||'#C0392B', corAxis = opts.corAxis||'#6B7280', corLabel = opts.corLabel||'#1D1F2A';
   const campo = opts.campo||'valor', fmt = opts.fmt||irFmtMoney, xLabel = opts.xLabel||(r=>r.label);
-  const W = 800, H = 260;
+  // W/H por parâmetro (mesma ideia do irBuildAcuraciaCiclosSvg): o boletim usa o
+  // padrão 800x260 (largura fixa da página impressa), mas um painel de tela cheia
+  // (aba NET) pode pedir um W maior pra desenhar já perto do tamanho real do
+  // painel — sem isso o SVG ficava pequeno e centralizado, sobrando vão vazio.
+  const W = opts.W||800, H = opts.H||260;
   const padL = 14, padR = 14, padT = 34, padB = 30;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const n = rows.length;
@@ -1661,13 +1665,7 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
     labels += `<text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="13" text-anchor="middle" fill="${corLabel}" font-weight="700">${fmt(v)}</text>`;
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="12.5" text-anchor="middle" fill="${corAxis}" font-weight="600">${irEsc(xLabel(r))}</text>`;
   });
-  // height:auto (em vez de height="${H}" fixo) — sem isso, num painel bem mais largo
-  // que os 800 do viewBox (caso da aba NET, painel de largura cheia), o navegador
-  // desenhava o gráfico no tamanho original e centralizava, sobrando um vão vazio
-  // enorme dos dois lados em vez de ocupar o painel. Com altura automática, a caixa
-  // do SVG cresce na mesma proporção da largura e o desenho preenche tudo, só maior
-  // (mesma técnica já usada em irBuildAcuraciaCiclosSvg).
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto;">${baseLine}${bars}${labels}${xLabels}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${baseLine}${bars}${labels}${xLabels}</svg>`;
 }
 /* Gráfico de barras agrupadas (3 séries por ciclo: Peças/Locais/Valor) — "Comparativo
    de Acurácias entre Ciclos" do Dashboard. Ciclo sem indicadores ainda (não processado)
@@ -3552,10 +3550,9 @@ function irRenderGestaoCiclo(){
     ${netMensalRows.length ? `<div class="panel">
       <h3>NET Mensal em Colunas — ${d.ano}</h3>
       <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna.</p>
-      ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B'})}
+      ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:1200, H:260})}
     </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
     ${irRenderNet410PorObsMesTable(d)}
-    ${irRenderNet410PorDeptoMesTable(d)}
     <h3 style="margin:20px 0 -6px;">Itens que mais impactam o NET — ${irEsc(mesLabel)}</h3>
     <div class="bi-grid-2">
       ${irRenderNet410ItensPanel(topPos, false, 'Os 10 itens que mais aumentaram o NET em '+mesLabel+', só motivos considerados pro NET.')}
