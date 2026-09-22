@@ -840,7 +840,12 @@ async function irInit(){
   irUpdateThemeLabel();
   irApplyZoom(parseInt(localStorage.getItem('ir-zoom'), 10) || 100);
   const versao = document.getElementById('sidebarVersao');
-  if(versao) versao.textContent = MD_APP_VERSION;
+  if(versao){
+    const build = window.MD_BUILD;
+    versao.textContent = (build && build.commit && build.commit!=='local')
+      ? `${MD_APP_VERSION} · ${build.commit} · ${build.data}`
+      : MD_APP_VERSION;
+  }
   try{
     await mdRecarregar();
   }catch(e){

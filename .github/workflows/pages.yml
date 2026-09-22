@@ -25,6 +25,13 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure Pages
         uses: actions/configure-pages@v5
+      - name: Gravar versão do build (Múltiplos Descasados)
+        # O rodapé do módulo mostra commit + horário deste deploy — é assim que
+        # dá pra confirmar, sem abrir o console, se uma alteração já subiu de
+        # verdade, em vez de só confiar num "v2" fixo que nunca muda.
+        run: |
+          echo "window.MD_BUILD = { commit: '$(git rev-parse --short HEAD)', data: '$(date -u +"%d/%m %H:%M UTC")' };" \
+            > multiplos-descasados/js/version.js
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
