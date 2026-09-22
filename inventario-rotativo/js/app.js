@@ -300,7 +300,7 @@ function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)|
 
 const IR_TAB_LABELS = {
   dashboard:['Dashboard Executivo','Visão geral do ciclo ativo.'],
-  ciclo:['NET','Meta x realizado do ciclo e detalhe de NET por Log/Rua/Tipo.'],
+  ciclo:['NET','Aba em reconstrução.'],
   produtividade:['Produtividade','Ritmo, meta, qualidade e capacidade da equipe.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
@@ -898,7 +898,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v190';
+const IR_APP_VERSION = 'v192';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -3500,58 +3500,16 @@ function irRenderNet410ItensMesSection(d){
 /* ============================================================
    GESTÃO DO CICLO
    ============================================================ */
-/* Aba "NET" (ex-"Gestão do Ciclo") — comparação meta x realizado do ciclo e tabela
-   detalhada de NET por combinação Log/Rua/Tipo. Primeiro rascunho: layout e colunas
-   ainda serão ajustados conforme o usuário revisar. */
+/* Aba "NET" — em reconstrução. O conteúdo anterior (meta x realizado, painel da
+   QRY410, "por que o NET está distorcido") foi retirado a pedido do usuário pra
+   essa aba ser refeita do zero; irRenderNet410Panel/irRenderNetDistorcaoPanel
+   continuam definidas abaixo, só não são mais chamadas daqui. */
 function irRenderGestaoCiclo(){
-  const c = IR.cicloAtivo, ind = IR.indicadores;
-  const metaRows = ind ? [
-    {label:'Acurácia Peças', meta: ind.meta, real: ind.acuraciaPecas},
-    {label:'Acurácia Locais', meta: ind.meta, real: ind.acuraciaLocal},
-    {label:'Acurácia Valor', meta: ind.meta, real: ind.acuraciaValor},
-    {label:'Andamento do ciclo', meta: 1, real: ind.andamentoCiclo}
-  ] : [];
   return `
     <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <div>
-          <h3 style="margin-bottom:4px;">${irCicloLabel(c)} — ${irCicloStatus(c)==='aberto'?'Aberto':'Encerrado'}</h3>
-          <p class="field-hint">Abertura: ${irFmtDate(c.dataAbertura)} · Término previsto: ${irFmtDate(c.dataPrevistaTermino)}${c.dataEncerramento?' · Encerrado em: '+irFmtDate(c.dataEncerramento):''}</p>
-        </div>
-        <div class="form-actions" style="margin:0;">
-          ${irCicloStatus(c)==='aberto' ? `<button class="btn btn-secondary" onclick="irEncerrarCiclo()">Encerrar ciclo</button>` : ''}
-          <button class="btn btn-primary" onclick="irSwitchTab('importacao')">Atualizar dados do ciclo</button>
-        </div>
-      </div>
-      ${ind ? `<div class="progress-track" style="margin-top:14px;"><div class="progress-fill" style="width:${Math.min(100,ind.andamentoCiclo*100)}%;"></div></div>
-      <p class="field-hint" style="margin-top:6px;">${irFmtInt(ind.locaisConcluidos)} de ${irFmtInt(ind.locaisCongelados)} locais concluídos (${irFmtPct(ind.andamentoCiclo)})</p>` : ''}
+      <h3>Aba em reconstrução</h3>
+      <p class="field-hint">Essa aba vai ser refeita. Em breve.</p>
     </div>
-    ${ind ? `<div class="panel">
-      <h3>Como deveria estar x Como estamos</h3>
-      <p class="panel-sub">Meta do ciclo comparada ao realizado até agora.</p>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Indicador</th><th>Deveria estar (meta)</th><th>Estamos (realizado)</th><th>Diferença</th></tr></thead>
-        <tbody>
-          ${metaRows.map(r=>{
-            const diff = r.real - r.meta, ok = diff>=0;
-            return `<tr>
-              <td>${r.label}</td>
-              <td class="mono">${irFmtPct(r.meta)}</td>
-              <td class="mono" style="${irHeatStyle(r.real, r.meta)}">${irFmtPct(r.real)}</td>
-              <td class="mono" style="color:${ok?'var(--success)':'var(--danger)'};font-weight:700;">${ok?'+':''}${irFmtPct(diff)}</td>
-            </tr>`;
-          }).join('')}
-          <tr>
-            <td>NET (divergência líquida)</td>
-            <td class="mono">${irFmtMoney(0)}</td>
-            <td class="mono" style="color:${Math.abs(ind.valorDivergenteLiquido)<1?'var(--success)':'var(--danger)'};font-weight:700;">${irFmtMoney(ind.valorDivergenteLiquido)}</td>
-            <td class="mono">${irFmtMoney(-ind.valorDivergenteLiquido)}</td>
-          </tr>
-        </tbody>
-      </table></div>
-    </div>` : ''}
-    ${irRenderNet410Panel()}
-    ${irRenderNetDistorcaoPanel()}
   `;
 }
 async function irEncerrarCiclo(){
