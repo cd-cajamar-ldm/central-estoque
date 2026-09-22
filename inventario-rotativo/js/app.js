@@ -896,7 +896,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v183';
+const IR_APP_VERSION = 'v184';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1093,13 +1093,19 @@ function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
      sempre, só que nas posições da nova escala: elas se fecham em direção ao
      topo, que é o aviso visual de que o eixo não é linear. */
   const alt = v => (Math.sqrt(Math.max(0, v))/Math.sqrt(maxVal))*plotH;
-  let grid='', bars='', faixa='';
+  let grid='', bars='', faixa='', divisorias='';
   for(let i=0;i<=4;i++){
     const v = maxVal*i/4, y = baseY-alt(v);
     grid += `<line x1="${padL}" x2="${W-padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="mes-grid"/>`
          +  `<text x="${padL-9}" y="${(y+3.5).toFixed(1)}" text-anchor="end" class="mes-axis">${irEsc(fmtVal(v))}</text>`;
   }
   rows.forEach((r,i)=>{
+    // Divisória leve entre ciclos: mês pedido explicitamente pelo usuário, pra dar
+    // pra ver de relance onde um ciclo (trimestre) termina e o outro começa.
+    if(i>0 && r.cicloId!=null && rows[i-1].cicloId!=null && r.cicloId!==rows[i-1].cicloId){
+      const xDiv = padL+step*i;
+      divisorias += `<line x1="${xDiv.toFixed(1)}" x2="${xDiv.toFixed(1)}" y1="${padT}" y2="${baseY}" class="mes-ciclo-div"/>`;
+    }
     const cx = padL+step*i+step/2;
     const x1 = cx-bw-gapIn/2, x2 = cx+gapIn/2;
     const hC = alt(r.contado);
@@ -1128,7 +1134,7 @@ function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
           +  `<text x="${cx.toFixed(1)}" y="${accTop+27}" text-anchor="middle" class="mes-acc ${semDado?'vazio':(ok?'ok':'bad')}">${semDado?'—':irFmtPct(r.acuracia)}</text>`;
   });
   return `<div class="mes-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Acurácia mensal de ${irEsc(cfg.titulo)}">
-    ${grid}${bars}
+    ${grid}${divisorias}${bars}
     <line x1="${padL}" x2="${W-padR}" y1="${baseY}" y2="${baseY}" class="mes-grid"/>
     <text x="${padL-9}" y="${accTop-8}" text-anchor="end" class="mes-band">ACURÁCIA</text>
     ${faixa}
@@ -1160,16 +1166,19 @@ function irEvolucaoMensalBloco(rows, cfg, fmtVal){
 function irPorMesDoAno(ano){
   const pares = (IR.comparativoCiclos||[]).filter(({ciclo}) => irCicloAno(ciclo) === ano);
   const acc = new Map();
-  for(const {ind} of pares){
+  for(const {ciclo, ind} of pares){
     for(const m of ((ind&&ind.porMes)||[])){
       if(!acc.has(m.mes)) acc.set(m.mes, {mes:m.mes, pecasContadas:0, pecasSaldoLogico:0, pecasDivergentes:0,
-        locaisContados:0, locaisDivergentes:0, valorContado:0, valorSaldoLogico:0, valorDivergente:0});
+        locaisContados:0, locaisDivergentes:0, valorContado:0, valorSaldoLogico:0, valorDivergente:0, cicloId:null});
       const a = acc.get(m.mes);
       a.pecasContadas += m.pecasContadas||0;   a.pecasDivergentes += m.pecasDivergentes||0;
       a.pecasSaldoLogico += (m.pecasSaldoLogico!=null ? m.pecasSaldoLogico : (m.pecasContadas||0));
       a.locaisContados += m.locaisContados||0; a.locaisDivergentes += m.locaisDivergentes||0;
       a.valorContado += m.valorContado||0;     a.valorDivergente += m.valorDivergente||0;
       a.valorSaldoLogico += (m.valorSaldoLogico!=null ? m.valorSaldoLogico : (m.valorContado||0));
+      // Mês normalmente só recebe contribuição de UM ciclo (cada ciclo é um
+      // trimestre); guarda o id pra desenhar a divisória entre ciclos no gráfico.
+      a.cicloId = ciclo.id;
     }
   }
   return Array.from(acc.values()).sort((x,y)=>x.mes.localeCompare(y.mes)).map(a=>({
@@ -1194,9 +1203,9 @@ function irRenderEvolucaoMensalPanel(ind){
     </div>`;
   }
   const linhas = m => ({
-    pecas:  {mes:m.mes, contado:m.pecasSaldoLogico, divergente:m.pecasDivergentes,  acuracia:m.acuraciaPecas},
-    locais: {mes:m.mes, contado:m.locaisContados,   divergente:m.locaisDivergentes, acuracia:m.acuraciaLocal},
-    valor:  {mes:m.mes, contado:m.valorSaldoLogico, divergente:m.valorDivergente,   acuracia:m.acuraciaValor}
+    pecas:  {mes:m.mes, contado:m.pecasSaldoLogico, divergente:m.pecasDivergentes,  acuracia:m.acuraciaPecas,  cicloId:m.cicloId},
+    locais: {mes:m.mes, contado:m.locaisContados,   divergente:m.locaisDivergentes, acuracia:m.acuraciaLocal,  cicloId:m.cicloId},
+    valor:  {mes:m.mes, contado:m.valorSaldoLogico, divergente:m.valorDivergente,   acuracia:m.acuraciaValor,  cicloId:m.cicloId}
   });
   const dados = meses.map(linhas);
   const tabela = `<details class="mes-tabela"><summary>Ver os números em tabela</summary>
@@ -1350,7 +1359,7 @@ function irRenderLogTablePanel(ind){
         <th>Acurácia Peças</th><th>Acurácia Posições</th><th>Acurácia Valor</th>
       </tr></thead>
       <tbody>${rowsComTotal.map(r=>`<tr${r.isTotal?' style="font-weight:700;border-top:2px solid var(--line);"':''}>
-        <td class="mono">${irEsc(r.chave)}</td>
+        <td class="mono">${r.isTotal?'Total':irEsc(r.chave)}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
         <td class="mono">${irFmtInt(r.locaisPendentes)}</td>
@@ -1558,7 +1567,7 @@ function irBuildLogBarChartSvg(rows, opts){
       bars += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${s.color}" rx="2"/>`;
       labels += `<text x="${(bx+barW/2).toFixed(1)}" y="${(by-6).toFixed(1)}" font-size="12" text-anchor="middle" fill="${s.color}" font-weight="700">${Math.round(val*100)}%</text>`;
     });
-    xLabels += `<text x="${(padL+i*groupW+groupW/2).toFixed(1)}" y="${H-12}" font-size="13" text-anchor="middle" fill="${colors.axis}" font-weight="600">${irEsc(r.chave)}</text>`;
+    xLabels += `<text x="${(padL+i*groupW+groupW/2).toFixed(1)}" y="${H-12}" font-size="13" text-anchor="middle" fill="${colors.axis}" font-weight="600">${r.isTotal?'Total':irEsc(r.chave)}</text>`;
   });
   const gridLines = [0,0.25,0.5,0.75,1].map(t=>{
     const y = padT+plotH-t*plotH;
