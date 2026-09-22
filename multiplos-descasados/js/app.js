@@ -573,9 +573,15 @@ function mdGerarCsvAjuste(lista){
     const s = String(v ?? '');
     return /[;"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   };
+  // Local (coletor) e EAN são só dígitos compridos (10 e 13 casas) — sem
+  // forçar texto o Excel "adivinha" que é número e mostra em notação
+  // científica (5E+09, 7,89862E+12), cortando dígitos de verdade. A aspa
+  // simples na frente força texto e some da visualização — mesmo truque de
+  // qualquer exportador de CSV com código/EAN comprido.
+  const celTexto = v=>{ const s = String(v ?? ''); return s ? cel("'"+s) : ''; };
   const linhas = lista.map(l=>[
-    l.localColetor, l.ean, l.codDe, l.codPara, irFmtInt(l.quantidade), l.endereco
-  ].map(cel).join(';'));
+    celTexto(l.localColetor), celTexto(l.ean), cel(l.codDe), cel(l.codPara), cel(irFmtInt(l.quantidade)), cel(l.endereco)
+  ].join(';'));
   // BOM na frente: sem ele o Excel em pt-BR abre o arquivo como Latin-1 e come
   // todos os acentos das descrições.
   const csv = '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n');
