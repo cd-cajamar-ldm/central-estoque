@@ -151,6 +151,7 @@ const ALIAS_410 = {
   item: ['Item'], nomeItem: ['Nome'], dtMov: ['Dt.Mov.','Dt Mov','Data Mov'],
   quantidade: ['Quantidade'], sentido: ['Sentido'], vlMov: ['Vl.Mov.','Vl Mov'],
   idDeposito: ['Id Deposito','Id Depósito'], obsWms: ['Observacao WMS','Observação WMS'],
+  depto: ['Nome Depto','Nome Departamento','Departamento'],
   /* A planilha tem DUAS colunas de observação. A WMS é a que traz o código do motivo
      (AIR, ADE, AIN...), e é por ela que a legenda classifica. Mas parte dos
      lançamentos vem com a WMS vazia e o motivo escrito só nesta outra — por exemplo
@@ -1522,7 +1523,11 @@ async function runPipeline410({buf410}){
       // porDia = mesma quebra, mas por dia — pra responder "o que aconteceu ontem"
       // rápido, sem esperar o mês fechar pra dar pra investigar.
       porDia:new Map(), porItemDia:new Map(),
-      porObs:new Map(), porObsMes:new Map(), porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0
+      porObs:new Map(), porObsMes:new Map(),
+      // Depto (coluna "Nome Depto" da QRY410) — só conta movimento de motivo
+      // considerado pro NET, mesmo critério da quebra por Obs mês a mês.
+      porDepto:new Map(), porDeptoMes:new Map(),
+      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0
     });
     return porAno.get(ano);
   }
@@ -1626,7 +1631,19 @@ async function runPipeline410({buf410}){
     if(sinal<0) goMes.saida += valor;
     else if(sinal>0) goMes.entrada += valor;
 
-    if(!cls.considerarNet) continue; // resto (mês/dia, item) só conta com motivos válidos pro NET
+    if(!cls.considerarNet) continue; // resto (mês/dia, item, depto) só conta com motivos válidos pro NET
+
+    // Quebra por Departamento (ano e mês) — mesma regra da quebra por Obs: só
+    // motivo considerado pro NET entra aqui.
+    const depto = String(getVal(row, r410.depto)||'').trim() || '(sem depto)';
+    if(!g.porDepto.has(depto)) g.porDepto.set(depto, {id:depto, saida:0, entrada:0});
+    const gd = g.porDepto.get(depto);
+    if(sinal<0) gd.saida += valor; else if(sinal>0) gd.entrada += valor;
+    if(!g.porDeptoMes.has(mes)) g.porDeptoMes.set(mes, new Map());
+    const porDeptoDoMes = g.porDeptoMes.get(mes);
+    if(!porDeptoDoMes.has(depto)) porDeptoDoMes.set(depto, {id:depto, saida:0, entrada:0});
+    const gdMes = porDeptoDoMes.get(depto);
+    if(sinal<0) gdMes.saida += valor; else if(sinal>0) gdMes.entrada += valor;
 
     const item = String(getVal(row, r410.item)||'').trim();
     const nomeItem = String(getVal(row, r410.nomeItem)||'').trim();
@@ -1664,9 +1681,13 @@ async function runPipeline410({buf410}){
     porMes.forEach(m=>{
       const mapaObsMes = g.porObsMes.get(m.mes) || new Map();
       m.porObs = Array.from(mapaObsMes.values()).map(o=>({...o, totalGeral:o.saida+o.entrada}));
+      const mapaDeptoMes = g.porDeptoMes.get(m.mes) || new Map();
+      m.porDepto = Array.from(mapaDeptoMes.values()).map(o=>({...o, totalGeral:o.saida+o.entrada}));
     });
     const porDia = finalizarPeriodos(g.porDia, g.porItemDia, g.porItem, 'dia');
     const porObs = Array.from(g.porObs.values()).map(o=>({...o, totalGeral: o.saida+o.entrada}))
+      .sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral));
+    const porDepto = Array.from(g.porDepto.values()).map(o=>({...o, totalGeral: o.saida+o.entrada}))
       .sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral));
     const itens = Array.from(g.porItem.values());
     const topItensPositivos = itens.filter(i=>i.saldoValor>0).sort((a,b)=>b.saldoValor-a.saldoValor).slice(0,20);
@@ -1675,7 +1696,7 @@ async function runPipeline410({buf410}){
     const totalPerdas = porMes.reduce((s,m)=>s+m.perdas,0);
     resumos[ano] = {
       ano, totalLinhas:g.totalLinhas, linhasExcluidasDeposito21:g.linhasExcluidasDeposito21,
-      porMes, porDia, porObs, topItensPositivos, topItensNegativos,
+      porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos,
       totalGanhos, totalPerdas, totalNet: totalGanhos+totalPerdas, totalNetAbs: Math.abs(totalGanhos+totalPerdas)
     };
   }
