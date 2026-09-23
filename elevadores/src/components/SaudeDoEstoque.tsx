@@ -13,11 +13,16 @@ import type { Componente } from '../domain/tipos';
 import {
   listarPorFornecedor, saudePorFornecedor, semNadaNoEstoque, totalizarSaude,
 } from '../domain/fornecedores';
+import type { MapaPrecos } from '../domain/fornecedores';
 import { cores } from '../config/tokens';
 import { Cartao, Tabela, Td, Th, Vazio } from './ui';
 
 const COR_OK = cores.semantico.verde;
 const COR_TRAVADO = cores.laranja.base;
+
+const formatoReal = new Intl.NumberFormat('pt-BR', {
+  style: 'currency', currency: 'BRL', maximumFractionDigits: 0,
+});
 
 /* Barra de proporcao: verde do que monta, laranja do que trava. Le-se
    de longe, sem precisar do numero.
@@ -42,11 +47,20 @@ function Pct({ pct, potencial }: { pct: number; potencial: number }) {
   return <>{pct.toFixed(0)}%</>;
 }
 
-export function SaudeDoEstoque({ componentes }: { componentes: Componente[] }) {
+export function SaudeDoEstoque({
+  componentes,
+  precos,
+}: {
+  componentes: Componente[];
+  /* Preco de custo do item pai (SIGEQ278), para o R$ parado. Sem
+     importar, o KPI mostra R$ 0 em vez de sumir da tela. */
+  precos?: MapaPrecos;
+}) {
   const todas = useMemo(
-    () => saudePorFornecedor(listarPorFornecedor(componentes)),
-    [componentes]
+    () => saudePorFornecedor(listarPorFornecedor(componentes, precos)),
+    [componentes, precos]
   );
+  const temPreco = (precos?.size ?? 0) > 0;
   /* O total sai da lista inteira: quem foi escondido soma zero, entao
      esconder nao muda numero nenhum - so tira ruido da leitura. */
   const total = useMemo(() => totalizarSaude(todas), [todas]);
@@ -87,7 +101,26 @@ export function SaudeDoEstoque({ componentes }: { componentes: Componente[] }) {
           <b>{total.pecasParadas}</b>
           <span className="eq-saude-det">unidades sem par no CD</span>
         </div>
+        <div className="eq-saude-num">
+          <span className="eq-saude-rot" style={{ color: COR_TRAVADO }}>R$ parado</span>
+          <b style={{ color: COR_TRAVADO }}>{formatoReal.format(total.valorParado)}</b>
+          <span className="eq-saude-det">
+            {temPreco ? 'pelo custo do item (SIGEQ278)' : 'importe a SIGEQ278 para valorar'}
+          </span>
+        </div>
       </div>
+
+      {/* So o lado que carrega o S na 051 tem preco (mesma regra do
+          Multiplos Descasados): quando a peca parada esta do outro
+          lado, o R$ acima e o piso, nao o total. Sem isso o numero
+          parece completo quando na verdade esta subestimado. */}
+      {temPreco && total.componentesSemPreco > 0 && (
+        <p className="eq-saude-aviso">
+          <b>{total.componentesSemPreco}</b> dos <b>{total.componentesComSobra}</b> componentes
+          descasados estão sem preço mesmo com a SIGEQ278 importada — o R$ parado acima é o piso,
+          não o total.
+        </p>
+      )}
 
       <Tabela>
         <thead>
@@ -99,6 +132,7 @@ export function SaudeDoEstoque({ componentes }: { componentes: Componente[] }) {
             <Th>Proporção</Th>
             <Th alinha="right">% OK</Th>
             <Th alinha="right">Peças paradas</Th>
+            <Th alinha="right">R$ parado</Th>
           </tr>
         </thead>
         <tbody>
@@ -121,6 +155,7 @@ export function SaudeDoEstoque({ componentes }: { componentes: Componente[] }) {
               <Td><Proporcao pct={l.pctCompleto} potencial={l.potencial} /></Td>
               <Td alinha="right" numerico><Pct pct={l.pctCompleto} potencial={l.potencial} /></Td>
               <Td alinha="right" numerico>{l.pecasParadas || '—'}</Td>
+              <Td alinha="right" numerico>{l.valorParado > 0 ? formatoReal.format(l.valorParado) : '—'}</Td>
             </tr>
           ))}
           <tr className="eq-saude-total">
@@ -133,6 +168,7 @@ export function SaudeDoEstoque({ componentes }: { componentes: Componente[] }) {
               <b><Pct pct={total.pctCompleto} potencial={total.potencial} /></b>
             </Td>
             <Td alinha="right" numerico><b>{total.pecasParadas}</b></Td>
+            <Td alinha="right" numerico><b>{formatoReal.format(total.valorParado)}</b></Td>
           </tr>
         </tbody>
       </Tabela>
