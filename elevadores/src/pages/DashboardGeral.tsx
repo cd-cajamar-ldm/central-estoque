@@ -212,6 +212,7 @@ export function DashboardGeral({
   componentes,
   fotos,
   precos,
+  saldo390,
   busca: buscaGlobal = '',
   divergencias = [],
   ajustes = [],
@@ -223,6 +224,10 @@ export function DashboardGeral({
   /* Preco de custo do item pai (SIGEQ278), para o R$ parado na saude
      do estoque. Mapa vazio quando nao foi importado. */
   precos?: MapaPrecos;
+  /* Valor unitario por componente (QRY0390), mesmo KPI - manda sobre
+     o preco do pai quando vier preenchido. Mapa vazio quando nao
+     importado. */
+  saldo390?: MapaPrecos;
   /* Texto da busca da barra de topo, que vale para todas as telas. */
   busca?: string;
   /* Devolucoes registradas pelo SAC (aba Divergencias SAC). */
@@ -298,7 +303,7 @@ export function DashboardGeral({
           "quanto do que esta parado vira venda", que e por onde a
           reuniao comeca. Os totais de compra e o detalhe por conjunto
           vem depois, para quem quer saber o que fazer a respeito. */}
-      <SaudeDoEstoque componentes={componentes} precos={precos} />
+      <SaudeDoEstoque componentes={componentes} precos={precos} saldo390={saldo390} />
 
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Kpi rotulo="Colunas a comprar" valor={resumo.totalComprarColuna} dica="para casar as bases existentes" cor={cores.laranja.base} />

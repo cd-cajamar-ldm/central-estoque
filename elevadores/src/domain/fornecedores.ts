@@ -13,9 +13,11 @@ import { ratioDaTonelada } from '../config/regras';
 import { montarKit, faltamDoTipo, porKitDe } from './kit';
 import type { MontagemDoKit } from './kit';
 
-/* Item pai -> preco de custo (SIGEQ278). Mapa vazio quando a planilha
-   de preco nao foi importada: todo o valor entao sai zero, sem quebrar
-   a tela. */
+/* Mapa de preco: item -> valor unitario. Serve tanto para o preco de
+   custo do item pai (SIGEQ278, chave = item pai) quanto para o valor
+   unitario por componente (QRY0390, chave = item componente). Mapa
+   vazio quando a planilha correspondente nao foi importada: o valor
+   entao sai zero, sem quebrar a tela. */
 export type MapaPrecos = Map<string, number>;
 
 export type SituacaoItem = 'CASADO' | 'DESCASADO' | 'SEM ESTOQUE';
@@ -171,13 +173,17 @@ function fecharItem(item: ItemFornecedor): ItemFornecedor {
   return item;
 }
 
-/* Preco do componente: so o lado que carrega o S da 051 (in interface)
-   vale o preco de custo do item pai (SIGEQ278) - mesma regra do modulo
-   Multiplos Descasados. A planilha traz o valor unitario zerado nos
-   componentes do kit; o preco de verdade fica no pai, que nao tem
-   saldo proprio. O outro lado do par entra a zero: contar os dois
-   dobraria o valor do mesmo conjunto parado. */
-function precoComponente(sn: string, precoPai: number): number {
+/* Preco do componente, na mesma ordem do modulo Multiplos Descasados:
+   primeiro o valor unitario do proprio componente na QRY0390, quando
+   existir. Ele costuma vir zerado nos componentes de kit - a
+   valoracao do multiplo fica no pai, nao nas partes - e ai entra a
+   SIGEQ278: o preco de custo do pai e atribuido so ao componente que
+   carrega o S da 051 (in interface). O outro lado do par, sem preco
+   proprio na 390 e sem o S, entra a zero: contar os dois dobraria o
+   valor do mesmo conjunto parado. */
+function precoComponente(codigo: string, sn: string, precoPai: number, precos390: MapaPrecos): number {
+  const doProprioComponente = precos390.get(codigo) ?? 0;
+  if (doProprioComponente > 0) return doProprioComponente;
   return sn === 'S' ? precoPai : 0;
 }
 
@@ -193,7 +199,11 @@ interface AvaliacaoParada {
    quantos ficaram sem preco - o lado que nao carrega o S vale zero,
    entao o total pode ser so o piso do valor parado, nao o valor
    inteiro (mesmo aviso do modulo Multiplos Descasados). */
-function avaliarParadoDoItem(item: ItemFornecedor, precoPai: number): AvaliacaoParada {
+function avaliarParadoDoItem(
+  item: ItemFornecedor,
+  precoPai: number,
+  precos390: MapaPrecos
+): AvaliacaoParada {
   const completos = item.montagem.kits;
   let valor = 0;
   let componentesComSobra = 0;
@@ -202,7 +212,7 @@ function avaliarParadoDoItem(item: ItemFornecedor, precoPai: number): AvaliacaoP
     const sobra = Math.max(0, c.cd - completos * c.porKit);
     if (sobra <= 0) continue;
     componentesComSobra++;
-    const preco = precoComponente(c.sn, precoPai);
+    const preco = precoComponente(c.codigo, c.sn, precoPai, precos390);
     valor += sobra * preco;
     if (!preco) componentesSemPreco++;
   }
@@ -217,7 +227,8 @@ function avaliarParadoDoItem(item: ItemFornecedor, precoPai: number): AvaliacaoP
    no CD do mesmo jeito e o comprador precisa ver. */
 export function listarPorFornecedor(
   componentes: Componente[],
-  precos: MapaPrecos = new Map()
+  precosPai: MapaPrecos = new Map(),
+  precos390: MapaPrecos = new Map()
 ): GrupoFornecedor[] {
   const itens = new Map<string, ItemFornecedor>();
   const marcasPorFornecedor = new Map<string, Set<string>>();
@@ -308,7 +319,7 @@ export function listarPorFornecedor(
   const grupos = new Map<string, Map<string, ItemFornecedor[]>>();
   for (const item of itens.values()) {
     fecharItem(item);
-    const avaliacao = avaliarParadoDoItem(item, precos.get(item.item) ?? 0);
+    const avaliacao = avaliarParadoDoItem(item, precosPai.get(item.item) ?? 0, precos390);
     item.valorParado = avaliacao.valor;
     item.componentesComSobra = avaliacao.componentesComSobra;
     item.componentesSemPreco = avaliacao.componentesSemPreco;

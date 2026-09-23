@@ -50,17 +50,21 @@ function Pct({ pct, potencial }: { pct: number; potencial: number }) {
 export function SaudeDoEstoque({
   componentes,
   precos,
+  saldo390,
 }: {
   componentes: Componente[];
   /* Preco de custo do item pai (SIGEQ278), para o R$ parado. Sem
      importar, o KPI mostra R$ 0 em vez de sumir da tela. */
   precos?: MapaPrecos;
+  /* Valor unitario por componente (QRY0390) - manda sobre o preco do
+     pai quando vier preenchido (ver precoComponente no dominio). */
+  saldo390?: MapaPrecos;
 }) {
   const todas = useMemo(
-    () => saudePorFornecedor(listarPorFornecedor(componentes, precos)),
-    [componentes, precos]
+    () => saudePorFornecedor(listarPorFornecedor(componentes, precos, saldo390)),
+    [componentes, precos, saldo390]
   );
-  const temPreco = (precos?.size ?? 0) > 0;
+  const temPreco = (precos?.size ?? 0) > 0 || (saldo390?.size ?? 0) > 0;
   /* O total sai da lista inteira: quem foi escondido soma zero, entao
      esconder nao muda numero nenhum - so tira ruido da leitura. */
   const total = useMemo(() => totalizarSaude(todas), [todas]);
@@ -105,20 +109,21 @@ export function SaudeDoEstoque({
           <span className="eq-saude-rot" style={{ color: COR_TRAVADO }}>R$ parado</span>
           <b style={{ color: COR_TRAVADO }}>{formatoReal.format(total.valorParado)}</b>
           <span className="eq-saude-det">
-            {temPreco ? 'pelo custo do item (SIGEQ278)' : 'importe a SIGEQ278 para valorar'}
+            {temPreco ? 'pelo valor unitário (390) ou custo do pai (278)' : 'importe a 390 ou a 278 para valorar'}
           </span>
         </div>
       </div>
 
-      {/* So o lado que carrega o S na 051 tem preco (mesma regra do
-          Multiplos Descasados): quando a peca parada esta do outro
-          lado, o R$ acima e o piso, nao o total. Sem isso o numero
-          parece completo quando na verdade esta subestimado. */}
+      {/* Preco vem primeiro do proprio componente na 390; quando ele
+          nao vem preenchido, so o lado que carrega o S na 051 pega o
+          preco do pai (278) - mesma regra do Multiplos Descasados.
+          Quando a peca parada fica sem os dois, o R$ acima e o piso,
+          nao o total. Sem isso o numero parece completo quando na
+          verdade esta subestimado. */}
       {temPreco && total.componentesSemPreco > 0 && (
         <p className="eq-saude-aviso">
           <b>{total.componentesSemPreco}</b> dos <b>{total.componentesComSobra}</b> componentes
-          descasados estão sem preço mesmo com a SIGEQ278 importada — o R$ parado acima é o piso,
-          não o total.
+          descasados estão sem preço na 390 e na 278 — o R$ parado acima é o piso, não o total.
         </p>
       )}
 

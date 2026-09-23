@@ -124,3 +124,34 @@ export function lerArquivoPrecos(data: ArrayBuffer | Uint8Array): MapaPrecos {
   const wb = XLSX.read(data, { type: 'array', cellDates: true });
   return lerPrecos(wb);
 }
+
+/* ---------------------------------------------------------------
+   Valor unitario por componente: QRY0390 (opcional), export avulso
+   de sistema - nao a aba EstoqueAtual de dentro da planilha principal
+   (essa continua fora, grande demais). Mesmos apelidos de coluna do
+   modulo Multiplos Descasados (worker.js, ALIAS_390): Item/VALOR_UNITARIO.
+   A 390 repete cada item uma vez por local/restricao; o preco e o
+   mesmo em todas as linhas, entao a primeira ocorrencia nao-zero
+   basta - nao precisa somar saldo aqui, isso ja vem da aba Multiplos.
+   --------------------------------------------------------------- */
+export function lerSaldo390(wb: XLSX.WorkBook): MapaPrecos {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = abaParaMatriz(ws);
+  const mapa: MapaPrecos = new Map();
+  if (aoa.length === 0) return mapa;
+
+  const { linhas } = montarObjetos(aoa, 0);
+  for (const linha of linhas) {
+    const s = criarSeletor(linha);
+    const item = paraTexto(s('ID_ITEM_FILHO', 'Item'));
+    if (!item || mapa.has(item)) continue;
+    const preco = paraNumero(s('VALOR_UNITARIO'));
+    if (preco > 0) mapa.set(item, preco);
+  }
+  return mapa;
+}
+
+export function lerArquivoSaldo390(data: ArrayBuffer | Uint8Array): MapaPrecos {
+  const wb = XLSX.read(data, { type: 'array', cellDates: true });
+  return lerSaldo390(wb);
+}
