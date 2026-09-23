@@ -186,10 +186,12 @@ async function runPipeline390({buf390}){
         // outra. Sem esse corte, um componente com 5 peças em WN e 5 em 86
         // parece ter 10 disponíveis pra casar.
         porRestricao: {},
-        // Endereços agregados por LOCAL + RESTRIÇÃO. A 390 quebra a mesma
-        // combinação em várias linhas quando há mais de um lote no endereço;
-        // sem juntar, o mesmo endereço virava duas linhas de coletor com a
-        // mesma quantidade e o operador lançaria o dobro.
+        // Endereços agregados por LOCAL + RESTRIÇÃO, pra somar e mostrar o saldo
+        // total do endereço nas telas. Mas o coletor (10/12.MOVI) recusa mover
+        // uma quantidade que precise juntar lotes diferentes — dá "IMPOSSÍVEL
+        // FUNDIR". Por isso cada lote (linha da 390) também fica guardado à
+        // parte em `refs`: quem monta o plano de ajuste aloca lote por lote,
+        // nunca juntando dois num endereço só.
         porLocal: new Map(),
         locais: []
       };
@@ -218,13 +220,14 @@ async function runPipeline390({buf390}){
         predio: String(getVal(row, r.predio) ?? '').trim(),
         clal: String(getVal(row, r.classeLocal) ?? '').trim(),
         restricao,
-        qtde: 0, qtdeDisp: 0, lotes: 0
+        qtde: 0, qtdeDisp: 0, lotes: 0, refs: []
       };
       it.porLocal.set(chave, lugar);
     }
     lugar.qtde += qtde;
     lugar.qtdeDisp += disp;
     lugar.lotes++;
+    lugar.refs.push({qtde, qtdeDisp: disp});
   }
   for(const it of porItem.values()){
     // Map não sobrevive à gravação estruturada do IndexedDB do jeito que a tela

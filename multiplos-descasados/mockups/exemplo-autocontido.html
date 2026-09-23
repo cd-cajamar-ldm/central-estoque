@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Múltiplos Descasados — exemplo de layout</title>
+<style>
+  :root{
+    --azul:#001A72; --azul-2:#0B3ACB; --laranja:#FE5000; --branco:#FFFFFF;
+    --paper:#F4F5F7; --surface:#FFFFFF; --surface2:#EEF0F4;
+    --ink:#1D1F2A; --ink-soft:#6B7280; --line:#D5D8E0;
+    --danger:#C83812; --danger-light:rgba(200,56,18,.08);
+    --success:#1F8A52; --success-light:rgba(31,138,82,.08);
+    --radius:10px; --radius-lg:14px;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    background:var(--paper); color:var(--ink); font-size:14px; line-height:1.5;
+  }
+  .mono{ font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; }
+
+  .shell{ display:flex; min-height:100vh; }
+  .sidebar{ width:220px; flex-shrink:0; background:var(--azul); color:#fff; display:flex; flex-direction:column; }
+  .sidebar-brand{ padding:22px 18px; border-bottom:1px solid rgba(255,255,255,.14); }
+  .sidebar-brand .logo{ font-weight:800; font-size:17px; letter-spacing:.02em; }
+  .sidebar-brand .logo span{ color:var(--laranja); }
+  .sidebar-brand .tag{ font-size:10.5px; color:rgba(255,255,255,.55); margin-top:2px; }
+  .sidebar-nav{ padding:14px 0; flex:1; }
+  .nav-item{
+    display:flex; align-items:center; gap:10px; padding:10px 18px; font-size:13px;
+    color:rgba(255,255,255,.72); border-left:3px solid transparent; cursor:pointer;
+  }
+  .nav-item.active{ background:rgba(254,80,0,.16); color:#fff; border-left-color:var(--laranja); font-weight:600; }
+  .nav-item:hover{ color:#fff; }
+
+  .content{ flex:1; display:flex; flex-direction:column; min-width:0; }
+  .topbar{
+    padding:20px 28px; background:linear-gradient(100deg, var(--azul) 0%, var(--azul-2) 100%);
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  }
+  .topbar h1{ color:#fff; font-size:20px; font-weight:800; }
+  .topbar p{ color:rgba(255,255,255,.72); font-size:12.5px; margin-top:2px; }
+  .topbar-updated{ color:rgba(255,255,255,.62); font-size:11.5px; text-align:right; }
+
+  .page{ padding:24px 28px; max-width:1180px; }
+
+  /* KPIs: só os 4 números que respondem "tem problema? quanto?" */
+  .kpi-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  @media(max-width:820px){ .kpi-row{ grid-template-columns:1fr 1fr; } }
+  .kpi{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:16px 18px; position:relative; overflow:hidden;
+    box-shadow:0 8px 18px -14px rgba(20,24,40,.25);
+  }
+  .kpi::before{ content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--laranja); }
+  .kpi.azul::before{ background:var(--azul); }
+  .kpi.verde::before{ background:var(--success); }
+  .kpi .num{ font-size:24px; font-weight:800; font-family:'SFMono-Regular',Consolas,monospace; }
+  .kpi.laranja .num{ color:var(--laranja); }
+  .kpi.verde .num{ color:var(--success); }
+  .kpi .label{ font-size:11px; color:var(--ink-soft); margin-top:5px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+
+  /* aviso curto sobre cobertura de preço — não esconde o número, só avisa */
+  .aviso{ background:#FFF4EC; border:1px solid #FFD3B8; color:#8A3F12; border-radius:var(--radius); padding:10px 14px; font-size:12.5px; margin-bottom:18px; }
+
+  .toolbar{ display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .toolbar input{
+    flex:1 1 260px; min-width:200px; border:1px solid var(--line); border-radius:8px;
+    padding:9px 13px; font-size:13px; background:var(--surface);
+  }
+  .toolbar input:focus{ outline:none; border-color:var(--laranja); }
+  .chip{ border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); border-radius:100px; padding:7px 14px; font-size:12.5px; cursor:pointer; white-space:nowrap; }
+  .chip.active{ background:#FFF0E8; border-color:var(--laranja); color:var(--laranja); font-weight:700; }
+
+  .secao-titulo{ display:flex; align-items:baseline; justify-content:space-between; margin:22px 0 10px; }
+  .secao-titulo h2{ font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
+  .secao-titulo span{ font-size:12px; color:var(--ink-soft); }
+
+  /* Aviso "sem peça" — problema diferente do descasamento, cor neutra/âmbar */
+  .card-sempeca{
+    background:#FFF8EE; border:1px solid #F3D9A6; border-radius:var(--radius); padding:10px 14px;
+    margin-bottom:8px; font-size:12.5px; display:flex; gap:8px; flex-wrap:wrap; align-items:baseline;
+  }
+  .card-sempeca .mono{ color:#8A6A1A; }
+
+  /* Cartão de ação: o coração da tela nova — mostra o que fazer, não só o número */
+  .acao{
+    background:var(--surface); border:1px solid var(--line); border-left:5px solid var(--danger);
+    border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:12px;
+    box-shadow:0 8px 18px -14px rgba(20,24,40,.22);
+  }
+  .acao.liberar{ border-left-color:var(--success); }
+  .acao-topo{ display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .acao-id .mono{ font-size:11.5px; color:var(--ink-soft); }
+  .acao-id strong{ display:block; font-size:14.5px; margin-top:1px; }
+  .acao-valor{ font-family:'SFMono-Regular',Consolas,monospace; font-weight:800; font-size:18px; color:var(--danger); white-space:nowrap; }
+  .acao.liberar .acao-valor{ color:var(--success); }
+
+  .acao-bar-track{ background:var(--surface2); border-radius:100px; height:8px; margin:12px 0 5px; overflow:hidden; }
+  .acao-bar-fill{ height:100%; background:var(--azul); border-radius:100px; }
+  .acao-bar-labels{ display:flex; justify-content:space-between; font-size:11px; color:var(--ink-soft); }
+
+  .acao-linha{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px;
+    background:var(--danger-light); border-radius:8px; padding:9px 12px;
+  }
+  .acao.liberar .acao-linha{ background:var(--success-light); }
+  .acao-linha .qtd{ font-family:'SFMono-Regular',Consolas,monospace; font-weight:800; font-size:16px; color:var(--danger); }
+  .acao.liberar .acao-linha .qtd{ color:var(--success); }
+  .acao-linha .desc{ font-size:12.5px; }
+  .acao-linha .desc b{ color:var(--ink-soft); font-weight:600; }
+  .acao-linha .onde{ margin-left:auto; font-size:11px; color:var(--ink-soft); }
+  .acao-linha .onde b{ color:var(--ink); font-family:'SFMono-Regular',Consolas,monospace; }
+
+  .acao-mais{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">LDM<span>·</span></div>
+      <div class="tag">Lugar de quem faz</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active">Descasados</div>
+      <div class="nav-item">Ajustes de Restrição</div>
+      <div class="nav-item">Importação</div>
+    </nav>
+  </aside>
+
+  <div class="content">
+    <div class="topbar">
+      <div>
+        <h1>Múltiplos Descasados</h1>
+        <p>Componente sem par no estoque: o que ajustar agora, em ordem de valor.</p>
+      </div>
+      <div class="topbar-updated">Estoque de<br><strong style="color:#fff">21/09/2026</strong></div>
+    </div>
+
+    <div class="page">
+      <div class="kpi-row">
+        <div class="kpi laranja"><div class="num">R$ 811.626,68</div><div class="label">Valor descasado agora</div></div>
+        <div class="kpi laranja"><div class="num">977</div><div class="label">Peças a bloquear</div></div>
+        <div class="kpi verde"><div class="num">26</div><div class="label">Peças a liberar</div></div>
+        <div class="kpi azul"><div class="num">142</div><div class="label">Múltiplos a ajustar</div></div>
+      </div>
+
+      <div class="aviso">125 dos 195 componentes descasados estão sem preço — o valor acima é o piso, não o total.</div>
+
+      <div class="toolbar">
+        <input type="text" placeholder="Buscar item pai, componente ou descrição...">
+        <button class="chip active">Tudo</button>
+        <button class="chip">Bloquear 0 → 86</button>
+        <button class="chip">Liberar 86 → 0</button>
+      </div>
+
+      <div class="secao-titulo">
+        <h2>Sem nenhuma peça de um componente</h2>
+        <span>não bloqueia — precisa de reposição</span>
+      </div>
+      <div class="card-sempeca"><span class="mono">5502341</span> ELEVADOR TESOURA 3T C/ACIONAMENTO ELETRICO — falta PATOLA TRASEIRA (0 em WN e 0 em 86)</div>
+      <div class="card-sempeca"><span class="mono">6610987</span> PRENSA HIDRAULICA 20T BANCADA — falta CILINDRO PRINCIPAL (0 em WN e 0 em 86)</div>
+
+      <div class="secao-titulo">
+        <h2>O que fazer agora</h2>
+        <span>ordenado por valor descasado</span>
+      </div>
+
+      <div class="acao">
+        <div class="acao-topo">
+          <div class="acao-id"><span class="mono">929051</span><strong>RAMPA LADO ESQUERDO 1 ELÉTRICA P/ ALINHAMENTO VERMELHA 5T JM MÁQUINAS</strong></div>
+          <div class="acao-valor">R$ 59.512,37</div>
+        </div>
+        <div class="acao-bar-track"><div class="acao-bar-fill" style="width:54%"></div></div>
+        <div class="acao-bar-labels"><span>7 vendáveis agora</span><span>13 possíveis se o 86 voltar</span></div>
+        <div class="acao-linha">
+          <span class="qtd">bloquear 6</span>
+          <span class="desc"><b>8817231 ·</b> Corpo da rampa esquerda</span>
+          <span class="onde">local <b>5000132564</b> · A-12-03</span>
+        </div>
+      </div>
+
+      <div class="acao">
+        <div class="acao-topo">
+          <div class="acao-id"><span class="mono">2807989</span><strong>TORRE E TRAVESSA DE CÂMERAS ALINHADOR TECHMAX 3D MAX-S3</strong></div>
+          <div class="acao-valor">R$ 59.198,97</div>
+        </div>
+        <div class="acao-bar-track"><div class="acao-bar-fill" style="width:60%"></div></div>
+        <div class="acao-bar-labels"><span>3 vendáveis agora</span><span>5 possíveis se o 86 voltar</span></div>
+        <div class="acao-linha">
+          <span class="qtd">bloquear 2</span>
+          <span class="desc"><b>6621190 ·</b> Torre de câmera</span>
+          <span class="onde">local <b>5000118820</b> · B-04-11</span>
+        </div>
+      </div>
+
+      <div class="acao liberar">
+        <div class="acao-topo">
+          <div class="acao-id"><span class="mono">3311420</span><strong>KIT ELEVADOR PNEUMÁTICO 4T C/BLOQUEIO PRETO</strong></div>
+          <div class="acao-valor">R$ 31.840,00</div>
+        </div>
+        <div class="acao-bar-track"><div class="acao-bar-fill" style="width:22%"></div></div>
+        <div class="acao-bar-labels"><span>2 vendáveis agora</span><span>9 possíveis se o 86 voltar</span></div>
+        <div class="acao-linha">
+          <span class="qtd">liberar 7</span>
+          <span class="desc"><b>5591004 ·</b> Cilindro pneumático — estoque bom parado em 86</span>
+          <span class="onde">local <b>5000140021</b> · D-09-02</span>
+        </div>
+      </div>
+
+      <div class="acao">
+        <div class="acao-topo">
+          <div class="acao-id"><span class="mono">2864738</span><strong>COLUNA_ELEVADOR 2,5T ZZS VERMELHO 220V 11815001 KREBS</strong></div>
+          <div class="acao-valor">R$ 56.041,32</div>
+        </div>
+        <div class="acao-bar-track"><div class="acao-bar-fill" style="width:38%"></div></div>
+        <div class="acao-bar-labels"><span>6 vendáveis agora</span><span>16 possíveis se o 86 voltar</span></div>
+        <div class="acao-linha">
+          <span class="qtd">bloquear 10</span>
+          <span class="desc"><b>4471002 ·</b> Coluna hidráulica</span>
+          <span class="onde">local <b>5000104432</b> · C-01-07</span>
+        </div>
+        <div class="acao-mais">+ 1 outro componente sem ação — clique para ver todos os componentes e endereços</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

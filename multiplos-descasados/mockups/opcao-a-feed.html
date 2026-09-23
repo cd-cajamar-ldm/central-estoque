@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Opção A — Feed de Ação · Múltiplos Descasados</title>
+<link rel="stylesheet" href="../css/theme.css">
+<link rel="stylesheet" href="../css/modulo.css">
+<style>
+  .mac-list{ display:flex; flex-direction:column; gap:12px; }
+  .mac-card{
+    background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--danger);
+    border-radius:var(--radius-lg); padding:14px 18px;
+    box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 18px -14px rgba(20,24,40,.2);
+  }
+  .mac-card.liberar{ border-left-color:var(--success); }
+  .mac-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+  .mac-id{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  .mac-id .mono{ font-size:12px; color:var(--ink-soft); }
+  .mac-id strong{ font-size:14px; color:var(--ink); }
+  .mac-valor{ font-family:'SFMono-Regular',Consolas,monospace; font-weight:800; font-size:17px; color:var(--danger); white-space:nowrap; }
+  .mac-card.liberar .mac-valor{ color:var(--success); }
+  .mac-bar-wrap{ margin:10px 0 8px; }
+  .mac-bar-track{ background:var(--surface2); border-radius:100px; height:10px; overflow:hidden; }
+  .mac-bar-fill{ height:100%; border-radius:100px; background:var(--blue); }
+  .mac-bar-labels{ display:flex; justify-content:space-between; font-size:10.5px; color:var(--ink-soft); margin-top:4px; }
+  .mac-acao-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 10px; border-radius:8px; background:var(--danger-light); margin-top:4px; }
+  .mac-card.liberar .mac-acao-row{ background:var(--success-light); }
+  .mac-acao-row .qtd{ font-family:'SFMono-Regular',Consolas,monospace; font-weight:800; font-size:16px; color:var(--danger); }
+  .mac-card.liberar .mac-acao-row .qtd{ color:var(--success); }
+  .mac-acao-row .desc{ font-size:12.5px; color:var(--ink); }
+  .mac-acao-row .desc .comp{ color:var(--ink-soft); }
+  .mac-local{ margin-left:auto; font-size:11px; color:var(--ink-soft); }
+  .mac-local b{ color:var(--ink); font-family:'SFMono-Regular',Consolas,monospace; }
+  .mac-foot{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+  .sem-peca-card{
+    background:var(--orange-light); border:1px solid var(--orange); border-radius:var(--radius-lg);
+    padding:10px 14px; margin-bottom:10px; font-size:12.5px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;
+  }
+  .sem-peca-card .mono{ color:var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="content" style="height:100vh;">
+  <div class="topbar">
+    <div class="topbar-titles">
+      <h1>Múltiplos Descasados</h1>
+    </div>
+  </div>
+  <div class="page-scroll">
+
+    <div class="kpi-grid">
+      <div class="kpi-card bad"><div class="num">R$ 811.626,68</div><div class="label">Valor descasado agora</div></div>
+      <div class="kpi-card bad"><div class="num">977</div><div class="label">Peças a bloquear (0 → 86)</div></div>
+      <div class="kpi-card good"><div class="num">26</div><div class="label">Peças a liberar (86 → 0)</div></div>
+      <div class="kpi-card orange"><div class="num">142</div><div class="label">Múltiplos a ajustar</div></div>
+    </div>
+
+    <div class="panel" style="padding:12px 16px; margin-bottom:14px;">
+      <div class="md-filtros">
+        <input class="md-busca" type="search" placeholder="Buscar item pai, componente ou descrição...">
+        <div class="md-chips">
+          <button class="chip active" onclick="filtrar('todos', this)">Tudo</button>
+          <button class="chip" onclick="filtrar('bloquear', this)">Bloquear 0 → 86</button>
+          <button class="chip" onclick="filtrar('liberar', this)">Liberar 86 → 0</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="field-hint" style="margin-bottom:8px;">2 múltiplos sem nenhuma peça de um componente — não têm ação de bloqueio, precisam de reposição.</p>
+    <div id="semPeca"></div>
+
+    <div class="md-head">
+      <h3>O que fazer agora</h3>
+      <span class="field-hint">ordenado por valor descasado</span>
+    </div>
+    <div class="mac-list" id="lista"></div>
+  </div>
+</div>
+
+<script src="mock-data.js"></script>
+<script>
+function fmtInt(n){ return Math.round(n).toLocaleString('pt-BR'); }
+function fmtMoney(n){ return n.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}); }
+
+function renderSemPeca(){
+  document.getElementById('semPeca').innerHTML = MOCK_SEM_PECA.map(p=>`
+    <div class="sem-peca-card">
+      <span class="mono">${p.pai}</span>
+      <strong>${p.nome}</strong>
+      <span>— falta ${p.faltando}</span>
+    </div>`).join('');
+}
+
+function cardAcao(p){
+  const acao = p.comps.find(c=>c.acao);
+  if(!acao) return '';
+  const outros = p.comps.filter(c=>c.acao).length - 1;
+  const verbo = acao.acao === 'bloquear' ? 'bloquear' : 'liberar';
+  const sentidoTxt = acao.acao === 'bloquear' ? '0 (WN) → 86 (AI)' : '86 (AI) → 0 (WN)';
+  return `<div class="mac-acao-row">
+      <span class="qtd">${verbo} ${fmtInt(acao.qtd)}</span>
+      <span class="desc"><span class="comp">${acao.componente} ·</span> ${acao.nome} <span class="comp">· ${sentidoTxt}</span></span>
+      <span class="mac-local">local <b>5000${acao.local}</b> (${acao.endereco})</span>
+    </div>
+    ${outros > 0 ? `<div class="field-hint" style="margin-top:4px;">+ ${outros} outro(s) componente(s) com ação — ver detalhes</div>` : ''}`;
+}
+
+function render(filtro){
+  const lista = MOCK_PAIS.filter(p=>{
+    const temBloquear = p.comps.some(c=>c.acao==='bloquear');
+    const temLiberar = p.comps.some(c=>c.acao==='liberar');
+    if(filtro==='bloquear') return temBloquear;
+    if(filtro==='liberar') return temLiberar;
+    return true;
+  }).slice().sort((a,b)=>b.valor-a.valor);
+
+  document.getElementById('lista').innerHTML = lista.map(p=>{
+    const sentido = p.comps.some(c=>c.acao==='liberar') && !p.comps.some(c=>c.acao==='bloquear') ? 'liberar' : '';
+    const pct = Math.round(100 * p.vendaveis / p.potencial);
+    return `<div class="mac-card ${sentido}">
+      <div class="mac-top">
+        <div class="mac-id"><span class="mono">${p.pai}</span><strong>${p.nome}</strong></div>
+        <div class="mac-valor">${fmtMoney(p.valor)}</div>
+      </div>
+      <div class="mac-bar-wrap">
+        <div class="mac-bar-track"><div class="mac-bar-fill" style="width:${pct}%"></div></div>
+        <div class="mac-bar-labels"><span>${fmtInt(p.vendaveis)} vendáveis agora</span><span>${fmtInt(p.potencial)} possíveis se o 86 voltar</span></div>
+      </div>
+      ${cardAcao(p)}
+    </div>`;
+  }).join('') || '<div class="panel"><p class="field-hint">Nada bate com o filtro atual.</p></div>';
+}
+
+function filtrar(f, btn){
+  document.querySelectorAll('.md-chips .chip').forEach(c=>c.classList.remove('active'));
+  btn.classList.add('active');
+  render(f);
+}
+
+renderSemPeca();
+render('todos');
+</script>
+</body>
+</html>

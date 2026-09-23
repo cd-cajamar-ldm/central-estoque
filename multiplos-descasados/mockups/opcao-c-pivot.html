@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Múltiplos Descasados — pivô compacto</title>
+<style>
+  :root{
+    --azul:#001A72; --laranja:#FE5000;
+    --paper:#F4F5F7; --surface:#FFFFFF;
+    --ink:#1D1F2A; --ink-soft:#6B7280; --line:#D9DCE3;
+    --pai-bg:#FFEEE3; --comp-bg:#EAF0FB; --leaf-bg:#FFFFFF;
+    --wn-bg:rgba(31,138,82,.10); --ai-bg:rgba(254,80,0,.10);
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; background:var(--paper); color:var(--ink); font-size:12.5px; }
+  .topo{ background:var(--azul); color:#fff; padding:14px 20px; }
+  .topo h1{ font-size:16px; font-weight:800; }
+  .topo p{ font-size:11.5px; color:rgba(255,255,255,.72); margin-top:2px; }
+  .page{ padding:16px 20px; max-width:1100px; }
+  .toolbar{ display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .toolbar input{ flex:1 1 240px; border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12.5px; }
+  .btn-mini{ border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:6px 10px; font-size:11.5px; cursor:pointer; color:var(--ink-soft); }
+  .btn-mini:hover{ border-color:var(--laranja); color:var(--laranja); }
+  .legenda{ font-size:11px; color:var(--ink-soft); margin-bottom:10px; }
+  .legenda b{ color:var(--ink); }
+
+  table{ width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); }
+  thead th{
+    background:var(--azul); color:#fff; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;
+    padding:6px 8px; text-align:right; position:sticky; top:0; white-space:nowrap;
+  }
+  thead th.rotulo{ text-align:left; }
+  thead th.total{ background:#0B3ACB; }
+  td{ padding:3px 8px; border-bottom:1px solid var(--line); text-align:right; font-family:'SFMono-Regular',Consolas,monospace; font-size:11.5px; white-space:nowrap; }
+  td.rotulo{ text-align:left; font-family:inherit; white-space:normal; }
+  td.total{ font-weight:800; }
+
+  tr.pai td{ background:var(--pai-bg); font-weight:800; }
+  tr.pai td.rotulo{ display:flex; align-items:center; gap:6px; }
+  tr.comp td{ background:var(--comp-bg); font-weight:700; }
+  tr.comp td.rotulo{ padding-left:22px; display:flex; align-items:center; gap:6px; }
+  tr.leaf td{ background:var(--leaf-bg); color:var(--ink-soft); font-weight:400; }
+  tr.leaf td.rotulo{ padding-left:44px; }
+  tr.leaf:hover td, tr.comp:hover td, tr.pai:hover td{ filter:brightness(.97); }
+
+  td.col-wn{ background:var(--wn-bg); }
+  td.col-ai{ background:var(--ai-bg); }
+  thead th.col-wn{ background:#1F8A52; }
+  thead th.col-ai{ background:#C43D00; }
+
+  .toggle{
+    width:15px; height:15px; border-radius:3px; border:1px solid var(--line); background:var(--surface);
+    display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:800;
+    line-height:1; cursor:pointer; color:var(--ink-soft); flex-shrink:0;
+  }
+  .toggle:hover{ border-color:var(--laranja); color:var(--laranja); }
+  .row-hidden{ display:none; }
+
+  .kpi-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+  @media(max-width:760px){ .kpi-row{ grid-template-columns:1fr 1fr; } }
+  .kpi{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:10px 14px; border-top:3px solid var(--laranja); }
+  .kpi.azul{ border-top-color:var(--azul); }
+  .kpi.verde{ border-top-color:#1F8A52; }
+  .kpi .num{ font-family:'SFMono-Regular',Consolas,monospace; font-size:20px; font-weight:800; }
+  .kpi .label{ font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; margin-top:3px; font-weight:600; }
+
+  .legenda-cols{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .legenda-item{ font-size:10.5px; background:var(--surface); border:1px solid var(--line); border-radius:100px; padding:3px 9px; color:var(--ink-soft); }
+  .legenda-item b{ color:var(--ink); font-family:'SFMono-Regular',Consolas,monospace; }
+</style>
+</head>
+<body>
+<div class="topo">
+  <h1>Múltiplos Descasados</h1>
+  <p>Item pai → componente → endereço. Colunas mostram o código de restrição do WMS.</p>
+</div>
+<div class="page">
+  <div class="kpi-row" id="kpis"></div>
+  <div class="toolbar">
+    <input type="text" placeholder="Buscar item, componente ou endereço...">
+    <button class="btn-mini" onclick="expandirTudo()">Expandir tudo</button>
+    <button class="btn-mini" onclick="recolherTudo()">Recolher tudo</button>
+  </div>
+  <div class="legenda">0 = <b>WN</b> vendável (verde) · 86 = <b>AI</b> descasado bloqueado (laranja) · demais códigos abaixo:</div>
+  <div class="legenda-cols" id="legendaCols"></div>
+  <div style="overflow:auto; max-height:74vh;">
+    <table id="tbl"></table>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  { codigo:'929051', totais:{WN:27, AI:6}, filhos:[
+    { codigo:'8817231', nome:'CORPO DA RAMPA ESQUERDA 5T ALINHAMENTO ELÉTRICO VERMELHO JM MÁQUINAS LINHA PESADA', totais:{WN:13, AI:6}, filhos:[
+      { codigo:'8817231-A', totais:{WN:7} },
+      { codigo:'8817231-B', totais:{WN:6} },
+      { codigo:'8817231-C', totais:{AI:6}, preco:850 }
+    ]},
+    { codigo:'8817232', nome:'PINO DE TRAVA', totais:{WN:14}, filhos:[
+      { codigo:'8817232-A', totais:{WN:14} }
+    ]}
+  ]},
+  { codigo:'2807989', totais:{WN:8, WQ:1}, filhos:[
+    { codigo:'6621190', nome:'TORRE DE CÂMERA ALINHADOR TECHMAX 3D MAX-S3', totais:{WN:5, WQ:1}, filhos:[
+      { codigo:'6621190-A', totais:{WN:5} },
+      { codigo:'6621190-B', totais:{WQ:1} }
+    ]},
+    { codigo:'6621191', nome:'TRAVESSA', totais:{WN:3}, filhos:[
+      { codigo:'6621191-A', totais:{WN:3} }
+    ]}
+  ]},
+  { codigo:'3311420', totais:{WN:2, AI:7, DT:1}, filhos:[
+    { codigo:'5591004', nome:'CILINDRO PNEUMÁTICO KIT ELEVADOR 4T C/BLOQUEIO PRETO REFORÇADO IMPORTADO', totais:{WN:2, AI:7}, filhos:[
+      { codigo:'5591004-A', totais:{WN:2} },
+      { codigo:'5591004-B', totais:{AI:7}, preco:1200 }
+    ]},
+    { codigo:'5591005', nome:'TRAVA DE SEGURANÇA', totais:{DT:1}, filhos:[
+      { codigo:'5591005-A', totais:{DT:1} }
+    ]}
+  ]},
+  { codigo:'1624504', totais:{WN:6}, filhos:[
+    { codigo:'1624504-C', nome:'ELEVADOR AUTOMOTIVO MECÂNICO 4000KG TRIF 220V AZUL JM4000 JM MÁQUINAS', totais:{WN:6}, filhos:[
+      { codigo:'1624505', totais:{WN:2} },
+      { codigo:'1624506', totais:{WN:2} },
+      { codigo:'1624507', totais:{WN:2} }
+    ]}
+  ]}
+];
+
+/* Código do WMS (o que o coletor pede) por sigla — mesma legenda de rules.js. */
+const RESTRICOES = {
+  WN:{cod:0,  nome:'Estoque vendável'},
+  WA:{cod:10, nome:'Estoque reversa'},
+  WQ:{cod:15, nome:'Sem condições de venda (quebra)'},
+  RT:{cod:20, nome:'Em conferência do recebimento'},
+  WE:{cod:25, nome:'Amostra / correção de cadastro / assistência técnica'},
+  WV:{cod:35, nome:'Fora do prazo de validade'},
+  WL:{cod:40, nome:'Estoque físico não localizado'},
+  WT:{cod:50, nome:'Análise de item'},
+  WR:{cod:55, nome:'Reparo interno'},
+  AT:{cod:60, nome:'Múltiplos incompletos da reversa (componentes)'},
+  SS:{cod:61, nome:'Componentes de peças da marca própria'},
+  DT:{cod:62, nome:'Restrição de triagem'},
+  WD:{cod:65, nome:'Devolução de obsoletos ou acordo comercial'},
+  WS:{cod:75, nome:'Leilão'},
+  AI:{cod:86, nome:'Múltiplos incompletos dentro do estoque'}
+};
+
+const COLS = ['AI','DT','SS','WA','WD','WL','WN','WQ','WR','WS','WT'].filter(col=>
+  DATA.some(p=>somaCol(p,col) > 0)
+);
+
+function somaCol(node, col){
+  let v = node.totais && node.totais[col] || 0;
+  if(node.filhos) v += node.filhos.reduce((a,f)=>a+somaCol(f,col),0);
+  return node.totais && (col in node.totais) ? node.totais[col] : (node.filhos ? node.filhos.reduce((a,f)=>a+(f.totais[col]||0),0) : 0);
+}
+function totalGeral(node){ return COLS.reduce((a,c)=>a+(node.totais[c]||0),0); }
+function fmt(n){ return n ? n.toLocaleString('pt-BR') : ''; }
+
+function truncarNome(nome, max){
+  if(!nome || nome.length <= max) return nome || '';
+  const inicio = nome.slice(0, Math.ceil(max*0.65));
+  const fim = nome.slice(-Math.floor(max*0.28));
+  return inicio.trim() + '…' + fim.trim();
+}
+
+const colapsados = new Set();
+
+function linhaColunas(node){
+  return COLS.map(c=>{
+    const v = node.totais[c] || 0;
+    const cls = c==='WN' ? 'col-wn' : (c==='AI' ? 'col-ai' : '');
+    return `<td class="${cls}">${fmt(v)}</td>`;
+  }).join('') + `<td class="total">${fmt(totalGeral(node))}</td>`;
+}
+
+function render(){
+  let html = '';
+  for(const pai of DATA){
+    const idPai = 'p-'+pai.codigo;
+    const paiColapsado = colapsados.has(idPai);
+    html += `<tr class="pai" data-id="${idPai}">
+      <td class="rotulo"><span class="toggle" onclick="toggle('${idPai}')">${paiColapsado?'+':'−'}</span>${pai.codigo}</td>
+      ${linhaColunas(pai)}
+    </tr>`;
+    for(const comp of pai.filhos){
+      const idComp = idPai+'-c-'+comp.codigo;
+      const compColapsado = colapsados.has(idComp);
+      const escondePai = paiColapsado ? 'row-hidden' : '';
+      html += `<tr class="comp ${escondePai}" data-parent="${idPai}" data-id="${idComp}">
+        <td class="rotulo"><span class="toggle" onclick="toggle('${idComp}')">${compColapsado?'+':'−'}</span>${truncarNome(comp.nome, 58)}</td>
+        ${linhaColunas(comp)}
+      </tr>`;
+      for(const leaf of comp.filhos){
+        const escondeComp = (paiColapsado || compColapsado) ? 'row-hidden' : '';
+        html += `<tr class="leaf ${escondeComp}" data-parent="${idComp}">
+          <td class="rotulo">${leaf.codigo}</td>
+          ${linhaColunas(leaf)}
+        </tr>`;
+      }
+    }
+  }
+  document.getElementById('tbl').innerHTML = `
+    <thead><tr>
+      <th class="rotulo">Rótulos de Linha</th>
+      ${COLS.map(c=>`<th class="${c==='WN'?'col-wn':c==='AI'?'col-ai':''}" title="${c} — ${RESTRICOES[c].nome}">${RESTRICOES[c].cod}</th>`).join('')}
+      <th class="total">Total Geral</th>
+    </tr></thead>
+    <tbody>${html}</tbody>`;
+}
+
+function toggle(id){
+  if(colapsados.has(id)) colapsados.delete(id); else colapsados.add(id);
+  render();
+}
+function expandirTudo(){ colapsados.clear(); render(); }
+function recolherTudo(){
+  DATA.forEach(p=>colapsados.add('p-'+p.codigo));
+  render();
+}
+
+function renderLegenda(){
+  const outras = COLS.filter(c=>c!=='WN' && c!=='AI');
+  document.getElementById('legendaCols').innerHTML = outras.map(c=>
+    `<span class="legenda-item"><b>${RESTRICOES[c].cod}</b> ${c} — ${RESTRICOES[c].nome}</span>`
+  ).join('');
+}
+
+/* KPIs: o que está descasado agora (pai com peça presa em 86) e o que está
+   pendente de mexer pra casar de novo (peças em 86 aguardando o par, com
+   preço quando existe). */
+function coletarLeaves(node, out){
+  if(node.filhos) node.filhos.forEach(f=>coletarLeaves(f, out));
+  else out.push(node);
+  return out;
+}
+function renderKpis(){
+  const paisDescasados = DATA.filter(p=>(p.totais.AI||0) > 0).length;
+  const leavesAI = DATA.flatMap(p=>coletarLeaves(p, [])).filter(l=>(l.totais.AI||0) > 0);
+  const pecasPendentes = leavesAI.reduce((a,l)=>a+l.totais.AI, 0);
+  const valorPendente = leavesAI.reduce((a,l)=>a+l.totais.AI*(l.preco||0), 0);
+  const fmtMoney = n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="num">${paisDescasados}</div><div class="label">Múltiplos descasados</div></div>
+    <div class="kpi"><div class="num">${fmtMoney(valorPendente)}</div><div class="label">Valor descasado (em 86)</div></div>
+    <div class="kpi verde"><div class="num">${pecasPendentes}</div><div class="label">Peças pendentes de ajuste</div></div>
+    <div class="kpi azul"><div class="num">${fmtMoney(valorPendente)}</div><div class="label">Valor a movimentar</div></div>`;
+}
+
+renderKpis();
+renderLegenda();
+render();
+</script>
+</body>
+</html>
