@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import localforage from 'localforage';
 import type { Componente, Acao } from '../domain/tipos';
 import type { DivergenciaSAC } from '../domain/divergencias';
-import { lerArquivo, lerArquivoFotos } from '../parsers/planilha';
+import { lerArquivo, lerArquivoFotos, lerArquivoPrecos } from '../parsers/planilha';
 import { agruparConjuntos, resumirEqualizacao } from '../domain/equalizacao';
 import { auditarValoracao, resumirValoracao } from '../domain/valoracao';
 import { calcularMetricas, derivarAcoes } from '../domain/projeto';
@@ -35,6 +35,9 @@ export interface Importacao {
   acoes: Acao[];
   divergencias: DivergenciaSAC[];
   fotos: [string, string][]; // Map serializado
+  /* Preco de custo do item pai (SIGEQ278), so quando importado -
+     dashboard exibe R$ 0 sem ele, nunca quebra por falta do arquivo. */
+  precos: [string, number][]; // Map serializado
   arquivo: string;
   importadoEm: string; // ISO
   /* Marca os dados de exemplo, para a tela avisar que nao sao do CD. */
@@ -130,7 +133,11 @@ export function useDados() {
     };
   }, []);
 
-  const importar = useCallback(async (arquivo: File, arquivoFotos?: File | null) => {
+  const importar = useCallback(async (
+    arquivo: File,
+    arquivoFotos?: File | null,
+    arquivoPrecos?: File | null
+  ) => {
     setErro(null);
     try {
       const buffer = new Uint8Array(await arquivo.arrayBuffer());
@@ -147,11 +154,18 @@ export function useDados() {
         fotos = [...lerArquivoFotos(bufFotos).entries()];
       }
 
+      let precos: [string, number][] = [];
+      if (arquivoPrecos) {
+        const bufPrecos = new Uint8Array(await arquivoPrecos.arrayBuffer());
+        precos = [...lerArquivoPrecos(bufPrecos).entries()];
+      }
+
       const novo: Importacao = {
         componentes,
         acoes,
         divergencias,
         fotos,
+        precos,
         arquivo: arquivo.name,
         importadoEm: new Date().toISOString(),
       };
@@ -193,6 +207,7 @@ export function useDados() {
       acoes: acoesDemo(),
       divergencias: divergenciasDemo(),
       fotos: [],
+      precos: [],
       arquivo: 'dados de exemplo',
       importadoEm: new Date().toISOString(),
       demonstracao: true,

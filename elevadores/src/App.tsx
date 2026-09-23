@@ -148,6 +148,14 @@ export default function App() {
     return m;
   }, [dados]);
 
+  /* Preco de custo do item pai (SIGEQ278), importado a parte. Mapa
+     vazio quando nao foi importado: o dashboard mostra R$ 0 parado,
+     nunca quebra por falta do arquivo. */
+  const precos = useMemo(
+    () => new Map<string, number>(dados?.precos ?? []),
+    [dados]
+  );
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', tema === 'escuro' ? 'dark' : 'light');
   }, [tema]);
@@ -347,6 +355,7 @@ export default function App() {
             <DashboardGeral
               componentes={dados.componentes}
               fotos={fotos}
+              precos={precos}
               busca={busca}
               divergencias={dados.divergencias}
               ajustes={ajustes}

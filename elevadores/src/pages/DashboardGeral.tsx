@@ -14,6 +14,7 @@ import type { ChartConfiguration } from 'chart.js';
 import type { Componente, Conjunto, Valoracao } from '../domain/tipos';
 import { agruparConjuntos, resumirEqualizacao } from '../domain/equalizacao';
 import { listarPorFornecedor } from '../domain/fornecedores';
+import type { MapaPrecos } from '../domain/fornecedores';
 import { auditarValoracao, resumirValoracao } from '../domain/valoracao';
 import { cores, coresStatus } from '../config/tokens';
 import { Grafico } from '../components/charts/Grafico';
@@ -210,6 +211,7 @@ function AuditoriaValoracao({
 export function DashboardGeral({
   componentes,
   fotos,
+  precos,
   busca: buscaGlobal = '',
   divergencias = [],
   ajustes = [],
@@ -218,6 +220,9 @@ export function DashboardGeral({
 }: {
   componentes: Componente[];
   fotos: Map<string, string>;
+  /* Preco de custo do item pai (SIGEQ278), para o R$ parado na saude
+     do estoque. Mapa vazio quando nao foi importado. */
+  precos?: MapaPrecos;
   /* Texto da busca da barra de topo, que vale para todas as telas. */
   busca?: string;
   /* Devolucoes registradas pelo SAC (aba Divergencias SAC). */
@@ -293,7 +298,7 @@ export function DashboardGeral({
           "quanto do que esta parado vira venda", que e por onde a
           reuniao comeca. Os totais de compra e o detalhe por conjunto
           vem depois, para quem quer saber o que fazer a respeito. */}
-      <SaudeDoEstoque componentes={componentes} />
+      <SaudeDoEstoque componentes={componentes} precos={precos} />
 
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         <Kpi rotulo="Colunas a comprar" valor={resumo.totalComprarColuna} dica="para casar as bases existentes" cor={cores.laranja.base} />

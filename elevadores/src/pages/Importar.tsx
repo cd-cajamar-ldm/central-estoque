@@ -11,14 +11,16 @@ export function Importar({
   aoVerExemplo,
   erro,
 }: {
-  aoImportar: (arquivo: File, fotos: File | null) => Promise<unknown>;
+  aoImportar: (arquivo: File, fotos: File | null, precos: File | null) => Promise<unknown>;
   aoVerExemplo: () => void;
   erro: string | null;
 }) {
   const refPlanilha = useRef<HTMLInputElement>(null);
   const refFotos = useRef<HTMLInputElement>(null);
+  const refPrecos = useRef<HTMLInputElement>(null);
   const [planilha, setPlanilha] = useState<File | null>(null);
   const [fotos, setFotos] = useState<File | null>(null);
+  const [precos, setPrecos] = useState<File | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [arrastando, setArrastando] = useState(false);
 
@@ -26,7 +28,7 @@ export function Importar({
     if (!planilha) return;
     setOcupado(true);
     try {
-      await aoImportar(planilha, fotos);
+      await aoImportar(planilha, fotos, precos);
     } catch {
       // A mensagem ja aparece pela prop erro.
     } finally {
@@ -106,6 +108,31 @@ export function Importar({
           {fotos && (
             <button
               onClick={() => setFotos(null)}
+              className="text-[11.5px] underline"
+              style={{ color: 'var(--ink-soft)' }}
+            >
+              remover
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-[12.5px]">
+          <span style={{ color: 'var(--ink-soft)' }}>
+            Preço de custo · SIGEQ278 <i>(opcional, para o R$ parado)</i>:
+          </span>
+          <input
+            ref={refPrecos}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => setPrecos(e.target.files?.[0] ?? null)}
+          />
+          <Botao variante="secundario" aoClicar={() => refPrecos.current?.click()}>
+            {precos ? precos.name : 'Escolher SIGEQ278.xlsx'}
+          </Botao>
+          {precos && (
+            <button
+              onClick={() => setPrecos(null)}
               className="text-[11.5px] underline"
               style={{ color: 'var(--ink-soft)' }}
             >

@@ -6,11 +6,12 @@
    ============================================================ */
 import * as XLSX from 'xlsx-js-style';
 import type { Componente, Acao } from '../domain/tipos';
+import type { MapaPrecos } from '../domain/fornecedores';
 import { lerMultiplos } from './lerMultiplos';
 import { lerProjeto } from './lerProjeto';
 import { lerDivergencias } from './lerDivergencias';
 import type { DivergenciaSAC } from '../domain/divergencias';
-import { normalizarCabecalho, paraTexto } from './utilData';
+import { normalizarCabecalho, paraNumero, paraTexto } from './utilData';
 import { montarObjetos, criarSeletor } from './utilData';
 
 /* A aba de divergencias entra na lista porque o XLSX.read so abre o
@@ -89,4 +90,37 @@ export function lerFotos(wb: XLSX.WorkBook): MapaFotos {
 export function lerArquivoFotos(data: ArrayBuffer | Uint8Array): MapaFotos {
   const wb = XLSX.read(data, { type: 'array', cellDates: true, sheets: ['Export'] });
   return lerFotos(wb);
+}
+
+/* ---------------------------------------------------------------
+   Preco de custo do item pai: SIGEQ278 (opcional).
+   Mesma logica do modulo Multiplos Descasados (rules.js, ALIAS_278):
+   a 390/Multiplos traz o valor unitario zerado nos componentes do
+   kit - o preco esta no item pai, que nao tem saldo proprio. A 278 e
+   um export cru de sistema, sheet unica, cabecalho na primeira linha.
+   Preco de custo manda; preco de compra so entra quando o de custo
+   nao veio preenchido.
+   --------------------------------------------------------------- */
+export function lerPrecos(wb: XLSX.WorkBook): MapaPrecos {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = abaParaMatriz(ws);
+  const mapa: MapaPrecos = new Map();
+  if (aoa.length === 0) return mapa;
+
+  const { linhas } = montarObjetos(aoa, 0);
+  for (const linha of linhas) {
+    const s = criarSeletor(linha);
+    const item = paraTexto(s('Item'));
+    if (!item) continue;
+    const custo = paraNumero(s('Preço de custo', 'Preco de custo'));
+    const compra = paraNumero(s('Preço de compra', 'Preco de compra'));
+    const preco = custo || compra;
+    if (preco > 0) mapa.set(item, preco);
+  }
+  return mapa;
+}
+
+export function lerArquivoPrecos(data: ArrayBuffer | Uint8Array): MapaPrecos {
+  const wb = XLSX.read(data, { type: 'array', cellDates: true });
+  return lerPrecos(wb);
 }
