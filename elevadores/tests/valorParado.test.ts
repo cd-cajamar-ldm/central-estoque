@@ -92,3 +92,45 @@ describe('valor parado (SIGEQ278)', () => {
     expect(total.componentesSemPreco).toBe(1); // so A ficou sem preco
   });
 });
+
+describe('valor parado com QRY0390 (prioridade sobre a SIGEQ278)', () => {
+  it('o valor unitario do proprio componente na 390 manda, mesmo sem o S', () => {
+    // Base (sem S) tem sobra e preco proprio na 390: nao precisa do
+    // pai nem do S para valorar.
+    const item = [
+      comp({ itemVolMultiplo: 'A', itemComponente: 'A1', componenteBaseColuna: 'BASE', cd: 10, inInterface: 'N', fabricante: 'JM' }),
+      comp({ itemVolMultiplo: 'A', itemComponente: 'A2', componenteBaseColuna: 'COLUNA', cd: 1, inInterface: 'S', fabricante: 'JM' }),
+    ];
+    const saldo390 = new Map([['A1', 80]]);
+    const i = primeiroItem(listarPorFornecedor(item, new Map(), saldo390));
+    expect(i.valorParado).toBe(9 * 80);
+    expect(i.componentesSemPreco).toBe(0);
+  });
+
+  it('sem preco na 390 para aquele componente, cai para o preco do pai (278) via S', () => {
+    const item = [
+      comp({ itemVolMultiplo: 'A', itemComponente: 'A1', componenteBaseColuna: 'BASE', cd: 10, inInterface: 'N', fabricante: 'JM' }),
+      comp({ itemVolMultiplo: 'A', itemComponente: 'A2', componenteBaseColuna: 'COLUNA', cd: 1, inInterface: 'S', fabricante: 'JM' }),
+    ];
+    // A 390 so tem preco de outro item; A1 fica sem, cai pro pai.
+    const precosPai = new Map([['A', 500]]);
+    const saldo390 = new Map([['Z9', 999]]);
+    const i = primeiroItem(listarPorFornecedor(item, precosPai, saldo390));
+    // A sobra continua na base (sem S): sem preco proprio na 390 e
+    // sem o S, o pai (278) nao se aplica a ela - mesmo resultado de
+    // quando so a 278 foi importada.
+    expect(i.valorParado).toBe(0);
+    expect(i.componentesSemPreco).toBe(1);
+  });
+
+  it('preco da 390 no proprio componente com S vence, ignorando o do pai', () => {
+    const item = [
+      comp({ itemVolMultiplo: 'B', itemComponente: 'B1', componenteBaseColuna: 'BASE', cd: 1, inInterface: 'N', fabricante: 'JM' }),
+      comp({ itemVolMultiplo: 'B', itemComponente: 'B2', componenteBaseColuna: 'COLUNA', cd: 10, inInterface: 'S', fabricante: 'JM' }),
+    ];
+    const precosPai = new Map([['B', 500]]); // preco do pai, seria usado sem a 390
+    const saldo390 = new Map([['B2', 700]]); // preco do proprio componente com sobra
+    const i = primeiroItem(listarPorFornecedor(item, precosPai, saldo390));
+    expect(i.valorParado).toBe(9 * 700);
+  });
+});
