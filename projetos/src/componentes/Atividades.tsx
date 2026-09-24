@@ -332,7 +332,7 @@ export default function Atividades({
                 <th className="px-3 py-2 font-bold">Saúde</th>
                 <th className="px-3 py-2 font-bold">Conteúdo</th>
                 <th className="px-3 py-2 font-bold w-40">Avanço</th>
-                <th className="px-3 py-2" />
+                <th className="px-3 py-2 font-bold">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -435,9 +435,7 @@ export default function Atividades({
                     </div>
                   </td>
 
-                  <td className="px-3 py-2 text-right">
-                    <button className="text-xs font-bold text-roxo-escuro" onClick={() => aoAbrir(p)}>Abrir</button>
-                  </td>
+                  <td className="px-3 py-2"><SeloStatus status={p.status} /></td>
                 </tr>
               ))}
             </tbody>
