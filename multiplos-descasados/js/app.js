@@ -19,12 +19,17 @@ const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
-  soDescasados:true,
+  equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
-  ordem:'valor',
-  expandido:null,
+  pivotExpandido:new Set(),
   tela:'descasados',
-  sentido:'todos',      // filtro da tela de ajuste: bloquear, liberar ou os dois
+  regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
+  selecionadas:{clal:null, x1:null}, // dimensão -> null (todas) | Set() (só as marcadas)
+  restricoesSel:null,             // null = todas as colunas | Set() = só estas siglas
+  restricoesAberto:false,         // lista de restrições aberta ou recolhida
+  // Ordenação de cada matriz: por total (padrão), pela descrição da dimensão,
+  // ou por uma coluna de restrição. asc/desc alterna no mesmo cabeçalho.
+  ordemMatriz:{clal:{col:'total', dir:'desc'}, x1:{col:'total', dir:'desc'}},
   f051:null, f390:null, f278:null,
   proc:{'051':false,'390':false,'278':false},
   progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0}},
@@ -33,6 +38,21 @@ const MD = {
 };
 
 const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
+
+/* As duas dimensões de local usadas nas matrizes de Ajustes e Configurações —
+   mesma lógica pras duas, só troca o valor do endereço que a QRY0390 traz.
+   X1 (setor) e X2 (rua) andam juntos num endereço físico — "PP 001" é um
+   setor só, não dois — por isso viram uma dimensão combinada só, em vez de
+   duas matrizes separadas. Chave de config própria por dimensão pra não
+   perder a regra de classe (CLAL) já salva quando X1/X2 foram adicionados
+   depois. */
+const MD_DIMENSOES = [
+  {chave:'clal', titulo:'Classe', valor:o=>o.clal || '—'},
+  {chave:'x1', titulo:'X1/X2', valor:o=>[o.x1, o.x2].filter(Boolean).join(' ') || '—'}
+];
+const MD_DIM_POR_CHAVE = {};
+MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
+const MD_CONFIG_KEY_POR_DIM = {clal:'regras-classe', x1:'regras-x1'};
 
 function irEsc(v){ if(v===undefined||v===null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function irFmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
@@ -114,7 +134,8 @@ function mdInvalidarCache(){ MD._cache = null; MD._cacheBase = null; MD._plano =
 function mdPaisFiltrados(){
   const termo = MD.busca.trim().toLowerCase();
   let lista = mdPais();
-  if(MD.soDescasados) lista = lista.filter(p=>p.descasado);
+  if(MD.equalizado === 'sim') lista = lista.filter(p=>!p.descasado);
+  else if(MD.equalizado === 'nao') lista = lista.filter(p=>p.descasado);
   if(termo){
     lista = lista.filter(p=>
       p.pai.includes(termo) ||
@@ -123,13 +144,7 @@ function mdPaisFiltrados(){
     );
   }
   const acoes = p=>p.bloquearPecas + p.liberarPecas;
-  const ordens = {
-    valor: (a,b)=>b.sobraValor - a.sobraValor || acoes(b) - acoes(a),
-    pecas: (a,b)=>acoes(b) - acoes(a) || b.sobraValor - a.sobraValor,
-    completos: (a,b)=>a.completos - b.completos || b.sobraValor - a.sobraValor,
-    item: (a,b)=>a.pai.localeCompare(b.pai)
-  };
-  return lista.slice().sort(ordens[MD.ordem] || ordens.valor);
+  return lista.slice().sort((a,b)=>b.sobraValor - a.sobraValor || acoes(b) - acoes(a));
 }
 
 /* ============================================================
@@ -138,37 +153,19 @@ function mdPaisFiltrados(){
 function mdTemDados(){ return !!(MD.estrutura && MD.estrutura.length && MD.saldos && MD.saldos.length); }
 
 function mdSetBase(base){ MD.base = base; mdInvalidarCache(); irRenderView(); }
-function mdSetOrdem(o){ MD.ordem = o; irRenderView(); }
-function mdToggleSoDescasados(){ MD.soDescasados = !MD.soDescasados; irRenderView(); }
+function mdSetEqualizado(v){ MD.equalizado = v; irRenderView(); }
 function mdBuscar(v){
   MD.busca = v;
   clearTimeout(window.__mdBuscaTimer);
   window.__mdBuscaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBusca')?.focus(); }, 220);
 }
-function mdToggleLinha(pai){ MD.expandido = MD.expandido===pai ? null : pai; irRenderView(); }
-
 function mdKpis(resumo){
   return `<div class="kpi-grid">
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.paisDescasados)}</div><div class="label">Múltiplos a ajustar</div></div>
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.bloquearPecas)}</div><div class="label">Peças a bloquear (0 → 86)</div></div>
     <div class="kpi-card good"><div class="num">${irFmtInt(resumo.liberarPecas)}</div><div class="label">Peças a liberar (86 → 0)</div></div>
-    <div class="kpi-card bad"><div class="num">${irFmtMoney(resumo.sobraValor)}</div><div class="label">Valor descasado</div></div>
-    <div class="kpi-card good"><div class="num">${irFmtInt(resumo.completos)}</div><div class="label">Múltiplos vendáveis</div></div>
-    <div class="kpi-card orange"><div class="num">${irFmtInt(resumo.paisIncompletos)}</div><div class="label">Sem nenhuma peça de um componente</div></div>
-  </div>` + mdAvisoPreco(resumo);
-}
-
-/* O valor da tela só é o valor de verdade se as peças descasadas tiverem preço.
-   Hoje a QRY0390 traz VALOR_UNITARIO zerado na quase totalidade dos componentes
-   de múltiplo — sem a SIGEQ278, o total sai muito abaixo do real. Em vez de
-   esconder o número atrás de um travessão (que some com os R$ que EXISTEM), a
-   tela mostra o total e diz, com número, o quanto dele não pôde ser valorado. */
-function mdAvisoPreco(resumo){
-  if(!resumo.componentesSemPreco) return '';
-  const semBase = !(MD.precos && MD.precos.length);
-  return `<div class="panel md-aviso">
-    <strong>${irFmtInt(resumo.componentesSemPreco)}</strong> dos ${irFmtInt(resumo.componentesComSobra)} componentes descasados estão sem preço${semBase ? '' : ' mesmo com a SIGEQ278 importada'} —
-    o valor acima é o piso, não o total. ${semBase ? 'Importe a SIGEQ278 para valorar pelo preço de custo do item pai.' : ''}
+    <div class="kpi-card bad"><div class="num num-money">${irFmtMoney(resumo.sobraValor)}</div><div class="label">Valor descasado</div></div>
+    <div class="kpi-card good"><div class="num num-money">${irFmtMoney(resumo.liberarValor)}</div><div class="label">Valor a liberar</div></div>
   </div>`;
 }
 
@@ -179,27 +176,11 @@ function mdBarraFiltros(){
       <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar item pai, componente ou descrição..."
              value="${irEsc(MD.busca)}" oninput="mdBuscar(this.value)">
       <div class="md-chips">
-        ${chip(MD.base==='qtde', "mdSetBase('qtde')", 'Estoque total')}
-        ${chip(MD.base==='qtdeDisp', "mdSetBase('qtdeDisp')", 'Só disponível')}
-      </div>
-      <div class="md-chips">
-        ${chip(MD.soDescasados, 'mdToggleSoDescasados()', MD.soDescasados ? 'Só com ajuste' : 'Todos os múltiplos')}
-      </div>
-      <div class="md-chips">
-        ${chip(MD.ordem==='valor', "mdSetOrdem('valor')", 'Por valor')}
-        ${chip(MD.ordem==='pecas', "mdSetOrdem('pecas')", 'Por peças')}
-        ${chip(MD.ordem==='completos', "mdSetOrdem('completos')", 'Menos completos')}
+        ${chip(MD.equalizado==='sim', "mdSetEqualizado('sim')", 'Equalizado: Sim')}
+        ${chip(MD.equalizado==='nao', "mdSetEqualizado('nao')", 'Equalizado: Não')}
       </div>
     </div>
-    <p class="field-hint">${irEsc(mdLegendaBase())}</p>
   </div>`;
-}
-function mdLegendaBase(){
-  const b = MD.base==='qtdeDisp'
-    ? 'Saldo disponível (QTDE_DISP): desconta o que já está reservado em romaneio.'
-    : 'Saldo total (QTDE): tudo que existe no endereço, reservado ou não.';
-  return b + ' Só o que está em WN (0) casa e conta como vendável; o 86 (AI) é o descasado bloqueado, que volta pra WN quando o par aparece.'
-    + ' O pai vem sempre da ZBIQ0051 — item que não está nela não é múltiplo e não aparece aqui.';
 }
 
 /* Colunas de restrição da tela: as que realmente aparecem no estoque destes
@@ -214,118 +195,185 @@ function mdRestricoesPresentes(){
   return ordenadas;
 }
 
-function mdTabelaPais(){
+/* Colunas que a matriz mostra de fato: as presentes no estoque, menos as que
+   o filtro de restrições desmarcou. A seleção é só de VISÃO — não muda saldo,
+   plano nem exportação; serve pra tirar da frente as restrições que não
+   interessam naquele momento, porque com 10 colunas a tabela rola na
+   horizontal e o que importa sai da tela. */
+function mdRestricoesVisiveis(){
+  const presentes = mdRestricoesPresentes();
+  if(MD.restricoesSel === null) return presentes;
+  const visiveis = presentes.filter(s=>MD.restricoesSel.has(s));
+  // Desmarcar tudo deixaria a matriz sem nenhuma coluna de número: sem isso a
+  // tela vira só a lista de valores, e parece quebrada em vez de filtrada.
+  return visiveis.length ? visiveis : presentes;
+}
+function mdToggleRestricaoCol(sigla){
+  if(MD.restricoesSel === null) MD.restricoesSel = new Set(mdRestricoesPresentes());
+  if(MD.restricoesSel.has(sigla)) MD.restricoesSel.delete(sigla); else MD.restricoesSel.add(sigla);
+  irRenderView();
+}
+function mdTodasRestricoes(){ MD.restricoesSel = null; irRenderView(); }
+function mdSoRestricoesDoModulo(){ MD.restricoesSel = new Set([MD_SIGLA_VENDAVEL, MD_SIGLA_BLOQUEIO]); irRenderView(); }
+function mdToggleListaRestricoes(){ MD.restricoesAberto = !MD.restricoesAberto; irRenderView(); }
+
+/* Lista de restrições em forma de filtro: uma linha por restrição, com o
+   código, a sigla e o nome da legenda — o mesmo vocabulário do coletor, pra
+   quem lembra do número e não da sigla (e vice-versa). */
+function mdRenderFiltroRestricoes(){
+  const presentes = mdRestricoesPresentes();
+  if(!presentes.length) return '';
+  const sel = MD.restricoesSel;
+  const marcadas = sel === null ? presentes.length : presentes.filter(s=>sel.has(s)).length;
+  const itens = presentes.map(s=>{
+    const marcado = sel === null || sel.has(s);
+    return `<label class="md-restr-item ${marcado?'':'off'}">
+      <input type="checkbox" ${marcado?'checked':''} onchange="mdToggleRestricaoCol('${s}')">
+      <span class="md-restr-cod">${irEsc(mdCodRestricao(s))}</span>
+      <span class="md-restr-sigla mono">${irEsc(s)}</span>
+      <span class="md-restr-nome">${irEsc(mdNomeRestricao(s))}</span>
+    </label>`;
+  }).join('');
+  return `<div class="md-restr-filtro ${MD.restricoesAberto?'aberto':''}">
+    <button class="chip md-restr-botao" onclick="mdToggleListaRestricoes()">
+      Restrições: ${marcadas === presentes.length ? 'todas' : irFmtInt(marcadas)+' de '+irFmtInt(presentes.length)}
+      <span class="md-seta">${MD.restricoesAberto ? '▴' : '▾'}</span>
+    </button>
+    ${MD.restricoesAberto ? `<div class="md-restr-lista">
+      <div class="md-restr-acoes">
+        <button class="btn-link" onclick="mdTodasRestricoes()">Todas</button>
+        <button class="btn-link" onclick="mdSoRestricoesDoModulo()">Só 0 e 86</button>
+      </div>
+      ${itens}
+    </div>` : ''}
+  </div>`;
+}
+
+/* Ordenação da matriz. Clicar no mesmo cabeçalho inverte; clicar em outro
+   começa pelo mais útil daquela coluna — a descrição em ordem alfabética
+   (A→Z), os números do maior pro menor, que é como se procura o volume. */
+function mdOrdenarMatriz(chave, col){
+  const atual = MD.ordemMatriz[chave] || {col:'total', dir:'desc'};
+  const dir = atual.col === col ? (atual.dir === 'asc' ? 'desc' : 'asc') : (col === 'valor' ? 'asc' : 'desc');
+  MD.ordemMatriz[chave] = {col, dir};
+  irRenderView();
+}
+function mdSetaOrdem(chave, col){
+  const atual = MD.ordemMatriz[chave] || {col:'total', dir:'desc'};
+  if(atual.col !== col) return '<span class="md-seta md-seta-off">↕</span>';
+  return `<span class="md-seta">${atual.dir === 'asc' ? '↑' : '↓'}</span>`;
+}
+
+/* Nome comprido não cabe numa linha compacta: mostra o início e o fim, que é
+   o trecho que costuma diferenciar um item do outro (cor, medida, modelo). */
+function mdTruncarNome(nome, max){
+  if(!nome || nome.length <= max) return nome || '';
+  const inicio = nome.slice(0, Math.ceil(max*0.65));
+  const fim = nome.slice(-Math.floor(max*0.28));
+  return inicio.trim() + '…' + fim.trim();
+}
+
+/* Soma por restrição no nível do pai: cada componente já traz o próprio total
+   (porRestricao, no corte de base escolhido); aqui só agrega os componentes. */
+function mdPaiTotaisPorSigla(p, restricoes){
+  const out = {};
+  for(const s of restricoes) out[s] = p.componentes.reduce((a,c)=>a+(c.porRestricao[s]||0),0);
+  return out;
+}
+
+function mdPivColunas(totais, restricoes, total){
+  return restricoes.map(s=>{
+    const v = totais[s] || 0;
+    const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
+    return `<td class="${cls}">${v ? irFmtInt(v) : ''}</td>`;
+  }).join('') + `<td class="md-piv-total">${irFmtInt(total)}</td>`;
+}
+
+function mdPivToggle(id){
+  if(MD.pivotExpandido.has(id)) MD.pivotExpandido.delete(id); else MD.pivotExpandido.add(id);
+  irRenderView();
+}
+function mdPivExpandirTudo(){
+  for(const p of mdPaisFiltrados()){
+    MD.pivotExpandido.add('p-'+p.pai);
+    for(const c of p.componentes) MD.pivotExpandido.add('p-'+p.pai+'-c-'+c.componente);
+  }
+  irRenderView();
+}
+function mdPivRecolherTudo(){ MD.pivotExpandido.clear(); irRenderView(); }
+
+/* Pivô item pai → componente → endereço, no estilo tabela dinâmica: uma
+   coluna por restrição — o CÓDIGO do WMS, não a sigla, porque é o que se
+   digita no coletor. WN e AI destacados. Recolhido por padrão: um múltiplo
+   grande pode ter dezenas de endereços por componente, e abrir tudo de cara
+   afoga a tela. */
+function mdRenderPivot(){
   const lista = mdPaisFiltrados();
   if(!lista.length){
     return `<div class="panel"><p class="field-hint">Nenhum múltiplo bate com o filtro atual.</p></div>`;
   }
-  const linhas = lista.map(p=>{
-    const aberto = MD.expandido === p.pai;
+  const restricoes = mdRestricoesPresentes();
+  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+
+  let linhas = '';
+  for(const p of lista){
+    const idPai = 'p-'+p.pai;
+    const paiAberto = MD.pivotExpandido.has(idPai);
     const alerta = p.faltantes > 0
       ? `<span class="md-tag md-tag-bad">${p.faltantes} sem peça</span>`
       : (p.completos === 0 ? `<span class="md-tag md-tag-bad">0 vendáveis</span>` : '');
-    const principal = `<tr class="md-linha ${aberto?'sel':''}" onclick="mdToggleLinha('${irEsc(p.pai)}')">
-      <td class="mono md-left">${irEsc(p.pai)}</td>
-      <td class="md-left">${irEsc(p.nome || '—')} ${alerta}</td>
-      <td class="mono">${irFmtInt(p.nComponentes)}</td>
-      <td class="mono">${irFmtInt(p.wnTotal)}</td>
-      <td class="mono ${p.bloqueadoTotal?'md-col-86':''}">${irFmtInt(p.bloqueadoTotal)}</td>
-      <td class="mono">${irFmtInt(p.outrasTotal)}</td>
-      <td class="mono ${p.completos?'pos':'neg'}">${irFmtInt(p.completos)}</td>
-      <td class="mono ${p.bloquearPecas?'neg':''}">${irFmtInt(p.bloquearPecas)}</td>
-      <td class="mono ${p.liberarPecas?'pos':''}">${irFmtInt(p.liberarPecas)}</td>
-      <td class="mono ${p.sobraValor?'neg':''}">${irFmtMoney(p.sobraValor)}</td>
+    linhas += `<tr class="md-piv-pai">
+      <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome,46))} ${alerta}</td>
+      ${mdPivColunas(mdPaiTotaisPorSigla(p, restricoes), restricoes, p.pecasTotal)}
     </tr>`;
-    if(!aberto) return principal;
-    return principal + `<tr class="md-detalhe"><td colspan="10">${mdDetalhePai(p)}</td></tr>`;
+    if(!paiAberto) continue;
+    for(const c of p.componentes){
+      const idComp = idPai+'-c-'+c.componente;
+      const compAberto = MD.pivotExpandido.has(idComp);
+      const tagValor = c.inInterface==='S' ? ' <span class="md-tag md-tag-info" title="Carrega o valor do múltiplo (in_interface = S)">valor</span>' : '';
+      linhas += `<tr class="md-piv-comp">
+        <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idComp}')">${compAberto?'−':'+'}</button><span class="mono">${irEsc(c.componente)}</span> ${irEsc(mdTruncarNome(c.nome,46))}${tagValor}</td>
+        ${mdPivColunas(c.porRestricao, restricoes, c.total)}
+      </tr>`;
+      if(!compAberto) continue;
+      for(const loc of (c.locais||[])){
+        const v = loc[campo] || 0;
+        if(!v) continue;
+        linhas += `<tr class="md-piv-leaf">
+          <td class="md-left">${irEsc(loc.desc || loc.local)}</td>
+          ${mdPivColunas({[loc.restricao]: v}, restricoes, v)}
+        </tr>`;
+      }
+    }
+  }
+
+  const headerCols = restricoes.map(s=>{
+    const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
+    return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
+      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${irEsc(mdCodRestricao(s))}${mdSetaOrdem(chave, s)}</th>`;
   }).join('');
 
   return `<div class="panel">
     <div class="md-head">
       <h3>Múltiplos por item pai</h3>
-      <span class="field-hint">${irFmtInt(lista.length)} ${lista.length===1?'múltiplo':'múltiplos'} · clique na linha para ver componentes, restrições e endereços</span>
+      <div class="md-piv-acoes">
+        <button class="btn-link" onclick="mdPivExpandirTudo()">Expandir tudo</button>
+        <button class="btn-link" onclick="mdPivRecolherTudo()">Recolher tudo</button>
+        <button class="btn btn-primary" onclick="mdExportarAjustePivot()">Baixar planilha de ajuste</button>
+      </div>
     </div>
-    <div class="table-wrap">
-      <table class="aud-table">
+    <p class="field-hint">${irFmtInt(lista.length)} ${lista.length===1?'múltiplo':'múltiplos'} · item pai → componente → endereço, clique em + para expandir</p>
+    <div class="md-piv-wrap">
+      <table class="md-piv">
         <thead><tr>
-          <th>Item pai</th><th>Descrição</th><th class="num">Comp.</th>
-          <th class="num" title="Estoque vendável">WN (0)</th>
-          <th class="num" title="Múltiplos incompletos dentro do estoque">AI (86)</th>
-          <th class="num" title="Demais restrições: não vendem e não casam">Outras</th>
-          <th class="num" title="Múltiplos completos em WN">Vendáveis</th>
-          <th class="num" title="Peças a mandar de 0 para 86">Bloquear</th>
-          <th class="num" title="Peças a devolver de 86 para 0">Liberar</th>
-          <th class="num">Valor descasado</th>
+          <th class="md-left">Item pai / Componente / Endereço</th>
+          ${headerCols}
+          <th class="md-piv-total">Total Geral</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
     </div>
   </div>`;
-}
-
-function mdDetalhePai(p){
-  const restricoes = mdRestricoesPresentes();
-  const comps = p.componentes.map(c=>{
-    const cels = restricoes.map(s=>{
-      const v = c.porRestricao[s] || 0;
-      const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-      return `<td class="mono ${cls}">${v ? irFmtInt(v) : ''}</td>`;
-    }).join('');
-    const acao = c.bloquear > 0
-      ? `<span class="md-tag md-tag-bad" title="Mandar de 0 (WN) para 86 (AI)">bloquear ${irFmtInt(c.bloquear)}</span>`
-      : (c.liberar > 0 ? `<span class="md-tag md-tag-good" title="Devolver de 86 (AI) para 0 (WN)">liberar ${irFmtInt(c.liberar)}</span>` : '');
-    return `<tr class="${c.bloquear>0?'md-comp-sobra':(c.liberar>0?'md-comp-liberar':'')}">
-      <td class="mono md-left">${irEsc(c.componente)}${c.inInterface==='S' ? ' <span class="md-tag md-tag-info" title="Componente que carrega o valor do múltiplo (in_interface = S)">valor</span>' : ''}</td>
-      <td class="md-left">${irEsc(c.nome || (c.semFicha ? 'sem saldo na QRY0390' : '—'))}</td>
-      <td class="mono">${irFmtInt(c.qtdePorMultiplo)}</td>
-      ${cels}
-      <td class="mono">${irFmtInt(c.total)}</td>
-      <td class="md-left">${acao}</td>
-    </tr>`;
-  }).join('');
-  const cabRestr = restricoes.map(s=>{
-    const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${irEsc(s)}</th>`;
-  }).join('');
-  const potencial = p.completosPotencial > p.completos
-    ? ` · <strong class="pos">${irFmtInt(p.completosPotencial)}</strong> se o 86 voltar`
-    : '';
-  return `<div class="md-sub">
-    <div class="md-sub-head">
-      <strong>${irFmtInt(p.completos)}</strong> múltiplos vendáveis${potencial}
-      ${p.bloquearPecas ? ' · <strong class="neg">'+irFmtInt(p.bloquearPecas)+'</strong> peças a bloquear' : ''}
-      ${p.liberarPecas ? ' · <strong class="pos">'+irFmtInt(p.liberarPecas)+'</strong> peças a liberar' : ''}
-      ${p.valorMultiplo ? ' · múltiplo montado a '+irFmtMoney(p.valorMultiplo) : ''}
-    </div>
-    <div class="table-wrap">
-      <table class="ofe-sub">
-        <thead><tr>
-          <th>Componente</th><th>Descrição</th><th>Por múlt.</th>${cabRestr}<th>Total</th><th>Ação</th>
-        </tr></thead>
-        <tbody>${comps}</tbody>
-      </table>
-    </div>
-    ${mdEnderecosPai(p)}
-  </div>`;
-}
-
-/* Onde as peças que serão mexidas estão, endereço por endereço. Só dos
-   componentes com ação — a lista completa de endereços de um múltiplo grande
-   tem dezenas de linhas e esconde justamente o que interessa. */
-function mdEnderecosPai(p){
-  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
-  const comAcao = p.componentes.filter(c=>c.bloquear > 0 || c.liberar > 0);
-  if(!comAcao.length) return '';
-  const blocos = comAcao.map(c=>{
-    const sigla = c.bloquear > 0 ? MD_SIGLA_VENDAVEL : MD_SIGLA_BLOQUEIO;
-    const alvos = mdAlocarPorEndereco(c.locais, sigla, c.bloquear > 0 ? c.bloquear : c.liberar, campo);
-    const chips = alvos.map(a=>a.semEndereco
-      ? `<span class="md-local md-local-mais">${irFmtInt(a.quantidade)} sem endereço em ${irEsc(sigla)}</span>`
-      : `<span class="md-local mono" title="${irEsc('Local '+a.local+' · saldo '+a.saldoLocal+' em '+sigla)}">${irEsc(a.desc || a.local)} <b>${irFmtInt(a.quantidade)}</b></span>`
-    ).join('');
-    return `<div class="md-end-linha"><span class="mono md-end-item">${irEsc(c.componente)}</span> ${chips}</div>`;
-  }).join('');
-  return `<div class="md-enderecos"><div class="md-end-titulo">De onde sai</div>${blocos}</div>`;
 }
 
 function mdRenderDescasados(){
@@ -335,7 +383,7 @@ function mdRenderDescasados(){
       : 'A estrutura já está aqui. Falta a QRY0390 com o saldo dos componentes.';
     return irEmptyState('Sem bases importadas', falta, "irSwitchTab('importacao')", 'Ir para a importação');
   }
-  return mdKpis(mdResumo(mdPais())) + mdBarraFiltros() + mdTabelaPais();
+  return mdKpis(mdResumo(mdPais())) + mdBarraFiltros() + mdRenderPivot();
 }
 
 /* ============================================================
@@ -356,112 +404,297 @@ function mdPlano(){
   MD._planoBase = MD.base;
   return MD._plano;
 }
-function mdSetSentido(s){ MD.sentido = s; irRenderView(); }
-function mdPlanoFiltrado(){
-  const termo = MD.busca.trim().toLowerCase();
-  let lista = mdPlano();
-  if(MD.sentido !== 'todos') lista = lista.filter(l=>l.sentido === MD.sentido);
-  if(termo){
-    lista = lista.filter(l=>
-      l.componente.includes(termo) || l.pai.includes(termo) ||
-      (l.nome||'').toLowerCase().includes(termo) ||
-      (l.endereco||'').toLowerCase().includes(termo) ||
-      String(l.local||'').includes(termo)
-    );
+/* Matriz por dimensão de local (classe/X1/X2) × restrição, no mesmo espírito
+   da matriz que o usuário usa no PuTTY (linhas = valor da dimensão, colunas =
+   restrição, valor = quantidade) — só que aqui é o recorte deste módulo: só
+   os componentes de múltiplo, não o estoque vendável inteiro. A tabela linha
+   a linha (endereço por endereço, pronta pra colar no coletor) fica só na
+   planilha exportada — aqui é só a visão gerencial. As duas dimensões
+   compartilham a mesma lógica, só troca o valor do endereço. */
+function mdMatrizPor(chave){
+  const dim = MD_DIM_POR_CHAVE[chave];
+  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+  const porValor = new Map();
+  for(const s of (MD.saldos||[])){
+    for(const loc of (s.locais||[])){
+      const v = loc[campo] || 0;
+      if(!v) continue;
+      const valor = dim.valor(loc);
+      if(!porValor.has(valor)) porValor.set(valor, {});
+      const bucket = porValor.get(valor);
+      bucket[loc.restricao] = (bucket[loc.restricao] || 0) + v;
+    }
   }
-  return lista;
+  return porValor;
+}
+
+function mdRegraDe(chave, valor){
+  const regra = MD.regras[chave] && MD.regras[chave][valor];
+  return (regra && regra.length) ? regra : null;
+}
+/* Restrição fora da regra configurada em Configurações. Sem regra salva pra
+   esse valor, não dá pra dizer se está certo ou errado — não valida. */
+function mdRestricaoPermitidaEm(chave, valor, sigla){
+  const regra = mdRegraDe(chave, valor);
+  return !regra || regra.includes(sigla);
+}
+
+/* Plano de correção de restrição (aba Ajustes de Restrição) — não confundir
+   com o plano de pareamento de múltiplos descasados (aba Descasados, outra
+   lógica, outro botão). Aqui o problema é a REGRA configurada em
+   Configurações: peça numa restrição que não está marcada como permitida
+   pra aquela classe/X1+X2 volta pra uma que está. WN é o destino sempre que
+   WN estiver entre as permitidas (é o normal — 86 fica de fora da correção
+   de propósito, porque quem decide o que vai pra 86 é o pareamento da aba
+   Descasados, não esta tela); com WN fora e mais de uma restrição permitida
+   ao mesmo tempo não dá pra escolher sem chute — a linha fica de fora até o
+   cadastro em Configurações ter só uma opção certa. Sem regra pro valor,
+   nada é corrigido (mesmo critério da validação da matriz). */
+function mdPlanoCorrecaoRestricao(){
+  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+  const out = [];
+  for(const s of (MD.saldos||[])){
+    for(const loc of (s.locais||[])){
+      let regra = null;
+      for(const dim of MD_DIMENSOES){
+        const r = mdRegraDe(dim.chave, dim.valor(loc));
+        if(r && !r.includes(loc.restricao)){ regra = r; break; }
+      }
+      if(!regra) continue;
+      const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
+        : (regra.length===1 ? regra[0] : null);
+      if(!destino) continue;
+      const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
+      const preco = s.valorUnitario || 0;
+      for(const ref of refs){
+        const quantidade = ref[campo] || 0;
+        if(!quantidade) continue;
+        out.push({
+          de: loc.restricao, para: destino,
+          codDe: mdCodRestricao(loc.restricao), codPara: mdCodRestricao(destino),
+          localColetor: mdLocalColetor(loc.local),
+          local: loc.local, endereco: loc.desc, predio: loc.predio,
+          clal: loc.clal, x1: loc.x1, x2: loc.x2,
+          componente: s.item, ean: s.ean, quantidade,
+          preco, valor: quantidade * preco
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/* KPIs da aba Ajustes de Restrição, mesma lógica dos cartões de Descasados
+   (contagem + peças + valor), mas olhando só pro estoque vendável (WN)
+   bloqueado por engano numa restrição fora da regra. 86 fica de fora da
+   conta de propósito: é normal um componente estar lá num momento e não
+   estar no outro — quem decide isso é o pareamento da aba Descasados, não
+   é erro de configuração desta tela. */
+function mdResumoCorrecao(){
+  const plano = mdPlanoCorrecaoRestricao().filter(l=>l.de !== MD_SIGLA_BLOQUEIO);
+  return {
+    itens: new Set(plano.map(l=>l.componente)).size,
+    pecas: plano.reduce((a,l)=>a+l.quantidade, 0),
+    valor: plano.reduce((a,l)=>a+l.valor, 0)
+  };
+}
+/* Sem nenhuma regra salva em Configurações, os três cartões ficam em zero
+   por construção: a correção compara o que existe contra o que é PERMITIDO
+   naquela classe/X1, e sem régua não há o que comparar. Três zeros sem
+   explicação passam a mensagem oposta — "está tudo certo" — então a tela diz
+   o motivo e aponta pra onde resolver. */
+function mdAvisoSemRegra(){
+  const comRegra = MD_DIMENSOES.reduce((a,dim)=>a + Object.keys(MD.regras[dim.chave] || {}).filter(v=>(MD.regras[dim.chave][v]||[]).length).length, 0);
+  if(comRegra) return '';
+  return `<div class="panel md-aviso">
+    Os cartões acima estão zerados porque <strong>nenhuma regra foi configurada ainda</strong>.
+    Esta tela compara o que existe no estoque contra as restrições permitidas em cada classe e X1/X2 —
+    sem essa régua, nada pode ser apontado como errado.
+    <button class="btn-link" onclick="irSwitchTab('configuracoes')">Configurar agora</button>
+  </div>`;
+}
+function mdKpisCorrecao(resumo){
+  return `<div class="kpi-grid" style="margin-bottom:18px;">
+    <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.itens)}</div><div class="label">Itens com restrição a corrigir</div></div>
+    <div class="kpi-card good"><div class="num">${irFmtInt(resumo.pecas)}</div><div class="label">Peças vendáveis bloqueadas a liberar</div></div>
+    <div class="kpi-card good"><div class="num num-money">${irFmtMoney(resumo.valor)}</div><div class="label">Valor bloqueado a liberar</div></div>
+  </div>`;
+}
+
+function mdValorMarcado(chave, valor){
+  const sel = MD.selecionadas[chave];
+  return sel === null || sel.has(valor);
+}
+function mdToggleValor(chave, valor){
+  if(MD.selecionadas[chave] === null) MD.selecionadas[chave] = new Set(mdMatrizPor(chave).keys());
+  const sel = MD.selecionadas[chave];
+  if(sel.has(valor)) sel.delete(valor); else sel.add(valor);
+  irRenderView();
+}
+function mdMarcarTodosValores(chave){ MD.selecionadas[chave] = null; irRenderView(); }
+function mdDesmarcarTodosValores(chave){ MD.selecionadas[chave] = new Set(); irRenderView(); }
+/* Checkbox único no cabeçalho da tabela: marca/desmarca tudo de uma vez, sem
+   precisar desmarcar linha por linha pra sobrar só o que interessa. */
+function mdToggleCabecalhoSelecao(chave, marcarTudo){
+  if(marcarTudo) mdMarcarTodosValores(chave); else mdDesmarcarTodosValores(chave);
+}
+
+function mdRenderMatrizPor(chave){
+  const dim = MD_DIM_POR_CHAVE[chave];
+  const porValor = mdMatrizPor(chave);
+  const restricoes = mdRestricoesVisiveis();
+  const totalDe = v => Object.values(porValor.get(v)).reduce((a,x)=>a+x, 0);
+  const termo = MD.busca.trim().toLowerCase();
+  let valores = Array.from(porValor.keys());
+  if(termo) valores = valores.filter(v=>v.toLowerCase().includes(termo));
+
+  // Ordenação escolhida no cabeçalho. O desempate é sempre a descrição, pra
+  // que duas linhas com o mesmo número não troquem de lugar a cada render.
+  // Ordenar por uma coluna que o filtro escondeu deixaria a tabela numa ordem
+  // que a tela não explica — nesse caso volta pro total.
+  let ordem = MD.ordemMatriz[chave] || {col:'total', dir:'desc'};
+  if(ordem.col !== 'total' && ordem.col !== 'valor' && !restricoes.includes(ordem.col)){
+    ordem = {col:'total', dir:'desc'};
+    MD.ordemMatriz[chave] = ordem;
+  }
+  const sinal = ordem.dir === 'asc' ? 1 : -1;
+  const valorDe = v => ordem.col === 'total' ? totalDe(v) : ((porValor.get(v) || {})[ordem.col] || 0);
+  valores.sort((a,b)=>{
+    if(ordem.col === 'valor') return sinal * a.localeCompare(b, 'pt-BR');
+    return sinal * (valorDe(a) - valorDe(b)) || a.localeCompare(b, 'pt-BR');
+  });
+
+  if(!valores.length){
+    return { html: `<p class="field-hint">Nenhum valor de ${dim.titulo.toLowerCase()} bate com o filtro atual.</p>`, comErro: 0 };
+  }
+
+  const headerCols = restricoes.map(s=>{
+    const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
+    return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
+      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${irEsc(mdCodRestricao(s))}${mdSetaOrdem(chave, s)}</th>`;
+  }).join('');
+
+  // Com o filtro de restrições ligado, a soma das colunas na tela não fecha
+  // com o Total Geral (que continua sendo o de todas) — o cabeçalho avisa.
+  const filtrando = restricoes.length < mdRestricoesPresentes().length;
+  const totalPorRestricao = {};
+  for(const s of restricoes) totalPorRestricao[s] = 0;
+  let totalGeral = 0, comErro = 0;
+  const todosMarcados = valores.every(v=>mdValorMarcado(chave, v));
+
+  const linhas = valores.map(v=>{
+    const bucket = porValor.get(v);
+    let temErro = false;
+    const cels = restricoes.map(s=>{
+      const qtd = bucket[s] || 0;
+      totalPorRestricao[s] += qtd;
+      const erro = qtd > 0 && !mdRestricaoPermitidaEm(chave, v, s);
+      if(erro) temErro = true;
+      const cls = erro ? 'md-cel-erro' : (s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : ''));
+      const titulo = erro ? ` title="${irEsc('Restrição '+mdCodRestricao(s)+' ('+s+') não está nas restrições permitidas de '+v+' — configure em Configurações')}"` : '';
+      return `<td class="${cls}"${titulo}>${qtd ? irFmtInt(qtd) : ''}</td>`;
+    }).join('');
+    if(temErro) comErro++;
+    const total = totalDe(v);
+    totalGeral += total;
+    const marcado = mdValorMarcado(chave, v);
+    return `<tr>
+      <td class="md-piv-check"><input type="checkbox" ${marcado?'checked':''} onchange="mdToggleValor('${chave}','${irEsc(v)}')"></td>
+      <td class="md-left mono">${irEsc(v)}</td>${cels}<td class="md-piv-total">${irFmtInt(total)}</td>
+    </tr>`;
+  }).join('');
+
+  const rodape = `<tr class="md-piv-pai">
+    <td></td>
+    <td class="md-left">Total Geral</td>
+    ${restricoes.map(s=>{
+      const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
+      return `<td class="${cls}">${irFmtInt(totalPorRestricao[s])}</td>`;
+    }).join('')}
+    <td class="md-piv-total">${irFmtInt(totalGeral)}</td>
+  </tr>`;
+
+  const html = `<div class="md-piv-wrap">
+    <table class="md-piv">
+      <thead><tr>
+        <th class="md-piv-check"><input type="checkbox" ${todosMarcados?'checked':''} onchange="mdToggleCabecalhoSelecao('${chave}', this.checked)" title="Marcar/desmarcar todas as linhas"></th>
+        <th class="md-left md-th-ord" onclick="mdOrdenarMatriz('${chave}','valor')"
+            title="Ordenar pela descrição de ${irEsc(dim.titulo)}">${irEsc(dim.titulo)}${mdSetaOrdem(chave, 'valor')}</th>
+        ${headerCols}
+        <th class="md-piv-total md-th-ord" onclick="mdOrdenarMatriz('${chave}','total')"
+            title="${irEsc(filtrando ? 'Soma de TODAS as restrições, inclusive as escondidas pelo filtro — clique para ordenar' : 'Ordenar pelo total')}">${filtrando ? 'Total (todas)' : 'Total Geral'}${mdSetaOrdem(chave, 'total')}</th>
+      </tr></thead>
+      <tbody>${linhas}${rodape}</tbody>
+    </table>
+  </div>`;
+  return { html, comErro };
 }
 
 function mdRenderAjustes(){
   if(!mdTemDados()){
     return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 para montar o plano de ajuste.', "irSwitchTab('importacao')", 'Ir para a importação');
   }
-  const plano = mdPlano();
-  if(!plano.length){
-    return `<div class="panel"><h3>Nada a ajustar</h3><p class="field-hint">Todos os múltiplos com estoque estão casados na base ${MD.base==='qtdeDisp'?'disponível':'total'}: nada a bloquear em 86 e nada a devolver pra venda.</p></div>`;
-  }
-  const lista = mdPlanoFiltrado();
-  const soma = (arr, sentido)=>arr.filter(l=>!sentido || l.sentido===sentido).reduce((a,l)=>a+l.quantidade, 0);
-  const bloquear = soma(plano, 'bloquear'), liberar = soma(plano, 'liberar');
-  const semEndereco = plano.filter(l=>l.semEndereco).length;
   const chip = (ativo, onclick, texto)=>`<button class="chip ${ativo?'active':''}" onclick="${onclick}">${irEsc(texto)}</button>`;
 
-  const linhas = lista.map(l=>`<tr class="${l.sentido==='bloquear'?'md-comp-sobra':'md-comp-liberar'}">
-      <td class="mono md-left">${l.semEndereco ? '<span class="md-tag md-tag-bad">sem endereço</span>' : irEsc(l.localColetor)}</td>
-      <td class="mono">${irEsc(l.codDe)}</td>
-      <td class="mono">${irEsc(l.codPara)}</td>
-      <td class="mono">${irFmtInt(l.quantidade)}</td>
-      <td class="md-left">${irEsc(l.de)} → ${irEsc(l.para)}</td>
-      <td class="mono md-left">${irEsc(l.componente)}</td>
-      <td class="md-left">${irEsc(l.nome || '—')}</td>
-      <td class="mono md-left">${irEsc(l.pai)}</td>
-      <td class="md-left">${irEsc(l.endereco || '—')}</td>
-      <td class="mono">${irFmtInt(l.saldoLocal)}</td>
-      <td class="mono">${irFmtMoney(l.valor)}</td>
-    </tr>`).join('');
+  const blocosMatriz = MD_DIMENSOES.map(dim=>{
+    const m = mdRenderMatrizPor(dim.chave);
+    return `<div class="md-head" style="margin-top:18px;"><h3>Restrição por ${irEsc(dim.titulo)}</h3></div>${m.html}`;
+  }).join('');
 
   return `<div class="panel">
     <div class="md-head">
-      <h3>Plano de ajuste de restrição</h3>
-      <button class="btn btn-primary" onclick="mdExportarAjuste()">Baixar relatório de ajuste</button>
+      <h3>Ajustes de Restrição</h3>
+      <button class="btn btn-primary" onclick="mdExportarAjusteClasses()">Baixar relatório de ajuste</button>
     </div>
+    ${mdKpisCorrecao(mdResumoCorrecao())}
+    ${mdAvisoSemRegra()}
     <div class="md-filtros">
-      <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar componente, item pai ou endereço..."
+      <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar classe, X1 ou X2..."
              value="${irEsc(MD.busca)}" oninput="mdBuscar(this.value)">
-      <div class="md-chips">
-        ${chip(MD.sentido==='todos', "mdSetSentido('todos')", 'Tudo ('+irFmtInt(plano.length)+')')}
-        ${chip(MD.sentido==='bloquear', "mdSetSentido('bloquear')", 'Bloquear 0 → 86')}
-        ${chip(MD.sentido==='liberar', "mdSetSentido('liberar')", 'Liberar 86 → 0')}
-      </div>
+      ${mdRenderFiltroRestricoes()}
       <div class="md-chips">
         ${chip(MD.base==='qtde', "mdSetBase('qtde')", 'Estoque total')}
         ${chip(MD.base==='qtdeDisp', "mdSetBase('qtdeDisp')", 'Só disponível')}
       </div>
     </div>
-    <p class="field-hint">
-      ${irFmtInt(bloquear)} peças a bloquear (0 → 86) e ${irFmtInt(liberar)} a liberar (86 → 0), em ${irFmtInt(plano.length)} linhas de coletor.
-      O local já sai no formato do coletor (${MD_PREFIXO_LOCAL} + id do endereço) e as quatro primeiras colunas estão na ordem da tela 12.MOVI.
-      ${semEndereco ? '<strong class="neg">'+irFmtInt(semEndereco)+' linha(s) sem endereço</strong>: o saldo da restrição não fechou com a soma dos endereços na 390.' : ''}
-    </p>
-    <div class="table-wrap">
-      <table class="aud-table table-dense">
-        <thead><tr>
-          <th>Local (coletor)</th><th class="num">Orig</th><th class="num">Dest</th><th class="num">Qt</th>
-          <th>Sentido</th><th>Componente</th><th>Descrição</th><th>Item pai</th>
-          <th>Endereço</th><th class="num">Saldo no endereço</th><th class="num">Valor</th>
-        </tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
-    </div>
+    ${blocosMatriz}
   </div>`;
 }
 
-function mdExportarAjuste(){
-  const lista = mdPlano();
+/* Descasados: respeita a busca, o base (total/disponível) e o filtro
+   Equalizado da tela — exporta só o que está sendo mostrado ali. */
+function mdExportarAjustePivot(){
+  mdGerarCsvAjuste(mdPlanoAjuste(mdPaisFiltrados(), MD.base));
+}
+/* Ajustes de Restrição: corrige as células fora da regra (não é o plano de
+   pareamento da aba Descasados — ver mdPlanoCorrecaoRestricao), respeitando
+   classe e X1/X2 marcados nas duas matrizes. */
+function mdExportarAjusteClasses(){
+  mdGerarCsvAjuste(mdPlanoCorrecaoRestricao().filter(l=>
+    MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
+  ));
+}
+
+/* Só o que vai pro coletor: local, item, restrição de/para, quantidade,
+   endereço (pra achar a peça) e o alerta de estoque duplo. O resto (pai,
+   descrição, saldo, preço...) é conferência que já está na tela — não
+   precisa duplicar na planilha. */
+function mdGerarCsvAjuste(lista){
   if(!lista.length){ irShowToast('Não há ajuste para exportar.'); return; }
-  // As quatro primeiras colunas são, na ordem, o que se digita no coletor:
-  // local (5000+id), restrição de origem, restrição de destino e quantidade.
-  // O resto é conferência, e fica depois justamente pra não atrapalhar quem
-  // copia a faixa e cola.
-  const cab = ['Local (coletor)','Orig','Dest','Qtde',
-    'Sentido','Sigla origem','Sigla destino','Item pai','Descrição do pai','Componente','Descrição',
-    'Carrega valor','Por múltiplo','Saldo WN','Saldo 86','Alvo WN','Múltiplos vendáveis','Múltiplos possíveis',
-    'Id do local','Endereço','Prédio','Saldo no endereço','Preço unitário','Valor'];
+  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço'];
   const cel = v=>{
     const s = String(v ?? '');
     return /[;"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   };
-  const num = n=>String((n||0).toFixed(2)).replace('.', ',');
+  // Local (coletor) e EAN são só dígitos compridos (10 e 13 casas) — sem
+  // forçar texto o Excel "adivinha" que é número e mostra em notação
+  // científica (5E+09, 7,89862E+12), cortando dígitos de verdade. A aspa
+  // simples na frente força texto e some da visualização — mesmo truque de
+  // qualquer exportador de CSV com código/EAN comprido.
+  const celTexto = v=>{ const s = String(v ?? ''); return s ? cel("'"+s) : ''; };
   const linhas = lista.map(l=>[
-    l.localColetor, l.codDe, l.codPara, irFmtInt(l.quantidade),
-    l.sentido==='bloquear' ? 'Bloquear' : 'Liberar', l.de, l.para,
-    l.pai, l.nomePai, l.componente, l.nome,
-    l.inInterface==='S' ? 'Sim' : 'Não', irFmtInt(l.qtdePorMultiplo),
-    irFmtInt(l.wn), irFmtInt(l.bloqueado), irFmtInt(l.alvoWn),
-    irFmtInt(l.completos), irFmtInt(l.completosPotencial),
-    l.local, l.endereco, l.predio, irFmtInt(l.saldoLocal),
-    num(l.preco), num(l.valor)
-  ].map(cel).join(';'));
+    celTexto(l.localColetor), celTexto(l.ean), cel(l.codDe), cel(l.codPara), cel(irFmtInt(l.quantidade)), cel(l.endereco)
+  ].join(';'));
   // BOM na frente: sem ele o Excel em pt-BR abre o arquivo como Latin-1 e come
   // todos os acentos das descrições.
   const csv = '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n');
@@ -608,23 +841,92 @@ function mdRenderImportacao(){
 }
 
 /* ============================================================
+   TELA — CONFIGURAÇÕES
+   ============================================================
+   Regra por valor de classe/X1/X2: quais restrições podem existir ali. É a
+   base da validação das matrizes em Ajustes de Restrição — sem marcar nada
+   pra um valor, ele não é validado (não dá pra saber o que é errado sem
+   regra). Persistido no banco do módulo (config), não se perde ao reimportar. */
+function mdValoresConhecidos(chave){
+  const dim = MD_DIM_POR_CHAVE[chave];
+  const set = new Set();
+  for(const s of (MD.saldos||[])) for(const loc of (s.locais||[])){ const v = dim.valor(loc); if(v && v!=='—') set.add(v); }
+  for(const v in (MD.regras[chave]||{})) set.add(v);
+  return Array.from(set).sort();
+}
+function mdSetRegra(chave, valor, sigla, permitido){
+  if(!MD.regras[chave]) MD.regras[chave] = {};
+  const atual = new Set(MD.regras[chave][valor] || []);
+  if(permitido) atual.add(sigla); else atual.delete(sigla);
+  MD.regras[chave][valor] = Array.from(atual);
+  mdSetConfig(MD_CONFIG_KEY_POR_DIM[chave], MD.regras[chave]);
+  irRenderView();
+}
+function mdRenderConfiguracoes(){
+  const secoes = MD_DIMENSOES.map(dim=>{
+    const valores = mdValoresConhecidos(dim.chave);
+    if(!valores.length) return '';
+    const headerCols = MD_RESTRICOES.map(r=>
+      `<th title="${irEsc(r.sigla+' — '+r.nome)}">${irEsc(r.cod)}</th>`
+    ).join('');
+    const linhas = valores.map(v=>{
+      const regra = MD.regras[dim.chave][v] || [];
+      const cels = MD_RESTRICOES.map(r=>{
+        const marcado = regra.includes(r.sigla);
+        return `<td><input type="checkbox" ${marcado?'checked':''} onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)"></td>`;
+      }).join('');
+      return `<tr><td class="md-left mono">${irEsc(v)}</td>${cels}</tr>`;
+    }).join('');
+    return `<div class="panel">
+      <div class="md-head"><h3>Restrições permitidas por ${irEsc(dim.titulo)}</h3></div>
+      <div class="md-piv-wrap">
+        <table class="md-piv md-config-table">
+          <thead><tr><th class="md-left">${irEsc(dim.titulo)}</th>${headerCols}</tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if(!secoes){
+    return irEmptyState('Sem valores ainda', 'Importe a QRY0390 para ver as classes de local (CLAL, X1, X2) dos componentes de múltiplo.', "irSwitchTab('importacao')", 'Ir para a importação');
+  }
+  return `<p class="field-hint" style="margin-bottom:14px;">
+    Marque, por classe/X1/X2, quais restrições podem existir ali. O que estiver fora disso aparece em vermelho
+    nas matrizes da aba Ajustes de Restrição. Sem marcação nenhuma, não é validado.
+  </p>${secoes}`;
+}
+
+/* ============================================================
    SHELL
    ============================================================ */
 const MD_TELAS = {
   descasados:['Múltiplos Descasados','Componente sem par no estoque: dimensão, onde está e quanto vale.'],
   ajustes:['Ajustes de Restrição','O que bloquear em 86 e o que devolver para venda, linha a linha.'],
+  configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
   importacao:['Importação','ZBIQ0051, QRY0390 e SIGEQ278 — as bases do módulo.']
 };
+let irUltimaTelaRenderizada = null;
 function irRenderView(){
   const raiz = document.getElementById('viewRoot');
   if(!raiz) return;
+  // Expandir/recolher uma linha do pivô (ou qualquer outra ação que force um
+  // re-render dentro da MESMA aba) troca o innerHTML inteiro — e sem isso a
+  // rolagem interna da tabela (.md-piv-wrap tem overflow próprio) voltava pro
+  // topo, jogando fora o lugar onde a pessoa tinha acabado de abrir algo. Numa
+  // troca de aba os wraps são de outra tabela — não faz sentido herdar scroll.
+  const mesmaTela = irUltimaTelaRenderizada === MD.tela;
+  const scrolls = mesmaTela ? Array.from(raiz.querySelectorAll('.md-piv-wrap')).map(el=>el.scrollTop) : [];
+  irUltimaTelaRenderizada = MD.tela;
   if(MD.initErro){
     raiz.innerHTML = irEmptyState('Não consegui abrir o banco do navegador', MD.initErro, null, null);
     return;
   }
-  raiz.innerHTML = MD.tela==='importacao' ? mdRenderImportacao()
-                 : MD.tela==='ajustes'    ? mdRenderAjustes()
+  raiz.innerHTML = MD.tela==='importacao'    ? mdRenderImportacao()
+                 : MD.tela==='ajustes'       ? mdRenderAjustes()
+                 : MD.tela==='configuracoes' ? mdRenderConfiguracoes()
                  : mdRenderDescasados();
+  if(mesmaTela) raiz.querySelectorAll('.md-piv-wrap').forEach((el, i)=>{ if(scrolls[i]) el.scrollTop = scrolls[i]; });
 }
 function irSwitchTab(tela){
   MD.tela = MD_TELAS[tela] ? tela : 'descasados';
@@ -643,6 +945,10 @@ async function mdRecarregar(){
   MD.estruturaMeta = await mdGetEstruturaMeta();
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
+  MD.regras = {
+    clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || {},
+    x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {}
+  };
   mdInvalidarCache();
 }
 async function irInit(){
@@ -653,7 +959,12 @@ async function irInit(){
   irUpdateThemeLabel();
   irApplyZoom(parseInt(localStorage.getItem('ir-zoom'), 10) || 100);
   const versao = document.getElementById('sidebarVersao');
-  if(versao) versao.textContent = MD_APP_VERSION;
+  if(versao){
+    const build = window.MD_BUILD;
+    versao.textContent = (build && build.commit && build.commit!=='local')
+      ? `${MD_APP_VERSION} · ${build.commit} · ${build.data}`
+      : MD_APP_VERSION;
+  }
   try{
     await mdRecarregar();
   }catch(e){

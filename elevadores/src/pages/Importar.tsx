@@ -11,14 +11,23 @@ export function Importar({
   aoVerExemplo,
   erro,
 }: {
-  aoImportar: (arquivo: File, fotos: File | null) => Promise<unknown>;
+  aoImportar: (
+    arquivo: File,
+    fotos: File | null,
+    precos: File | null,
+    saldo390: File | null
+  ) => Promise<unknown>;
   aoVerExemplo: () => void;
   erro: string | null;
 }) {
   const refPlanilha = useRef<HTMLInputElement>(null);
   const refFotos = useRef<HTMLInputElement>(null);
+  const refPrecos = useRef<HTMLInputElement>(null);
+  const refSaldo390 = useRef<HTMLInputElement>(null);
   const [planilha, setPlanilha] = useState<File | null>(null);
   const [fotos, setFotos] = useState<File | null>(null);
+  const [precos, setPrecos] = useState<File | null>(null);
+  const [saldo390, setSaldo390] = useState<File | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [arrastando, setArrastando] = useState(false);
 
@@ -26,7 +35,7 @@ export function Importar({
     if (!planilha) return;
     setOcupado(true);
     try {
-      await aoImportar(planilha, fotos);
+      await aoImportar(planilha, fotos, precos, saldo390);
     } catch {
       // A mensagem ja aparece pela prop erro.
     } finally {
@@ -106,6 +115,60 @@ export function Importar({
           {fotos && (
             <button
               onClick={() => setFotos(null)}
+              className="text-[11.5px] underline"
+              style={{ color: 'var(--ink-soft)' }}
+            >
+              remover
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-[12.5px]">
+          <span style={{ color: 'var(--ink-soft)' }}>
+            Valor unitário · QRY0390 <i>(opcional, para o R$ parado)</i>:
+          </span>
+          <input
+            ref={refSaldo390}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => setSaldo390(e.target.files?.[0] ?? null)}
+          />
+          <Botao variante="secundario" aoClicar={() => refSaldo390.current?.click()}>
+            {saldo390 ? saldo390.name : 'Escolher QRY0390.xlsx'}
+          </Botao>
+          {saldo390 && (
+            <button
+              onClick={() => setSaldo390(null)}
+              className="text-[11.5px] underline"
+              style={{ color: 'var(--ink-soft)' }}
+            >
+              remover
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-soft)' }}>
+          É a extração avulsa da query (não a aba EstoqueAtual de dentro da planilha principal, essa
+          continua fora). Arquivo grande — a leitura pode demorar alguns segundos.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-[12.5px]">
+          <span style={{ color: 'var(--ink-soft)' }}>
+            Preço de custo do pai · SIGEQ278 <i>(opcional, reserva quando a 390 não tiver o preço)</i>:
+          </span>
+          <input
+            ref={refPrecos}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => setPrecos(e.target.files?.[0] ?? null)}
+          />
+          <Botao variante="secundario" aoClicar={() => refPrecos.current?.click()}>
+            {precos ? precos.name : 'Escolher SIGEQ278.xlsx'}
+          </Botao>
+          {precos && (
+            <button
+              onClick={() => setPrecos(null)}
               className="text-[11.5px] underline"
               style={{ color: 'var(--ink-soft)' }}
             >
