@@ -13,6 +13,13 @@ import { ratioDaTonelada } from '../config/regras';
 import { montarKit, faltamDoTipo, porKitDe } from './kit';
 import type { MontagemDoKit } from './kit';
 
+/* Mapa de preco: item -> valor unitario. Serve tanto para o preco de
+   custo do item pai (SIGEQ278, chave = item pai) quanto para o valor
+   unitario por componente (QRY0390, chave = item componente). Mapa
+   vazio quando a planilha correspondente nao foi importada: o valor
+   entao sai zero, sem quebrar a tela. */
+export type MapaPrecos = Map<string, number>;
+
 export type SituacaoItem = 'CASADO' | 'DESCASADO' | 'SEM ESTOQUE';
 
 /* Uma linha de componente do item pai. Traz o kit inteiro, nao so a
@@ -68,6 +75,16 @@ export interface ItemFornecedor {
   comprarBase: number;
   /* Componentes do kit com saldo zero no CD, de qualquer tipo. */
   semSaldo: number;
+  /* R$ parado: peca sem par (sobra depois de montar o que dava) vezes
+     o preco do componente. So existe quando a SIGEQ278 foi importada;
+     sem ela fica zero, nunca undefined. */
+  valorParado: number;
+  /* Componentes com sobra (peca sem par), e quantos deles a 278 nao
+     conseguiu precificar - o lado que nao carrega o S na 051 vale
+     zero, e por isso o R$ parado pode ficar subestimado (secao "mesma
+     regra do Multiplos Descasados"). */
+  componentesComSobra: number;
+  componentesSemPreco: number;
 }
 
 export interface GrupoTonelada {
@@ -77,6 +94,7 @@ export interface GrupoTonelada {
   descasados: number;
   comprarColuna: number;
   comprarBase: number;
+  valorParado: number;
 }
 
 export interface GrupoFornecedor {
@@ -89,6 +107,7 @@ export interface GrupoFornecedor {
   comprarBase: number;
   /* Componentes deste fornecedor que servem mais de um elevador. */
   compartilhados: number;
+  valorParado: number;
 }
 
 /* Nome que o comprador usa. O fabricante manda; a marca entra quando
@@ -154,13 +173,63 @@ function fecharItem(item: ItemFornecedor): ItemFornecedor {
   return item;
 }
 
+/* Preco do componente, na mesma ordem do modulo Multiplos Descasados:
+   primeiro o valor unitario do proprio componente na QRY0390, quando
+   existir. Ele costuma vir zerado nos componentes de kit - a
+   valoracao do multiplo fica no pai, nao nas partes - e ai entra a
+   SIGEQ278: o preco de custo do pai e atribuido so ao componente que
+   carrega o S da 051 (in interface). O outro lado do par, sem preco
+   proprio na 390 e sem o S, entra a zero: contar os dois dobraria o
+   valor do mesmo conjunto parado. */
+function precoComponente(codigo: string, sn: string, precoPai: number, precos390: MapaPrecos): number {
+  const doProprioComponente = precos390.get(codigo) ?? 0;
+  if (doProprioComponente > 0) return doProprioComponente;
+  return sn === 'S' ? precoPai : 0;
+}
+
+interface AvaliacaoParada {
+  valor: number;
+  componentesComSobra: number;
+  componentesSemPreco: number;
+}
+
+/* R$ da peca parada do item: sobra de cada componente (o que os kits
+   montados nao consumiram, a mesma conta de saudeDoItem) vezes o
+   preco dele. Conta tambem quantos componentes tem sobra e, desses,
+   quantos ficaram sem preco - o lado que nao carrega o S vale zero,
+   entao o total pode ser so o piso do valor parado, nao o valor
+   inteiro (mesmo aviso do modulo Multiplos Descasados). */
+function avaliarParadoDoItem(
+  item: ItemFornecedor,
+  precoPai: number,
+  precos390: MapaPrecos
+): AvaliacaoParada {
+  const completos = item.montagem.kits;
+  let valor = 0;
+  let componentesComSobra = 0;
+  let componentesSemPreco = 0;
+  for (const c of item.componentes) {
+    const sobra = Math.max(0, c.cd - completos * c.porKit);
+    if (sobra <= 0) continue;
+    componentesComSobra++;
+    const preco = precoComponente(c.codigo, c.sn, precoPai, precos390);
+    valor += sobra * preco;
+    if (!preco) componentesSemPreco++;
+  }
+  return { valor, componentesComSobra, componentesSemPreco };
+}
+
 /* Monta a arvore Fornecedor -> Tonelada -> Item pai.
 
    Entram os kits que tem base ou coluna, que sao os elevadores do
    projeto. De cada kit vem o componente inteiro, incluindo bomba,
    comando e motor: eles nao entram na conta do casamento, mas faltam
    no CD do mesmo jeito e o comprador precisa ver. */
-export function listarPorFornecedor(componentes: Componente[]): GrupoFornecedor[] {
+export function listarPorFornecedor(
+  componentes: Componente[],
+  precosPai: MapaPrecos = new Map(),
+  precos390: MapaPrecos = new Map()
+): GrupoFornecedor[] {
   const itens = new Map<string, ItemFornecedor>();
   const marcasPorFornecedor = new Map<string, Set<string>>();
 
@@ -218,6 +287,9 @@ export function listarPorFornecedor(componentes: Componente[]): GrupoFornecedor[
         comprarColuna: 0,
         comprarBase: 0,
         semSaldo: 0,
+        valorParado: 0,
+        componentesComSobra: 0,
+        componentesSemPreco: 0,
       };
       itens.set(codigoPai, item);
     }
@@ -247,6 +319,10 @@ export function listarPorFornecedor(componentes: Componente[]): GrupoFornecedor[
   const grupos = new Map<string, Map<string, ItemFornecedor[]>>();
   for (const item of itens.values()) {
     fecharItem(item);
+    const avaliacao = avaliarParadoDoItem(item, precosPai.get(item.item) ?? 0, precos390);
+    item.valorParado = avaliacao.valor;
+    item.componentesComSobra = avaliacao.componentesComSobra;
+    item.componentesSemPreco = avaliacao.componentesSemPreco;
     const porTon = grupos.get(item.fabricante) ?? new Map<string, ItemFornecedor[]>();
     const lista = porTon.get(item.tonelada) ?? [];
     lista.push(item);
@@ -271,6 +347,7 @@ export function listarPorFornecedor(componentes: Componente[]): GrupoFornecedor[
         descasados: lista.filter((i) => i.situacao === 'DESCASADO').length,
         comprarColuna: lista.reduce((s, i) => s + i.comprarColuna, 0),
         comprarBase: lista.reduce((s, i) => s + i.comprarBase, 0),
+        valorParado: lista.reduce((s, i) => s + i.valorParado, 0),
       });
     }
     toneladas.sort((a, b) => ordemTonelada(a.tonelada) - ordemTonelada(b.tonelada));
@@ -287,6 +364,7 @@ export function listarPorFornecedor(componentes: Componente[]): GrupoFornecedor[
       compartilhados: new Set(
         todos.flatMap((i) => i.componentes.filter((c) => c.paisQueUsam > 1).map((c) => c.codigo))
       ).size,
+      valorParado: toneladas.reduce((s, t) => s + t.valorParado, 0),
     });
   }
 
@@ -396,6 +474,13 @@ export interface SaudeFornecedor {
   /* Pecas em estoque que nao formam elevador nenhum: o que esta parado
      sem virar venda. */
   pecasParadas: number;
+  /* R$ das pecas paradas, pelo preco de custo do item pai (SIGEQ278).
+     Zero quando a planilha de preco nao foi importada. */
+  valorParado: number;
+  /* Quantos componentes descasados existem e, desses, quantos a 278
+     nao conseguiu precificar - avisa quando o R$ parado e so o piso. */
+  componentesComSobra: number;
+  componentesSemPreco: number;
 }
 
 function saudeDoItem(i: ItemFornecedor): { completos: number; potencial: number; paradas: number } {
@@ -415,11 +500,17 @@ export function saudePorFornecedor(grupos: GrupoFornecedor[]): SaudeFornecedor[]
     let completos = 0;
     let potencial = 0;
     let pecasParadas = 0;
+    let valorParado = 0;
+    let componentesComSobra = 0;
+    let componentesSemPreco = 0;
     for (const i of itens) {
       const s = saudeDoItem(i);
       completos += s.completos;
       potencial += s.potencial;
       pecasParadas += s.paradas;
+      valorParado += i.valorParado;
+      componentesComSobra += i.componentesComSobra;
+      componentesSemPreco += i.componentesSemPreco;
     }
     const descasados = Math.max(0, potencial - completos);
     return {
@@ -434,6 +525,9 @@ export function saudePorFornecedor(grupos: GrupoFornecedor[]): SaudeFornecedor[]
       pctCompleto: potencial > 0 ? (completos / potencial) * 100 : 0,
       pctDescasado: potencial > 0 ? (descasados / potencial) * 100 : 0,
       pecasParadas,
+      valorParado,
+      componentesComSobra,
+      componentesSemPreco,
     };
   });
   /* Quem tem mais elevador travado aparece primeiro: e onde a compra
@@ -456,6 +550,9 @@ export interface SaudeTotal {
   pctCompleto: number;
   pctDescasado: number;
   pecasParadas: number;
+  valorParado: number;
+  componentesComSobra: number;
+  componentesSemPreco: number;
 }
 
 export function totalizarSaude(linhas: SaudeFornecedor[]): SaudeTotal {
@@ -471,5 +568,8 @@ export function totalizarSaude(linhas: SaudeFornecedor[]): SaudeTotal {
     pctCompleto: potencial > 0 ? (completos / potencial) * 100 : 0,
     pctDescasado: potencial > 0 ? (descasados / potencial) * 100 : 0,
     pecasParadas: soma((l) => l.pecasParadas),
+    valorParado: soma((l) => l.valorParado),
+    componentesComSobra: soma((l) => l.componentesComSobra),
+    componentesSemPreco: soma((l) => l.componentesSemPreco),
   };
 }
