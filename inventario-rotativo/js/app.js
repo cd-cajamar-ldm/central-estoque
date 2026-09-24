@@ -305,7 +305,7 @@ function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)|
 const IR_TAB_LABELS = {
   dashboard:['Dashboard Executivo','Visão geral do ciclo ativo.'],
   ciclo:['NET','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
-  produtividade:['Produtividade','Ritmo, meta, qualidade e capacidade da equipe.'],
+  produtividade:['Produtividade','Aba em reconstrução.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
   comparativo:['Comparativo entre Ciclos','Compare acurácia, produtividade e tendências.'],
@@ -915,7 +915,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v199';
+const IR_APP_VERSION = 'v200';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -4493,44 +4493,19 @@ function irRenderProdDiagnostico(a, ind, meta, metaDiaria){
     </div>`).join('')}</div>
   </div>`;
 }
+/* Aba "Produtividade" — em reconstrução, a pedido do usuário. As funções que
+   montavam os painéis antigos (irRenderProdHeader, irRenderProdCards,
+   irRenderProdDiagnostico, irRenderProdEvolucao, irRenderProdRanking,
+   irRenderProdRitmo, irRenderProdCapacidade, irRenderProdProjecao,
+   irRenderProdQualidade, irRenderProdRecontagem, irRenderProdTempo,
+   irRenderPodio, irRenderProdMatriz) continuam no arquivo — inclusive porque
+   irRenderProdMatriz também é usada pelo painel condensado do Dashboard, que
+   não foi mexido — só não são mais chamadas daqui.*/
 function irRenderProdutividade(){
-  const ind = IR.indicadores;
-  if(!ind) return irEmptyState('Sem dados', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
-  const contagens = irProdContagensAnalise();
-  const a = irCalcProdAnalitica(contagens);
-  const p = irCalcProdutividade(contagens); // pódio, matriz hora a hora e exports
-  const meta = irProdMetaLocaisHH(a);
-  const metaDiaria = irProdMetaDiaria(ind);
-  if(!contagens.length){
-    return `${irRenderProdHeader(ind)}${irRenderProdFiltros(a)}
-      <div class="panel"><p class="field-hint">Nenhuma contagem no recorte.</p></div>`;
-  }
   return `
-    ${irRenderProdHeader(ind)}
-    ${irRenderProdFiltros(a)}
-    ${IR.prodFilters.incluirAbertura ? `<p class="field-hint" style="color:var(--orange);margin:-8px 0 12px;">Rodada 1 incluída — é sistêmica, não é conferência.</p>` : ''}
-    ${irRenderProdCards(a, ind, meta, metaDiaria)}
-    <p class="field-hint" style="margin:-8px 0 14px;">${irFmtInt(a.horasHomem)} homem-hora no recorte · blocos de hora com contagem registrada (sem ponto eletrônico).</p>
-    ${irRenderProdDiagnostico(a, ind, meta, metaDiaria)}
-    ${irRenderProdEvolucao(a, metaDiaria)}
-    ${irRenderProdRanking(a, meta)}
-    ${irRenderProdRitmo(a)}
-    ${irRenderProdCapacidade(a, meta)}
-    ${irRenderProdProjecao(a, ind)}
-    ${irRenderProdQualidade(a, meta)}
-    ${irRenderProdRecontagem(a)}
-    ${irRenderProdTempo(a)}
     <div class="panel">
-      <div class="panel-head-row">
-        <h3>🏆 Pódio da equipe (por locais contados)</h3>
-        <button class="btn btn-secondary" onclick="irExportarRankingImagem()">🖼️ Exportar ranking (imagem)</button>
-      </div>
-      ${irRenderPodio(p.ranking)}
-    </div>
-    <div class="panel">
-      <h3>Locais por colaborador, hora a hora</h3>
-      <p class="panel-sub">Cada célula é o número de locais distintos que o colaborador contou naquele horário. Janela de expediente: 06h–22h (soma os dias do recorte).</p>
-      ${irRenderProdMatriz(p)}
+      <h3>Produtividade</h3>
+      <p class="field-hint">Essa aba vai ser refeita. Em breve.</p>
     </div>
   `;
 }
