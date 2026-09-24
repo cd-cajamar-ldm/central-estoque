@@ -915,7 +915,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v198';
+const IR_APP_VERSION = 'v199';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1962,7 +1962,7 @@ function irRenderPioresRuas(ind){
   if(!rows.length) return '';
   const pior = Math.max(...rows.map(r => r.pecasDivergentes||0), 1);
   return `<div class="pior-ruas">
-    <div class="pior-ruas-h">Top 5 ruas · mais peças divergentes</div>
+    <div class="pior-ruas-h">5 ruas com mais peças divergentes</div>
     ${rows.map(r=>`<div class="pior-rua">
       <div class="pr-nome">${irEsc(r.chave)}</div>
       <div class="pr-track"><div class="pr-fill" style="width:${Math.round((r.pecasDivergentes||0)/pior*100)}%;"></div></div>
@@ -2317,7 +2317,7 @@ function irGerarRelatorioEmail(){
           <div class="rp-donut-stat"><div class="n bad">${irFmtInt(ind.locaisCongelados-ind.locaisConcluidos)}</div><div class="l">Ainda não concluídos</div></div>
         </div>
         ${top5Ruas.length ? `<div class="rp-month-list">
-          <div class="rp-month-title">Top 5 Ruas mais divergentes</div>
+          <div class="rp-month-title">5 Ruas mais divergentes</div>
           <div class="rp-month-row">
             <div></div><div></div>
             <div class="rp-month-val-head">Peças div.<span class="rp-month-val-sub">Acurácia</span></div>
@@ -2368,7 +2368,7 @@ function irGerarRelatorioEmail(){
       ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#001A72', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'locais', fmt:irFmtInt})}
     </div>` : ''}
 
-    ${sectionTitle('🛣️','Top 10 Ruas mais divergentes','por peças divergentes')}
+    ${sectionTitle('🛣️','10 Ruas mais divergentes','por peças divergentes')}
     <div class="rp-panel"><table class="rp-table">
       <thead><tr><th>Rua</th><th>Peças divergentes</th><th>Locais divergentes</th><th>Valor divergente</th><th>Acurácia Peças</th><th>Acurácia Locais</th><th>Acurácia Valor</th></tr></thead>
       <tbody>${rua.slice(0, 10).map(r=>`<tr>
