@@ -107,12 +107,20 @@ export default function Atividades({
   const avanco = avancoPorConclusao(projetos, pai.id);
   const nomePessoa = (id: string | null) => pessoas.find((p) => p.id === id)?.nome ?? '—';
 
-  const cartoes: CartaoDeAtividade[] = visiveis.map((p) => ({ id: p.id, coluna: p.status, projeto: p }));
+  /* O quadro tem posicao propria (arrastada a mao), diferente da ordem
+     escolhida no seletor — essa e so para a lista. Sem ordem gravada
+     ainda (nula), a atividade vai para o fim. */
+  const cartoes: CartaoDeAtividade[] = [...visiveis]
+    .sort((a, b) => (a.ordem ?? Infinity) - (b.ordem ?? Infinity))
+    .map((p) => ({ id: p.id, coluna: p.status, projeto: p }));
 
   async function criar(status: StatusProjeto) {
     const limpo = nome.trim();
     if (!limpo) return;
     try {
+      const maiorOrdem = filhos
+        .filter((p) => p.status === status)
+        .reduce((maior, p) => Math.max(maior, p.ordem ?? 0), 0);
       await salvarProjeto({
         nome: limpo,
         projeto_pai_id: pai.id,
@@ -122,6 +130,7 @@ export default function Atividades({
         responsavel_id: pai.responsavel_id,
         status,
         prioridade: 'media',
+        ordem: maiorOrdem + 1000,
       });
       setNome('');
       setCriando(null);
@@ -143,6 +152,27 @@ export default function Atividades({
     } catch (falha) {
       setErro(mensagemDeErro(falha));
     }
+  }
+
+  /* Arrastar um cartao do quadro para uma posicao especifica — dentro da
+     mesma coluna ou trocando de coluna. antesDeId nulo joga para o fim.
+     A posicao vira um numero entre a da atividade anterior e a da
+     seguinte, para nao precisar renumerar a coluna inteira a cada
+     arrasto. */
+  async function reordenarCartao(projeto: Projeto, coluna: string, antesDeId: string | null) {
+    const vizinhas = visiveis
+      .filter((p) => p.status === coluna && p.id !== projeto.id)
+      .sort((a, b) => (a.ordem ?? Infinity) - (b.ordem ?? Infinity));
+    const indiceBruto = antesDeId ? vizinhas.findIndex((p) => p.id === antesDeId) : vizinhas.length;
+    const indiceAlvo = indiceBruto === -1 ? vizinhas.length : indiceBruto;
+    const anterior = vizinhas[indiceAlvo - 1] ?? null;
+    const seguinte = vizinhas[indiceAlvo] ?? null;
+    const novaOrdem = anterior?.ordem != null && seguinte?.ordem != null
+      ? (anterior.ordem + seguinte.ordem) / 2
+      : anterior?.ordem != null ? anterior.ordem + 1000
+      : seguinte?.ordem != null ? seguinte.ordem - 1000
+      : 1000;
+    await alterar(projeto, { status: coluna as StatusProjeto, ordem: novaOrdem });
   }
 
   /* Mudar situacao, prioridade ou responsavel direto na linha: e o que
@@ -280,6 +310,7 @@ export default function Atividades({
           colunas={colunas}
           itens={cartoes}
           aoMover={(c, coluna) => alterar(c.projeto, { status: coluna as StatusProjeto })}
+          aoReordenarCartao={(c, coluna, antesDeId) => reordenarCartao(c.projeto, coluna, antesDeId)}
           aoAbrir={(c) => aoAbrir(c.projeto)}
           /* Situacao que nao esta na configuracao (renomeada ou de antes
              da mudanca) nao tem para onde ser movida: sem seta nela. */
