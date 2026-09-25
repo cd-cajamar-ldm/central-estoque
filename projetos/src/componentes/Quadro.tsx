@@ -36,6 +36,10 @@ interface Props<T extends CartaoDoQuadro> {
    No celular nao ha arrastar - por isso todo cartao tambem tem o seletor
    de situacao na propria lista, que continua sendo o caminho garantido. */
 const CHAVE_RECOLHIDAS = 'projetos.colunas-recolhidas';
+const CHAVE_ZOOM = 'projetos.quadro-zoom';
+const ZOOM_MINIMO = 0.5;
+const ZOOM_MAXIMO = 1.5;
+const ZOOM_PASSO = 0.1;
 
 export default function Quadro<T extends CartaoDoQuadro>({
   colunas, itens, aoMover, aoAbrir, cartao, rodape, aoReordenar, aoReordenarCartao,
@@ -54,6 +58,19 @@ export default function Quadro<T extends CartaoDoQuadro>({
     try { return JSON.parse(localStorage.getItem(CHAVE_RECOLHIDAS) ?? '[]') as string[]; }
     catch { return []; }
   });
+  /* Quadro grande, tela pequena: encolher o quadro inteiro cabe mais
+     coluna sem rolar de lado; aumentar deixa cartao e texto maiores. A
+     escolha e de quem esta olhando, entao fica no navegador. */
+  const [zoom, setZoom] = useState<number>(() => {
+    try { return Number(localStorage.getItem(CHAVE_ZOOM)) || 1; }
+    catch { return 1; }
+  });
+
+  function mudarZoom(novo: number) {
+    const limitado = Math.round(Math.min(ZOOM_MAXIMO, Math.max(ZOOM_MINIMO, novo)) * 100) / 100;
+    setZoom(limitado);
+    try { localStorage.setItem(CHAVE_ZOOM, String(limitado)); } catch { /* só não lembra */ }
+  }
 
   function alternarRecolhida(id: string) {
     setRecolhidas((atual) => {
@@ -64,13 +81,36 @@ export default function Quadro<T extends CartaoDoQuadro>({
   }
 
   return (
-    /* A altura da caixa e limitada de proposito: com o quadro inteiro
-       rolando na pagina, a barra de rolagem lateral ficava la embaixo, e
-       ver a coluna da direita exigia descer, rolar e subir de novo.
-       Presa a 70% da altura da tela, a barra fica sempre a vista e as
-       colunas rolam por dentro. */
-    <div data-quadro="colunas" className="max-h-[70vh] overflow-auto">
-      <div className="flex min-w-max gap-3 p-3">
+    <div>
+      <div className="mb-1 flex items-center justify-end gap-1">
+        <button
+          className="rounded px-1.5 py-0.5 text-sm font-bold text-tinta-suave hover:bg-papel hover:text-roxo-escuro disabled:opacity-30"
+          disabled={zoom <= ZOOM_MINIMO}
+          onClick={() => mudarZoom(zoom - ZOOM_PASSO)}
+          title="Diminuir o quadro"
+        >−</button>
+        <button
+          className="w-11 rounded px-1 py-0.5 text-[11px] font-bold text-tinta-suave hover:bg-papel hover:text-roxo-escuro"
+          onClick={() => mudarZoom(1)}
+          title="Voltar ao tamanho normal"
+        >{Math.round(zoom * 100)}%</button>
+        <button
+          className="rounded px-1.5 py-0.5 text-sm font-bold text-tinta-suave hover:bg-papel hover:text-roxo-escuro disabled:opacity-30"
+          disabled={zoom >= ZOOM_MAXIMO}
+          onClick={() => mudarZoom(zoom + ZOOM_PASSO)}
+          title="Aumentar o quadro"
+        >+</button>
+      </div>
+      {/* A altura da caixa e limitada de proposito: com o quadro inteiro
+         rolando na pagina, a barra de rolagem lateral ficava la embaixo, e
+         ver a coluna da direita exigia descer, rolar e subir de novo.
+         Presa a 70% da altura da tela, a barra fica sempre a vista e as
+         colunas rolam por dentro. */}
+      <div data-quadro="colunas" className="max-h-[70vh] overflow-auto">
+      <div
+        className="flex min-w-max gap-3 p-3"
+        style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: `${100 / zoom}%` }}
+      >
         {colunas.map((coluna, indice) => {
           const daColuna = itens.filter((i) => i.coluna === coluna.id);
           const recolhida = recolhidas.includes(coluna.id);
@@ -225,6 +265,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );
