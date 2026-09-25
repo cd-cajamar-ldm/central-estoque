@@ -23,6 +23,10 @@ interface Props<T extends CartaoDoQuadro> {
   /* Trocar a coluna de lugar. Quando existe, o cabecalho ganha as setas
      — e a ordem do quadro deixa de exigir uma ida a configuracao. */
   aoReordenar?: (coluna: ColunaDoQuadro, direcao: -1 | 1) => void | Promise<void>;
+  /* Soltar um cartao antes de outro (ou no fim, com antesDeId nulo) —
+     tanto reorganizar dentro da mesma coluna quanto trocar de coluna numa
+     posicao especifica. Sem isto, soltar so muda a coluna (aoMover). */
+  aoReordenarCartao?: (item: T, coluna: string, antesDeId: string | null) => void | Promise<void>;
 }
 
 /* Quadro de colunas com arrastar e soltar, no espirito do Jira. Usa a
@@ -34,10 +38,14 @@ interface Props<T extends CartaoDoQuadro> {
 const CHAVE_RECOLHIDAS = 'projetos.colunas-recolhidas';
 
 export default function Quadro<T extends CartaoDoQuadro>({
-  colunas, itens, aoMover, aoAbrir, cartao, rodape, aoReordenar,
+  colunas, itens, aoMover, aoAbrir, cartao, rodape, aoReordenar, aoReordenarCartao,
 }: Props<T>) {
   const [arrastado, setArrastado] = useState<string | null>(null);
   const [alvo, setAlvo] = useState<string | null>(null);
+  /* Cartao sobre o qual se esta arrastando, e se o solto entra antes ou
+     depois dele — e o que desenha a linha indicando onde o cartao vai
+     parar. */
+  const [alvoCartao, setAlvoCartao] = useState<{ id: string; pos: 'antes' | 'depois' } | null>(null);
   /* Coluna recolhida vira uma faixa fina com o nome em pe e a contagem.
      Com muitas situacoes, encolher "Cancelado" e "Concluido" e o que
      faz as colunas do meio caberem na tela sem rolagem lateral. A
@@ -81,7 +89,9 @@ export default function Quadro<T extends CartaoDoQuadro>({
                   setAlvo(null);
                   const item = itens.find((i) => i.id === arrastado);
                   setArrastado(null);
-                  if (item && item.coluna !== coluna.id) void aoMover(item, coluna.id);
+                  if (!item || item.coluna === coluna.id) return;
+                  if (aoReordenarCartao) void aoReordenarCartao(item, coluna.id, null);
+                  else void aoMover(item, coluna.id);
                 }}
                 onClick={() => alternarRecolhida(coluna.id)}
                 title={`Abrir ${coluna.rotulo}`}
@@ -107,9 +117,15 @@ export default function Quadro<T extends CartaoDoQuadro>({
               onDrop={(e) => {
                 e.preventDefault();
                 setAlvo(null);
+                setAlvoCartao(null);
                 const item = itens.find((i) => i.id === arrastado);
                 setArrastado(null);
-                if (item && item.coluna !== coluna.id) void aoMover(item, coluna.id);
+                if (!item) return;
+                /* Disparado so quando o solto cai no fundo da coluna, fora de
+                   qualquer cartao — sobre um cartao quem responde e o proprio
+                   cartao, que impede isto de rodar tambem (stopPropagation). */
+                if (aoReordenarCartao) void aoReordenarCartao(item, coluna.id, null);
+                else if (item.coluna !== coluna.id) void aoMover(item, coluna.id);
               }}
               className={`flex w-64 shrink-0 flex-col rounded-xl border p-2 transition ${
                 alvo === coluna.id ? 'border-roxo bg-roxo-suave' : 'border-linha bg-papel'
@@ -148,18 +164,54 @@ export default function Quadro<T extends CartaoDoQuadro>({
               </div>
 
               <div className="flex-1 space-y-2">
-                {daColuna.map((item) => (
-                  <div
-                    key={item.id}
-                    draggable
-                    onDragStart={() => setArrastado(item.id)}
-                    onDragEnd={() => { setArrastado(null); setAlvo(null); }}
-                    onClick={() => aoAbrir?.(item)}
-                    className={`cursor-grab rounded-lg border border-linha bg-white p-2.5 shadow-card transition active:cursor-grabbing ${
-                      arrastado === item.id ? 'opacity-50' : 'hover:shadow-alto'
-                    }`}
-                  >
-                    {cartao(item)}
+                {daColuna.map((item, indiceCartao) => (
+                  <div key={item.id}>
+                    {alvoCartao?.id === item.id && alvoCartao.pos === 'antes' && (
+                      <div className="mb-2 h-1 rounded-full bg-roxo" />
+                    )}
+                    <div
+                      draggable
+                      onDragStart={() => setArrastado(item.id)}
+                      onDragEnd={() => { setArrastado(null); setAlvo(null); setAlvoCartao(null); }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        /* Sem aoReordenarCartao (quadro de tarefas) nao ha onde
+                           gravar a posicao — a linha so apareceria e nunca
+                           surtiria efeito. */
+                        if (!aoReordenarCartao || arrastado === item.id) return;
+                        const retangulo = e.currentTarget.getBoundingClientRect();
+                        const meio = retangulo.top + retangulo.height / 2;
+                        setAlvoCartao({ id: item.id, pos: e.clientY < meio ? 'antes' : 'depois' });
+                      }}
+                      onDragLeave={() => setAlvoCartao((atual) => (atual?.id === item.id ? null : atual))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        /* Para o drop da coluna (que so acrescenta no fim) nao
+                           rodar tambem e desfazer a posicao escolhida aqui. */
+                        e.stopPropagation();
+                        const arrastadoItem = itens.find((i) => i.id === arrastado);
+                        const pos = alvoCartao?.id === item.id ? alvoCartao.pos : 'antes';
+                        setArrastado(null);
+                        setAlvo(null);
+                        setAlvoCartao(null);
+                        if (!arrastadoItem || arrastadoItem.id === item.id) return;
+                        if (aoReordenarCartao) {
+                          const antesDeId = pos === 'antes' ? item.id : (daColuna[indiceCartao + 1]?.id ?? null);
+                          void aoReordenarCartao(arrastadoItem, coluna.id, antesDeId);
+                        } else if (arrastadoItem.coluna !== coluna.id) {
+                          void aoMover(arrastadoItem, coluna.id);
+                        }
+                      }}
+                      onClick={() => aoAbrir?.(item)}
+                      className={`cursor-grab rounded-lg border border-linha bg-white p-2.5 shadow-card transition active:cursor-grabbing ${
+                        arrastado === item.id ? 'opacity-50' : 'hover:shadow-alto'
+                      }`}
+                    >
+                      {cartao(item)}
+                    </div>
+                    {alvoCartao?.id === item.id && alvoCartao.pos === 'depois' && (
+                      <div className="mt-2 h-1 rounded-full bg-roxo" />
+                    )}
                   </div>
                 ))}
                 {!daColuna.length && (
