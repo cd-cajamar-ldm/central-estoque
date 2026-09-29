@@ -29,6 +29,17 @@ const CHAVE_HISTORICO = 'historico';
    apuracao de quem trabalha o caso, e trocar a planilha do mes nao
    pode apagar a decisao ja tomada sobre uma entrega. */
 const CHAVE_AJUSTES = 'ajustes_responsavel';
+/* SIGEQ278/QRY0390 tambem ficam fora, pelo mesmo motivo: o CD reimporta
+   a planilha do dia com muito mais frequencia do que o preco de custo
+   muda, e "Importar outra planilha" limpa CHAVE_DADOS. Sem uma chave
+   propria, cada troca de planilha zerava o R$ parado ate alguem lembrar
+   de reanexar os dois arquivos de preco de novo. */
+const CHAVE_PRECOS = 'precos_importados';
+
+interface PrecosImportados {
+  precos: [string, number][];
+  saldo390: [string, number][];
+}
 
 export interface Importacao {
   componentes: Componente[];
@@ -103,6 +114,11 @@ export function useDados() {
   const [dados, setDados] = useState<Importacao | null>(null);
   const [historico, setHistorico] = useState<Marco[]>([]);
   const [ajustes, setAjustes] = useState<AjusteCaso[]>([]);
+  /* So para a tela de importacao avisar "ja tenho isso guardado" antes
+     de qualquer arquivo ser escolhido nesta sessao - o valor em si so
+     entra no calculo depois de um importar() (ver CHAVE_PRECOS acima). */
+  const [temPrecoSalvo, setTemPrecoSalvo] = useState(false);
+  const [temSaldo390Salvo, setTemSaldo390Salvo] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -117,6 +133,14 @@ export function useDados() {
       /* migrarAjustes aceita o formato antigo, de quando o ajuste so
          sabia trocar o responsavel. */
       .then((a) => vivo && setAjustes(migrarAjustes(a)))
+      .catch(() => undefined);
+    void store
+      .getItem<PrecosImportados>(CHAVE_PRECOS)
+      .then((p) => {
+        if (!vivo || !p) return;
+        setTemPrecoSalvo(p.precos.length > 0);
+        setTemSaldo390Salvo(p.saldo390.length > 0);
+      })
       .catch(() => undefined);
     store
       .getItem<Importacao>(CHAVE_DADOS)
@@ -153,22 +177,41 @@ export function useDados() {
         );
       }
 
+      /* SIGEQ278 e QRY0390 sao importadas a parte da planilha principal, e
+         o CD atualiza o saldo/estoque bem mais vezes do que o preco muda.
+         "Importar outra planilha" limpa CHAVE_DADOS antes de voltar pra
+         esta tela (App.tsx, trocarPlanilha), entao o preco precisa vir de
+         uma chave propria - senao reprocessar o dia sem reanexar os dois
+         so pode significar "esqueci", nunca "zere o R$ parado". */
+      const anterior = await store.getItem<PrecosImportados>(CHAVE_PRECOS);
+
       let fotos: [string, string][] = [];
       if (arquivoFotos) {
         const bufFotos = new Uint8Array(await arquivoFotos.arrayBuffer());
         fotos = [...lerArquivoFotos(bufFotos).entries()];
       }
 
-      let precos: [string, number][] = [];
+      let precos: [string, number][] = anterior?.precos ?? [];
       if (arquivoPrecos) {
         const bufPrecos = new Uint8Array(await arquivoPrecos.arrayBuffer());
         precos = [...lerArquivoPrecos(bufPrecos).entries()];
       }
 
-      let saldo390: [string, number][] = [];
+      let saldo390: [string, number][] = anterior?.saldo390 ?? [];
       if (arquivoSaldo390) {
         const buf390 = new Uint8Array(await arquivoSaldo390.arrayBuffer());
         saldo390 = [...lerArquivoSaldo390(buf390).entries()];
+      }
+
+      if (arquivoPrecos || arquivoSaldo390) {
+        try {
+          await store.setItem<PrecosImportados>(CHAVE_PRECOS, { precos, saldo390 });
+        } catch {
+          // Sem armazenamento, o preco vale so para esta sessao - mesma
+          // degradacao da importacao principal, mais abaixo.
+        }
+        setTemPrecoSalvo(precos.length > 0);
+        setTemSaldo390Salvo(saldo390.length > 0);
       }
 
       const novo: Importacao = {
@@ -257,6 +300,7 @@ export function useDados() {
 
   return {
     dados, historico, ajustes, carregando, erro,
+    temPrecoSalvo, temSaldo390Salvo,
     importar, carregarDemo, limpar, ajustarResponsavel, desfazerAjuste,
   };
 }

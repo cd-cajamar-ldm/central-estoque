@@ -10,6 +10,8 @@ export function Importar({
   aoImportar,
   aoVerExemplo,
   erro,
+  temPrecoSalvo = false,
+  temSaldo390Salvo = false,
 }: {
   aoImportar: (
     arquivo: File,
@@ -19,6 +21,12 @@ export function Importar({
   ) => Promise<unknown>;
   aoVerExemplo: () => void;
   erro: string | null;
+  /* Ja existe um preco de custo (SIGEQ278) guardado de uma importacao
+     anterior - ele continua valendo se nenhum arquivo for escolhido
+     agora, entao a tela avisa em vez de parecer que precisa reanexar
+     toda vez que a planilha do dia e trocada. */
+  temPrecoSalvo?: boolean;
+  temSaldo390Salvo?: boolean;
 }) {
   const refPlanilha = useRef<HTMLInputElement>(null);
   const refFotos = useRef<HTMLInputElement>(null);
@@ -150,6 +158,12 @@ export function Importar({
         <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-soft)' }}>
           É a extração avulsa da query (não a aba EstoqueAtual de dentro da planilha principal, essa
           continua fora). Arquivo grande — a leitura pode demorar alguns segundos.
+          {temSaldo390Salvo && !saldo390 && (
+            <>
+              {' '}
+              <b>Já tem uma importada</b> — continua valendo se você não escolher outra agora.
+            </>
+          )}
         </p>
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-[12.5px]">
@@ -176,6 +190,11 @@ export function Importar({
             </button>
           )}
         </div>
+        {temPrecoSalvo && !precos && (
+          <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-soft)' }}>
+            <b>Já tem uma importada</b> — continua valendo se você não escolher outra agora.
+          </p>
+        )}
 
         {erro && (
           <p
