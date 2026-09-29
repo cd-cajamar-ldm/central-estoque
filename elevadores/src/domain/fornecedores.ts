@@ -173,18 +173,19 @@ function fecharItem(item: ItemFornecedor): ItemFornecedor {
   return item;
 }
 
-/* Preco do componente, na mesma ordem do modulo Multiplos Descasados:
-   primeiro o valor unitario do proprio componente na QRY0390, quando
-   existir. Ele costuma vir zerado nos componentes de kit - a
-   valoracao do multiplo fica no pai, nao nas partes - e ai entra a
-   SIGEQ278: o preco de custo do pai e atribuido so ao componente que
-   carrega o S da 051 (in interface). O outro lado do par, sem preco
-   proprio na 390 e sem o S, entra a zero: contar os dois dobraria o
-   valor do mesmo conjunto parado. */
+/* Preco do componente, na mesma regra de valoracao do modulo Multiplos
+   Descasados: quem carrega o S da 051 (in interface) e que valora,
+   nunca o N - contar os dois dobraria o valor do mesmo conjunto
+   parado. No componente com S, o valor unitario proprio na QRY0390
+   manda quando existir; sem ele, cai para o preco de custo do pai
+   (SIGEQ278). Um preco de 390 no lado N e ignorado de proposito: ele
+   costuma vir zerado nos componentes de kit (a valoracao do multiplo
+   fica no pai, nao nas partes), mas mesmo quando vier preenchido nao
+   e ele quem valora. */
 function precoComponente(codigo: string, sn: string, precoPai: number, precos390: MapaPrecos): number {
+  if (sn !== 'S') return 0;
   const doProprioComponente = precos390.get(codigo) ?? 0;
-  if (doProprioComponente > 0) return doProprioComponente;
-  return sn === 'S' ? precoPai : 0;
+  return doProprioComponente > 0 ? doProprioComponente : precoPai;
 }
 
 interface AvaliacaoParada {

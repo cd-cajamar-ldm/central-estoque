@@ -93,18 +93,18 @@ describe('valor parado (SIGEQ278)', () => {
   });
 });
 
-describe('valor parado com QRY0390 (prioridade sobre a SIGEQ278)', () => {
-  it('o valor unitario do proprio componente na 390 manda, mesmo sem o S', () => {
-    // Base (sem S) tem sobra e preco proprio na 390: nao precisa do
-    // pai nem do S para valorar.
+describe('valor parado com QRY0390 (so o componente com S valora)', () => {
+  it('preco da 390 no lado N e ignorado - quem nao carrega o S nunca valora', () => {
+    // Base (sem S) tem sobra e ate preco proprio na 390 - mas quem
+    // nao carrega o S nunca valora, mesmo com preco disponivel.
     const item = [
       comp({ itemVolMultiplo: 'A', itemComponente: 'A1', componenteBaseColuna: 'BASE', cd: 10, inInterface: 'N', fabricante: 'JM' }),
       comp({ itemVolMultiplo: 'A', itemComponente: 'A2', componenteBaseColuna: 'COLUNA', cd: 1, inInterface: 'S', fabricante: 'JM' }),
     ];
     const saldo390 = new Map([['A1', 80]]);
     const i = primeiroItem(listarPorFornecedor(item, new Map(), saldo390));
-    expect(i.valorParado).toBe(9 * 80);
-    expect(i.componentesSemPreco).toBe(0);
+    expect(i.valorParado).toBe(0);
+    expect(i.componentesSemPreco).toBe(1);
   });
 
   it('sem preco na 390 para aquele componente, cai para o preco do pai (278) via S', () => {
