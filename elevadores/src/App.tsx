@@ -110,6 +110,7 @@ function Icone({ nome }: { nome: Pagina | 'tema' | 'menu' | 'voltar' }) {
 export default function App() {
   const {
     dados, historico, ajustes, carregando, erro,
+    temPrecoSalvo, temSaldo390Salvo,
     importar, carregarDemo, limpar, ajustarResponsavel, desfazerAjuste,
   } = useDados();
   const [pagina, setPagina] = useState<Pagina>('geral');
@@ -355,7 +356,13 @@ export default function App() {
           {carregando ? (
             <Vazio icone="⏳">Carregando dados salvos…</Vazio>
           ) : !dados ? (
-            <Importar aoImportar={importar} aoVerExemplo={carregarDemo} erro={erro} />
+            <Importar
+              aoImportar={importar}
+              aoVerExemplo={carregarDemo}
+              erro={erro}
+              temPrecoSalvo={temPrecoSalvo}
+              temSaldo390Salvo={temSaldo390Salvo}
+            />
           ) : paginaAtual === 'geral' ? (
             <DashboardGeral
               componentes={dados.componentes}
