@@ -1158,12 +1158,12 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // final física — nunca soma rodada, sempre a última).
   const totalPecasFisicas = divergenciasConcluidas.reduce((s,d)=>s+d.qtdeFisica,0);
   const totalDiferencaAbs = divergenciasConcluidas.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-  /* Denominador = MAIOR entre sistema e físico de cada item (baseQtd), não só a
-     quantidade física contada nem só o saldo do sistema. Com a física sozinha, um
-     item que sumiu inteiro (sistema 500, físico 0) põe 500 no numerador e ZERO no
-     denominador: o erro passa de 100% e a conta estoura — só não aparecia negativa
-     porque o clamp segurava em 0%. Com o maior dos dois o erro de um item nunca passa
-     de 100% e o resultado é limitado por construção, dos dois lados (sumiço e achado). */
+  /* Denominador = saldo SISTÊMICO de cada item (baseQtd = qtdeSistema), não a
+     física contada. Item que sumiu inteiro (sistema 500, físico 0) põe 500 no
+     numerador e 500 no denominador: erro de 100%, sem estourar. Item ACHADO do
+     nada (sistema 0, físico 500) é o lado cego aceito: entra no numerador com
+     base zero, pesando no erro sem somar na base — ver comentário na baseQtd
+     acima. O clamp01 só segura o resultado final entre 0% e 100%. */
   const totalSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+baseQtd(d),0);
   const acuraciaPecas = clamp01(totalSaldoLogico>0 ? 1-(totalDiferencaAbs/totalSaldoLogico) : 1);
   const totalItensContados = divergenciasConcluidas.length;
