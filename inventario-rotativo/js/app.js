@@ -915,7 +915,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v202';
+const IR_APP_VERSION = 'v203';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1050,7 +1050,6 @@ function irRenderDashboard(){
     ${irRenderContadosPorDiaPanel(ind)}
     ${irRenderDivergentesPorDiaPanel(ind)}
     ${irRenderLogTablePanel(ind)}
-    ${irRenderEvolucaoMensalPanel(ind)}
   `;
 }
 /* ============================================================
@@ -1068,97 +1067,11 @@ function irRenderDashboard(){
    tela). Peças/Valor físico contado continua disponível nos KPIs do topo e nas
    tabelas por Rua/Log. Locais não muda: a base da Acurácia Local já É o total de
    locais contados, sem número escondido. */
-const IR_MES_SERIES = {
-  pecas:  {titulo:'Peças',  rotContado:'Peças sistêmicas', rotDiv:'Peças divergentes',
-           cont:'var(--mes-pecas-cont)',  div:'var(--mes-pecas-div)',  acc:'var(--mes-pecas-cont)'},
-  locais: {titulo:'Locais', rotContado:'Locais contados',  rotDiv:'Locais divergentes',
-           cont:'var(--mes-locais-cont)', div:'var(--mes-locais-div)', acc:'var(--mes-locais-cont)'},
-  valor:  {titulo:'Valor',  rotContado:'Valor sistêmico',  rotDiv:'Valor divergente',
-           cont:'var(--mes-valor-cont)',  div:'var(--mes-valor-div)',  acc:'var(--mes-valor-cont)'}
-};
 const IR_MES_ABREV = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function irMesLabel(mes){
   const [a,m] = String(mes||'').split('-');
   const i = parseInt(m,10)-1;
   return (IR_MES_ABREV[i]||m||'?')+'/'+String(a||'').slice(2);
-}
-// Acurácia null = mês sem base de cálculo. Na tabela vira traço, não "0,0%".
-function irFmtPctOuTraco(v){ return v==null ? '—' : irFmtPct(v); }
-/* Gráfico mensal de UMA métrica. `rows` = [{mes, contado, divergente, acuracia}],
-   com acuracia null quando o mês não tem base pra calcular. */
-/* Piso da faixa de acurácia. Padrão 95%, mas desce se algum mês ficar abaixo
-   disso — senão a barrinha do mês pior vira um toco de 3px e não dá pra
-   comparar nada (Acurácia Local costuma rodar na casa dos 93%). */
-function irMesAccFloor(rows){
-  // Mês sem base (acuracia null) fica de fora: ele não tem acurácia ruim, ele não
-  // tem acurácia nenhuma — e deixá-lo entrar zerava o piso e achatava a régua.
-  const validas = rows.map(r=>r.acuracia).filter(a=>a!=null);
-  const min = Math.min(...validas, 0.95);
-  return Math.max(0, Math.floor(min*100)/100 - 0.01);
-}
-function irBuildEvolucaoMensalSvg(rows, cfg, fmtVal){
-  const meta = IR_META_ACURACIA;
-  const lo = irMesAccFloor(rows);
-  const W=1080, padL=86, padR=16, padT=26;
-  const plotH=186, baseY=padT+plotH, plotW=W-padL-padR;
-  const accTop=baseY+58, H=accTop+42;
-  const maxVal = Math.max(...rows.map(r=>r.contado), 1)*1.05;
-  const step = plotW/rows.length;
-  const bw = Math.min(24, Math.max(10, step/3.2)), gapIn = 6;
-  /* Altura pela raiz quadrada do valor. No linear, divergente ao lado de contado
-     é sempre um toco: 50.846 contra 973.436 dá 5% da altura da barra vizinha, e
-     a comparação mês a mês — que é pra que o gráfico existe — não se fazia. A
-     raiz aproxima as duas sem igualá-las (os mesmos números viram 23%), então
-     continua na cara qual é qual. As linhas de grade vão nos mesmos valores de
-     sempre, só que nas posições da nova escala: elas se fecham em direção ao
-     topo, que é o aviso visual de que o eixo não é linear. */
-  const alt = v => (Math.sqrt(Math.max(0, v))/Math.sqrt(maxVal))*plotH;
-  let grid='', bars='', faixa='', divisorias='';
-  for(let i=0;i<=4;i++){
-    const v = maxVal*i/4, y = baseY-alt(v);
-    grid += `<line x1="${padL}" x2="${W-padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="mes-grid"/>`
-         +  `<text x="${padL-9}" y="${(y+3.5).toFixed(1)}" text-anchor="end" class="mes-axis">${irEsc(fmtVal(v))}</text>`;
-  }
-  rows.forEach((r,i)=>{
-    // Divisória leve entre ciclos: mês pedido explicitamente pelo usuário, pra dar
-    // pra ver de relance onde um ciclo (trimestre) termina e o outro começa.
-    if(i>0 && r.cicloId!=null && rows[i-1].cicloId!=null && r.cicloId!==rows[i-1].cicloId){
-      const xDiv = padL+step*i;
-      divisorias += `<line x1="${xDiv.toFixed(1)}" x2="${xDiv.toFixed(1)}" y1="${padT}" y2="${baseY}" class="mes-ciclo-div"/>`;
-    }
-    const cx = padL+step*i+step/2;
-    const x1 = cx-bw-gapIn/2, x2 = cx+gapIn/2;
-    const hC = alt(r.contado);
-    const hD = Math.max(alt(r.divergente), 2);
-    bars += `<rect x="${x1.toFixed(1)}" y="${(baseY-hC).toFixed(1)}" width="${bw.toFixed(1)}" height="${hC.toFixed(1)}" rx="4" fill="${cfg.cont}"><title>${irEsc(irMesLabel(r.mes))} — ${irEsc(cfg.rotContado)}: ${irEsc(fmtVal(r.contado))}</title></rect>`
-         +  `<rect x="${x2.toFixed(1)}" y="${(baseY-hD).toFixed(1)}" width="${bw.toFixed(1)}" height="${hD.toFixed(1)}" rx="4" fill="${cfg.div}"><title>${irEsc(irMesLabel(r.mes))} — ${irEsc(cfg.rotDiv)}: ${irEsc(fmtVal(r.divergente))}</title></rect>`
-         // Rótulos ancorados nas bordas EXTERNAS do par (contado alinhado à direita,
-         // divergente à esquerda), não centralizados: rótulo largo — valor em R$, por
-         // exemplo — centralizado invade a coluna vizinha.
-         +  `<text x="${(x1+bw).toFixed(1)}" y="${(baseY-hC-7).toFixed(1)}" text-anchor="end" class="mes-val">${irEsc(fmtVal(r.contado))}</text>`
-         +  `<text x="${x2.toFixed(1)}" y="${(baseY-hD-7).toFixed(1)}" text-anchor="start" class="mes-val">${irEsc(fmtVal(r.divergente))}</text>`
-         +  `<text x="${cx.toFixed(1)}" y="${(baseY+22).toFixed(1)}" text-anchor="middle" class="mes-mon">${irEsc(irMesLabel(r.mes))}</text>`;
-    // Faixa de acurácia: escala do piso → 100%, com traço na meta.
-    // Mês sem base de cálculo (acuracia null) não tem acurácia: mostra o trilho vazio
-    // e um traço no lugar do número. Pintar "0,0%" em vermelho aqui dizia que o mês
-    // foi péssimo, quando ele só não tem o que medir ainda.
-    const semDado = r.acuracia == null;
-    const frac = semDado ? 0 : Math.max(0, Math.min(1, (r.acuracia-lo)/(1-lo)));
-    const tw = Math.min(78, step*0.72), tx = cx-tw/2, ok = !semDado && r.acuracia>=meta;
-    const mx = tx+tw*Math.max(0, Math.min(1,(meta-lo)/(1-lo)));
-    const dica = semDado ? `${irEsc(irMesLabel(r.mes))}: sem base de cálculo no mês`
-                         : `Acurácia ${irEsc(irMesLabel(r.mes))}: ${irFmtPct(r.acuracia)} (meta ${irFmtPct(meta)})`;
-    faixa += `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${tw.toFixed(1)}" height="7" rx="3.5" fill="var(--surface2)"><title>${dica}</title></rect>`
-          +  (semDado ? '' : `<rect x="${tx.toFixed(1)}" y="${accTop}" width="${Math.max(tw*frac,3).toFixed(1)}" height="7" rx="3.5" fill="${ok?cfg.acc:'var(--danger)'}"><title>${dica}</title></rect>`)
-          +  `<line x1="${mx.toFixed(1)}" x2="${mx.toFixed(1)}" y1="${accTop-3}" y2="${accTop+10}" class="mes-meta"/>`
-          +  `<text x="${cx.toFixed(1)}" y="${accTop+27}" text-anchor="middle" class="mes-acc ${semDado?'vazio':(ok?'ok':'bad')}">${semDado?'—':irFmtPct(r.acuracia)}</text>`;
-  });
-  return `<div class="mes-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Acurácia mensal de ${irEsc(cfg.titulo)}">
-    ${grid}${divisorias}${bars}
-    <line x1="${padL}" x2="${W-padR}" y1="${baseY}" y2="${baseY}" class="mes-grid"/>
-    <text x="${padL-9}" y="${accTop-8}" text-anchor="end" class="mes-band">ACURÁCIA</text>
-    ${faixa}
-  </svg></div>`;
 }
 // Total do período = soma bruta dos meses, não média das % mensais (mesma
 // metodologia ponderada por volume usada no resto do app — ver irCalcLogTotal).
@@ -1167,87 +1080,6 @@ function irEvolucaoMensalTotal(rows, cfg, fmtVal){
   const totalDivergente = rows.reduce((s,r)=>s+(r.divergente||0),0);
   const totalAcuracia = totalContado>0 ? Math.max(0,1-totalDivergente/totalContado) : null;
   return `<p class="field-hint mes-total">Total do período: ${irEsc(cfg.rotContado)} ${irEsc(fmtVal(totalContado))} · ${irEsc(cfg.rotDiv)} ${irEsc(fmtVal(totalDivergente))} · Acurácia ${totalAcuracia==null?'—':irFmtPct(totalAcuracia)}</p>`;
-}
-function irEvolucaoMensalBloco(rows, cfg, fmtVal){
-  return `<div class="mes-bloco">
-    <div class="mes-legend">
-      <span class="mes-lg"><span class="mes-sw" style="background:${cfg.cont}"></span>${irEsc(cfg.rotContado)}</span>
-      <span class="mes-lg"><span class="mes-sw" style="background:${cfg.div}"></span>${irEsc(cfg.rotDiv)}</span>
-      <span class="mes-legend-right">Acurácia na faixa ${irFmtPct(irMesAccFloor(rows))}→100% · traço = meta ${irFmtPct(IR_META_ACURACIA)}</span>
-    </div>
-    ${irBuildEvolucaoMensalSvg(rows, cfg, fmtVal)}
-    ${irEvolucaoMensalTotal(rows, cfg, fmtVal)}
-  </div>`;
-}
-/* Une o porMes de todos os ciclos do ano. Cada ciclo cobre um trimestre, então
-   na prática é concatenação — mas soma por mês mesmo assim, pra um mês que caia
-   na virada de dois ciclos não aparecer duas vezes. A acurácia é recalculada do
-   total somado, não herdada do ciclo. */
-function irPorMesDoAno(ano){
-  const pares = (IR.comparativoCiclos||[]).filter(({ciclo}) => irCicloAno(ciclo) === ano);
-  const acc = new Map();
-  for(const {ciclo, ind} of pares){
-    for(const m of ((ind&&ind.porMes)||[])){
-      if(!acc.has(m.mes)) acc.set(m.mes, {mes:m.mes, pecasContadas:0, pecasSaldoLogico:0, pecasDivergentes:0,
-        locaisContados:0, locaisDivergentes:0, valorContado:0, valorSaldoLogico:0, valorDivergente:0, cicloId:null});
-      const a = acc.get(m.mes);
-      a.pecasContadas += m.pecasContadas||0;   a.pecasDivergentes += m.pecasDivergentes||0;
-      a.pecasSaldoLogico += (m.pecasSaldoLogico!=null ? m.pecasSaldoLogico : (m.pecasContadas||0));
-      a.locaisContados += m.locaisContados||0; a.locaisDivergentes += m.locaisDivergentes||0;
-      a.valorContado += m.valorContado||0;     a.valorDivergente += m.valorDivergente||0;
-      a.valorSaldoLogico += (m.valorSaldoLogico!=null ? m.valorSaldoLogico : (m.valorContado||0));
-      // Mês normalmente só recebe contribuição de UM ciclo (cada ciclo é um
-      // trimestre); guarda o id pra desenhar a divisória entre ciclos no gráfico.
-      a.cicloId = ciclo.id;
-    }
-  }
-  return Array.from(acc.values()).sort((x,y)=>x.mes.localeCompare(y.mes)).map(a=>({
-    ...a,
-    /* Sem base de cálculo = null, e não 0. Um mês entra aqui assim que tem local
-       contado, mas Peças e Valor só ganham base quando algum local CONCLUI — então
-       existe mês legítimo com locais contados e nenhuma peça/valor apurado ainda.
-       Devolver 0 nesse caso pintava "0,0%" em vermelho, como se a acurácia fosse
-       péssima, quando o que falta é dado; e ainda puxava o piso da faixa
-       (irMesAccFloor) pra zero, achatando a régua de todos os outros meses. */
-    acuraciaPecas:  a.pecasSaldoLogico>0 ? 1-a.pecasDivergentes/a.pecasSaldoLogico : null,
-    acuraciaLocal:  a.locaisContados>0 ? 1-a.locaisDivergentes/a.locaisContados : null,
-    acuraciaValor:  a.valorSaldoLogico>0 ? 1-a.valorDivergente/a.valorSaldoLogico : null
-  }));
-}
-function irRenderEvolucaoMensalPanel(ind){
-  const meses = irPorMesDoAno(irCicloAno(IR.cicloAtivo));
-  if(!meses.length){
-    return `<div class="panel">
-      <h3>Acurácia mensal</h3>
-      <p class="field-hint">Reprocesse os ciclos na Importação para habilitar a quebra por mês.</p>
-    </div>`;
-  }
-  const linhas = m => ({
-    pecas:  {mes:m.mes, contado:m.pecasSaldoLogico, divergente:m.pecasDivergentes,  acuracia:m.acuraciaPecas,  cicloId:m.cicloId},
-    locais: {mes:m.mes, contado:m.locaisContados,   divergente:m.locaisDivergentes, acuracia:m.acuraciaLocal,  cicloId:m.cicloId},
-    valor:  {mes:m.mes, contado:m.valorSaldoLogico, divergente:m.valorDivergente,   acuracia:m.acuraciaValor,  cicloId:m.cicloId}
-  });
-  const dados = meses.map(linhas);
-  const tabela = `<details class="mes-tabela"><summary>Ver os números em tabela</summary>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Mês</th><th>Peças sistêmicas</th><th>Peças div.</th><th>Acur. Peças</th>
-        <th>Locais contados</th><th>Locais div.</th><th>Acur. Local</th>
-        <th>Valor sistêmico</th><th>Valor div.</th><th>Acur. Valor</th></tr></thead>
-      <tbody>${meses.map(m=>`<tr>
-        <td>${irEsc(irMesLabel(m.mes))}</td>
-        <td class="mono">${irFmtInt(m.pecasSaldoLogico)}</td><td class="mono">${irFmtInt(m.pecasDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaPecas)}</td>
-        <td class="mono">${irFmtInt(m.locaisContados)}</td><td class="mono">${irFmtInt(m.locaisDivergentes)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaLocal)}</td>
-        <td class="mono">${irFmtMoneyInt(m.valorSaldoLogico)}</td><td class="mono">${irFmtMoneyInt(m.valorDivergente)}</td><td class="mono">${irFmtPctOuTraco(m.acuraciaValor)}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>
-  </details>`;
-  return `<div class="panel">
-    <h3>Acurácia mensal</h3>
-    ${irEvolucaoMensalBloco(dados.map(d=>d.pecas),  IR_MES_SERIES.pecas,  irFmtInt)}
-    ${irEvolucaoMensalBloco(dados.map(d=>d.locais), IR_MES_SERIES.locais, irFmtInt)}
-    ${irEvolucaoMensalBloco(dados.map(d=>d.valor),  IR_MES_SERIES.valor,  irFmtMoneyCompact)}
-    ${tabela}
-  </div>`;
 }
 // Impacto de locais que tiveram trabalho de campo iniciado (Data Início Contagem
 // preenchida na 843) e terminaram CANCELADOS — o colaborador foi lá, começou a contar,
@@ -6584,7 +6416,7 @@ function irRenderCiclosCards(){
       ${linha('Cancelamento', ind.taxaCancelamento!=null?irFmtPct(ind.taxaCancelamento):'—', 'neg')}
       ${linha('Valor divergente', irFmtMoney(ind.valorDivergenteAbsoluto||0), 'neg')}
       <div class="cc-rod">
-        <button class="btn-link" onclick="irSelecionarCiclo('${ciclo.id}')">Ver detalhe</button>
+        <button class="btn-link" onclick="irFiltrarCiclo('${ciclo.id}')">Ver detalhe</button>
         <span class="mono ${delta==null?'':(delta>=0?'good':'neg')}">${delta==null?'' : (delta>=0?'+':'−')+irFmtNum(Math.abs(delta)*100,1)+' p.p.'}</span>
       </div>
     </div>`;
