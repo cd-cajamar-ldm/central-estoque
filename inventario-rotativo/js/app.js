@@ -927,7 +927,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v209';
+const IR_APP_VERSION = 'v210';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -6447,10 +6447,10 @@ function irRenderCiclosCards(){
       ${sub('Operação')}
       ${linha('Recontagens', irFmtInt(ind.qtdRecontagens||0))}
       ${linha('Cancelamento', ind.taxaCancelamento!=null?irFmtPct(ind.taxaCancelamento):'—', 'neg')}
-      <div class="cc-rod">
-        <button class="btn-link" onclick="irFiltrarCiclo('${ciclo.id}')">Ver detalhe</button>
-        <span class="mono ${delta==null?'':(delta>=0?'good':'neg')}">${delta==null?'' : (delta>=0?'+':'−')+irFmtNum(Math.abs(delta)*100,1)+' p.p.'}</span>
-      </div>
+      ${delta==null?'' : `<div class="cc-rod">
+        <span>vs. ciclo anterior</span>
+        <span class="mono ${delta>=0?'good':'neg'}">${(delta>=0?'+':'−')+irFmtNum(Math.abs(delta)*100,1)+' p.p.'}</span>
+      </div>`}
     </div>`;
   }).join('');
   return `<div class="panel">
