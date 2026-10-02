@@ -927,7 +927,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v206';
+const IR_APP_VERSION = 'v207';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -6408,6 +6408,13 @@ function irRenderCiclosCards(){
     const divergentes = ind.locaisDivergentes!=null ? ind.locaisDivergentes
       : (ind.divergentesPorDia||[]).reduce((s,d)=>s+(d.locais||0),0);
     const base = ind.pecasSaldoLogico!=null ? ind.pecasSaldoLogico : (ind.pecasContadas||0);
+    /* As três acurácias ficam lado a lado no topo, mesma fonte e mesmo padrão
+       (número grande + rótulo + barra com a marca da meta). */
+    const kpiAcc = (rot, v) => `<div class="cc-acc">
+      <p class="cc-big ${cls(v)}">${pct(v)}</p>
+      <span class="cc-lbl">Acurácia ${irEsc(rot)}</span>
+      <span class="cc-bar"><i style="width:${((v||0)*100).toFixed(1)}%"></i><span class="cc-meta" style="left:${(IR_META_ACURACIA*100).toFixed(1)}%"></span></span>
+    </div>`;
     const linha = (rot, valor, classe) => `<div class="cc-lin"><span>${irEsc(rot)}</span><b class="${classe||''}">${valor}</b></div>`;
     const sub = (rot) => `<div class="cc-grupo">${irEsc(rot)}</div>`;
     return `<div class="cc-card ${aberto?'aberto':''}">
@@ -6415,13 +6422,10 @@ function irRenderCiclosCards(){
         <span class="cc-tag ${aberto?'ab':'en'}">${aberto?'aberto':'encerrado'}</span></div>
       <p class="cc-per">${irEsc(irFmtDate(per.inicio))} a ${irEsc(irFmtDate(per.fim))}</p>
       <div class="cc-kpi">
-        <p class="cc-big ${cls(ind.acuraciaPecas)}">${pct(ind.acuraciaPecas)}</p>
-        <span class="cc-lbl">Acurácia peças</span>
-        <span class="cc-bar"><i style="width:${((ind.acuraciaPecas||0)*100).toFixed(1)}%"></i><span class="cc-meta" style="left:${(IR_META_ACURACIA*100).toFixed(1)}%"></span></span>
+        ${kpiAcc('Peças', ind.acuraciaPecas)}
+        ${kpiAcc('Local', ind.acuraciaLocal)}
+        ${kpiAcc('Valor', ind.acuraciaValor)}
       </div>
-      ${sub('Acurácia')}
-      ${linha('Local', pct(ind.acuraciaLocal), cls(ind.acuraciaLocal))}
-      ${linha('Valor', pct(ind.acuraciaValor), cls(ind.acuraciaValor))}
       ${sub('Peças')}
       ${linha('Sistêmicas', irFmtInt(base))}
       ${linha('Contadas', irFmtInt(ind.pecasContadas||0))}

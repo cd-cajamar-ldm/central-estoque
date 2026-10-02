@@ -683,13 +683,14 @@ table.prod-rank td{ white-space:nowrap; }
 .cc-tag.ab{ background:var(--orange-light); color:var(--orange); }
 .cc-tag.en{ background:var(--surface2); color:var(--ink-soft); }
 .cc-per{ margin:4px 14px 0; font-size:11px; color:var(--ink-soft); }
-.cc-kpi{ padding:6px 14px 10px; }
-.cc-big{ margin:0; font-size:28px; font-weight:800; line-height:1;
+.cc-kpi{ padding:6px 14px 10px; display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+.cc-acc{ min-width:0; }
+.cc-big{ margin:0; font-size:clamp(17px, 2.1vw, 24px); font-weight:800; line-height:1;
   font-family:'SFMono-Regular',Consolas,monospace; }
 .cc-big.good{ color:var(--success); } .cc-big.neg{ color:var(--danger); }
-.cc-lbl{ font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+.cc-lbl{ display:block; font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
 .cc-bar{ display:block; position:relative; height:6px; border-radius:99px;
-  background:var(--surface2); margin-top:8px; overflow:visible; }
+  background:var(--surface2); margin-top:6px; overflow:visible; }
 .cc-bar i{ display:block; height:100%; border-radius:99px; background:var(--orange); }
 .cc-meta{ position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink); opacity:.45; }
 .cc-grupo{ padding:2px 14px; font-size:9.5px; font-weight:800; letter-spacing:.07em;
