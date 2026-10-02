@@ -667,6 +667,53 @@ table.prod-rank td{ white-space:nowrap; }
 .ofe-num.neg strong{ color:var(--danger); }
 .ofe-num.pos strong{ color:var(--success); }
 
+/* ---------- CARTÕES DOS CICLOS + BURNDOWN (Comparativo) ---------- */
+.cc-grid{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:14px; }
+.cc-card{ border:1px solid var(--line); border-radius:12px; background:var(--surface);
+  display:flex; flex-direction:column; overflow:hidden; }
+/* Ciclo aberto fica marcado: os números dele são parciais e não se comparam de
+   igual pra igual com os fechados. */
+.cc-card.aberto{ border-color:var(--orange); box-shadow:0 0 0 1px var(--orange); }
+.cc-top{ display:flex; align-items:center; gap:8px; padding:12px 14px 0; }
+.cc-top h4{ margin:0; font-size:15px; font-weight:800; }
+.cc-tag{ margin-left:auto; font-size:9.5px; font-weight:800; letter-spacing:.05em;
+  text-transform:uppercase; border-radius:99px; padding:2px 8px; }
+.cc-tag.ab{ background:var(--orange-light); color:var(--orange); }
+.cc-tag.en{ background:var(--surface2); color:var(--ink-soft); }
+.cc-per{ margin:4px 14px 0; font-size:11px; color:var(--ink-soft); }
+.cc-kpi{ padding:8px 14px 14px; }
+.cc-big{ margin:0; font-size:28px; font-weight:800; line-height:1;
+  font-family:'SFMono-Regular',Consolas,monospace; }
+.cc-big.good{ color:var(--success); } .cc-big.neg{ color:var(--danger); }
+.cc-lbl{ font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+.cc-bar{ display:block; position:relative; height:6px; border-radius:99px;
+  background:var(--surface2); margin-top:8px; overflow:visible; }
+.cc-bar i{ display:block; height:100%; border-radius:99px; background:var(--orange); }
+.cc-meta{ position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink); opacity:.45; }
+.cc-grupo{ padding:4px 14px; font-size:9.5px; font-weight:800; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--ink-soft); background:var(--surface2);
+  border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.cc-lin{ display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  padding:6px 14px; font-size:12px; border-bottom:1px solid var(--line); }
+.cc-lin span{ color:var(--ink-soft); }
+.cc-lin b{ font-family:'SFMono-Regular',Consolas,monospace; font-weight:700; white-space:nowrap; }
+.cc-lin b.good{ color:var(--success); } .cc-lin b.neg{ color:var(--danger); }
+.cc-lin b em{ font-style:normal; font-family:inherit; font-size:10.5px; font-weight:400;
+  color:var(--ink-soft); margin-left:4px; }
+.cc-rod{ margin-top:auto; display:flex; align-items:center; justify-content:space-between;
+  gap:8px; padding:8px 14px; background:var(--surface2); border-top:1px solid var(--line); font-size:11.5px; }
+.cc-rod .good{ color:var(--success); font-weight:700; }
+.cc-rod .neg{ color:var(--danger); font-weight:700; }
+@media (max-width:1100px){ .cc-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+@media (max-width:600px){ .cc-grid{ grid-template-columns:1fr; } }
+
+.bd-legenda{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px; }
+.bd-sw-ideal{ background:var(--ink-soft); }
+.bd-sw-real{ background:var(--orange); }
+.bd-ideal{ fill:none; stroke:var(--ink-soft); stroke-width:1.5; stroke-dasharray:5 4; }
+.bd-real{ fill:none; stroke:var(--orange); stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; }
+.bd-pt{ fill:var(--orange); }
+
 .ofe-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
 .ofe-head h3{ margin:0; }
 .ofe-acoes{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
