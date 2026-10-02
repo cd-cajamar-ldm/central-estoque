@@ -915,7 +915,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v200';
+const IR_APP_VERSION = 'v201';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -6425,10 +6425,151 @@ function irExportarLocaisPendentesCsv(rua){
 /* ============================================================
    COMPARATIVO ENTRE CICLOS
    ============================================================ */
+/* ============================================================
+   CARTÕES DOS CICLOS + BURNDOWN (aba Comparativo)
+   ============================================================ */
+/* Dias úteis do ciclo, um a um — o irDiasUteisEntre() de rules.js só devolve a
+   CONTAGEM, e o burndown precisa de cada dia pra marcar o eixo. Mesma régua:
+   sem sábado, sem domingo e sem feriado de Cajamar. */
+function irDiasUteisDoCiclo(dataAbertura, dataTermino){
+  if(!dataAbertura || !dataTermino) return [];
+  const cache = new Map();
+  const [a1,a2,a3] = dataAbertura.slice(0,10).split('-').map(Number);
+  const [t1,t2,t3] = dataTermino.slice(0,10).split('-').map(Number);
+  const cur = new Date(a1, a2-1, a3), fim = new Date(t1, t2-1, t3);
+  const dias = [];
+  // Teto de segurança: data de término digitada errada (ano 2206) travaria a tela.
+  while(cur<=fim && dias.length < 400){
+    const ds = cur.getDay();
+    if(ds!==0 && ds!==6 && !irEhFeriadoCajamar(cur, cache)){
+      dias.push(cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0'));
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  return dias;
+}
+/* Burndown do ciclo do filtro: quanto falta contar, dia a dia.
+
+   A linha de referência é reta — total de locais dividido pelos dias úteis do
+   ciclo, que é a meta diária. A linha cheia é o real: locais congelados menos o
+   acumulado de locais contados até aquele dia. Contagem feita em sábado, domingo
+   ou feriado não some: ela entra no primeiro dia útil seguinte, senão o real
+   "pularia" degraus que o eixo não tem. */
+function irBurndownCiclo(ciclo, ind){
+  if(!ciclo || !ind) return '';
+  const total = ind.locaisCongelados || 0;
+  const dias = irDiasUteisDoCiclo(ciclo.dataAbertura, ciclo.dataPrevistaTermino);
+  if(!total || dias.length<2) return '';
+  const porDia = new Map();
+  for(const d of (ind.contadosPorDia||[])) porDia.set(d.dia, (porDia.get(d.dia)||0) + (d.total||0));
+  // Cada contagem vai pro primeiro dia útil >= o dia dela (quem contou no sábado
+  // aparece na segunda). O que for anterior à abertura entra no primeiro dia.
+  const contadoNoDia = dias.map(()=>0);
+  for(const [dia, qtd] of porDia){
+    let i = dias.findIndex(d=>d>=dia);
+    if(i<0) i = dias.length-1;
+    contadoNoDia[i] += qtd;
+  }
+  const hoje = new Date().toISOString().slice(0,10);
+  const metaDia = total/(dias.length-1 || 1);
+  const W=760, H=260, padL=56, padR=16, padT=16, padB=34;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+  const x = i => padL + (plotW*i)/(dias.length-1);
+  const y = v => padT + plotH - (plotH*Math.max(0, Math.min(total, v)))/total;
+  let acum = 0, real = [], ideal = [];
+  dias.forEach((dia,i)=>{
+    acum += contadoNoDia[i];
+    ideal.push([x(i), y(total - metaDia*i)]);
+    // Só desenha o real até hoje: linha caindo até zero no futuro é promessa, não dado.
+    if(dia <= hoje) real.push([x(i), y(total - acum), dia, total-acum]);
+  });
+  const path = pts => pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const passo = Math.ceil(dias.length/12);
+  const eixoX = dias.map((dia,i)=> i%passo===0 || i===dias.length-1
+    ? `<text x="${x(i).toFixed(1)}" y="${H-12}" text-anchor="middle" class="mes-mon">${irEsc(dia.slice(8,10)+'/'+dia.slice(5,7))}</text>` : '').join('');
+  const eixoY = [0,0.25,0.5,0.75,1].map(f=>{
+    const v = total*f, yy = y(v);
+    return `<line x1="${padL}" x2="${W-padR}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" class="mes-grid"/>`
+         + `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" text-anchor="end" class="mes-mon">${irEsc(irFmtInt(v))}</text>`;
+  }).join('');
+  const pontos = real.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="bd-pt"><title>${irEsc(irFmtDate(p[2])+'\n'+irFmtInt(p[3])+' locais restantes')}</title></circle>`).join('');
+  return `<div class="panel">
+    <div class="ofe-head"><h3>Burndown · ${irEsc(irCicloLabel(ciclo))}</h3></div>
+    <div class="bd-legenda">
+      <span class="mes-lg"><span class="mes-sw bd-sw-ideal"></span>Referência (${irFmtInt(Math.round(metaDia))}/dia · ${dias.length} dias úteis)</span>
+      <span class="mes-lg"><span class="mes-sw bd-sw-real"></span>Restante</span>
+    </div>
+    <div class="mes-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Burndown do ciclo">
+      ${eixoY}
+      <path d="${path(ideal)}" class="bd-ideal"/>
+      ${real.length>1 ? `<path d="${path(real)}" class="bd-real"/>` : ''}
+      ${pontos}${eixoX}
+    </svg></div>
+  </div>`;
+}
+/* Um cartão por ciclo do ano em curso. O ano vem do ciclo selecionado no topo —
+   trocar o filtro troca o conjunto de cartões. */
+function irRenderCiclosCards(){
+  const pares = IR.comparativoCiclos;
+  if(pares===null || pares===undefined) return '<div class="panel"><p class="field-hint">Carregando ciclos...</p></div>';
+  const ano = irCicloAno(IR.cicloAtivo);
+  const doAno = pares.filter(({ciclo,ind}) => ind && irCicloAno(ciclo)===ano)
+    .sort((a,b)=>a.ciclo.numero-b.ciclo.numero);
+  if(!doAno.length) return '';
+  const pct = v => v==null ? '—' : irFmtPct(v);
+  const cls = v => v==null ? '' : (v>=IR_META_ACURACIA ? 'good' : 'neg');
+  const cards = doAno.map(({ciclo,ind}, i)=>{
+    const aberto = irCicloStatus(ciclo)==='aberto';
+    const anterior = i>0 ? doAno[i-1].ind : null;
+    const delta = (anterior && ind.acuraciaPecas!=null && anterior.acuraciaPecas!=null)
+      ? ind.acuraciaPecas-anterior.acuraciaPecas : null;
+    const orcados = ind.locaisCongelados||0;
+    const contados = ind.locaisContadosTotal||0;
+    const divergentes = ind.locaisDivergentes!=null ? ind.locaisDivergentes
+      : (ind.divergentesPorDia||[]).reduce((s,d)=>s+(d.locais||0),0);
+    const base = ind.pecasSaldoLogico!=null ? ind.pecasSaldoLogico : (ind.pecasContadas||0);
+    const linha = (rot, valor, classe) => `<div class="cc-lin"><span>${irEsc(rot)}</span><b class="${classe||''}">${valor}</b></div>`;
+    const sub = (rot) => `<div class="cc-grupo">${irEsc(rot)}</div>`;
+    return `<div class="cc-card ${aberto?'aberto':''}">
+      <div class="cc-top"><h4>Ciclo ${ind && ciclo.numero}</h4>
+        <span class="cc-tag ${aberto?'ab':'en'}">${aberto?'aberto':'encerrado'}</span></div>
+      <p class="cc-per">${irEsc(irFmtDate(ciclo.dataAbertura))} a ${irEsc(irFmtDate(ciclo.dataPrevistaTermino))}</p>
+      <div class="cc-kpi">
+        <p class="cc-big ${cls(ind.acuraciaPecas)}">${pct(ind.acuraciaPecas)}</p>
+        <span class="cc-lbl">Acurácia peças</span>
+        <span class="cc-bar"><i style="width:${((ind.acuraciaPecas||0)*100).toFixed(1)}%"></i><span class="cc-meta" style="left:${(IR_META_ACURACIA*100).toFixed(1)}%"></span></span>
+      </div>
+      ${sub('Acurácia')}
+      ${linha('Local', pct(ind.acuraciaLocal), cls(ind.acuraciaLocal))}
+      ${linha('Valor', pct(ind.acuraciaValor), cls(ind.acuraciaValor))}
+      ${sub('Peças')}
+      ${linha('Sistêmicas', irFmtInt(base))}
+      ${linha('Contadas', irFmtInt(ind.pecasContadas||0))}
+      ${linha('Divergentes', irFmtInt(ind.pecasDivergentes||0), 'neg')}
+      ${sub('Locais')}
+      ${linha('Orçados', irFmtInt(orcados))}
+      ${linha('Contados', irFmtInt(contados)+(orcados?` <em>${irFmtPct(contados/orcados)}</em>`:''))}
+      ${linha('Divergentes', irFmtInt(divergentes)+(contados?` <em>${irFmtPct(divergentes/contados)}</em>`:''), 'neg')}
+      ${sub('Operação')}
+      ${linha('Recontagens', irFmtInt(ind.qtdRecontagens||0))}
+      ${linha('Cancelamento', ind.taxaCancelamento!=null?irFmtPct(ind.taxaCancelamento):'—', 'neg')}
+      ${linha('Valor divergente', irFmtMoney(ind.valorDivergenteAbsoluto||0), 'neg')}
+      <div class="cc-rod">
+        <button class="btn-link" onclick="irSelecionarCiclo('${ciclo.id}')">Ver detalhe</button>
+        <span class="mono ${delta==null?'':(delta>=0?'good':'neg')}">${delta==null?'' : (delta>=0?'+':'−')+irFmtNum(Math.abs(delta)*100,1)+' p.p.'}</span>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="panel">
+    <div class="ofe-head"><h3>Ciclos ${ano||''}</h3></div>
+    <div class="cc-grid">${cards}</div>
+  </div>`;
+}
 function irRenderComparativo(){
   if(IR.ciclos.length<2) return irEmptyState('Precisa de ao menos 2 ciclos', 'Processe outro ciclo para poder comparar.', "irSwitchTab('importacao')", 'Ir para Importação');
+  if(IR.comparativoCiclos===null) irCarregarComparativoCiclos(); // async — re-renderiza quando chegar
   const opts = IR.ciclos.map(c=>`<option value="${c.id}">${irCicloLabel(c)}</option>`).join('');
-  return `
+  return irRenderCiclosCards() + irBurndownCiclo(IR.cicloAtivo, IR.indicadores) + `
     <div class="filter-bar">
       <select id="ir-cmp-a" onchange="irSetComparar('A', this.value)">${opts}</select>
       <span>vs.</span>
