@@ -1564,18 +1564,43 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
   const gap = Math.max(8, Math.min(22, (grupoW*0.72 - 3*barW)/2));
   const metaY = padT + plotH*(1-meta);
   let bars = '', labels = '', xLabels = '';
+  // Altura mínima entre dois rótulos do mesmo grupo: com valores próximos (ex.: 92,4%
+  // e 94,0%) as barras ficam quase na mesma altura e o texto ("13px", ~40px de
+  // largura) de uma série encosta no da vizinha — mesmo as barras sendo bem
+  // separadas horizontalmente, o rótulo centralizado em cada uma é mais largo que o
+  // vão entre elas. Processa da barra mais BAIXA pra mais ALTA (mais baixa fica no
+  // lugar natural, rente ao próprio topo) e empurra o rótulo de cada barra mais alta
+  // pra CIMA quando encostaria no de baixo — nunca pra baixo, senão o texto cai em
+  // cima da barra vizinha (e com a cor escura do rótulo em cima da barra "Valor",
+  // também escura, o texto some).
+  const MIN_GAP_LABEL = 13;
+  const LABEL_Y_MIN = 14; // nunca sobe mais que isso, pra não invadir o texto da Meta
   rows.forEach((r,i)=>{
     const cx = padL + (i+0.5)*grupoW;
     const series = [{v:r.pecas, cor:cores.pecas}, {v:r.locais, cor:cores.locais}, {v:r.valor, cor:cores.valor}];
     const totalW = series.length*barW + (series.length-1)*gap;
     let bx = cx - totalW/2;
-    series.forEach(s=>{
+    const geoms = series.map(s=>{
       const tem = s.v!==null && s.v!==undefined;
       const bh = tem ? Math.max(0,Math.min(1,s.v))*plotH : plotH*0.015;
       const by = padT+plotH-bh;
-      bars += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${tem?s.cor:cores.vazio}" rx="3"/>`;
-      if(tem) labels += `<text x="${(bx+barW/2).toFixed(1)}" y="${(by-7).toFixed(1)}" font-size="13" text-anchor="middle" fill="${cores.label}" font-weight="800">${(s.v*100).toFixed(1)}%</text>`;
+      const g = {...s, tem, bh, by, bx, labelX:bx+barW/2};
       bx += barW+gap;
+      return g;
+    });
+    geoms.forEach(g=>{
+      bars += `<rect x="${g.bx.toFixed(1)}" y="${g.by.toFixed(1)}" width="${barW.toFixed(1)}" height="${g.bh.toFixed(1)}" fill="${g.tem?g.cor:cores.vazio}" rx="3"/>`;
+    });
+    // Ordena da barra mais baixa (maior "by") pra mais alta, empurrando cada
+    // rótulo seguinte pra cima do anterior quando precisar.
+    const comRotulo = geoms.filter(g=>g.tem).sort((a,b)=>b.by-a.by);
+    let yAnterior = null;
+    comRotulo.forEach(g=>{
+      let y = g.by-7;
+      if(yAnterior!==null) y = Math.min(y, yAnterior-MIN_GAP_LABEL);
+      y = Math.max(y, LABEL_Y_MIN);
+      yAnterior = y;
+      labels += `<text x="${g.labelX.toFixed(1)}" y="${y.toFixed(1)}" font-size="13" text-anchor="middle" fill="${cores.label}" font-weight="800">${(g.v*100).toFixed(1)}%</text>`;
     });
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="14" text-anchor="middle" fill="${cores.axis}" font-weight="800">${irEsc(r.label)}</text>`;
   });
