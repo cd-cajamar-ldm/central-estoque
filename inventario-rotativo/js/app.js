@@ -308,7 +308,6 @@ const IR_TAB_LABELS = {
   produtividade:['Produtividade','Aba em reconstrução.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
-  comparativo:['Comparativo entre Ciclos','Compare acurácia, produtividade e tendências.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
   configuracoes:['Configurações','Pesos do Índice de Prioridade de Auditoria.']
@@ -430,7 +429,7 @@ function irRenderView(){
     dashboard: irRenderDashboard, ciclo: irRenderGestaoCiclo, produtividade: irRenderProdutividade,
     setores: irRenderSetores,
     divergencias: irRenderDivergencias,
-    comparativo: irRenderComparativo, indicadores: irRenderIndicadores,
+    indicadores: irRenderIndicadores,
     importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes
   };
   root.innerHTML = (renderers[IR.currentTab] || (()=>''))();
@@ -915,7 +914,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v203';
+const IR_APP_VERSION = 'v204';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1042,6 +1041,7 @@ function irRenderDashboard(){
       ${blocoPecas}${blocoLocais}${blocoValor}${blocoCiclo}
     </div>
     ${irRenderCiclosCards()}
+    ${irBurndownCiclo(IR.cicloAtivo, ind)}
     <div class="bi-grid-2">
       ${irRenderAcuraciaAnualPanel()}
       ${irRenderStatusInventarioPanel(ind)}
@@ -6305,8 +6305,10 @@ function irBurndownCiclo(ciclo, ind){
   }
   const hoje = new Date().toISOString().slice(0,10);
   const metaDia = total/(dias.length-1 || 1);
-  // padT maior: o rótulo de dados fica ACIMA do ponto e era cortado no topo.
-  const W=760, H=280, padL=56, padR=24, padT=30, padB=34;
+  /* Largura por dia, não fixa: com 65 dias úteis num SVG de 760 os números do eixo
+     viram um borrão. O .mes-chart rola na horizontal quando não cabe.
+     padB maior: embaixo dos dias ainda entra a faixa do mês. */
+  const W = Math.max(760, 86 + dias.length*26), H=300, padL=56, padR=24, padT=30, padB=58;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const x = i => padL + (plotW*i)/(dias.length-1);
   const y = v => padT + plotH - (plotH*Math.max(0, Math.min(total, v)))/total;
@@ -6321,17 +6323,26 @@ function irBurndownCiclo(ciclo, ind){
     if(dia <= hoje) real.push([x(i), y(total - acum), dia, Math.max(0, total - acum)]);
   });
   const path = pts => pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-  /* Eixo X: primeiro e último dia SEMPRE aparecem — é o período do ciclo, e sem o
-     último não dá pra saber até quando ele vai. Os do meio entram de N em N, e
-     qualquer um que caia perto demais do último é omitido: era o que fazia as duas
-     datas finais se sobreporem ("21/0824/08"). */
-  const passo = Math.max(1, Math.ceil(dias.length/12));
-  const rotulo = (i) => `<text x="${x(i).toFixed(1)}" y="${H-12}" text-anchor="middle" class="mes-mon">${irEsc(dias[i].slice(8,10)+'/'+dias[i].slice(5,7))}</text>`;
-  const minGap = 42; // px no viewBox entre duas datas, pra não colidir
-  let eixoX = rotulo(0) + rotulo(dias.length-1);
-  for(let i=passo; i<dias.length-1; i+=passo){
-    if(x(i)-x(0) < minGap || x(dias.length-1)-x(i) < minGap) continue;
-    eixoX += rotulo(i);
+  /* Eixo X: TODO dia útil do ciclo, só o número do dia. De que mês ele é, quem diz
+     é a faixa logo abaixo — repetir "01/07" em cada marca gastava o dobro do espaço
+     pra dizer a mesma coisa. */
+  const baseY = padT + plotH;
+  const eixoX = dias.map((dia,i)=>
+    `<text x="${x(i).toFixed(1)}" y="${(baseY+15).toFixed(1)}" text-anchor="middle" class="bd-dia">${irEsc(dia.slice(8,10))}</text>`).join('');
+  /* Faixa de mês: uma caixa por mês, cobrindo os dias daquele mês, com a divisa
+     subindo até o gráfico. É o que dá a noção de "passou um mês e falta tanto". */
+  const meio = dias.length>1 ? (x(1)-x(0))/2 : 10;
+  let faixaMes = '', ini = 0;
+  for(let i=1; i<=dias.length; i++){
+    if(i===dias.length || dias[i].slice(0,7)!==dias[ini].slice(0,7)){
+      const x1 = x(ini) - (ini>0 ? meio : 8);
+      const x2 = x(i-1) + (i<dias.length ? meio : 8);
+      const nomeMes = IR_MES_ABREV[parseInt(dias[ini].slice(5,7),10)-1] || '';
+      faixaMes += `<rect x="${x1.toFixed(1)}" y="${(baseY+22).toFixed(1)}" width="${(x2-x1).toFixed(1)}" height="18" rx="4" class="bd-mes-box"/>`
+               +  `<text x="${((x1+x2)/2).toFixed(1)}" y="${(baseY+34.5).toFixed(1)}" text-anchor="middle" class="bd-mes-lbl">${irEsc(nomeMes.toUpperCase())}</text>`;
+      if(i<dias.length) faixaMes += `<line x1="${x2.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${padT}" y2="${(baseY+22).toFixed(1)}" class="bd-mes-sep"/>`;
+      ini = i;
+    }
   }
   const eixoY = [0,0.25,0.5,0.75,1].map(f=>{
     const v = total*f, yy = y(v);
@@ -6355,7 +6366,7 @@ function irBurndownCiclo(ciclo, ind){
       ${eixoY}
       <path d="${path(ideal)}" class="bd-ideal"/>
       ${real.length>1 ? `<path d="${path(real)}" class="bd-real"/>` : ''}
-      ${pontos}${rotulos}${eixoX}
+      ${pontos}${rotulos}${eixoX}${faixaMes}
     </svg></div>
   </div>`;
 }
@@ -6365,21 +6376,15 @@ function irRenderCiclosCards(){
   const pares = IR.comparativoCiclos;
   if(pares===null || pares===undefined) return '<div class="panel"><p class="field-hint">Carregando ciclos...</p></div>';
   const ano = irCicloAno(IR.cicloAtivo);
-  const processados = pares.filter(({ciclo,ind}) => ind && irCicloAno(ciclo)===ano);
-  /* O ano tem quatro ciclos, sempre. O que ainda não rodou aparece vazio em vez de
-     sumir: quatro cartões com um deles em branco dizem "falta esse"; três cartões
-     não dizem nada. */
-  const doAno = [1,2,3,4].map(numero=>{
-    const achado = processados.find(x=>x.ciclo.numero===numero);
-    return achado || {ciclo:{numero}, ind:null};
-  });
-  if(!ano) return '';
+  /* Só ciclo processado vira cartão. Ciclo que ainda não começou não tem nada pra
+     mostrar, e o grid se ajusta sozinho ao que existe (auto-fit no CSS): com três
+     ciclos, três cartões ocupam a largura toda. */
+  const doAno = pares.filter(({ciclo,ind}) => ind && irCicloAno(ciclo)===ano)
+    .sort((a,b)=>a.ciclo.numero-b.ciclo.numero);
+  if(!ano || !doAno.length) return '';
   const pct = v => v==null ? '—' : irFmtPct(v);
   const cls = v => v==null ? '' : (v>=IR_META_ACURACIA ? 'good' : 'neg');
   const cards = doAno.map(({ciclo,ind}, i)=>{
-    if(!ind) return `<div class="cc-card vazio">
-      <div class="cc-top"><h4>Ciclo ${ciclo.numero}</h4><span class="cc-tag na">sem dados</span></div>
-    </div>`;
     const aberto = irCicloStatus(ciclo)==='aberto';
     const anterior = i>0 ? doAno[i-1].ind : null; // null quando o anterior não rodou
     const delta = (anterior && ind.acuraciaPecas!=null && anterior.acuraciaPecas!=null)
@@ -6425,78 +6430,6 @@ function irRenderCiclosCards(){
     <div class="ofe-head"><h3>Ciclos ${ano||''}</h3></div>
     <div class="cc-grid">${cards}</div>
   </div>`;
-}
-function irRenderComparativo(){
-  if(IR.ciclos.length<2) return irEmptyState('Precisa de ao menos 2 ciclos', 'Processe outro ciclo para poder comparar.', "irSwitchTab('importacao')", 'Ir para Importação');
-  if(IR.comparativoCiclos===null) irCarregarComparativoCiclos(); // async — re-renderiza quando chegar
-  const opts = IR.ciclos.map(c=>`<option value="${c.id}">${irCicloLabel(c)}</option>`).join('');
-  return irBurndownCiclo(IR.cicloAtivo, IR.indicadores) + `
-    <div class="filter-bar">
-      <select id="ir-cmp-a" onchange="irSetComparar('A', this.value)">${opts}</select>
-      <span>vs.</span>
-      <select id="ir-cmp-b" onchange="irSetComparar('B', this.value)">${opts}</select>
-      <button class="btn btn-primary" onclick="irRenderComparativoResultado()">Comparar</button>
-    </div>
-    <div id="ir-cmp-result"></div>
-  `;
-}
-function irSetComparar(which, id){ if(which==='A') IR.compararA=id; else IR.compararB=id; }
-async function irRenderComparativoResultado(){
-  const idA = IR.compararA || document.getElementById('ir-cmp-a').value;
-  const idB = IR.compararB || document.getElementById('ir-cmp-b').value;
-  const ciA = IR.ciclos.find(c=>c.id===idA), ciB = IR.ciclos.find(c=>c.id===idB);
-  const indA = await irGetIndicadores(idA), indB = await irGetIndicadores(idB);
-  const el = document.getElementById('ir-cmp-result');
-  if(!indA || !indB){ el.innerHTML = '<p class="field-hint">Indicadores não encontrados para um dos ciclos.</p>'; return; }
-  const linhas = [
-    ['Acurácia Peças', irFmtPct(indA.acuraciaPecas), irFmtPct(indB.acuraciaPecas), indB.acuraciaPecas-indA.acuraciaPecas],
-    ['Acurácia Local', irFmtPct(indA.acuraciaLocal), irFmtPct(indB.acuraciaLocal), indB.acuraciaLocal-indA.acuraciaLocal],
-    ['Acurácia Valor', irFmtPct(indA.acuraciaValor), irFmtPct(indB.acuraciaValor), indB.acuraciaValor-indA.acuraciaValor],
-    ['Andamento', irFmtPct(indA.andamentoCiclo), irFmtPct(indB.andamentoCiclo), indB.andamentoCiclo-indA.andamentoCiclo],
-    ['Itens Divergentes', irFmtInt(indA.itensDivergentes), irFmtInt(indB.itensDivergentes), indB.itensDivergentes-indA.itensDivergentes],
-    ['Valor Divergente (abs.)', irFmtMoney(indA.valorDivergenteAbsoluto), irFmtMoney(indB.valorDivergenteAbsoluto), indB.valorDivergenteAbsoluto-indA.valorDivergenteAbsoluto],
-    ['Recontagens', irFmtInt(indA.qtdRecontagens), irFmtInt(indB.qtdRecontagens), indB.qtdRecontagens-indA.qtdRecontagens],
-    ['Tempo Médio (min)', irFmtNum(indA.tempoMedioContagemMin,1), irFmtNum(indB.tempoMedioContagemMin,1), indB.tempoMedioContagemMin-indA.tempoMedioContagemMin],
-    ['Eficiência', irFmtPct(indA.eficiencia), irFmtPct(indB.eficiencia), indB.eficiencia-indA.eficiencia]
-  ];
-  // Junta os Logs presentes em qualquer um dos dois ciclos (um ciclo pode não ter
-  // contado ainda um Log que o outro já tem) — cada ciclo já vem com seus próprios
-  // indicadores isolados por cicloId no IndexedDB, então não há mistura de dados aqui.
-  const porLogA = new Map((indA.porLog||[]).filter(r=>r.chave!=='(sem log)').map(r=>[r.chave,r]));
-  const porLogB = new Map((indB.porLog||[]).filter(r=>r.chave!=='(sem log)').map(r=>[r.chave,r]));
-  const logsChaves = Array.from(new Set([...porLogA.keys(), ...porLogB.keys()])).sort();
-  const linhasLog = logsChaves.map(chave=>{
-    const rA = porLogA.get(chave), rB = porLogB.get(chave);
-    const delta = (rB?rB.acuraciaPecas:null)!==null && (rA?rA.acuraciaPecas:null)!==null && rA && rB ? rB.acuraciaPecas-rA.acuraciaPecas : null;
-    return {chave, rA, rB, delta};
-  });
-  el.innerHTML = `<div class="panel"><h3>${irCicloLabel(ciA)} vs. ${irCicloLabel(ciB)}</h3>
-    <div class="table-wrap"><table><thead><tr><th>Indicador</th><th>${irCicloLabel(ciA)}</th><th>${irCicloLabel(ciB)}</th><th>Tendência</th></tr></thead>
-    <tbody>${linhas.map(([label,a,b,delta])=>`<tr><td>${label}</td><td class="mono">${a}</td><td class="mono">${b}</td>
-      <td><span class="tag ${delta>0?'tag-good':(delta<0?'tag-bad':'tag-muted')}">${delta>0?'▲ melhora':(delta<0?'▼ piora':'= igual')}</span></td></tr>`).join('')}</tbody>
-    </table></div>
-  </div>
-  ${logsChaves.length ? `<div class="panel">
-    <h3>Acurácia por Log — ${irCicloLabel(ciA)} vs. ${irCicloLabel(ciB)}</h3>
-    <div class="table-wrap"><table><thead><tr>
-      <th>Log</th>
-      <th>Peças (${irCicloLabel(ciA)})</th><th>Peças (${irCicloLabel(ciB)})</th>
-      <th>Locais (${irCicloLabel(ciA)})</th><th>Locais (${irCicloLabel(ciB)})</th>
-      <th>Valor (${irCicloLabel(ciA)})</th><th>Valor (${irCicloLabel(ciB)})</th>
-      <th>Tendência (Peças)</th>
-    </tr></thead>
-    <tbody>${linhasLog.map(({chave,rA,rB,delta})=>`<tr>
-      <td class="mono">${irEsc(chave)}</td>
-      <td class="mono">${rA?irFmtPct(rA.acuraciaPecas):'—'}</td>
-      <td class="mono">${rB?irFmtPct(rB.acuraciaPecas):'—'}</td>
-      <td class="mono">${rA?irFmtPct(rA.acuraciaPosicoes):'—'}</td>
-      <td class="mono">${rB?irFmtPct(rB.acuraciaPosicoes):'—'}</td>
-      <td class="mono">${rA?irFmtPct(rA.acuraciaValor):'—'}</td>
-      <td class="mono">${rB?irFmtPct(rB.acuraciaValor):'—'}</td>
-      <td>${delta===null ? '<span class="tag tag-muted">sem base</span>' : `<span class="tag ${delta>0?'tag-good':(delta<0?'tag-bad':'tag-muted')}">${delta>0?'▲ melhora':(delta<0?'▼ piora':'= igual')}</span>`}</td>
-    </tr>`).join('')}</tbody>
-    </table></div>
-  </div>` : ''}`;
 }
 
 /* ============================================================

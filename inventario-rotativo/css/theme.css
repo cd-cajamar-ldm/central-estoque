@@ -668,7 +668,9 @@ table.prod-rank td{ white-space:nowrap; }
 .ofe-num.pos strong{ color:var(--success); }
 
 /* ---------- CARTÕES DOS CICLOS + BURNDOWN (Comparativo) ---------- */
-.cc-grid{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:14px; }
+/* auto-fit: três ciclos processados ocupam a largura toda; quando o quarto entra,
+   os quatro se ajustam sozinhos. */
+.cc-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px; }
 .cc-card{ border:1px solid var(--line); border-radius:12px; background:var(--surface);
   display:flex; flex-direction:column; overflow:hidden; }
 /* Ciclo aberto fica marcado: os números dele são parciais e não se comparam de
@@ -704,7 +706,6 @@ table.prod-rank td{ white-space:nowrap; }
   gap:8px; padding:8px 14px; background:var(--surface2); border-top:1px solid var(--line); font-size:11.5px; }
 .cc-rod .good{ color:var(--success); font-weight:700; }
 .cc-rod .neg{ color:var(--danger); font-weight:700; }
-@media (max-width:1100px){ .cc-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
 @media (max-width:600px){ .cc-grid{ grid-template-columns:1fr; } }
 
 .bd-legenda{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px; }
@@ -716,9 +717,11 @@ table.prod-rank td{ white-space:nowrap; }
 .bd-rot{ fill:var(--ink); font-size:10px; font-weight:700;
   font-family:'SFMono-Regular',Consolas,monospace; paint-order:stroke;
   stroke:var(--surface); stroke-width:3px; stroke-linejoin:round; }
-.cc-card.vazio{ background:var(--surface2); border-style:dashed; min-height:120px; }
-.cc-card.vazio .cc-top h4{ color:var(--ink-soft); }
-.cc-tag.na{ background:transparent; color:var(--ink-soft); border:1px solid var(--line); }
+.bd-dia{ fill:var(--ink-soft); font-size:9.5px; font-weight:600;
+  font-family:'SFMono-Regular',Consolas,monospace; }
+.bd-mes-box{ fill:var(--surface2); }
+.bd-mes-lbl{ fill:var(--ink-soft); font-size:10px; font-weight:800; letter-spacing:.08em; }
+.bd-mes-sep{ stroke:var(--line); stroke-width:1; stroke-dasharray:3 3; }
 
 .ofe-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
 .ofe-head h3{ margin:0; }
