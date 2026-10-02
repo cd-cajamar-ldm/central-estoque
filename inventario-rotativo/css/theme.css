@@ -1551,3 +1551,25 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .lg-mini-pc{ font-size:11.5px; font-weight:700; min-width:46px; text-align:right;
   font-family:'SFMono-Regular',Consolas,monospace; }
 .lg-mini-pc.good{ color:var(--success); } .lg-mini-pc.neg{ color:var(--danger); }
+
+/* Aba Produtividade */
+.pv-kpis{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:11px; }
+.pv-k{ border:1px solid var(--line); border-radius:12px; padding:12px 13px; }
+.pv-n{ font-size:20px; font-weight:800; line-height:1.1;
+  font-family:'SFMono-Regular',Consolas,monospace; }
+.pv-n.good{ color:var(--success); } .pv-n.neg{ color:var(--danger); }
+.pv-l{ font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--ink-soft); margin-top:5px; }
+.pv-h{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+.pv-tab td.n, .pv-tab th.n{ text-align:right; }
+.pv-pos{ display:inline-block; min-width:22px; color:var(--ink-soft); font-weight:700; }
+.pv-bar{ display:inline-block; vertical-align:middle; width:88px; height:6px; border-radius:99px;
+  background:var(--surface2); margin-right:8px; }
+.pv-bar i{ display:block; height:100%; border-radius:99px; background:var(--orange); }
+.pv-pill{ display:inline-block; min-width:54px; padding:2px 8px; border-radius:99px;
+  font-weight:700; font-size:11.5px; font-family:'SFMono-Regular',Consolas,monospace;
+  background:var(--surface2); color:var(--ink-soft); }
+.pv-pill.ok{ background:color-mix(in srgb, var(--success) 12%, transparent); color:var(--success); }
+.pv-pill.medio{ background:color-mix(in srgb, #B45309 14%, transparent); color:#B45309; }
+.pv-pill.ruim{ background:color-mix(in srgb, var(--danger) 12%, transparent); color:var(--danger); }
+.pv-tot td{ font-weight:800; background:var(--surface2); }
