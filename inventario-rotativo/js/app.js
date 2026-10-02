@@ -927,7 +927,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v208';
+const IR_APP_VERSION = 'v209';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -6412,6 +6412,8 @@ function irRenderCiclosCards(){
     const divergentes = ind.locaisDivergentes!=null ? ind.locaisDivergentes
       : (ind.divergentesPorDia||[]).reduce((s,d)=>s+(d.locais||0),0);
     const base = ind.pecasSaldoLogico!=null ? ind.pecasSaldoLogico : (ind.pecasContadas||0);
+    // Base do valor é o saldo do sistema — mesma base da acurácia de valor.
+    const baseValor = ind.valorSaldoLogico!=null ? ind.valorSaldoLogico : (ind.valorFisicoTotal||0);
     /* As três acurácias ficam lado a lado no topo, mesma fonte e mesmo padrão
        (número grande + rótulo + barra com a marca da meta). */
     const kpiAcc = (rot, v) => `<div class="cc-acc">
@@ -6438,10 +6440,13 @@ function irRenderCiclosCards(){
       ${linha('Orçados', irFmtInt(orcados))}
       ${linha('Contados', irFmtInt(contados)+(orcados?` <em>${irFmtPct(contados/orcados)}</em>`:''))}
       ${linha('Divergentes', irFmtInt(divergentes)+(contados?` <em>${irFmtPct(divergentes/contados)}</em>`:''), 'neg')}
+      ${sub('Valor')}
+      ${linha('Sistêmico', irFmtMoney(baseValor))}
+      ${linha('Contado', irFmtMoney(ind.valorFisicoTotal||0))}
+      ${linha('Divergente', irFmtMoney(ind.valorDivergenteAbsoluto||0), 'neg')}
       ${sub('Operação')}
       ${linha('Recontagens', irFmtInt(ind.qtdRecontagens||0))}
       ${linha('Cancelamento', ind.taxaCancelamento!=null?irFmtPct(ind.taxaCancelamento):'—', 'neg')}
-      ${linha('Valor divergente', irFmtMoney(ind.valorDivergenteAbsoluto||0), 'neg')}
       <div class="cc-rod">
         <button class="btn-link" onclick="irFiltrarCiclo('${ciclo.id}')">Ver detalhe</button>
         <span class="mono ${delta==null?'':(delta>=0?'good':'neg')}">${delta==null?'' : (delta>=0?'+':'−')+irFmtNum(Math.abs(delta)*100,1)+' p.p.'}</span>
