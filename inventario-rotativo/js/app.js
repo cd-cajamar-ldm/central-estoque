@@ -109,6 +109,19 @@ function irCicloAno(c){
   if(m) return +m[1];
   const d = new Date(s); return isNaN(d.getTime()) ? null : d.getFullYear();
 }
+/* Período do ciclo pelo calendário: ciclo é trimestral, então o ciclo N de um
+   ano vai do 1º dia do trimestre ao último (1: 01/01–31/03, 2: 01/04–30/06,
+   3: 01/07–30/09, 4: 01/10–31/12). É só exibição — a janela que o worker usa
+   para filtrar contagens continua sendo dataAbertura/dataPrevistaTermino. */
+function irPeriodoTrimestre(ciclo){
+  const ano = irCicloAno(ciclo), n = ciclo && ciclo.numero;
+  if(!ano || !(n>=1 && n<=4)) return null;
+  const pad = v => String(v).padStart(2,'0');
+  const ini = new Date(Date.UTC(ano, (n-1)*3, 1));
+  const fim = new Date(Date.UTC(ano, n*3, 0));
+  const iso = d => `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`;
+  return {inicio: iso(ini), fim: iso(fim)};
+}
 /* Término previsto de um ciclo recém-detectado.
 
    A detecção devolve como término a ÚLTIMA data de contagem do arquivo. Para
@@ -914,7 +927,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v204';
+const IR_APP_VERSION = 'v205';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1040,12 +1053,12 @@ function irRenderDashboard(){
     <div class="kpi-blocks">
       ${blocoPecas}${blocoLocais}${blocoValor}${blocoCiclo}
     </div>
-    ${irRenderCiclosCards()}
-    ${irBurndownCiclo(IR.cicloAtivo, ind)}
     <div class="bi-grid-2">
       ${irRenderAcuraciaAnualPanel()}
       ${irRenderStatusInventarioPanel(ind)}
     </div>
+    ${irRenderCiclosCards()}
+    ${irBurndownCiclo(IR.cicloAtivo, ind)}
     ${irRenderPorLogPanel(ind)}
     ${irRenderContadosPorDiaPanel(ind)}
     ${irRenderDivergentesPorDiaPanel(ind)}
@@ -6386,6 +6399,7 @@ function irRenderCiclosCards(){
   const cls = v => v==null ? '' : (v>=IR_META_ACURACIA ? 'good' : 'neg');
   const cards = doAno.map(({ciclo,ind}, i)=>{
     const aberto = irCicloStatus(ciclo)==='aberto';
+    const per = irPeriodoTrimestre(ciclo) || {inicio: ciclo.dataAbertura, fim: ciclo.dataPrevistaTermino};
     const anterior = i>0 ? doAno[i-1].ind : null; // null quando o anterior não rodou
     const delta = (anterior && ind.acuraciaPecas!=null && anterior.acuraciaPecas!=null)
       ? ind.acuraciaPecas-anterior.acuraciaPecas : null;
@@ -6399,7 +6413,7 @@ function irRenderCiclosCards(){
     return `<div class="cc-card ${aberto?'aberto':''}">
       <div class="cc-top"><h4>Ciclo ${ind && ciclo.numero}</h4>
         <span class="cc-tag ${aberto?'ab':'en'}">${aberto?'aberto':'encerrado'}</span></div>
-      <p class="cc-per">${irEsc(irFmtDate(ciclo.dataAbertura))} a ${irEsc(irFmtDate(ciclo.dataPrevistaTermino))}</p>
+      <p class="cc-per">${irEsc(irFmtDate(per.inicio))} a ${irEsc(irFmtDate(per.fim))}</p>
       <div class="cc-kpi">
         <p class="cc-big ${cls(ind.acuraciaPecas)}">${pct(ind.acuraciaPecas)}</p>
         <span class="cc-lbl">Acurácia peças</span>
