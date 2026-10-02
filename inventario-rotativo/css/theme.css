@@ -713,6 +713,12 @@ table.prod-rank td{ white-space:nowrap; }
 .bd-ideal{ fill:none; stroke:var(--ink-soft); stroke-width:1.5; stroke-dasharray:5 4; }
 .bd-real{ fill:none; stroke:var(--orange); stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; }
 .bd-pt{ fill:var(--orange); }
+.bd-rot{ fill:var(--ink); font-size:10px; font-weight:700;
+  font-family:'SFMono-Regular',Consolas,monospace; paint-order:stroke;
+  stroke:var(--surface); stroke-width:3px; stroke-linejoin:round; }
+.cc-card.vazio{ background:var(--surface2); border-style:dashed; min-height:120px; }
+.cc-card.vazio .cc-top h4{ color:var(--ink-soft); }
+.cc-tag.na{ background:transparent; color:var(--ink-soft); border:1px solid var(--line); }
 
 .ofe-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
 .ofe-head h3{ margin:0; }
