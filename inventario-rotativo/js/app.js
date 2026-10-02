@@ -927,7 +927,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v207';
+const IR_APP_VERSION = 'v208';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -6304,7 +6304,11 @@ function irDiasUteisDoCiclo(dataAbertura, dataTermino){
 function irBurndownCiclo(ciclo, ind){
   if(!ciclo || !ind) return '';
   const total = ind.locaisCongelados || 0;
-  const dias = irDiasUteisDoCiclo(ciclo.dataAbertura, ciclo.dataPrevistaTermino);
+  /* O ciclo é trimestral: o eixo é o trimestre inteiro, não a primeira/última
+     data de contagem do arquivo (que encurtava o ciclo em curso e inflava a
+     meta diária). Mesma regra do período no cartão (irPeriodoTrimestre). */
+  const per = irPeriodoTrimestre(ciclo) || {inicio: ciclo.dataAbertura, fim: ciclo.dataPrevistaTermino};
+  const dias = irDiasUteisDoCiclo(per.inicio, per.fim);
   if(!total || dias.length<2) return '';
   const porDia = new Map();
   for(const d of (ind.contadosPorDia||[])) porDia.set(d.dia, (porDia.get(d.dia)||0) + (d.total||0));
