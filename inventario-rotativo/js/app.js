@@ -927,7 +927,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v211';
+const IR_APP_VERSION = 'v212';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -3547,6 +3547,51 @@ const IR_HORA_FIM = 21;    // último bloco de hora do expediente (21:00–22:00
    simples (sem ponto eletrônico), sinalizada na tela. A matriz colaborador x hora usa
    só a hora do dia (sem data), fixada na janela 06h–22h de expediente, somando os dias
    do período filtrado na mesma coluna. */
+/* Taxa de recontagem e taxa de erro por colaborador.
+
+   A unidade das duas é a VISITA (local + Nº Inventário), a mesma do resto do
+   módulo — não a linha de item, senão quem conta endereço cheio pareceria pior
+   que quem conta endereço vazio.
+
+   • Recontagem: o colaborador contou uma rodada e DEPOIS dela veio outra na
+     mesma visita. É o retrabalho que a contagem dele gerou. Olha a PRIMEIRA
+     rodada dele na visita: quem só entrou na rodada final não gerou recontagem
+     nenhuma, e quem contou a primeira e voltou pra corrigir gerou sim.
+   • Erro: a visita fechou com divergência (algum item com física ≠ sistêmica,
+     pela regra de sempre — rodada 1 é o sistema, a última é o físico). Visita
+     recontada por duas pessoas conta pras duas, igual ao resto da aba, que
+     mede esforço de quem participou e não deduplicação. */
+function irProdTaxasPorUsuario(contagens){
+  // Rodada máxima de cada visita e quem contou cada rodada — vem da base inteira
+  // (IR.contagens), não do recorte filtrado, senão um filtro por período cortaria
+  // a recontagem que aconteceu no dia seguinte e zeraria a taxa.
+  const rodadaMaxima = new Map();   // visita -> maior idConferencia
+  for(const c of (IR.contagens||[])){
+    const v = c.local+'|'+c.inventario;
+    if(!rodadaMaxima.has(v) || c.idConferencia > rodadaMaxima.get(v)) rodadaMaxima.set(v, c.idConferencia);
+  }
+  const visitasDivergentes = new Set();
+  for(const d of (IR.divergencias||[])) if(d.diferenca) visitasDivergentes.add(d.local+'|'+d.inventario);
+  // Por usuário: visitas distintas e, dentro delas, a rodada mais alta que ele contou.
+  const porUsuario = new Map();
+  for(const c of contagens){
+    if(!c.usuario) continue;
+    const v = c.local+'|'+c.inventario;
+    let u = porUsuario.get(c.usuario);
+    if(!u){ u = new Map(); porUsuario.set(c.usuario, u); }
+    if(!u.has(v) || c.idConferencia < u.get(v)) u.set(v, c.idConferencia);
+  }
+  const out = new Map();
+  for(const [usuario, visitas] of porUsuario){
+    let recontadas = 0, divergentes = 0;
+    for(const [v, primeiraRodada] of visitas){
+      if((rodadaMaxima.get(v)||primeiraRodada) > primeiraRodada) recontadas++;
+      if(visitasDivergentes.has(v)) divergentes++;
+    }
+    out.set(usuario, {visitas: visitas.size, recontadas, divergentes});
+  }
+  return out;
+}
 function irCalcProdutividade(contagens){
   const porUsuario = new Map();
   const horasPorUsuario = new Map();
@@ -3581,10 +3626,17 @@ function irCalcProdutividade(contagens){
       mu.get(horaDia).add(c.local);
     }
   }
-  const ranking = Array.from(porUsuario.values()).map(g=>({
-    usuario:g.usuario, locais:g.locais.size, itens:g.itens, pecas:g.pecas, contagens:g.contagens,
-    tempoMedioMin: g.nMin>0 ? g.minutos/g.nMin : 0, horasAtivas: g.horas.size
-  })).sort((a,b)=>b.locais-a.locais);
+  const taxas = irProdTaxasPorUsuario(contagens);
+  const ranking = Array.from(porUsuario.values()).map(g=>{
+    const t = taxas.get(g.usuario) || {visitas:0, recontadas:0, divergentes:0};
+    return {
+      usuario:g.usuario, locais:g.locais.size, itens:g.itens, pecas:g.pecas, contagens:g.contagens,
+      tempoMedioMin: g.nMin>0 ? g.minutos/g.nMin : 0, horasAtivas: g.horas.size,
+      visitas: t.visitas,
+      taxaRecontagem: t.visitas ? t.recontadas/t.visitas : null,
+      taxaErro: t.visitas ? t.divergentes/t.visitas : null
+    };
+  }).sort((a,b)=>b.locais-a.locais);
   const horasOrdenadas = [];
   for(let h=IR_HORA_INICIO; h<=IR_HORA_FIM; h++) horasOrdenadas.push(h);
   const matrizColaboradorHora = ranking.map(r=>({
@@ -4360,11 +4412,114 @@ function irRenderProdDiagnostico(a, ind, meta, metaDiaria){
    irRenderPodio, irRenderProdMatriz) continuam no arquivo — inclusive porque
    irRenderProdMatriz também é usada pelo painel condensado do Dashboard, que
    não foi mexido — só não são mais chamadas daqui.*/
+/* Meta de locais por colaborador por dia útil — acordada com a operação. */
+const IR_PROD_META_LOCAIS_DIA = 60;
+/* Faixas do semáforo de qualidade, por visita do colaborador. */
+const IR_PROD_FAIXA_RECONTAGEM = {ok:0.08, medio:0.15};
+const IR_PROD_FAIXA_ERRO = {ok:0.03, medio:0.07};
+function irProdFaixa(v, f){
+  if(v==null) return '';
+  return v<=f.ok ? 'ok' : (v<=f.medio ? 'medio' : 'ruim');
+}
+function irProdNome(u){ return String(u||'').replace(/^MECA_/,''); }
+/* Dias úteis distintos com contagem no recorte — denominador do "locais por
+   pessoa por dia". Usa o dia real contado, não o calendário do ciclo: com filtro
+   de período aplicado, o calendário diria 64 dias e a média despencaria. */
+function irProdDiasComContagem(contagens){
+  const dias = new Set();
+  for(const c of contagens){
+    const d = (c.dataFimContagem || c.dataInicioContagem || '').slice(0,10);
+    if(d) dias.add(d);
+  }
+  return dias.size;
+}
 function irRenderProdutividade(){
+  const c = IR.cicloAtivo;
+  if(!c) return irEmptyState('Sem ciclo ativo', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
+  const contagens = irProdContagensFiltradas();
+  const p = irCalcProdutividade(contagens);
+  if(!p.ranking.length){
+    return `<div class="panel"><h3>Produtividade</h3>
+      <p class="field-hint">Nenhuma contagem no período selecionado. Ajuste o filtro de data no topo da tela.</p></div>`;
+  }
+  const dias = irProdDiasComContagem(contagens) || 1;
+  const pessoas = p.ranking.length;
+  const locaisPessoaDia = p.totalLocais/pessoas/dias;
+  const tempos = p.ranking.map(r=>r.tempoMedioMin).filter(v=>v>0).sort((a,b)=>a-b);
+  const tempoMediano = tempos.length ? tempos[Math.floor(tempos.length/2)] : 0;
+  const locaisHora = p.horasHomem>0 ? p.totalLocais/p.horasHomem : 0;
+  const periodo = (IR.prodFilters.de||IR.prodFilters.ate)
+    ? `${IR.prodFilters.de?irFmtDate(IR.prodFilters.de):'início'} a ${IR.prodFilters.ate?irFmtDate(IR.prodFilters.ate):'hoje'}`
+    : 'ciclo inteiro';
+  const tile = (n, l, h, cls) => `<div class="pv-k"><div class="pv-n ${cls||''}">${n}</div>
+    <div class="pv-l">${irEsc(l)}</div><div class="pv-h">${irEsc(h)}</div></div>`;
+  const kpis = `<div class="pv-kpis">
+    ${tile(irFmtInt(p.totalLocais), 'Locais contados', dias+(dias===1?' dia com contagem':' dias com contagem'))}
+    ${tile(irFmtInt(pessoas), 'Colaboradores', 'ativos no período')}
+    ${tile(irFmtNum(locaisPessoaDia,0), 'Locais / pessoa / dia',
+        'meta '+IR_PROD_META_LOCAIS_DIA+'/dia', locaisPessoaDia>=IR_PROD_META_LOCAIS_DIA?'good':'neg')}
+    ${tile(irFmtNum(tempoMediano,1)+' min', 'Tempo médio / local', 'mediana da equipe')}
+    ${tile(irFmtNum(locaisHora,1), 'Locais por hora', 'média da equipe')}
+    ${tile(irFmtInt(p.horasHomem), 'Homem-hora', 'blocos de hora com contagem')}
+  </div>`;
+
+  const maxLocais = Math.max(1, ...p.ranking.map(r=>r.locais));
+  const pill = (v, f) => v==null ? '<span class="pv-pill">—</span>'
+    : `<span class="pv-pill ${irProdFaixa(v,f)}">${irFmtPct(v)}</span>`;
+  const linhas = p.ranking.map((r,i)=>{
+    const lh = r.horasAtivas>0 ? r.locais/r.horasAtivas : 0;
+    return `<tr>
+      <td><span class="pv-pos">${irMedalha(i)}</span>${irEsc(irProdNome(r.usuario))}</td>
+      <td class="n"><span class="pv-bar"><i style="width:${(r.locais/maxLocais*100).toFixed(1)}%"></i></span><span class="mono">${irFmtInt(r.locais)}</span></td>
+      <td class="n mono">${irFmtInt(r.pecas)}</td>
+      <td class="n mono">${r.tempoMedioMin>0?irFmtNum(r.tempoMedioMin,1)+' min':'—'}</td>
+      <td class="n mono">${irFmtNum(lh,1)}</td>
+      <td class="n">${pill(r.taxaRecontagem, IR_PROD_FAIXA_RECONTAGEM)}</td>
+      <td class="n">${pill(r.taxaErro, IR_PROD_FAIXA_ERRO)}</td>
+    </tr>`;
+  }).join('');
+  const somaVisitas = p.ranking.reduce((s,r)=>s+(r.visitas||0),0);
+  const somaRec = p.ranking.reduce((s,r)=>s+(r.visitas||0)*(r.taxaRecontagem||0),0);
+  const somaErr = p.ranking.reduce((s,r)=>s+(r.visitas||0)*(r.taxaErro||0),0);
+  const rodape = `<tr class="pv-tot">
+    <td>Equipe</td>
+    <td class="n mono">${irFmtInt(p.totalLocais)}</td>
+    <td class="n mono">${irFmtInt(p.totalPecas)}</td>
+    <td class="n mono">${irFmtNum(tempoMediano,1)} min</td>
+    <td class="n mono">${irFmtNum(locaisHora,1)}</td>
+    <td class="n">${pill(somaVisitas?somaRec/somaVisitas:null, IR_PROD_FAIXA_RECONTAGEM)}</td>
+    <td class="n">${pill(somaVisitas?somaErr/somaVisitas:null, IR_PROD_FAIXA_ERRO)}</td>
+  </tr>`;
+
   return `
     <div class="panel">
-      <h3>Produtividade</h3>
-      <p class="field-hint">Essa aba vai ser refeita. Em breve.</p>
+      <div class="ofe-head"><h3>Produtividade</h3>
+        <span class="field-hint">${irEsc(irCicloLabel(c))} · ${irEsc(periodo)}</span></div>
+      ${kpis}
+    </div>
+    <div class="panel">
+      <div class="ofe-head"><h3>Pódio</h3>
+        <span class="field-hint">Os 3 com mais locais contados no período</span></div>
+      ${irRenderPodio(p.ranking)}
+    </div>
+    <div class="panel">
+      <div class="ofe-head"><h3>Ranking da equipe</h3>
+        <span class="field-hint">Recontagem: verde ≤8% · amarelo ≤15% · vermelho &gt;15% &nbsp;|&nbsp; Erro: verde ≤3% · amarelo ≤7% · vermelho &gt;7%</span></div>
+      <div class="table-wrap"><table class="pv-tab">
+        <thead><tr><th>Colaborador</th><th class="n">Locais contados</th><th class="n">Peças</th>
+          <th class="n">Tempo médio</th><th class="n">Locais/h</th>
+          <th class="n">Taxa recontagem</th><th class="n">Taxa de erro</th></tr></thead>
+        <tbody>${linhas}${rodape}</tbody>
+      </table></div>
+      <p class="field-hint" style="margin-top:10px;">As duas taxas são por visita (local + Nº Inventário). Recontagem = visitas do colaborador em que veio outra rodada depois da dele. Erro = visitas dele que fecharam com divergência.</p>
+    </div>
+    <div class="panel">
+      <div class="ofe-head"><h3>Produção por hora</h3>
+        <span class="field-hint">Locais contados por colaborador em cada hora do dia</span></div>
+      ${irRenderProdMatriz(p)}
+    </div>
+    <div class="form-actions" style="margin-top:4px;">
+      <button class="btn btn-secondary" onclick="irExportarRankingImagem()">🏆 Exportar ranking como imagem</button>
     </div>
   `;
 }
