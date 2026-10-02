@@ -915,7 +915,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v201';
+const IR_APP_VERSION = 'v202';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1041,6 +1041,7 @@ function irRenderDashboard(){
     <div class="kpi-blocks">
       ${blocoPecas}${blocoLocais}${blocoValor}${blocoCiclo}
     </div>
+    ${irRenderCiclosCards()}
     <div class="bi-grid-2">
       ${irRenderAcuraciaAnualPanel()}
       ${irRenderStatusInventarioPanel(ind)}
@@ -6472,7 +6473,8 @@ function irBurndownCiclo(ciclo, ind){
   }
   const hoje = new Date().toISOString().slice(0,10);
   const metaDia = total/(dias.length-1 || 1);
-  const W=760, H=260, padL=56, padR=16, padT=16, padB=34;
+  // padT maior: o rótulo de dados fica ACIMA do ponto e era cortado no topo.
+  const W=760, H=280, padL=56, padR=24, padT=30, padB=34;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const x = i => padL + (plotW*i)/(dias.length-1);
   const y = v => padT + plotH - (plotH*Math.max(0, Math.min(total, v)))/total;
@@ -6481,29 +6483,47 @@ function irBurndownCiclo(ciclo, ind){
     acum += contadoNoDia[i];
     ideal.push([x(i), y(total - metaDia*i)]);
     // Só desenha o real até hoje: linha caindo até zero no futuro é promessa, não dado.
-    if(dia <= hoje) real.push([x(i), y(total - acum), dia, total-acum]);
+    /* Restante nunca é negativo: a 843 pode fechar mais visitas do que a base
+       congelada tem locais (local revisitado em inventário novo), e sem o piso o
+       rótulo mostrava "-7.693 locais restantes". */
+    if(dia <= hoje) real.push([x(i), y(total - acum), dia, Math.max(0, total - acum)]);
   });
   const path = pts => pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-  const passo = Math.ceil(dias.length/12);
-  const eixoX = dias.map((dia,i)=> i%passo===0 || i===dias.length-1
-    ? `<text x="${x(i).toFixed(1)}" y="${H-12}" text-anchor="middle" class="mes-mon">${irEsc(dia.slice(8,10)+'/'+dia.slice(5,7))}</text>` : '').join('');
+  /* Eixo X: primeiro e último dia SEMPRE aparecem — é o período do ciclo, e sem o
+     último não dá pra saber até quando ele vai. Os do meio entram de N em N, e
+     qualquer um que caia perto demais do último é omitido: era o que fazia as duas
+     datas finais se sobreporem ("21/0824/08"). */
+  const passo = Math.max(1, Math.ceil(dias.length/12));
+  const rotulo = (i) => `<text x="${x(i).toFixed(1)}" y="${H-12}" text-anchor="middle" class="mes-mon">${irEsc(dias[i].slice(8,10)+'/'+dias[i].slice(5,7))}</text>`;
+  const minGap = 42; // px no viewBox entre duas datas, pra não colidir
+  let eixoX = rotulo(0) + rotulo(dias.length-1);
+  for(let i=passo; i<dias.length-1; i+=passo){
+    if(x(i)-x(0) < minGap || x(dias.length-1)-x(i) < minGap) continue;
+    eixoX += rotulo(i);
+  }
   const eixoY = [0,0.25,0.5,0.75,1].map(f=>{
     const v = total*f, yy = y(v);
     return `<line x1="${padL}" x2="${W-padR}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" class="mes-grid"/>`
          + `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" text-anchor="end" class="mes-mon">${irEsc(irFmtInt(v))}</text>`;
   }).join('');
   const pontos = real.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="bd-pt"><title>${irEsc(irFmtDate(p[2])+'\n'+irFmtInt(p[3])+' locais restantes')}</title></circle>`).join('');
+  /* Rótulo de dados: o restante escrito em cima do ponto. Em todos os dias vira um
+     borrão, então sai de N em N — e o último dia entra sempre, que é o número que
+     interessa ("falta tanto"). */
+  const passoRot = Math.max(1, Math.ceil(real.length/10));
+  const rotulos = real.map((p,i)=> (i%passoRot===0 || i===real.length-1)
+    ? `<text x="${p[0].toFixed(1)}" y="${(p[1]-9).toFixed(1)}" text-anchor="middle" class="bd-rot">${irEsc(irFmtInt(p[3]))}</text>` : '').join('');
   return `<div class="panel">
-    <div class="ofe-head"><h3>Burndown · ${irEsc(irCicloLabel(ciclo))}</h3></div>
+    <div class="ofe-head"><h3>Burndown</h3></div>
     <div class="bd-legenda">
-      <span class="mes-lg"><span class="mes-sw bd-sw-ideal"></span>Referência (${irFmtInt(Math.round(metaDia))}/dia · ${dias.length} dias úteis)</span>
+      <span class="mes-lg"><span class="mes-sw bd-sw-ideal"></span>Referência ${irFmtInt(Math.round(metaDia))}/dia · ${dias.length} dias úteis · ${irEsc(irFmtDate(dias[0]))} a ${irEsc(irFmtDate(dias[dias.length-1]))}</span>
       <span class="mes-lg"><span class="mes-sw bd-sw-real"></span>Restante</span>
     </div>
     <div class="mes-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Burndown do ciclo">
       ${eixoY}
       <path d="${path(ideal)}" class="bd-ideal"/>
       ${real.length>1 ? `<path d="${path(real)}" class="bd-real"/>` : ''}
-      ${pontos}${eixoX}
+      ${pontos}${rotulos}${eixoX}
     </svg></div>
   </div>`;
 }
@@ -6513,14 +6533,23 @@ function irRenderCiclosCards(){
   const pares = IR.comparativoCiclos;
   if(pares===null || pares===undefined) return '<div class="panel"><p class="field-hint">Carregando ciclos...</p></div>';
   const ano = irCicloAno(IR.cicloAtivo);
-  const doAno = pares.filter(({ciclo,ind}) => ind && irCicloAno(ciclo)===ano)
-    .sort((a,b)=>a.ciclo.numero-b.ciclo.numero);
-  if(!doAno.length) return '';
+  const processados = pares.filter(({ciclo,ind}) => ind && irCicloAno(ciclo)===ano);
+  /* O ano tem quatro ciclos, sempre. O que ainda não rodou aparece vazio em vez de
+     sumir: quatro cartões com um deles em branco dizem "falta esse"; três cartões
+     não dizem nada. */
+  const doAno = [1,2,3,4].map(numero=>{
+    const achado = processados.find(x=>x.ciclo.numero===numero);
+    return achado || {ciclo:{numero}, ind:null};
+  });
+  if(!ano) return '';
   const pct = v => v==null ? '—' : irFmtPct(v);
   const cls = v => v==null ? '' : (v>=IR_META_ACURACIA ? 'good' : 'neg');
   const cards = doAno.map(({ciclo,ind}, i)=>{
+    if(!ind) return `<div class="cc-card vazio">
+      <div class="cc-top"><h4>Ciclo ${ciclo.numero}</h4><span class="cc-tag na">sem dados</span></div>
+    </div>`;
     const aberto = irCicloStatus(ciclo)==='aberto';
-    const anterior = i>0 ? doAno[i-1].ind : null;
+    const anterior = i>0 ? doAno[i-1].ind : null; // null quando o anterior não rodou
     const delta = (anterior && ind.acuraciaPecas!=null && anterior.acuraciaPecas!=null)
       ? ind.acuraciaPecas-anterior.acuraciaPecas : null;
     const orcados = ind.locaisCongelados||0;
@@ -6569,7 +6598,7 @@ function irRenderComparativo(){
   if(IR.ciclos.length<2) return irEmptyState('Precisa de ao menos 2 ciclos', 'Processe outro ciclo para poder comparar.', "irSwitchTab('importacao')", 'Ir para Importação');
   if(IR.comparativoCiclos===null) irCarregarComparativoCiclos(); // async — re-renderiza quando chegar
   const opts = IR.ciclos.map(c=>`<option value="${c.id}">${irCicloLabel(c)}</option>`).join('');
-  return irRenderCiclosCards() + irBurndownCiclo(IR.cicloAtivo, IR.indicadores) + `
+  return irBurndownCiclo(IR.cicloAtivo, IR.indicadores) + `
     <div class="filter-bar">
       <select id="ir-cmp-a" onchange="irSetComparar('A', this.value)">${opts}</select>
       <span>vs.</span>
