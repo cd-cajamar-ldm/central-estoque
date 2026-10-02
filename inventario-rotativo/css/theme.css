@@ -1527,3 +1527,27 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .atualiza-bar[hidden]{ display:none; }
 .atualiza-bar button{ background:var(--orange); color:#fff; border:none; border-radius:7px;
   padding:6px 12px; font-size:12px; font-weight:800; font-family:inherit; cursor:pointer; }
+
+/* Acurácias por Log — um cartão por log, anel de peças + barras finas. */
+.lg-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; }
+.lg-card{ border:1px solid var(--line); border-radius:14px; padding:14px 14px 8px; text-align:center;
+  background:var(--surface); }
+.lg-card.total{ background:var(--surface2); }
+.lg-card.alerta{ border-color:color-mix(in srgb, var(--danger) 35%, var(--line)); }
+.lg-head{ display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:20px; margin-bottom:10px; }
+.lg-head h4{ margin:0; font-size:12.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.lg-tag{ font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--danger);
+  background:color-mix(in srgb, var(--danger) 12%, transparent); border-radius:99px; padding:3px 7px; }
+.lg-ring{ position:relative; width:120px; height:120px; margin:0 auto 10px; }
+.lg-ring-val{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
+.lg-num{ font-size:24px; font-weight:800; line-height:1; font-family:'SFMono-Regular',Consolas,monospace; }
+.lg-num.good{ color:var(--success); } .lg-num.neg{ color:var(--danger); }
+.lg-cap{ font-size:9px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft); }
+.lg-mini{ display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line); }
+.lg-mini-lbl{ font-size:11px; color:var(--ink-soft); min-width:50px; text-align:left; }
+.lg-mini-tr{ position:relative; flex:1; height:5px; border-radius:99px; background:var(--surface2); }
+.lg-mini-tr i{ display:block; height:100%; border-radius:99px; }
+.lg-mini-mk{ position:absolute; top:-2.5px; bottom:-2.5px; width:2px; background:var(--ink); opacity:.45; border-radius:2px; }
+.lg-mini-pc{ font-size:11.5px; font-weight:700; min-width:46px; text-align:right;
+  font-family:'SFMono-Regular',Consolas,monospace; }
+.lg-mini-pc.good{ color:var(--success); } .lg-mini-pc.neg{ color:var(--danger); }
