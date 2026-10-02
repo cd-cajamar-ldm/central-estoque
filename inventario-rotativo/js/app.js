@@ -927,7 +927,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v210';
+const IR_APP_VERSION = 'v211';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1373,32 +1373,45 @@ function irRenderPorLogPanel(ind){
   if(!rows.length) return `<div class="panel"><h3>Acurácias e NET por Log</h3><p class="field-hint">Nenhum log com locais contados ainda.</p></div>`;
   const rowsComTotal = [...rows, irCalcLogTotal(rows)];
   IR._porLogMap = new Map(rowsComTotal.map(r=>[r.chave, r]));
+  const META = IR_META_ACURACIA;
+  /* Um cartão por log: anel com a acurácia de peças (a manchete) e duas barras
+     finas para posições e valores. A marca da meta aparece no anel e nas barras,
+     sempre na mesma posição, então não precisa de legenda pra ler. */
+  const anel = (v) => {
+    const R = 52, C = 2*Math.PI*R, off = C*(1-(v||0)), bad = (v||0) < META;
+    return `<div class="lg-ring">
+      <svg viewBox="0 0 120 120" width="120" height="120">
+        <g transform="rotate(-90 60 60)">
+          <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="9"/>
+          <circle cx="60" cy="60" r="${R}" fill="none" stroke="${bad?'var(--danger)':'var(--orange)'}" stroke-width="9"
+            stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/>
+          <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--ink-soft)" stroke-width="13"
+            stroke-dasharray="1.6 ${(C-1.6).toFixed(1)}" stroke-dashoffset="${(-C*META).toFixed(1)}" opacity=".7"/>
+        </g>
+      </svg>
+      <div class="lg-ring-val"><span class="lg-num ${bad?'neg':'good'}">${irFmtPct(v)}</span><span class="lg-cap">Peças</span></div>
+    </div>`;
+  };
+  const barra = (rot, v, cor) => {
+    const bad = (v||0) < META;
+    return `<div class="lg-mini"><span class="lg-mini-lbl">${irEsc(rot)}</span>
+      <span class="lg-mini-tr"><i style="width:${((v||0)*100).toFixed(1)}%;background:${cor}"></i><span class="lg-mini-mk" style="left:${(META*100).toFixed(1)}%"></span></span>
+      <span class="lg-mini-pc ${bad?'neg':'good'}">${irFmtPct(v)}</span></div>`;
+  };
+  const cards = rowsComTotal.map(r=>{
+    const alerta = !r.isTotal && (r.acuraciaPecas||0) < META;
+    return `<div class="lg-card${r.isTotal?' total':''}${alerta?' alerta':''}"
+      onmouseenter="irShowLogTooltip(event,'${irEsc(r.chave)}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
+      <div class="lg-head"><h4>${r.isTotal?'TOTAL':irEsc(r.chave)}</h4>${alerta?'<span class="lg-tag">atenção</span>':''}</div>
+      ${anel(r.acuraciaPecas)}
+      ${barra('Posições', r.acuraciaPosicoes, 'var(--blue)')}
+      ${barra('Valores', r.acuraciaValor, 'var(--ink)')}
+    </div>`;
+  }).join('');
   return `<div class="panel">
-    <h3>Acurácias por Log</h3>
-    <div class="bi-vbars bi-vbars-grouped">
-      ${rowsComTotal.map(r=>`<div class="bi-vbar-col${r.isTotal?' bi-vbar-col-total':''}" onmouseenter="irShowLogTooltip(event,'${irEsc(r.chave)}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
-        <div class="bi-cluster" style="height:100px;">
-          <div class="bi-cluster-bar">
-            <div class="bi-cluster-val mono" style="color:var(--orange);">${irFmtPct(r.acuraciaPecas)}</div>
-            <div class="bi-vbar orange" style="height:${Math.round(r.acuraciaPecas*100)}px;"></div>
-          </div>
-          <div class="bi-cluster-bar">
-            <div class="bi-cluster-val mono" style="color:var(--blue);">${irFmtPct(r.acuraciaPosicoes)}</div>
-            <div class="bi-vbar" style="height:${Math.round(r.acuraciaPosicoes*100)}px;"></div>
-          </div>
-          <div class="bi-cluster-bar">
-            <div class="bi-cluster-val mono" style="color:var(--ink);">${irFmtPct(r.acuraciaValor)}</div>
-            <div class="bi-vbar" style="height:${Math.round(r.acuraciaValor*100)}px;background:var(--ink);"></div>
-          </div>
-        </div>
-        <div class="bi-vbar-label">${r.isTotal?'TOTAL':irEsc(r.chave)}</div>
-      </div>`).join('')}
-    </div>
-    <p class="field-hint" style="margin-top:8px;">
-      <span class="mono" style="color:var(--orange);">■</span> Peças &nbsp;
-      <span class="mono" style="color:var(--blue);">■</span> Posições &nbsp;
-      <span class="mono" style="color:#1D1F2A;">■</span> Valores
-    </p>
+    <div class="ofe-head"><h3>Acurácias por Log</h3>
+      <span class="field-hint">Meta ${irFmtPct(META)} · o traço cinza no anel e nas barras marca a meta</span></div>
+    <div class="lg-grid">${cards}</div>
   </div>`;
 }
 /* Gráfico de barras (Acurácias por Log) pro boletim — SVG estático com o
