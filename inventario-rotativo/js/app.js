@@ -5899,36 +5899,42 @@ function irDivExportarItem(item){
    xlsx-js-style carregado no index.html; a build community do xlsx descarta .s. */
 const IR_XLS_BORDA = {style:'thin', color:{rgb:'FF9AA1B4'}};
 const IR_XLS_GRADE = {top:IR_XLS_BORDA, bottom:IR_XLS_BORDA, left:IR_XLS_BORDA, right:IR_XLS_BORDA};
-function irDivBaixarPlanilha(cabecalho, linhas, nomeBase, colsMoeda){
-  if(typeof XLSX!=='undefined' && XLSX.utils){
-    const ws = XLSX.utils.aoa_to_sheet([cabecalho, ...linhas]);
-    ws['!cols'] = cabecalho.map(h=>({wch: /Descrição/.test(h) ? 40 : Math.max(12, h.length+2)}));
-    // Cabeçalho congelado: rolando 300 linhas de auditoria, sem isso não dá pra saber
-    // mais qual coluna é qual.
-    ws['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
-    ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:linhas.length, c:cabecalho.length-1}})};
-    for(let c=0;c<cabecalho.length;c++){
-      for(let r=0;r<=linhas.length;r++){
-        // Célula vazia não existe na planilha e por isso não ganharia borda — a coluna
-        // "Contagem", que é justamente onde o auditor escreve à mão, sairia sem grade.
-        // Então cria a célula em branco só pra ela receber a moldura.
-        const end = XLSX.utils.encode_cell({r, c});
-        if(!ws[end]) ws[end] = {t:'s', v:''};
-        const cel = ws[end];
-        cel.s = r===0
-          ? {font:{bold:true, sz:10, color:{rgb:'FFFFFFFF'}}, fill:{fgColor:{rgb:'FF001A72'}},
-             alignment:{horizontal:'center', vertical:'center', wrapText:true}, border:IR_XLS_GRADE}
-          : {font:{sz:10}, alignment:{vertical:'center'}, border:IR_XLS_GRADE};
-        if(r>0 && colsMoeda && colsMoeda[c] && typeof cel.v === 'number'){
-          cel.t = 'n'; cel.z = 'R$ #,##0.00;[Red]-R$ #,##0.00';
-        }
+// Monta o workbook (cabeçalho congelado, autofiltro, borda, moeda) — compartilhado
+// entre o download direto (irDivBaixarPlanilha) e o export que também abre e-mail
+// (irDivExportarHojeEEnviar), que precisa dos bytes antes de decidir o que fazer com eles.
+function irDivMontarPlanilha(cabecalho, linhas, colsMoeda){
+  const ws = XLSX.utils.aoa_to_sheet([cabecalho, ...linhas]);
+  ws['!cols'] = cabecalho.map(h=>({wch: /Descrição/.test(h) ? 40 : Math.max(12, h.length+2)}));
+  // Cabeçalho congelado: rolando 300 linhas de auditoria, sem isso não dá pra saber
+  // mais qual coluna é qual.
+  ws['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
+  ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:linhas.length, c:cabecalho.length-1}})};
+  for(let c=0;c<cabecalho.length;c++){
+    for(let r=0;r<=linhas.length;r++){
+      // Célula vazia não existe na planilha e por isso não ganharia borda — a coluna
+      // "Contagem", que é justamente onde o auditor escreve à mão, sairia sem grade.
+      // Então cria a célula em branco só pra ela receber a moldura.
+      const end = XLSX.utils.encode_cell({r, c});
+      if(!ws[end]) ws[end] = {t:'s', v:''};
+      const cel = ws[end];
+      cel.s = r===0
+        ? {font:{bold:true, sz:10, color:{rgb:'FFFFFFFF'}}, fill:{fgColor:{rgb:'FF001A72'}},
+           alignment:{horizontal:'center', vertical:'center', wrapText:true}, border:IR_XLS_GRADE}
+        : {font:{sz:10}, alignment:{vertical:'center'}, border:IR_XLS_GRADE};
+      if(r>0 && colsMoeda && colsMoeda[c] && typeof cel.v === 'number'){
+        cel.t = 'n'; cel.z = 'R$ #,##0.00;[Red]-R$ #,##0.00';
       }
     }
-    // Garante que o range da planilha cobre as células em branco que acabamos de criar.
-    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:linhas.length, c:cabecalho.length-1}});
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Dados');
-    XLSX.writeFile(wb, nomeBase+'.xlsx');
+  }
+  // Garante que o range da planilha cobre as células em branco que acabamos de criar.
+  ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:linhas.length, c:cabecalho.length-1}});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Dados');
+  return wb;
+}
+function irDivBaixarPlanilha(cabecalho, linhas, nomeBase, colsMoeda){
+  if(typeof XLSX!=='undefined' && XLSX.utils){
+    XLSX.writeFile(irDivMontarPlanilha(cabecalho, linhas, colsMoeda), nomeBase+'.xlsx');
     return;
   }
   const esc = v => typeof v==='string' ? '"'+v.replace(/"/g,'""')+'"' : String(v==null?'':v).replace('.', ',');
@@ -5937,6 +5943,53 @@ function irDivBaixarPlanilha(cabecalho, linhas, nomeBase, colsMoeda){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = nomeBase+'.csv'; a.click();
   URL.revokeObjectURL(a.href);
+}
+/* Botão do boletim: planilha das divergências FECHADAS HOJE (diaFechamento = hoje),
+   pra anexar no e-mail pros stakeholders sem precisar abrir a aba e filtrar na mão.
+   Mesmo padrão de envio do boletim por imagem (irBaixarBoletimImagem): baixa o
+   arquivo, tenta compartilhar nativo com o arquivo já anexado e, sem suporte, abre
+   um rascunho de e-mail (com os destinatários salvos em Configurações, se houver)
+   pedindo pra anexar o que acabou de baixar — mailto não anexa arquivo sozinho. */
+async function irDivExportarHojeEEnviar(){
+  if(typeof XLSX==='undefined' || !XLSX.utils){ irShowToast('Exportação de planilha indisponível neste navegador.', true); return; }
+  await irCarregarDescLocaisTodosCiclos();
+  const hoje = new Date().toISOString().slice(0,10);
+  const divsHoje = irDivLinhasValidas(IR.divergencias).filter(d=>irDivDiaDa(d)===hoje);
+  if(!divsHoje.length){ irShowToast('Nenhuma divergência fechada hoje ('+irFmtDate(hoje)+') no ciclo ativo.', true); return; }
+  const linhas = divsHoje.slice()
+    .sort((a,b)=>Math.abs(b.vlDivergencia)-Math.abs(a.vlDivergencia))
+    .map(d=>[d.item, d.itemNome||'', d.local, irDescLocal(d.local)||'', d.motivo||'',
+      d.qtdeSistema, d.qtdeFisica, d.diferenca, d.vlDivergencia]);
+  const cab = ['Item','Descrição','Local','Descrição do Local','Motivo','Qtde Sistema','Qtde Física','Diferença','Valor Divergente'];
+  const wb = irDivMontarPlanilha(cab, linhas, cab.map(h=>h==='Valor Divergente'));
+  const nomeArquivo = 'Divergencias_'+hoje+'.xlsx';
+  const bytes = XLSX.write(wb, {type:'array', bookType:'xlsx'});
+  const blob = new Blob([bytes], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nomeArquivo;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+
+  const assunto = 'Divergências do dia — '+irFmtDate(hoje);
+  if(navigator.canShare){
+    try{
+      const file = new File([blob], nomeArquivo, {type:blob.type});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:assunto, text:assunto});
+        irShowToast('✓ Planilha pronta — escolha os destinatários na tela de compartilhamento.');
+        return;
+      }
+    }catch(shareErr){
+      if(shareErr && shareErr.name==='AbortError'){ irShowToast('Envio cancelado.'); return; }
+    }
+  }
+  const emailCfg = IR.boletimEmail || {};
+  const corpo = `Segue a planilha com as divergências fechadas hoje (${irFmtDate(hoje)}).\n\nAnexe o arquivo "${nomeArquivo}" (baixado agora na pasta de downloads) antes de enviar.`;
+  const lista = v => (v||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean).join(',');
+  const q = ['subject='+encodeURIComponent(assunto), 'body='+encodeURIComponent(corpo)];
+  if(emailCfg.cc) q.push('cc='+encodeURIComponent(lista(emailCfg.cc)));
+  window.open('mailto:'+encodeURIComponent(lista(emailCfg.para))+'?'+q.join('&'), '_blank');
+  irShowToast('✓ Planilha baixada e e-mail aberto — anexe o arquivo e envie.');
 }
 
 /* ---------- RENDER ---------- */
@@ -6110,6 +6163,7 @@ function irRenderDivTabela(c){
       <div class="ofe-acoes">
         ${sel.size?`<button class="btn-link" onclick="irDivLimparSelecao()">Limpar (${sel.size})</button>`:''}
         <button class="btn btn-secondary" onclick="irDivMarcarTodos()">Marcar todos</button>
+        <button class="btn btn-secondary" onclick="irDivExportarHojeEEnviar()">📧 Exportar divergências de hoje</button>
         <button class="btn btn-primary" onclick="irDivGerarAuditoria()">Gerar auditoria (${sel.size})</button>
       </div>
     </div>
