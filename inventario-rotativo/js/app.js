@@ -1613,7 +1613,15 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
       if(yAnterior!==null) y = Math.min(y, yAnterior-MIN_GAP_LABEL);
       y = Math.max(y, LABEL_Y_MIN);
       yAnterior = y;
-      labels += `<text x="${g.labelX.toFixed(1)}" y="${y.toFixed(1)}" font-size="13" text-anchor="middle" fill="${cores.label}" font-weight="800">${(g.v*100).toFixed(1)}%</text>`;
+      const texto = (g.v*100).toFixed(1)+'%';
+      // Halo branco atrás do texto: uma barra com valor perto da meta (ex.: 91,4% x
+      // 97%) deixa o rótulo quase em cima da linha tracejada, e o traço aparecia
+      // cortando por dentro das letras ("91.4%" com hífen no meio). O halo garante
+      // o rótulo legível em cima de qualquer coisa atrás dele — linha, barra ou
+      // outro rótulo — sem precisar prever cada combinação de valores.
+      const haloW = texto.length*7.6+6;
+      labels += `<rect x="${(g.labelX-haloW/2).toFixed(1)}" y="${(y-11).toFixed(1)}" width="${haloW.toFixed(1)}" height="15" fill="#fff"/>`;
+      labels += `<text x="${g.labelX.toFixed(1)}" y="${y.toFixed(1)}" font-size="13" text-anchor="middle" fill="${cores.label}" font-weight="800">${texto}</text>`;
     });
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="14" text-anchor="middle" fill="${cores.axis}" font-weight="800">${irEsc(r.label)}</text>`;
   });
