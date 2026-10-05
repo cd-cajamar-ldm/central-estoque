@@ -808,7 +808,20 @@ function irProcessarCiclo(op){
   if(IR.processing) return Promise.resolve(false);
   const files843 = (op.files843||[]).filter(Boolean), filesCong = (op.filesCong||[]).filter(Boolean),
         files278 = (op.files278||[]).filter(Boolean), files051 = (op.files051||[]).filter(Boolean);
-  if(!(files843.length && filesCong.length && files278.length && files051.length)) return Promise.resolve(false);
+  if(!(files843.length && filesCong.length && files278.length && files051.length)){
+    // Antes falhava calado — a fila só dizia "parei no Ciclo X", sem dizer QUAL
+    // arquivo faltou. Quem via a mensagem não tinha como saber se era a 843, a
+    // Base Congelada, a SIGEQ278 ou a ZBIQ0051 que não foi encontrada pra esse
+    // ciclo (ex.: o arquivo existe, mas mora na pasta de outro ciclo e foi
+    // excluído da escolha).
+    const faltam = [];
+    if(!files843.length) faltam.push('QRY0843');
+    if(!filesCong.length) faltam.push('Base Congelada');
+    if(!files278.length) faltam.push('SIGEQ278');
+    if(!files051.length) faltam.push('ZBIQ0051');
+    irShowToast('Ciclo '+(op.numero||'?')+': não achei '+faltam.join(', ')+' pra processar.', true);
+    return Promise.resolve(false);
+  }
   const numero = op.numero, dataAbertura = op.dataAbertura, dataPrevistaTermino = op.dataPrevistaTermino;
   if(!numero || !dataAbertura){ irShowToast('Informe o número do ciclo e a data de abertura.', true); return Promise.resolve(false); }
 
@@ -1600,7 +1613,15 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
       if(yAnterior!==null) y = Math.min(y, yAnterior-MIN_GAP_LABEL);
       y = Math.max(y, LABEL_Y_MIN);
       yAnterior = y;
-      labels += `<text x="${g.labelX.toFixed(1)}" y="${y.toFixed(1)}" font-size="13" text-anchor="middle" fill="${cores.label}" font-weight="800">${(g.v*100).toFixed(1)}%</text>`;
+      const texto = (g.v*100).toFixed(1)+'%';
+      // Halo branco atrás do texto: uma barra com valor perto da meta (ex.: 91,4% x
+      // 97%) deixa o rótulo quase em cima da linha tracejada, e o traço aparecia
+      // cortando por dentro das letras ("91.4%" com hífen no meio). O halo garante
+      // o rótulo legível em cima de qualquer coisa atrás dele — linha, barra ou
+      // outro rótulo — sem precisar prever cada combinação de valores.
+      const haloW = texto.length*7.6+6;
+      labels += `<rect x="${(g.labelX-haloW/2).toFixed(1)}" y="${(y-11).toFixed(1)}" width="${haloW.toFixed(1)}" height="15" fill="#fff"/>`;
+      labels += `<text x="${g.labelX.toFixed(1)}" y="${y.toFixed(1)}" font-size="13" text-anchor="middle" fill="${cores.label}" font-weight="800">${texto}</text>`;
     });
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="14" text-anchor="middle" fill="${cores.axis}" font-weight="800">${irEsc(r.label)}</text>`;
   });
