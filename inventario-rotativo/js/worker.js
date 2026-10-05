@@ -522,14 +522,27 @@ function readMultiSheet(bufs, aliasMap, requiredCols, label, keyFields){
     validateColumns(lastResolved, requiredCols, label+' (último arquivo)');
   }
   if(bufs.length === 1) return {rows: rowsRaw, resolved, duplicatas: 0};
-  const seen = new Set();
+  /* A ÚLTIMA ocorrência de uma chave vence, não a primeira. Os arquivos chegam na
+     ordem em que o usuário anexa (o mais velho primeiro, o mais novo por último) —
+     um arquivo exportado no meio de uma contagem grava a mesma linha com um estado
+     mais antigo (ex.: Situação "Iniciado"); o arquivo seguinte, exportado depois,
+     tem a MESMA chave (local+rodada+item+usuário+datas não mudam) só que já
+     "Liquidado". Com a primeira ocorrência vencendo, ficava valendo o estado velho,
+     a linha caía fora do filtro de liquidado, e a rodada seguinte da mesma visita
+     ficava "órfã" — sistema contava como achado do nada (sistema 0) uma peça que já
+     tinha Rodada 1 real, só que gravada num arquivo anterior. */
+  const indexByKey = new Map();
   const rows = [];
   let duplicatas = 0;
   for(const row of rowsRaw){
     const key = keyFields.map(f=>String(getVal(row, resolved[f]) ?? '')).join('|');
-    if(seen.has(key)){ duplicatas++; continue; }
-    seen.add(key);
-    rows.push(row);
+    if(indexByKey.has(key)){
+      rows[indexByKey.get(key)] = row;
+      duplicatas++;
+    } else {
+      indexByKey.set(key, rows.length);
+      rows.push(row);
+    }
   }
   return {rows, resolved, duplicatas};
 }
@@ -552,8 +565,13 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // extração de origem tem limite de período/linhas, ou os dados chegam em pedaços por
   // ciclo). Concatena tudo e deduplica por uma chave natural de cada planilha.
   post('progress', {stage:'Lendo QRY0843 ('+bufs843.length+' arquivo(s))...', pct:4});
+  // Chave inclui "inventario": sem ele, duas visitas DIFERENTES do mesmo local (ex.:
+  // uma cancelada e reaberta, ou um arquivo velho exportado no meio da contagem e um
+  // novo já completo) podiam colidir em local+rodada+item+usuário+datas e a primeira
+  // ocorrência "vencia" — mesmo sendo de um evento diferente, ou de uma extração
+  // antiga e incompleta que não devia prevalecer sobre a mais nova.
   const m843 = readMultiSheet(bufs843, ALIAS_843, ['local','item','idConferencia','qtFis','usuario'], 'QRY0843',
-    ['local','idConferencia','item','usuario','dataFimContagem','dataInicioContagem']);
+    ['local','inventario','idConferencia','item','usuario','dataFimContagem','dataInicioContagem']);
   const rows843 = m843.rows, r843 = m843.resolved;
 
   post('progress', {stage:'Lendo Base Congelada ('+bufsCongelada.length+' arquivo(s))...', pct:5});
@@ -1158,12 +1176,12 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // final física — nunca soma rodada, sempre a última).
   const totalPecasFisicas = divergenciasConcluidas.reduce((s,d)=>s+d.qtdeFisica,0);
   const totalDiferencaAbs = divergenciasConcluidas.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-  /* Denominador = MAIOR entre sistema e físico de cada item (baseQtd), não só a
-     quantidade física contada nem só o saldo do sistema. Com a física sozinha, um
-     item que sumiu inteiro (sistema 500, físico 0) põe 500 no numerador e ZERO no
-     denominador: o erro passa de 100% e a conta estoura — só não aparecia negativa
-     porque o clamp segurava em 0%. Com o maior dos dois o erro de um item nunca passa
-     de 100% e o resultado é limitado por construção, dos dois lados (sumiço e achado). */
+  /* Denominador = saldo SISTÊMICO de cada item (baseQtd = qtdeSistema), não a
+     física contada. Item que sumiu inteiro (sistema 500, físico 0) põe 500 no
+     numerador e 500 no denominador: erro de 100%, sem estourar. Item ACHADO do
+     nada (sistema 0, físico 500) é o lado cego aceito: entra no numerador com
+     base zero, pesando no erro sem somar na base — ver comentário na baseQtd
+     acima. O clamp01 só segura o resultado final entre 0% e 100%. */
   const totalSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+baseQtd(d),0);
   const acuraciaPecas = clamp01(totalSaldoLogico>0 ? 1-(totalDiferencaAbs/totalSaldoLogico) : 1);
   const totalItensContados = divergenciasConcluidas.length;
