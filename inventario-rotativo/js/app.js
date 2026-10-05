@@ -808,7 +808,20 @@ function irProcessarCiclo(op){
   if(IR.processing) return Promise.resolve(false);
   const files843 = (op.files843||[]).filter(Boolean), filesCong = (op.filesCong||[]).filter(Boolean),
         files278 = (op.files278||[]).filter(Boolean), files051 = (op.files051||[]).filter(Boolean);
-  if(!(files843.length && filesCong.length && files278.length && files051.length)) return Promise.resolve(false);
+  if(!(files843.length && filesCong.length && files278.length && files051.length)){
+    // Antes falhava calado — a fila só dizia "parei no Ciclo X", sem dizer QUAL
+    // arquivo faltou. Quem via a mensagem não tinha como saber se era a 843, a
+    // Base Congelada, a SIGEQ278 ou a ZBIQ0051 que não foi encontrada pra esse
+    // ciclo (ex.: o arquivo existe, mas mora na pasta de outro ciclo e foi
+    // excluído da escolha).
+    const faltam = [];
+    if(!files843.length) faltam.push('QRY0843');
+    if(!filesCong.length) faltam.push('Base Congelada');
+    if(!files278.length) faltam.push('SIGEQ278');
+    if(!files051.length) faltam.push('ZBIQ0051');
+    irShowToast('Ciclo '+(op.numero||'?')+': não achei '+faltam.join(', ')+' pra processar.', true);
+    return Promise.resolve(false);
+  }
   const numero = op.numero, dataAbertura = op.dataAbertura, dataPrevistaTermino = op.dataPrevistaTermino;
   if(!numero || !dataAbertura){ irShowToast('Informe o número do ciclo e a data de abertura.', true); return Promise.resolve(false); }
 
