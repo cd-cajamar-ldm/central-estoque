@@ -91,9 +91,25 @@ function buildAliasResolver(headers, aliasMap){
   }
   return resolved;
 }
+/* Extração automatizada (ex.: QRY0390 via Snowflake) às vezes vem com uma linha de
+   título/metadado acima do cabeçalho de verdade ("Relatório gerado em..."), o que
+   empurra os nomes reais das colunas pra linha 2. Sem isso, o SheetJS lia a linha 1
+   como cabeçalho — toda célula virava "__EMPTY_N" — e TODAS as colunas obrigatórias
+   falhavam juntas ao mesmo tempo, mesmo com os nomes certos esperando logo abaixo
+   (confirmado reproduzindo com o cabeçalho real que o usuário mandou). Escaneia até
+   10 linhas e usa a primeira com pelo menos 3 células preenchidas como cabeçalho —
+   uma linha de título real tem 1 célula só, um cabeçalho de verdade tem dezenas. */
+function irAcharLinhaCabecalho(ws){
+  const bruto = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+  for(let i=0;i<Math.min(10, bruto.length);i++){
+    const preenchidas = (bruto[i]||[]).filter(v=>v!==null && String(v).trim()!=='').length;
+    if(preenchidas>=3) return i;
+  }
+  return 0;
+}
 function sheetToRows(wb){
   const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(ws, {defval:null, raw:true});
+  return XLSX.utils.sheet_to_json(ws, {defval:null, raw:true, range: irAcharLinhaCabecalho(ws)});
 }
 function getVal(row, key){ return key ? row[key] : null; }
 function validateColumns(resolved, required, label){
