@@ -26,11 +26,14 @@ const IR = {
   divEscopo:{tipo:'ciclo'}, divEscopoDados:null, divAnoCache:null, divSelecionados:null,
   divCorte:null, divCorteQtd:null, divBusca:'', divExpandido:null,
   // Base do corte (o que define ofensor) e sentidos ligados na tabela — multi-seleção.
-  divBase:'valor', divSentidos:['perda','ganho'],
+  // Compensado entra ligado por padrão: o item que fecha líquido zero continua
+  // contando como erro de contagem (pedido do usuário), então ele aparece a
+  // menos que o próprio usuário desligue o chip.
+  divBase:'valor', divSentidos:['perda','ganho','compensado'],
   // Cache da QRY410 do(s) ano(s) do escopo — é dela que sai o preço congelado.
   div410Cache:null,
   divSimExigeDesc:true,
-  divOrdem:{col:'netValor', dir:'desc'}, divAuditoria:null,
+  divOrdem:{col:'absValor', dir:'desc'}, divAuditoria:null,
   divSimFiltro:{de:'', ate:''},
   divSimOrdem:{col:'dia', dir:'desc'},
   prodFilters:{de:'', ate:'', usuario:'', setor:''},
@@ -945,7 +948,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v215';
+const IR_APP_VERSION = 'v216';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -5133,13 +5136,13 @@ function irDivBase(){
 }
 function irDivSetBase(base){
   IR.divBase = base;
-  IR.divOrdem = {col: base==='qtd'?'netQtd':'netValor', dir:'desc'};
+  IR.divOrdem = {col: base==='qtd'?'absQtd':'absValor', dir:'desc'};
   irRenderView();
 }
 // Chips de sentido: clicar liga/desliga. Nunca deixa a tabela sem nenhum ligado —
 // desligar o último volta a ligar todos, senão a tela some sem explicação.
 function irDivToggleSentido(s){
-  const atual = new Set(IR.divSentidos || ['perda','ganho']);
+  const atual = new Set(IR.divSentidos || ['perda','ganho','compensado']);
   if(atual.has(s)) atual.delete(s); else atual.add(s);
   IR.divSentidos = atual.size ? Array.from(atual) : ['perda','ganho','compensado'];
   irRenderView();
@@ -5185,7 +5188,7 @@ function irDivSetCorte(v){
 function irDivSetBusca(v){ IR.divBusca = String(v||'').trim(); irRenderView(); }
 /* Cabeçalho clicável: 1º clique ordena decrescente, 2º inverte. */
 function irDivOrdenar(col){
-  const o = IR.divOrdem || {col:'netValor', dir:'desc'};
+  const o = IR.divOrdem || {col:'absValor', dir:'desc'};
   IR.divOrdem = (o.col===col) ? {col, dir: o.dir==='desc'?'asc':'desc'} : {col, dir:'desc'};
   irRenderView();
 }
@@ -5430,10 +5433,15 @@ function irDivAgruparPorItem(divs){
   const map = new Map();
   for(const d of divs){
     let g = map.get(d.item);
-    if(!g){ g = {item:d.item, descricao:d.itemNome, ean:d.ean||'', netQtd:0, netValor:0, locais:[], origens:new Set()}; map.set(d.item, g); }
+    if(!g){ g = {item:d.item, descricao:d.itemNome, ean:d.ean||'', netQtd:0, netValor:0, absQtd:0, absValor:0, locais:[], origens:new Set()}; map.set(d.item, g); }
     const v = irDivValorDa(d);
     g.netQtd += d.diferenca;
     g.netValor += v.valor;
+    // Absoluto: sobra num local e falta em outro são DOIS erros de contagem, não
+    // um que cancela o outro — pedido explícito do usuário pra não deixar um item
+    // sumir da aba só porque o saldo líquido fechou perto de zero.
+    g.absQtd += Math.abs(d.diferenca);
+    g.absValor += Math.abs(v.valor);
     g.locais.push(Object.assign({}, d, {vlDivergencia: v.valor, precoUsado: v.preco, precoOrigem: v.origem}));
     g.origens.add(v.origem);
     if(!g.descricao && d.itemNome) g.descricao = d.itemNome;
@@ -5492,10 +5500,17 @@ function irDivCalcItens(){
   const noAno = irDivAgruparPorItem(irDivLinhasValidas((IR.divAnoCache||{}).divs));
   const busca = (IR.divBusca||'').toLowerCase();
   const itens = Array.from(noEscopo.values()).map(g=>{
-    const a = noAno.get(g.item) || {netQtd:g.netQtd, netValor:g.netValor};
+    const a = noAno.get(g.item) || {netQtd:g.netQtd, netValor:g.netValor, absQtd:g.absQtd, absValor:g.absValor};
     const noPeriodo = base.campo==='netQtd' ? g.netQtd : g.netValor;
+    const noPeriodoAbs = base.campo==='netQtd' ? g.absQtd : g.absValor;
     const noAnoBase = base.campo==='netQtd' ? a.netQtd : a.netValor;
-    const relevante = Math.abs(noPeriodo) >= corte;
+    // Relevância é pelo ABSOLUTO, não pelo saldo líquido: um item que perde 2.688
+    // num local e "acha" 2.688 em outro, no MESMO dia, fecha líquido zero e some da
+    // tela inteira — mas os dois erros de contagem são reais e precisam aparecer.
+    // Pedido explícito do usuário: "se o NET do item zera, ele deve constar, mas
+    // posso retirar quando não quiser ver" — por isso continua visível (como
+    // compensado), nunca mais invisível.
+    const relevante = noPeriodoAbs >= corte;
     /* Compensado = pesou no escopo, mas o ano desmancha. Erro de contagem houve;
        perda não. Não é ofensor.
 
@@ -5522,7 +5537,7 @@ function irDivCalcItens(){
     if(!busca) return true;
     return String(i.item).toLowerCase().includes(busca) || String(i.descricao||'').toLowerCase().includes(busca);
   });
-  const o = IR.divOrdem || {col:'netValor', dir:'desc'};
+  const o = IR.divOrdem || {col:'absValor', dir:'desc'};
   const dir = o.dir==='desc' ? -1 : 1;
   itens.sort((x,y)=>{
     if(o.col==='item') return dir*String(x.item).localeCompare(String(y.item));
@@ -6122,8 +6137,8 @@ function irDivIndevido(c){
 const IR_OFE_COLS = [
   {key:'item',        lbl:'Item'},
   {key:'descricao',   lbl:'Descrição'},
-  {key:'netValor',    lbl:'Divergência',      num:true},
-  {key:'netQtd',      lbl:'NET peças',        num:true},
+  {key:'absValor',    lbl:'Valor R$ ÷ net',   num:true},
+  {key:'absQtd',      lbl:'Peças ÷ net',      num:true},
   {key:'netValorAno', lbl:'NET R$ (ano)',     num:true, ano:true},
   {key:'netQtdAno',   lbl:'NET peças (ano)',  num:true, ano:true},
   {key:'nLocais',     lbl:'Locais',           num:true},
@@ -6133,15 +6148,19 @@ function irRenderDivTabela(c){
   const sel = IR.divSelecionados || new Set();
   // Chips de sentido, multi-seleção: perda, ganho e compensado entram e saem da
   // lista sem mexer no cálculo — o corte e a base continuam os mesmos.
-  const on = new Set(IR.divSentidos || ['perda','ganho']);
+  const on = new Set(IR.divSentidos || ['perda','ganho','compensado']);
   const lista = c.itens.filter(i=>{
     if(!i.relevante) return false;
     if(i.compensado) return on.has('compensado');
     return on.has(i.sentido);
   });
-  const o = IR.divOrdem || {col:'netValor', dir:'desc'};
+  const o = IR.divOrdem || {col:'absValor', dir:'desc'};
   const seta = k => o.col===k ? (o.dir==='desc'?' ▾':' ▴') : '';
-  const num = (v, fmt) => `<td class="mono ${v<0?'neg':(v>0?'pos':'')}">${v>0?'+':''}${fmt(v)}</td>`;
+  // Absoluto é o número grande (é ele que diz o tamanho do erro); o NET some
+  // pequeno do lado só pra comparar — quando os dois batem, o item é um ofensor
+  // normal; quando o NET é bem menor que o absoluto, foi aquele NET que escondia
+  // o problema até agora (é o caso "compensado").
+  const numAbs = (abs, net, fmt) => `<td class="mono">${fmt(abs)}<span class="ofe-net-sub ${net<0?'neg':(net>0?'pos':'')}">net ${net>0?'+':''}${fmt(net)}</span></td>`;
   const linha = i=>{
     const aberto = IR.divExpandido===i.item;
     // Item sem preço nem na 410 nem na 278: componente de kit que não valora.
@@ -6156,8 +6175,8 @@ function irRenderDivTabela(c){
       <td><input type="checkbox" ${sel.has(i.item)?'checked':''} onchange="irDivToggleItem('${irEsc(i.item)}')"></td>
       <td class="mono">${irEsc(i.item)}</td>
       <td title="${irEsc(i.descricao||'')}">${irEsc(irResumirDescricao(i.descricao))}</td>
-      ${num(i.netValor, irFmtMoney)}
-      ${num(i.netQtd, irFmtInt)}
+      ${numAbs(i.absValor, i.netValor, irFmtMoney)}
+      ${numAbs(i.absQtd, i.netQtd, irFmtInt)}
       <td class="mono ofe-ano ${i.netValorAno<0?'neg':(i.netValorAno>0?'pos':'')}">${i.netValorAno>0?'+':''}${irFmtMoney(i.netValorAno)}</td>
       <td class="mono ofe-ano ${i.netQtdAno<0?'neg':(i.netQtdAno>0?'pos':'')}">${i.netQtdAno>0?'+':''}${irFmtInt(i.netQtdAno)}</td>
       <td class="mono"><button class="btn-link" onclick="irDivExpandir('${irEsc(i.item)}')">${irFmtInt(i.nLocais)} ${aberto?'▾':'▸'}</button></td>
