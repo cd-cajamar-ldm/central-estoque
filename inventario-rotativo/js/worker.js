@@ -107,8 +107,25 @@ function irAcharLinhaCabecalho(ws){
   }
   return 0;
 }
+/* Algumas extrações automatizadas (QRY0390 confirmado: aba "Planilha1" de resumo,
+   sobrando do relatório que gerou o arquivo, na frente da aba "QRY0390" com os
+   dados de verdade) trazem mais de uma aba, e a aba com os dados nem sempre é a
+   primeira. Usa a aba com mais células preenchidas (linhas × colunas) — a aba de
+   resumo é sempre pequena (poucas linhas, 1-2 colunas) perto da aba de dados real. */
+function irAcharMelhorAba(wb){
+  let melhor = wb.SheetNames[0], melhorArea = -1;
+  for(const nome of wb.SheetNames){
+    const ws = wb.Sheets[nome];
+    const ref = ws && ws['!ref'];
+    if(!ref) continue;
+    const range = XLSX.utils.decode_range(ref);
+    const area = (range.e.r-range.s.r+1) * (range.e.c-range.s.c+1);
+    if(area > melhorArea){ melhorArea = area; melhor = nome; }
+  }
+  return melhor;
+}
 function sheetToRows(wb){
-  const ws = wb.Sheets[wb.SheetNames[0]];
+  const ws = wb.Sheets[irAcharMelhorAba(wb)];
   return XLSX.utils.sheet_to_json(ws, {defval:null, raw:true, range: irAcharLinhaCabecalho(ws)});
 }
 function getVal(row, key){ return key ? row[key] : null; }
