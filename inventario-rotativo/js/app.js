@@ -948,7 +948,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v220';
+const IR_APP_VERSION = 'v221';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -3138,7 +3138,18 @@ async function irPastaProcessarCiclos(forcarChave){
         files051:(g.arquivos['051']||[]).map(a=>a.file),
         limparFiles:false, abrirDashboard:false
       });
-      if(!ok){ irShowToast('Parei no Ciclo '+irPastaCicloChave(g)+' — os seguintes não foram processados.', true); break; }
+      if(!ok){
+        // irProcessarCiclo já mostrou o motivo específico (arquivo faltando, erro do
+        // worker etc.) num toast — só que o toast seguinte sempre SOBRESCREVIA esse
+        // texto com uma mensagem genérica, apagando a única pista de causa que o
+        // usuário via na tela. Reaproveita o texto do toast de erro que já está lá.
+        const toastEl = document.getElementById('toast');
+        const motivo = toastEl && toastEl.classList.contains('error') ? toastEl.textContent : '';
+        const temMaisNaFila = fila.indexOf(g) < fila.length-1;
+        irShowToast((motivo || ('Falha ao processar o Ciclo '+irPastaCicloChave(g)+'.'))
+          + (temMaisNaFila ? ' Os demais ciclos da fila não foram processados.' : ''), true);
+        break;
+      }
       await irPastaMarcarCiclo(g);
     }
   } finally {
