@@ -948,7 +948,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v216';
+const IR_APP_VERSION = 'v217';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -5467,7 +5467,9 @@ function irDivEhAIR(d){
   return String(d.motivo||'').trim().toUpperCase()==='AIR';
 }
 function irDivTipoBate(d){
-  return (IR.divTipo||'inventario')==='inventario' ? irDivEhAIR(d) : !irDivEhAIR(d);
+  const t = IR.divTipo||'inventario';
+  if(t==='todos') return true;
+  return t==='inventario' ? irDivEhAIR(d) : !irDivEhAIR(d);
 }
 function irDivSetTipo(tipo){
   if(IR.divTipo===tipo) return;
@@ -6036,8 +6038,9 @@ function irRenderDivTipoToggle(){
   return `<div class="panel" style="display:flex;align-items:center;gap:12px;">
     <strong style="font-size:13px;color:var(--ink-muted,#6B7280);">Ver</strong>
     <div class="conc-chips" style="margin:0;">
-      <button class="conc-chip ${t==='inventario'?'on':''}" onclick="irDivSetTipo('inventario')">Inventário rotativo (AIR)</button>
-      <button class="conc-chip ${t==='geral'?'on':''}" onclick="irDivSetTipo('geral')">Geral (outros motivos)</button>
+      <button class="conc-chip ${t==='inventario'?'on':''}" onclick="irDivSetTipo('inventario')">Inventário Rotativo</button>
+      <button class="conc-chip ${t==='geral'?'on':''}" onclick="irDivSetTipo('geral')">Geral</button>
+      <button class="conc-chip ${t==='todos'?'on':''}" onclick="irDivSetTipo('todos')">Inventário Rotativo e Geral</button>
     </div>
   </div>`;
 }
