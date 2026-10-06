@@ -18,6 +18,11 @@ const IR = {
   files:{f390:null, f843:[null,null,null,null], fCong:[null,null,null,null], f278:[null,null,null,null], f051:[null,null,null,null]},
   processing:false, progress:{stage:'', pct:0},
   divergencias:[], locais:[], contagens:[],
+  // 'inventario' = só motivo AIR (o ciclo rotativo propriamente dito); 'geral' = os
+  // demais motivos que já contam pro NET hoje (ADE, AIC...). Pedido do usuário pra
+  // não misturar as duas coisas numa tabela só, já que elas respondem perguntas
+  // diferentes (como o rotativo está indo vs. o que mais está pesando no CD).
+  divTipo:'inventario',
   divEscopo:{tipo:'ciclo'}, divEscopoDados:null, divAnoCache:null, divSelecionados:null,
   divCorte:null, divCorteQtd:null, divBusca:'', divExpandido:null,
   // Base do corte (o que define ofensor) e sentidos ligados na tabela — multi-seleção.
@@ -940,7 +945,7 @@ const IR_INDICADORES_VERSION = 22; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v214';
+const IR_APP_VERSION = 'v215';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -5447,8 +5452,23 @@ function irDivMotivoConta(d){
   const m = (IR.net410Legenda||[]).find(x=>x.id===d.motivo);
   return !m || m.considerarNet !== false;
 }
+// AIR é o ajuste do próprio ciclo rotativo; qualquer outro motivo que conte pro NET
+// (ADE, AIC...) é inventário de outro programa, não deste ciclo — por isso as duas
+// coisas não podem ficar misturadas na mesma tabela/cartão/auditoria.
+function irDivEhAIR(d){
+  return String(d.motivo||'').trim().toUpperCase()==='AIR';
+}
+function irDivTipoBate(d){
+  return (IR.divTipo||'inventario')==='inventario' ? irDivEhAIR(d) : !irDivEhAIR(d);
+}
+function irDivSetTipo(tipo){
+  if(IR.divTipo===tipo) return;
+  IR.divTipo = tipo;
+  IR.divSelecionados = null; IR.divAuditoria = null; // seleção/auditoria do outro recorte não faz sentido aqui
+  irRenderView();
+}
 function irDivLinhasValidas(lista){
-  return irSoLocaisConcluidos(lista || []).filter(d=>d.diferenca!==0 && irDivMotivoConta(d));
+  return irSoLocaisConcluidos(lista || []).filter(d=>d.diferenca!==0 && irDivMotivoConta(d) && irDivTipoBate(d));
 }
 // Divergências do período escolhido no filtro do topo. Isolado porque a
 // conciliação com a QRY410 precisa exatamente do mesmo recorte.
@@ -5993,6 +6013,19 @@ async function irDivExportarHojeEEnviar(){
 }
 
 /* ---------- RENDER ---------- */
+// Alterna a tela inteira (cartões NET, tabela, similares, auditoria) entre só o
+// ajuste do ciclo rotativo (AIR) e os demais motivos que contam pro NET. É a
+// primeira decisão da tela porque muda o que TODO o resto mostra.
+function irRenderDivTipoToggle(){
+  const t = IR.divTipo||'inventario';
+  return `<div class="panel" style="display:flex;align-items:center;gap:12px;">
+    <strong style="font-size:13px;color:var(--ink-muted,#6B7280);">Ver</strong>
+    <div class="conc-chips" style="margin:0;">
+      <button class="conc-chip ${t==='inventario'?'on':''}" onclick="irDivSetTipo('inventario')">Inventário rotativo (AIR)</button>
+      <button class="conc-chip ${t==='geral'?'on':''}" onclick="irDivSetTipo('geral')">Geral (outros motivos)</button>
+    </div>
+  </div>`;
+}
 function irRenderDivFiltros(){
   const e = IR.divEscopo;
   const b = irDivBase();
@@ -6405,13 +6438,14 @@ function irRenderDivergencias(){
       IR._divCarregando = true;
       irCarregarDivEscopo().finally(()=>{ IR._divCarregando = false; irRenderView(); });
     }
-    return irRenderDivFiltros() + irDivCarregando();
+    return irRenderDivTipoToggle() + irRenderDivFiltros() + irDivCarregando();
   }
   // Gerada a auditoria, ela toma a tela: é a folha que o auditor vai imprimir, e
   // deixar as divergências embaixo só fazia rolar página até achar.
-  if(IR.divAuditoria) return irRenderDivAuditoria();
+  if(IR.divAuditoria) return irRenderDivTipoToggle() + irRenderDivAuditoria();
   const c = irDivCalcItens();
   return `
+    ${irRenderDivTipoToggle()}
     ${irRenderDivFiltros()}
     ${irRenderDivResumo(c)}
     ${irRenderDivTabela(c)}
