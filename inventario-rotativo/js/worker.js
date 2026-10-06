@@ -107,12 +107,31 @@ function irAcharLinhaCabecalho(ws){
   }
   return 0;
 }
-/* Algumas extrações automatizadas (QRY0390 confirmado: aba "Planilha1" de resumo,
-   sobrando do relatório que gerou o arquivo, na frente da aba "QRY0390" com os
-   dados de verdade) trazem mais de uma aba, e a aba com os dados nem sempre é a
-   primeira. Usa a aba com mais células preenchidas (linhas × colunas) — a aba de
-   resumo é sempre pequena (poucas linhas, 1-2 colunas) perto da aba de dados real. */
-function irAcharMelhorAba(wb){
+/* Algumas extrações trazem mais de uma aba, e a aba com os dados nem sempre é a
+   primeira nem é a maior — já vimos as duas formas:
+     - QRY0390: aba "Planilha1" de resumo (pequena) na frente da aba com os dados
+       de verdade (grande) — "usar a maior aba" resolvia.
+     - Base Congelada: aba "Planilha1" que é um espelho histórico de TODOS os
+       locais já congelados (maior, mas com outras colunas ou dado de outro
+       ciclo) na frente da aba "Ciclo N" com os locais de verdade deste ciclo
+       (menor) — "usar a maior aba" escolhia errado, e a Base Congelada falhava
+       com "colunas obrigatórias não encontradas" mesmo tendo a aba certa do lado.
+   Por isso, quando quem chama sabe quais colunas precisa (aliasMap + required),
+   a escolha é pela aba cujo cabeçalho de fato resolve essas colunas — não pelo
+   tamanho. Sem essa informação (chamadas antigas), cai no critério de tamanho
+   como antes. */
+function irAcharMelhorAba(wb, aliasMap, required){
+  if(aliasMap && required && required.length){
+    for(const nome of wb.SheetNames){
+      const ws = wb.Sheets[nome];
+      if(!ws || !ws['!ref']) continue;
+      const linhaCabecalho = irAcharLinhaCabecalho(ws);
+      const linhas = XLSX.utils.sheet_to_json(ws, {defval:null, raw:true, range: linhaCabecalho});
+      if(!linhas.length) continue;
+      const resolved = buildAliasResolver(Object.keys(linhas[0]), aliasMap);
+      if(required.every(k=>resolved[k])) return nome;
+    }
+  }
   let melhor = wb.SheetNames[0], melhorArea = -1;
   for(const nome of wb.SheetNames){
     const ws = wb.Sheets[nome];
@@ -124,8 +143,8 @@ function irAcharMelhorAba(wb){
   }
   return melhor;
 }
-function sheetToRows(wb){
-  const ws = wb.Sheets[irAcharMelhorAba(wb)];
+function sheetToRows(wb, aliasMap, required){
+  const ws = wb.Sheets[irAcharMelhorAba(wb, aliasMap, required)];
   return XLSX.utils.sheet_to_json(ws, {defval:null, raw:true, range: irAcharLinhaCabecalho(ws)});
 }
 function getVal(row, key){ return key ? row[key] : null; }
@@ -300,7 +319,7 @@ function detectarCiclo843(bufs){
   let rows = [];
   for(const buf of (bufs||[])){
     const wb = XLSX.read(buf, {type:'array', cellDates:true});
-    rows = rows.concat(sheetToRows(wb));
+    rows = rows.concat(sheetToRows(wb, ALIAS_843, ['local','item','idConferencia','qtFis','usuario']));
   }
   if(!rows.length) return {erro:'QRY0843: planilha vazia.'};
   const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_843);
@@ -368,7 +387,7 @@ const ALIAS_160 = {
 async function runPipeline160({buf160}){
   post('progress', {stage:'Lendo QRY0160...', pct:5});
   const wb = XLSX.read(buf160, {type:'array', cellDates:true});
-  const rows = sheetToRows(wb);
+  const rows = sheetToRows(wb, ALIAS_160, ['item','local','qtd','dataMovimento']);
   if(!rows.length) throw new Error('QRY0160: planilha vazia.');
   const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_160);
   validateColumns(r, ['item','local','qtd','dataMovimento'], 'QRY0160');
@@ -438,7 +457,7 @@ async function runPipeline160({buf160}){
 async function runPipeline390({buf390}){
   post('progress', {stage:'Lendo QRY0390...', pct:5});
   const wb = XLSX.read(buf390, {type:'array', cellDates:true});
-  const rows = sheetToRows(wb);
+  const rows = sheetToRows(wb, ALIAS_390, ['item','local','quantidade']);
   if(!rows.length) throw new Error('QRY0390: planilha vazia.');
   const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_390);
   validateColumns(r, ['item','local','quantidade'], 'QRY0390');
@@ -545,7 +564,7 @@ function readMultiSheet(bufs, aliasMap, requiredCols, label, keyFields){
   let rowsRaw = [];
   for(const buf of bufs){
     const wb = XLSX.read(buf, {type:'array', cellDates:true});
-    rowsRaw = rowsRaw.concat(sheetToRows(wb));
+    rowsRaw = rowsRaw.concat(sheetToRows(wb, aliasMap, requiredCols));
   }
   if(!rowsRaw.length) throw new Error(label+': planilha vazia.');
   const resolved = buildAliasResolver(Object.keys(rowsRaw[0]), aliasMap);
@@ -587,7 +606,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   let rows390 = [], r390 = null;
   if(buf390){
     const wb390 = XLSX.read(buf390, {type:'array', cellDates:true});
-    rows390 = sheetToRows(wb390);
+    rows390 = sheetToRows(wb390, ALIAS_390, ['item','local','quantidade']);
     if(rows390.length){
       r390 = buildAliasResolver(Object.keys(rows390[0]), ALIAS_390);
       validateColumns(r390, ['item','local','quantidade'], 'QRY0390');
@@ -1559,7 +1578,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
 async function runPipeline410({buf410}){
   post('progress', {stage:'Lendo QRY410...', pct:5});
   const wb410 = XLSX.read(buf410, {type:'array', cellDates:true});
-  const rows410 = sheetToRows(wb410);
+  const rows410 = sheetToRows(wb410, ALIAS_410, ['dtMov','sentido','vlMov']);
   if(!rows410.length) throw new Error('QRY410: planilha vazia.');
   const r410 = buildAliasResolver(Object.keys(rows410[0]), ALIAS_410);
   validateColumns(r410, ['dtMov','sentido','vlMov'], 'QRY410');
