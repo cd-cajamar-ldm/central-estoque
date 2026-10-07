@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 25;
+const IR_INDICADORES_VERSION = 26;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1194,8 +1194,12 @@ function irEhCicloLegadoAIR(cicloNumero, dataAbertura){
    locais / 92,2351% valor, 1.325.889 peças contadas, 28.274 divergentes,
    55.922 locais contados, 3.510 divergentes, R$131.391.330,63 físico,
    R$10.202.354,92 divergente).
-   Ciclo 1: só as 3 acurácias — não recebemos a planilha detalhada desse
-   ciclo, então o resto dos números dele continua vindo do cálculo normal. */
+   Ciclo 1: Locais vem da Base Orçada (planilha enviada depois), mas Peças foi
+   travada por pedido explícito em 96,6% — a aproximação da regra atual (só
+   AIR, última rodada por local; 52.941 peças divergentes ÷ 1.546.390
+   contadas, física como proxy do saldo lógico, que esse relatório não tem) —
+   em vez dos 96,31% que a Base Orçada dá pela regra legada. Valor segue sem
+   travar (dado tratado como variável/não confiável). */
 function irValoresLegadoLiterais(cicloNumero, dataAbertura){
   if(!irEhCicloLegadoAIR(cicloNumero, dataAbertura)) return null;
   if(cicloNumero===2) return {
@@ -1207,7 +1211,11 @@ function irValoresLegadoLiterais(cicloNumero, dataAbertura){
     locaisContadosTotal: 55922, locaisDivergentes: 3510,
     valorFisicoTotal: 131391330.6318, valorDivergenteAbsoluto: 10202354.9151
   };
-  if(cicloNumero===1) return {acuraciaPecas: 0.969, acuraciaLocal: 0.859, acuraciaValor: 0.917};
+  if(cicloNumero===1) return {
+    acuraciaPecas: 1 - 52941/1546390, acuraciaLocal: 0.8598897214760356, acuraciaValor: 0.917,
+    pecasContadas: 1546390, pecasDivergentes: 52941,
+    locaisContadosTotal: 56584, locaisDivergentes: 7928
+  };
   return null;
 }
 // Mesma ideia de irDivergenciasDoCiclo (só a rodada de fechamento de cada local),
