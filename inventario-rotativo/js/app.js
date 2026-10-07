@@ -1811,7 +1811,15 @@ function irAcuraciaDoAno(ano){
 function irRenderAcuraciaAnualPanel(){
   const ano = irCicloAno(IR.cicloAtivo);
   const ac = irAcuraciaDoAno(ano);
-  if(!ac) return '';
+  if(!ac){
+    // Nunca sumir em silêncio: sem isso, um painel vazio e um painel com bug
+    // pareciam a mesma coisa (nada na tela), e não dava pra saber qual era.
+    const total = (IR.comparativoCiclos||[]).length;
+    const msg = IR.comparativoCiclos===null
+      ? 'Carregando acurácia do ano...'
+      : `Sem dados de acurácia do ano${ano?(' de '+ano):''} (${total} ciclo(s) carregado(s)).`;
+    return `<div class="panel"><h3>Acurácia Anual</h3><p class="field-hint">${irEsc(msg)}</p></div>`;
+  }
   const linha = (rot, v, cor, base, divergente) => `<div class="acan-row">
     <div class="acan-label">${irEsc(rot)}</div>
     <div class="acan-qt"><span class="k">Base</span><span class="n mono">${base}</span></div>
