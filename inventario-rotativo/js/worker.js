@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 22;
+const IR_INDICADORES_VERSION = 23;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
