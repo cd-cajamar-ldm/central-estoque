@@ -276,12 +276,17 @@ async function recalcularIndicadores(cicloId){
   }
   const STATUS_PRIORIDADE = {convergido:3, encerrado_sem_convergencia:2, em_contagem:1};
   const statusPorLocalAIR = new Map();
+  // Ciclo 1 e 2 de 2026 (regra de quando fecharam): status do melhor de QUALQUER
+  // motivo, não só AIR — ver irEhCicloLegadoAIR.
+  const statusPorLocalTodoMotivo = new Map();
   for(const [chave, lista] of porVisita){
     if(!lista.some(c=>c.idConferencia>=2)) continue;
-    if(!lista.some(c=>String(c.motivo||'').trim().toUpperCase()==='AIR')) continue;
     const local = chave.split('|')[0];
     const maxRodada = Math.max(...lista.map(c=>c.idConferencia||0));
     const st = {status:'convergido', rodadas:maxRodada};
+    const atualTodo = statusPorLocalTodoMotivo.get(local);
+    if(!atualTodo || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atualTodo.status]) statusPorLocalTodoMotivo.set(local, st);
+    if(!lista.some(c=>String(c.motivo||'').trim().toUpperCase()==='AIR')) continue;
     const atual = statusPorLocalAIR.get(local);
     if(!atual || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atual.status]) statusPorLocalAIR.set(local, st);
   }
@@ -289,9 +294,11 @@ async function recalcularIndicadores(cicloId){
   for(const d of divergencias) pecasFisicasPorLocal.set(d.local, (pecasFisicasPorLocal.get(d.local)||0) + (d.qtdeFisica||0));
 
   post('progress', {stage:'Recalculando indicadores...', pct:75});
+  const cicloNumero = ciclo && ciclo.numero;
   const ind = calcularIndicadores({
     congelados, contagens: contagens.filter(c=>c.liquidada!==false), divergencias,
-    statusPorLocal: statusPorLocalAIR, pecasFisicasPorLocal,
+    statusPorLocal: irEhCicloLegadoAIR(cicloNumero, ciclo && ciclo.dataAbertura) ? statusPorLocalTodoMotivo : statusPorLocalAIR,
+    pecasFisicasPorLocal, cicloNumero,
     dataAbertura: ciclo && ciclo.dataAbertura, dataPrevistaTermino: ciclo && ciclo.dataPrevistaTermino,
     locaisComCancelamento: antigo.locaisComCancelamento,
     tentativasCanceladas: antigo.tentativasCanceladas,
@@ -1069,7 +1076,9 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   }
 
   post('progress', {stage:'Calculando indicadores...', pct:90});
-  const indicadores = calcularIndicadores({congelados: locais, contagens: contagensLiquidadas, divergencias, statusPorLocal: statusPorLocalAIR, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
+  const indicadores = calcularIndicadores({congelados: locais, contagens: contagensLiquidadas, divergencias,
+    statusPorLocal: irEhCicloLegadoAIR(cicloNumero, dataAbertura) ? statusPorLocal : statusPorLocalAIR,
+    pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino, cicloNumero,
     locaisComCancelamento: locaisComCancelamentoSet.size, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
     locaisCanceladosAposBater: locaisCanceladosAposBater.size, locaisCanceladosInterrompidos: locaisCanceladosInterrompidos.size});
 
@@ -1165,6 +1174,28 @@ function irDivergenciasDoCiclo(divergencias){
   }
   return air.filter(d=>irNumInventario(d.inventario) === ultima.get(d.local));
 }
+/* Ciclo 1 e 2 de 2026 fecharam e foram apresentados ao comitê ANTES da regra acima
+   existir (#258, motor 17 — só AIR, só rodada de fechamento, saldo lógico no
+   denominador). Reprocessar esses dois ciclos com a regra nova mudaria um número
+   já publicado, então eles ficam travados na regra de quando fecharam (motor 16:
+   peças divergentes sobre peças CONTADAS — física, não saldo lógico — todo
+   motivo entra, só a rodada de fechamento de cada local). Ciclo 3 em diante usa
+   a regra atual. */
+function irEhCicloLegadoAIR(cicloNumero, dataAbertura){
+  const m = /^(\d{4})-\d{2}-\d{2}/.exec(String(dataAbertura||'').trim());
+  const ano = m ? +m[1] : (isNaN(new Date(dataAbertura).getTime()) ? null : new Date(dataAbertura).getFullYear());
+  return ano===2026 && (cicloNumero===1 || cicloNumero===2);
+}
+// Mesma ideia de irDivergenciasDoCiclo (só a rodada de fechamento de cada local),
+// mas sem o recorte de motivo — motor 16 não separava AIR de ADE/AIC.
+function irDivergenciasLatestAnyMotivo(divergencias){
+  const ultima = new Map();
+  for(const d of divergencias){
+    const n = irNumInventario(d.inventario);
+    if(!ultima.has(d.local) || n > ultima.get(d.local)) ultima.set(d.local, n);
+  }
+  return divergencias.filter(d=>irNumInventario(d.inventario) === ultima.get(d.local));
+}
 /* O escopo do ciclo é a BASE CONGELADA: local que está nela conta, local que não
    está não conta. É ela que define quais endereços o ciclo foi orçado pra cobrir, e
    por isso é o único norte confiável.
@@ -1183,7 +1214,7 @@ function irDivergenciasDoCiclo(divergencias){
    ele é assunto do módulo de Transitórios, não uma exceção escrita em código.
 
    A aba Divergências continua enxergando tudo, porque é auditoria do CD inteiro. */
-function calcularIndicadores({congelados: congeladosTodos, contagens, divergencias: divergenciasTodas, statusPorLocal: statusPorLocalTodos, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino,
+function calcularIndicadores({congelados: congeladosTodos, contagens, divergencias: divergenciasTodas, statusPorLocal: statusPorLocalTodos, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino, cicloNumero,
   locaisComCancelamento, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
   locaisCanceladosAposBater, locaisCanceladosInterrompidos}){
   // Escopo do ciclo: a base congelada, inteira. Local fora dela não entra em
@@ -1199,8 +1230,14 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   const horasPerdidasCancelamento = (minutosPerdidosCancelamento||0)/60;
 
   const clamp01 = (n)=>Math.max(0, Math.min(1, n));
-  // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo.
-  const divergencias = irDivergenciasDoCiclo(divergenciasTodas).filter(d=>noCiclo.has(d.local));
+  // Ciclo 1 e 2 de 2026: regra de quando fecharam (motor 16, pré-#258) — todo
+  // motivo entra, toda rodada soma, física no denominador da Acurácia Peças. Não
+  // dá pra reabrir número já publicado; statusPorLocal de legado (todo motivo) já
+  // vem escolhido por quem chamou (runPipeline/recalcularIndicadores).
+  const modoLegado = irEhCicloLegadoAIR(cicloNumero, dataAbertura);
+  // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo (ou, em
+  // modoLegado, só o escopo da base congelada — sem recorte de motivo/rodada).
+  const divergencias = (modoLegado ? irDivergenciasLatestAnyMotivo(divergenciasTodas) : irDivergenciasDoCiclo(divergenciasTodas)).filter(d=>noCiclo.has(d.local));
 
   /* Base de cada item na Acurácia Peças/Valor = SALDO DO SISTEMA (a rodada 1, o que
      o WMS dizia ter antes da contagem). É a régua pedida pela operação: acurácia é
@@ -1235,7 +1272,8 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
      base zero, pesando no erro sem somar na base — ver comentário na baseQtd
      acima. O clamp01 só segura o resultado final entre 0% e 100%. */
   const totalSaldoLogico = divergenciasConcluidas.reduce((s,d)=>s+baseQtd(d),0);
-  const acuraciaPecas = clamp01(totalSaldoLogico>0 ? 1-(totalDiferencaAbs/totalSaldoLogico) : 1);
+  const baseAcuraciaPecas = modoLegado ? totalPecasFisicas : totalSaldoLogico;
+  const acuraciaPecas = clamp01(baseAcuraciaPecas>0 ? 1-(totalDiferencaAbs/baseAcuraciaPecas) : 1);
   const totalItensContados = divergenciasConcluidas.length;
 
   // "AIR" (X1) é tratado como um local normal, no mesmo padrão de qualquer outro —
@@ -1323,7 +1361,8 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     const totalDiferencaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.diferenca),0);
     // Mesmo denominador do KPI do topo: o saldo do sistema.
     const totalSaldoGrupo = divsConcluidos.reduce((s,d)=>s+baseQtd(d),0);
-    const acuraciaPecas = clamp01(totalSaldoGrupo>0 ? 1-(totalDiferencaAbs/totalSaldoGrupo) : 1);
+    const baseGrupo = modoLegado ? totalPecasGrupo : totalSaldoGrupo;
+    const acuraciaPecas = clamp01(baseGrupo>0 ? 1-(totalDiferencaAbs/baseGrupo) : 1);
     const totalVlFisico = divsConcluidos.reduce((s,d)=>s+d.vlFisico,0);
     const totalVlDivergenciaAbs = divsConcluidos.reduce((s,d)=>s+Math.abs(d.vlDivergencia),0);
     const totalVlSaldoGrupo = divsConcluidos.reduce((s,d)=>s+baseValor(d),0);
@@ -1505,7 +1544,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
         valorContado: g.valorContado, valorSaldoLogico: g.valorSaldoLogico,
         valorDivergente: g.valorDivergente,
         locaisContados: g.locaisContados, locaisDivergentes,
-        acuraciaPecas: clamp01(g.pecasSaldoLogico>0 ? 1-(g.pecasDivergentes/g.pecasSaldoLogico) : 1),
+        acuraciaPecas: clamp01((modoLegado?g.pecasContadas:g.pecasSaldoLogico)>0 ? 1-(g.pecasDivergentes/(modoLegado?g.pecasContadas:g.pecasSaldoLogico)) : 1),
         acuraciaValor: clamp01(g.valorSaldoLogico>0 ? 1-(g.valorDivergente/g.valorSaldoLogico) : 1),
         acuraciaLocal: clamp01(g.locaisContados>0 ? 1-(locaisDivergentes/g.locaisContados) : 1)
       };
@@ -1560,8 +1599,9 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     itensSemPreco, itensSemPrecoTotal: semPrecoPorItem.size,
     pecasContadas: totalPecasFisicas, pecasDivergentes: totalDiferencaAbs,
     // Base da acurácia de peças, gravada junto pra que a soma anual e a mensal
-    // usem o mesmo denominador do ciclo em vez de recalcular pela física.
-    pecasSaldoLogico: totalSaldoLogico,
+    // usem o mesmo denominador do ciclo em vez de recalcular pela física. Em
+    // modoLegado é a própria física — mesma base usada no cálculo acima.
+    pecasSaldoLogico: baseAcuraciaPecas,
     qtdRecontagens, tempoMedioContagemMin, diasRestantes, eficiencia,
     rankingProdutividade, porRua, porLog, contadosPorDia, porDiaRua, divergentesPorDia, porMes,
     topItensPositivos, topItensNegativos, topItensPositivosValor, topItensNegativosValor
