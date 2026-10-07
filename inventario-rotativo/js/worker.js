@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 24;
+const IR_INDICADORES_VERSION = 26;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1194,17 +1194,28 @@ function irEhCicloLegadoAIR(cicloNumero, dataAbertura){
    locais / 92,2351% valor, 1.325.889 peças contadas, 28.274 divergentes,
    55.922 locais contados, 3.510 divergentes, R$131.391.330,63 físico,
    R$10.202.354,92 divergente).
-   Ciclo 1: só as 3 acurácias — não recebemos a planilha detalhada desse
-   ciclo, então o resto dos números dele continua vindo do cálculo normal. */
+   Ciclo 1: Locais vem da Base Orçada (planilha enviada depois), mas Peças foi
+   travada por pedido explícito em 96,6% — a aproximação da regra atual (só
+   AIR, última rodada por local; 52.941 peças divergentes ÷ 1.546.390
+   contadas, física como proxy do saldo lógico, que esse relatório não tem) —
+   em vez dos 96,31% que a Base Orçada dá pela regra legada. Valor segue sem
+   travar (dado tratado como variável/não confiável). */
 function irValoresLegadoLiterais(cicloNumero, dataAbertura){
   if(!irEhCicloLegadoAIR(cicloNumero, dataAbertura)) return null;
   if(cicloNumero===2) return {
     acuraciaPecas: 0.978675439648417, acuraciaLocal: 0.9372340045062766, acuraciaValor: 0.922351384478401,
-    pecasContadas: 1325889, pecasDivergentes: 28274, pecasSaldoLogico: 1325889,
+    pecasContadas: 1325889, pecasDivergentes: 28274,
+    // pecasSaldoLogico (tile "Sistêmicas") NÃO entra aqui: a Base Orçada não
+    // tem essa coluna separada da física, então fica o saldo sistêmico real
+    // calculado (totalSaldoLogico), não um número travado.
     locaisContadosTotal: 55922, locaisDivergentes: 3510,
     valorFisicoTotal: 131391330.6318, valorDivergenteAbsoluto: 10202354.9151
   };
-  if(cicloNumero===1) return {acuraciaPecas: 0.969, acuraciaLocal: 0.859, acuraciaValor: 0.917};
+  if(cicloNumero===1) return {
+    acuraciaPecas: 1 - 52941/1546390, acuraciaLocal: 0.8598897214760356, acuraciaValor: 0.917,
+    pecasContadas: 1546390, pecasDivergentes: 52941,
+    locaisContadosTotal: 56584, locaisDivergentes: 7928
+  };
   return null;
 }
 // Mesma ideia de irDivergenciasDoCiclo (só a rodada de fechamento de cada local),
@@ -1619,10 +1630,11 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     horasPerdidasCancelamento, sessoesComHorarioRegistrado: sessoesComHorarioRegistrado||0, taxaCancelamento,
     itensSemPreco, itensSemPrecoTotal: semPrecoPorItem.size,
     pecasContadas: totalPecasFisicas, pecasDivergentes: totalDiferencaAbs,
-    // Base da acurácia de peças, gravada junto pra que a soma anual e a mensal
-    // usem o mesmo denominador do ciclo em vez de recalcular pela física. Em
-    // modoLegado é a própria física — mesma base usada no cálculo acima.
-    pecasSaldoLogico: baseAcuraciaPecas,
+    // Saldo sistêmico de verdade (soma de qtdeSistema), pra mostrar na tela —
+    // SEMPRE esse número, mesmo em modoLegado, onde a Acurácia usa a física
+    // como denominador (baseAcuraciaPecas); misturar os dois fazia "Sistêmicas"
+    // aparecer igual a "Contadas", que é duas métricas diferentes viradas uma.
+    pecasSaldoLogico: totalSaldoLogico,
     qtdRecontagens, tempoMedioContagemMin, diasRestantes, eficiencia,
     rankingProdutividade, porRua, porLog, contadosPorDia, porDiaRua, divergentesPorDia, porMes,
     topItensPositivos, topItensNegativos, topItensPositivosValor, topItensNegativosValor
