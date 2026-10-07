@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 23;
+const IR_INDICADORES_VERSION = 24;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1186,6 +1186,27 @@ function irEhCicloLegadoAIR(cicloNumero, dataAbertura){
   const ano = m ? +m[1] : (isNaN(new Date(dataAbertura).getTime()) ? null : new Date(dataAbertura).getFullYear());
   return ano===2026 && (cicloNumero===1 || cicloNumero===2);
 }
+/* Nenhuma fórmula reproduziu exatamente o número já publicado do Ciclo 1 e 2 —
+   a planilha original ("Base Orçada"/Bseller) tinha correções manuais
+   (Erros de Contagens.csv) que não dá pra refazer por código. Esses valores
+   são o número literal de quando o ciclo fechou, não um cálculo.
+   Ciclo 2: linha "Total" da Base Orçada real (97,8675% peças / 93,7234%
+   locais / 92,2351% valor, 1.325.889 peças contadas, 28.274 divergentes,
+   55.922 locais contados, 3.510 divergentes, R$131.391.330,63 físico,
+   R$10.202.354,92 divergente).
+   Ciclo 1: só as 3 acurácias — não recebemos a planilha detalhada desse
+   ciclo, então o resto dos números dele continua vindo do cálculo normal. */
+function irValoresLegadoLiterais(cicloNumero, dataAbertura){
+  if(!irEhCicloLegadoAIR(cicloNumero, dataAbertura)) return null;
+  if(cicloNumero===2) return {
+    acuraciaPecas: 0.978675439648417, acuraciaLocal: 0.9372340045062766, acuraciaValor: 0.922351384478401,
+    pecasContadas: 1325889, pecasDivergentes: 28274, pecasSaldoLogico: 1325889,
+    locaisContadosTotal: 55922, locaisDivergentes: 3510,
+    valorFisicoTotal: 131391330.6318, valorDivergenteAbsoluto: 10202354.9151
+  };
+  if(cicloNumero===1) return {acuraciaPecas: 0.969, acuraciaLocal: 0.859, acuraciaValor: 0.917};
+  return null;
+}
 // Mesma ideia de irDivergenciasDoCiclo (só a rodada de fechamento de cada local),
 // mas sem o recorte de motivo — motor 16 não separava AIR de ADE/AIC.
 function irDivergenciasLatestAnyMotivo(divergencias){
@@ -1586,7 +1607,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     tempoMedioMin: g.nMin>0 ? g.minutos/g.nMin : 0
   })).sort((a,b)=>b.locais-a.locais);
 
-  return {
+  const indicadoresFinais = {
     _v: IR_INDICADORES_VERSION,
     locaisCongelados, locaisContadosTotal, locaisConcluidos, locaisPendentes, locaisEmContagem, locaisNaoIniciados,
     andamentoCiclo, acuraciaPecas, acuraciaLocal, acuraciaValor, meta: IR_META_ACURACIA,
@@ -1606,6 +1627,9 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     rankingProdutividade, porRua, porLog, contadosPorDia, porDiaRua, divergentesPorDia, porMes,
     topItensPositivos, topItensNegativos, topItensPositivosValor, topItensNegativosValor
   };
+  // Ciclo 1 e 2 de 2026: número literal de quando o ciclo fechou, por cima do
+  // cálculo acima — ver irValoresLegadoLiterais.
+  return Object.assign(indicadoresFinais, irValoresLegadoLiterais(cicloNumero, dataAbertura));
 }
 
 /* ============================================================
