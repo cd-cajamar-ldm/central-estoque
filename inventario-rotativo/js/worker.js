@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 24;
+const IR_INDICADORES_VERSION = 25;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1200,7 +1200,10 @@ function irValoresLegadoLiterais(cicloNumero, dataAbertura){
   if(!irEhCicloLegadoAIR(cicloNumero, dataAbertura)) return null;
   if(cicloNumero===2) return {
     acuraciaPecas: 0.978675439648417, acuraciaLocal: 0.9372340045062766, acuraciaValor: 0.922351384478401,
-    pecasContadas: 1325889, pecasDivergentes: 28274, pecasSaldoLogico: 1325889,
+    pecasContadas: 1325889, pecasDivergentes: 28274,
+    // pecasSaldoLogico (tile "Sistêmicas") NÃO entra aqui: a Base Orçada não
+    // tem essa coluna separada da física, então fica o saldo sistêmico real
+    // calculado (totalSaldoLogico), não um número travado.
     locaisContadosTotal: 55922, locaisDivergentes: 3510,
     valorFisicoTotal: 131391330.6318, valorDivergenteAbsoluto: 10202354.9151
   };
@@ -1619,10 +1622,11 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     horasPerdidasCancelamento, sessoesComHorarioRegistrado: sessoesComHorarioRegistrado||0, taxaCancelamento,
     itensSemPreco, itensSemPrecoTotal: semPrecoPorItem.size,
     pecasContadas: totalPecasFisicas, pecasDivergentes: totalDiferencaAbs,
-    // Base da acurácia de peças, gravada junto pra que a soma anual e a mensal
-    // usem o mesmo denominador do ciclo em vez de recalcular pela física. Em
-    // modoLegado é a própria física — mesma base usada no cálculo acima.
-    pecasSaldoLogico: baseAcuraciaPecas,
+    // Saldo sistêmico de verdade (soma de qtdeSistema), pra mostrar na tela —
+    // SEMPRE esse número, mesmo em modoLegado, onde a Acurácia usa a física
+    // como denominador (baseAcuraciaPecas); misturar os dois fazia "Sistêmicas"
+    // aparecer igual a "Contadas", que é duas métricas diferentes viradas uma.
+    pecasSaldoLogico: totalSaldoLogico,
     qtdRecontagens, tempoMedioContagemMin, diasRestantes, eficiencia,
     rankingProdutividade, porRua, porLog, contadosPorDia, porDiaRua, divergentesPorDia, porMes,
     topItensPositivos, topItensNegativos, topItensPositivosValor, topItensNegativosValor
