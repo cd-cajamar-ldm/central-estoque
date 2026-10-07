@@ -271,15 +271,23 @@ async function irCarregarComparativoCiclos(){
   // Não depende só de irRecalcularSeMotorAntigo já ter rodado: esse painel
   // mostra Ciclo 1/2/3 mesmo sem o usuário nunca ter aberto cada um como
   // ativo, então confere a versão aqui e recalcula na hora se estiver velha.
-  const pares = await Promise.all(ciclosOrdenados.map(async c=>{
+  // allSettled + try/catch por ciclo: se o recálculo de UM ciclo falhar, os
+  // outros não podem ficar reféns disso — senão o painel inteiro some (já
+  // aconteceu: um reject aqui deixava IR.comparativoCiclos null pra sempre,
+  // já que essa função roda sem await/catch no chamador).
+  const resultados = await Promise.allSettled(ciclosOrdenados.map(async c=>{
     let ind = await irGetIndicadores(c.id);
     if(ind && ind._v !== IR_INDICADORES_VERSION){
-      const ok = await irRecalcularCiclo(c.id);
-      if(ok) ind = await irGetIndicadores(c.id);
+      try{
+        const ok = await irRecalcularCiclo(c.id);
+        if(ok) ind = await irGetIndicadores(c.id);
+      }catch(e){
+        console.error('irCarregarComparativoCiclos: falha ao recalcular ciclo', c.id, e);
+      }
     }
     return {ciclo:c, ind};
   }));
-  IR.comparativoCiclos = pares;
+  IR.comparativoCiclos = resultados.map((r, i)=> r.status==='fulfilled' ? r.value : {ciclo:ciclosOrdenados[i], ind:null});
   irRenderView();
 }
 const IR_MOBILE_QUERY = '(max-width:640px)'; // precisa bater com o breakpoint do CSS (theme.css)
