@@ -268,25 +268,17 @@ async function irCarregarComparativoCiclos(){
     const anoA = irCicloAno(a)||0, anoB = irCicloAno(b)||0;
     return anoA!==anoB ? anoA-anoB : a.numero-b.numero;
   });
-  // Não depende só de irRecalcularSeMotorAntigo já ter rodado: esse painel
-  // mostra Ciclo 1/2/3 mesmo sem o usuário nunca ter aberto cada um como
-  // ativo, então confere a versão aqui e recalcula na hora se estiver velha.
-  // allSettled + try/catch por ciclo: se o recálculo de UM ciclo falhar, os
-  // outros não podem ficar reféns disso — senão o painel inteiro some (já
-  // aconteceu: um reject aqui deixava IR.comparativoCiclos null pra sempre,
-  // já que essa função roda sem await/catch no chamador).
-  const resultados = await Promise.allSettled(ciclosOrdenados.map(async c=>{
-    let ind = await irGetIndicadores(c.id);
-    if(ind && ind._v !== IR_INDICADORES_VERSION){
-      try{
-        const ok = await irRecalcularCiclo(c.id);
-        if(ok) ind = await irGetIndicadores(c.id);
-      }catch(e){
-        console.error('irCarregarComparativoCiclos: falha ao recalcular ciclo', c.id, e);
-      }
-    }
-    return {ciclo:c, ind};
-  }));
+  // Só LÊ o que já está salvo — não recalcula aqui. irRecalcularSeMotorAntigo já
+  // cobre TODOS os ciclos (não só o ativo) e um de cada vez; recalcular de novo
+  // aqui disparava um Worker por ciclo desatualizado em paralelo — vários ciclos
+  // pesados (Ciclo 1 tem 244 mil linhas) reprocessando ao mesmo tempo é o que
+  // estava derrubando a aba por falta de memória. Quando o motor antigo termina,
+  // ele mesmo manda recarregar este comparativo (IR.comparativoCiclos = null +
+  // irCarregarComparativoCiclos()), então o dado chega atualizado de qualquer jeito.
+  // allSettled: uma leitura falhando não pode travar o painel inteiro em null.
+  const resultados = await Promise.allSettled(ciclosOrdenados.map(async c=>
+    ({ciclo:c, ind: await irGetIndicadores(c.id)})
+  ));
   IR.comparativoCiclos = resultados.map((r, i)=> r.status==='fulfilled' ? r.value : {ciclo:ciclosOrdenados[i], ind:null});
   irRenderView();
 }
