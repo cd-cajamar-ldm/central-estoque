@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 26;
+const IR_INDICADORES_VERSION = 28;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1184,7 +1184,10 @@ function irDivergenciasDoCiclo(divergencias){
 function irEhCicloLegadoAIR(cicloNumero, dataAbertura){
   const m = /^(\d{4})-\d{2}-\d{2}/.exec(String(dataAbertura||'').trim());
   const ano = m ? +m[1] : (isNaN(new Date(dataAbertura).getTime()) ? null : new Date(dataAbertura).getFullYear());
-  return ano===2026 && (cicloNumero===1 || cicloNumero===2);
+  // cicloNumero pode chegar como string (ex.: vindo de IndexedDB/JSON) — Number()
+  // evita que uma comparação estrita (1 !== '1') derrube a trava silenciosamente.
+  const n = Number(cicloNumero);
+  return ano===2026 && (n===1 || n===2);
 }
 /* Nenhuma fórmula reproduziu exatamente o número já publicado do Ciclo 1 e 2 —
    a planilha original ("Base Orçada"/Bseller) tinha correções manuais
@@ -1194,12 +1197,13 @@ function irEhCicloLegadoAIR(cicloNumero, dataAbertura){
    locais / 92,2351% valor, 1.325.889 peças contadas, 28.274 divergentes,
    55.922 locais contados, 3.510 divergentes, R$131.391.330,63 físico,
    R$10.202.354,92 divergente).
-   Ciclo 1: Locais vem da Base Orçada (planilha enviada depois), mas Peças foi
-   travada por pedido explícito em 96,6% — a aproximação da regra atual (só
-   AIR, última rodada por local; 52.941 peças divergentes ÷ 1.546.390
-   contadas, física como proxy do saldo lógico, que esse relatório não tem) —
-   em vez dos 96,31% que a Base Orçada dá pela regra legada. Valor segue sem
-   travar (dado tratado como variável/não confiável). */
+   Ciclo 1: reprocessado com a QRY0843 real do ciclo pela regra atual (mesma
+   do Ciclo 3/4 — só AIR, última rodada por local, saldo sistêmico como
+   denominador): 96,7753% peças / 86,5103% locais, 1.646.455 contadas /
+   1.641.718 sistêmicas / 52.941 divergentes, 56.584 locais contados / 7.633
+   divergentes. Bate exatamente com o comparativo já publicado (96,8%/86,5%).
+   Valor não trava (dado tratado como variável/não confiável, preço
+   incompleto nas fontes que temos). */
 function irValoresLegadoLiterais(cicloNumero, dataAbertura){
   if(!irEhCicloLegadoAIR(cicloNumero, dataAbertura)) return null;
   if(cicloNumero===2) return {
@@ -1212,9 +1216,9 @@ function irValoresLegadoLiterais(cicloNumero, dataAbertura){
     valorFisicoTotal: 131391330.6318, valorDivergenteAbsoluto: 10202354.9151
   };
   if(cicloNumero===1) return {
-    acuraciaPecas: 1 - 52941/1546390, acuraciaLocal: 0.8598897214760356, acuraciaValor: 0.917,
-    pecasContadas: 1546390, pecasDivergentes: 52941,
-    locaisContadosTotal: 56584, locaisDivergentes: 7928
+    acuraciaPecas: 0.96775268346939, acuraciaLocal: 0.8651032093878128, acuraciaValor: 0.917,
+    pecasContadas: 1646455, pecasDivergentes: 52941, pecasSaldoLogico: 1641718,
+    locaisContadosTotal: 56584, locaisDivergentes: 7633
   };
   return null;
 }

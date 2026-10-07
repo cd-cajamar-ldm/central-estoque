@@ -268,7 +268,17 @@ async function irCarregarComparativoCiclos(){
     const anoA = irCicloAno(a)||0, anoB = irCicloAno(b)||0;
     return anoA!==anoB ? anoA-anoB : a.numero-b.numero;
   });
-  const pares = await Promise.all(ciclosOrdenados.map(async c=>({ciclo:c, ind: await irGetIndicadores(c.id)})));
+  // Não depende só de irRecalcularSeMotorAntigo já ter rodado: esse painel
+  // mostra Ciclo 1/2/3 mesmo sem o usuário nunca ter aberto cada um como
+  // ativo, então confere a versão aqui e recalcula na hora se estiver velha.
+  const pares = await Promise.all(ciclosOrdenados.map(async c=>{
+    let ind = await irGetIndicadores(c.id);
+    if(ind && ind._v !== IR_INDICADORES_VERSION){
+      const ok = await irRecalcularCiclo(c.id);
+      if(ok) ind = await irGetIndicadores(c.id);
+    }
+    return {ciclo:c, ind};
+  }));
   IR.comparativoCiclos = pares;
   irRenderView();
 }
@@ -942,13 +952,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <div class="kpi-block-body">${tilesHtml}</div>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 26; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 28; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v226';
+const IR_APP_VERSION = 'v228';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
