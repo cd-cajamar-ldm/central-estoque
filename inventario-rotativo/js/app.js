@@ -2425,13 +2425,14 @@ function irGerarRelatorioEmail(){
   const saudacao = hora<12 ? 'Bom dia' : (hora<18 ? 'Boa tarde' : 'Boa noite');
   // Os números (Acurácia Peças/Local/Valor, Locais concluídos) saíram daqui —
   // já estão na imagem do boletim, repetir em texto era redundante.
-  const corpo = `${saudacao},
+  // Corpo bem curto de propósito: um mailto com Para + Cc (muitos endereços) +
+  // corpo longo pode passar do limite de tamanho de URL que o Windows aceita ao
+  // abrir o programa de e-mail padrão — o excesso é cortado sem aviso, e o que
+  // sobra pode embaralhar onde "Para" termina e "Cc" começa. Corpo curto dá mais
+  // folga pra lista de destinatários não ser cortada.
+  const corpo = `${saudacao}, segue o boletim do ${c.numero}º ciclo.
 
-Segue report referente ao ${c.numero}º ciclo do Inventário Rotativo.
-
-[Clique aqui e cole a imagem do boletim — Ctrl+V]
-
-Atenciosamente,`;
+[Cole a imagem aqui — Ctrl+V]`;
   irBaixarBoletimImagem(html, `Boletim_Ciclo_${c.numero}_${new Date().toISOString().slice(0,10)}.png`, {
     para: emailCfg.para, cc: emailCfg.cc, assunto: `Boletim Inventário — ${irCicloLabel(c)}`, corpo
   });
