@@ -103,11 +103,10 @@ const IR_BASE_COLS = [
   {key:'valor',       lbl:'Valor',         tipo:'num', fmt:irFmtMoney},
   {key:'idade',       lbl:'Idade máx (d)', tipo:'num', fmt:n=>irFmtInt(n)}
 ];
-const IR_BASE_SITUACOES = {comSaldo:'Com saldo', semSaldo:'Sem saldo', foraDaBase:'Fora da base'};
+const IR_BASE_SITUACOES = {comSaldo:'Com saldo'};
 
-/* Uma linha por transitório: o que a base importada tem, mais o que está no
-   de-para e não apareceu na importação (esse entra zerado, como "Fora da base" —
-   some da tela seria o mesmo que não conferir). */
+/* Uma linha por transitório com saldo na importação — sem saldo (endereço zerado
+   ou só cadastrado no de-para) não tem o que conferir, então não entra na lista. */
 function irBaseLinhas(){
   const hoje = Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00');
   const temData = irTransTemData();
@@ -132,13 +131,7 @@ function irBaseLinhas(){
       if(r.idade===null || d>r.idade) r.idade = d;
     }
   }
-  // O que está no de-para e a importação não trouxe: entra zerado pra ser conferido.
-  for(const chave of dePara.keys()){
-    if(porChave.has(chave)) continue;
-    const partes = chave.split(' ');
-    porChave.set(chave, novo(chave, partes[0]||'', partes.slice(1).join(' ')));
-  }
-  return Array.from(porChave.values()).map(r=>{
+  return Array.from(porChave.values()).filter(r=>r.qtd || r.valor).map(r=>{
     const cad = dePara.get(irBaseNorm(r.chave)) || {};
     const setores = Array.from(r.setorSet).filter(Boolean)
       .map(s=>IR_TRANS_SETOR_NOME[s]||s).sort();
@@ -148,8 +141,7 @@ function irBaseLinhas(){
       responsavel: cad.responsavel || '—', gestor: cad.gestor || '—',
       clal: Array.from(r.clalSet).sort().join(', ') || '—',
       setorReport: setores.join(', ') || (r.setorSet.size ? 'Não classificado' : '—'),
-      situacao: (r.qtd || r.valor) ? IR_BASE_SITUACOES.comSaldo
-        : (r.setorSet.size ? IR_BASE_SITUACOES.semSaldo : IR_BASE_SITUACOES.foraDaBase),
+      situacao: IR_BASE_SITUACOES.comSaldo,
       nEnd:r.nEnd, qtd:r.qtd, valor:r.valor, idade:r.idade
     };
   });
