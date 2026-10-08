@@ -2029,14 +2029,31 @@ const IR_LOCAIS_CONCLUIDO = new Set(['convergido','encerrado_sem_convergencia'])
 function irSoLocaisConcluidos(divergencias){
   return (divergencias||[]).filter(d=>IR_LOCAIS_CONCLUIDO.has(d.statusLocal));
 }
+// Pequena duplicata de irEhCicloLegadoAIR (worker.js): o worker roda numa thread
+// separada, sem acesso às funções daqui, e vice-versa — por isso a mesma regra
+// (Ciclo 1 e 2 de 2026 fecharam por qualquer motivo, não só AIR) existe nos dois.
+function irEhCicloLegadoAIR(cicloNumero, dataAbertura){
+  const m = /^(\d{4})-\d{2}-\d{2}/.exec(String(dataAbertura||'').trim());
+  const ano = m ? +m[1] : (isNaN(new Date(dataAbertura).getTime()) ? null : new Date(dataAbertura).getFullYear());
+  const n = Number(cicloNumero);
+  return ano===2026 && (n===1 || n===2);
+}
 function irCalcItemSaldo(divergencias){
   // Este ranking mede o TAMANHO DO ERRO de contagem por item — divergência
   // ABSOLUTA: Σ |físico − sistema|. Sobra num local e falta em outro não se
   // anulam; as duas foram erro. O saldo líquido (NET) continua calculado e
   // aparece ao lado como leitura complementar, mas não é o que ordena a lista.
+  // Só motivo AIR (Inventário Rotativo) — o resto do boletim/dashboard (Acurácia,
+  // Peças Divergentes etc.) também é só AIR, então essa lista não pode misturar
+  // item que divergiu por auditoria ou ajuste de loja com o do ciclo rotativo.
+  // Exceção: Ciclo 1/2 de 2026 fecharam por qualquer motivo (mesma regra do
+  // worker.js), então não filtra motivo nesses dois.
+  const ca = IR.cicloAtivo;
+  const soAIR = !(ca && irEhCicloLegadoAIR(ca.numero, ca.dataAbertura));
   const map = new Map();
   for(const d of irSoLocaisConcluidos(divergencias)){
     if(d.diferenca===0) continue;
+    if(soAIR && String(d.motivo||'').trim().toUpperCase()!=='AIR') continue;
     let g = map.get(d.item);
     if(!g){ g = {item:d.item, descricao:d.itemNome, saldoQtd:0, saldoValor:0, absQtd:0, absValor:0, locais:new Set()}; map.set(d.item, g); }
     g.saldoQtd += d.diferenca;
