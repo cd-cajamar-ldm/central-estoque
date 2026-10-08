@@ -2255,12 +2255,13 @@ function irGerarRelatorioEmail(){
   const mesVigenteFull = mesVigente ? (IR.net410Data.porMes||[]).find(m=>m.mes===mesVigente.mes) : null;
   const motivosMesTodos = mesVigenteFull ? (mesVigenteFull.porObs||[]).slice().sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral)) : [];
   const motivosMes = motivosMesTodos.slice(0,12);
-  // Soma de TODOS os motivos do mês (não só os 12 exibidos) — pra bater com o
-  // valor do mês no gráfico/tabela "NET Mensal" acima, mesmo se algum motivo
-  // pequeno ficar de fora da lista.
-  const motivosMesTotal = motivosMesTodos.reduce((s,o)=>({
-    entrada: s.entrada+o.entrada, saida: s.saida+o.saida, totalGeral: s.totalGeral+o.totalGeral
-  }), {entrada:0, saida:0, totalGeral:0});
+  // O Total usa ganhos/perdas/net já calculados pelo worker (mesmo campo que gera a
+  // linha do mês na tabela "NET Mensal" acima) — e não a soma dos motivos exibidos:
+  // porObs lista TODO motivo (inclusive "Não" considera NET, só pra transparência),
+  // e somar tudo bateria errado com o NET de verdade, que é só dos motivos "Sim".
+  const motivosMesTotal = mesVigenteFull
+    ? {entrada: mesVigenteFull.ganhos, saida: mesVigenteFull.perdas, totalGeral: mesVigenteFull.net}
+    : {entrada:0, saida:0, totalGeral:0};
   const topItensValor = ((IR.itemDivSaldo && IR.itemDivSaldo.topItensAbsValor) || []).slice(0, 10);
   const maxItemValor = Math.max(1, ...topItensValor.map(i=>i.absValor));
   const topItensQtd = ((IR.itemDivSaldo && IR.itemDivSaldo.topItensAbsQtd) || []).slice(0, 10);
@@ -2302,7 +2303,7 @@ function irGerarRelatorioEmail(){
         <td style="color:${o.totalGeral>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(o.totalGeral)}</td>
       </tr>`).join('')}
       <tr>
-        <td style="font-weight:800;">Total</td>
+        <td style="font-weight:800;">NET do mês</td>
         <td></td>
         <td style="color:#1F8A52;font-weight:800;">${irFmtMoney(motivosMesTotal.entrada)}</td>
         <td style="color:#C0392B;font-weight:800;">${irFmtMoney(motivosMesTotal.saida)}</td>
