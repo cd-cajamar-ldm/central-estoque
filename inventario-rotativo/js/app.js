@@ -2141,6 +2141,23 @@ function irRenderTopItensPanel(saldo, kind){
     ${lista}
   </div>`;
 }
+/* "Se mantivermos o ritmo de peças divergentes por dia": extrapola linear, não é
+   previsão sofisticada. Pega a média diária de peças contadas e divergentes
+   OBSERVADA até agora (total ÷ nº de dias com fechamento registrado) e projeta
+   pros dias úteis que faltam (ind.diasRestantes já exclui fim de semana/feriado),
+   somando ao total já realizado — "se o resto do ciclo se parecer com a média do
+   que já rodou". */
+function irCalcProjecaoAcuracia(ind){
+  const dias = (ind.divergentesPorDia||[]).length;
+  if(!dias || !ind.diasRestantes || !(ind.pecasContadas>0)) return null;
+  const taxaDivDia = ind.pecasDivergentes / dias;
+  const taxaContDia = ind.pecasContadas / dias;
+  const divProjetado = ind.pecasDivergentes + taxaDivDia*ind.diasRestantes;
+  const contProjetado = ind.pecasContadas + taxaContDia*ind.diasRestantes;
+  if(!(contProjetado>0)) return null;
+  const projetada = Math.max(0, Math.min(1, 1 - divProjetado/contProjetado));
+  return {atual: ind.acuraciaPecas, projetada, diasRestantes: ind.diasRestantes, taxaDivDia, taxaContDia};
+}
 /* ============================================================
    RELATÓRIO PARA E-MAIL (impressão / salvar como PDF)
    ============================================================ */
@@ -2213,6 +2230,9 @@ function irGerarRelatorioEmail(){
   // mas ela sai da largura fixa do boletim com muitos meses e fica de fora da
   // imagem gerada. No gráfico ela sempre aparece, porque as barras se reajustam.
   const netMensalRowsComTotal = netMensalRows.length ? [...netMensalRows, {mes:'total', net:netMensalTotal, label:'Total'}] : netMensalRows;
+  const topItensValor = ((IR.itemDivSaldo && IR.itemDivSaldo.topItensAbsValor) || []).slice(0, 10);
+  const maxItemValor = Math.max(1, ...topItensValor.map(i=>i.absValor));
+  const proj = irCalcProjecaoAcuracia(ind);
   const html = `<div class="rp-page">
     <div class="rp-hero">
       <div class="rp-hero-top">
@@ -2312,6 +2332,25 @@ function irGerarRelatorioEmail(){
         ${rpAcTd(r.acuraciaValor, ind.meta)}
       </tr>`).join('') || '<tr><td colspan="7">Sem divergências registradas.</td></tr>'}</tbody>
     </table></div>
+
+    ${topItensValor.length ? `${sectionTitle('🏷️','Itens mais Divergentes (Valor)','maior divergência absoluta de valor, '+irItemDivEscopoLabel())}
+    <div class="rp-panel rp-panel-pad">
+      ${topItensValor.map(i=>`<div class="rp-hbar-row rp-hbar-row-item">
+        <div class="rp-hbar-label" title="${irEsc(i.item)} — ${irEsc(i.descricao)}"><span class="mono">${irEsc(i.item)}</span> — ${irEsc(irResumirDescricao(i.descricao)||i.item)}</div>
+        <div class="rp-hbar-track"><div class="rp-hbar-fill" style="width:${Math.round(i.absValor/maxItemValor*100)}%;"></div></div>
+        <div class="rp-hbar-val">${irFmtMoney(i.absValor)}</div>
+      </div>`).join('')}
+    </div>` : ''}
+
+    ${proj ? `${sectionTitle('🔮','Projeção de Acurácia (Peças)','se o ritmo diário de peças contadas e divergentes se mantiver até o fim do ciclo')}
+    <div class="rp-panel rp-panel-pad">
+      <div class="rp-proj-row">
+        <div class="rp-proj-stat"><div class="rp-proj-n ${proj.atual>=ind.meta?'good':'bad'}">${irFmtPct(proj.atual)}</div><div class="rp-proj-l">Acurácia atual</div></div>
+        <div class="rp-proj-arrow">→</div>
+        <div class="rp-proj-stat"><div class="rp-proj-n ${proj.projetada>=ind.meta?'good':'bad'}">${irFmtPct(proj.projetada)}</div><div class="rp-proj-l">Projetada (fim do ciclo)</div></div>
+      </div>
+      <p class="field-hint" style="margin-top:14px;text-align:center;">Com base em ${irFmtInt(Math.round(proj.taxaDivDia))} peças divergentes/dia e ${irFmtInt(Math.round(proj.taxaContDia))} peças contadas/dia (média do ciclo até aqui), projetado para os ${irFmtInt(proj.diasRestantes)} dias úteis restantes.</p>
+    </div>` : ''}
 
     </div>
   </div>`;
