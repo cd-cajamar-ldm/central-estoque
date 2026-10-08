@@ -1059,7 +1059,7 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
    o app, pra ler tranquilo em qualquer tamanho de tela. Cores fixas (não usam
    variáveis de tema claro/escuro) porque vira uma imagem estática. ---------- */
 #irPrintArea{ display:none; }
-.rp-page{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; color:#1D1F2A; background:#E7EAF1; padding:0 0 28px; max-width:920px; }
+.rp-page{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,Arial,sans-serif; color:#1D1F2A; background:#E7EAF1; padding:0 0 28px; max-width:920px; }
 
 .rp-hero{ background:#001A72; color:#fff; padding:34px 40px 26px; position:relative; }
 .rp-hero::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:4px; background:linear-gradient(90deg,#FA4616,#FF7A4D,#FA4616); }
@@ -1123,6 +1123,16 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-hbar-track{ background:#EEF0F4; border-radius:4px; height:12px; overflow:hidden; }
 .rp-hbar-fill{ height:100%; background:#FA4616; border-radius:4px; }
 .rp-hbar-val{ text-align:right; font-family:'SFMono-Regular',Consolas,monospace; font-size:10.5px; font-weight:700; color:#1D1F2A; }
+/* Linha de item (código + descrição) é bem mais longa que "LOG 1" — label mais
+   largo que o .rp-hbar-row padrão, senão a descrição toda fica espremida. */
+.rp-hbar-row-item{ grid-template-columns:230px 1fr 86px; }
+.rp-hbar-row-item .rp-hbar-label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rp-proj-row{ display:flex; align-items:center; justify-content:center; gap:28px; }
+.rp-proj-stat{ text-align:center; }
+.rp-proj-n{ font-family:'SFMono-Regular',Consolas,monospace; font-size:32px; font-weight:800; color:#1D1F2A; }
+.rp-proj-n.good{ color:#1F8A52; } .rp-proj-n.bad{ color:#C0392B; }
+.rp-proj-l{ font-size:11.5px; color:#6B7280; font-weight:600; margin-top:4px; }
+.rp-proj-arrow{ font-size:22px; color:#9AA1B4; }
 .rp-table{ width:100%; border-collapse:collapse; font-size:11px; }
 .rp-table th{ text-align:left; background:#F6F7FA; color:#4B5165; padding:9px 12px; font-size:9.5px; font-weight:700; border-bottom:1px solid #E4E7EE; }
 .rp-table td{ padding:8px 12px; border-bottom:1px solid #EEF0F4; }
