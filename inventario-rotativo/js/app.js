@@ -2253,7 +2253,14 @@ function irGerarRelatorioEmail(){
   const mesHoje = new Date().toISOString().slice(0,7);
   const mesVigente = netMensalRows.find(r=>r.mes===mesHoje) || netMensalRows[netMensalRows.length-1];
   const mesVigenteFull = mesVigente ? (IR.net410Data.porMes||[]).find(m=>m.mes===mesVigente.mes) : null;
-  const motivosMes = mesVigenteFull ? (mesVigenteFull.porObs||[]).slice().sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral)).slice(0,12) : [];
+  const motivosMesTodos = mesVigenteFull ? (mesVigenteFull.porObs||[]).slice().sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral)) : [];
+  const motivosMes = motivosMesTodos.slice(0,12);
+  // Soma de TODOS os motivos do mês (não só os 12 exibidos) — pra bater com o
+  // valor do mês no gráfico/tabela "NET Mensal" acima, mesmo se algum motivo
+  // pequeno ficar de fora da lista.
+  const motivosMesTotal = motivosMesTodos.reduce((s,o)=>({
+    entrada: s.entrada+o.entrada, saida: s.saida+o.saida, totalGeral: s.totalGeral+o.totalGeral
+  }), {entrada:0, saida:0, totalGeral:0});
   const topItensValor = ((IR.itemDivSaldo && IR.itemDivSaldo.topItensAbsValor) || []).slice(0, 10);
   const maxItemValor = Math.max(1, ...topItensValor.map(i=>i.absValor));
   const topItensQtd = ((IR.itemDivSaldo && IR.itemDivSaldo.topItensAbsQtd) || []).slice(0, 10);
@@ -2293,7 +2300,14 @@ function irGerarRelatorioEmail(){
         <td style="color:#1F8A52;">${irFmtMoney(o.entrada)}</td>
         <td style="color:#C0392B;">${irFmtMoney(o.saida)}</td>
         <td style="color:${o.totalGeral>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(o.totalGeral)}</td>
-      </tr>`).join('')}</tbody>
+      </tr>`).join('')}
+      <tr>
+        <td style="font-weight:800;">Total</td>
+        <td></td>
+        <td style="color:#1F8A52;font-weight:800;">${irFmtMoney(motivosMesTotal.entrada)}</td>
+        <td style="color:#C0392B;font-weight:800;">${irFmtMoney(motivosMesTotal.saida)}</td>
+        <td style="color:${motivosMesTotal.totalGeral>=0?'#001A72':'#C0392B'};font-weight:800;">${irFmtMoney(motivosMesTotal.totalGeral)}</td>
+      </tr></tbody>
     </table></div>` : ''}
 
     ${sectionTitle('🟡','Status do Inventário','percentual de locais contados')}
