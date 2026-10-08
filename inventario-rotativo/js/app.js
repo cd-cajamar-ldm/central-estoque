@@ -1079,7 +1079,7 @@ function irRenderDashboard(){
   );
   return `
     <div class="form-actions" style="margin:0 0 12px;">
-      <button class="btn btn-secondary" onclick="irGerarRelatorioEmail()">📧 Preparar boletim para enviar por e-mail</button>
+      <button class="btn btn-secondary" onclick="irGerarRelatorioEmail()">📧 Report</button>
     </div>
     <div class="kpi-blocks">
       ${blocoPecas}${blocoLocais}${blocoValor}${blocoCiclo}
@@ -7034,7 +7034,7 @@ function irRenderConfiguracoes(){
   </div>
   <div class="panel">
     <h3>Boletim por e-mail — destinatários</h3>
-    <p class="field-hint" style="margin-bottom:12px;">Salvos aqui, todo clique em "Preparar boletim para enviar por e-mail" já abre o rascunho preenchido com esses destinatários — só falta anexar a imagem e enviar.</p>
+    <p class="field-hint" style="margin-bottom:12px;">Salvos aqui, todo clique em "Report" já abre o rascunho preenchido com esses destinatários — só falta anexar a imagem e enviar.</p>
     <div class="two-col">
       <div><label>Para</label><input type="text" id="ir-cfg-email-para" placeholder="fulano@lojadomecanico.com.br" value="${irEsc((IR.boletimEmail||{}).para||'')}"></div>
       <div><label>Cc (responsáveis)</label><input type="text" id="ir-cfg-email-cc" placeholder="ciclano@lojadomecanico.com.br; beltrano@lojadomecanico.com.br" value="${irEsc((IR.boletimEmail||{}).cc||'')}"></div>
