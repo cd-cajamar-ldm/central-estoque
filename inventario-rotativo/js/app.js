@@ -1079,7 +1079,7 @@ function irRenderDashboard(){
   );
   return `
     <div class="form-actions" style="margin:0 0 12px;">
-      <button class="btn btn-secondary" onclick="irGerarRelatorioEmail()">📧 Preparar boletim para enviar por e-mail</button>
+      <button class="btn btn-secondary" onclick="irGerarRelatorioEmail()">📧 Report</button>
     </div>
     <div class="kpi-blocks">
       ${blocoPecas}${blocoLocais}${blocoValor}${blocoCiclo}
@@ -1964,7 +1964,7 @@ function irRenderDivergentesPorDiaPanel(ind){
     </div>`;
   };
   return `<div class="bi-grid-3">
-    ${chart('pecas','orange',irFmtInt,'Peças Divergentes por Dia')}
+    ${chart('pecas','orange',irFmtInt,'Peças Divergentes por Dia (abs.)')}
     ${chart('valor','ink',irFmtMoney,'Valor Divergente por Dia (abs.)')}
     ${chart('locais','blue',irFmtInt,'Locais Divergentes por Dia')}
   </div>`;
@@ -2192,7 +2192,7 @@ function irGerarRelatorioEmail(){
   const blocoPecas = rpBlock('orange','📦','Peças',
     rpTile('🎯', irFmtPct(ind.acuraciaPecas), 'Acurácia Peças', ind.acuraciaPecas>=ind.meta?'good':'bad', metaHint) +
     rpTile('📦', irFmtInt(ind.pecasContadas), 'Peças Contadas', '', 'total físico') +
-    rpTile('⚠️', irFmtInt(ind.pecasDivergentes), 'Peças Divergentes', 'bad', irFmtInt(ind.itensDivergentes)+' itens')
+    rpTile('⚠️', irFmtInt(ind.pecasDivergentes), 'Peças Divergentes (abs.)', 'bad', irFmtInt(ind.itensDivergentes)+' itens')
   );
   const blocoLocais = rpBlock('blue','📍','Locais',
     rpTile('🎯', irFmtPct(ind.acuraciaLocal), 'Acurácia Local', ind.acuraciaLocal>=ind.meta?'good':'bad', metaHint) +
@@ -2202,7 +2202,7 @@ function irGerarRelatorioEmail(){
   const blocoValor = rpBlock('black','💰','Valor',
     rpTile('🎯', irFmtPct(ind.acuraciaValor), 'Acurácia Valor', ind.acuraciaValor>=ind.meta?'good':'bad', metaHint) +
     rpTile('💰', irFmtMoneyCompact(ind.valorFisicoTotal), 'Valor Contado', '', 'total físico') +
-    rpTile('⚠️', irFmtMoneyCompact(ind.valorDivergenteAbsoluto), 'Valor Divergente', 'bad', 'soma absoluta')
+    rpTile('⚠️', irFmtMoneyCompact(ind.valorDivergenteAbsoluto), 'Valor Divergente (abs.)', 'bad', 'soma absoluta')
   );
   const blocoCiclo = rpBlock('neutral','🔄','Ciclo',
     rpTile('📊', irFmtPct(ind.andamentoCiclo), 'Andamento', '', irFmtInt(ind.locaisConcluidos)+' de '+irFmtInt(ind.locaisCongelados)) +
@@ -2230,8 +2230,17 @@ function irGerarRelatorioEmail(){
   // mas ela sai da largura fixa do boletim com muitos meses e fica de fora da
   // imagem gerada. No gráfico ela sempre aparece, porque as barras se reajustam.
   const netMensalRowsComTotal = netMensalRows.length ? [...netMensalRows, {mes:'total', net:netMensalTotal, label:'Total'}] : netMensalRows;
+  // Motivos do NET do mês vigente — "vigente" é o mês de hoje se já tiver dado da
+  // 410 processado; sem isso (dado ainda não chegou), cai no último mês disponível,
+  // que no fim das contas é o mesmo "mês vigente" da operação.
+  const mesHoje = new Date().toISOString().slice(0,7);
+  const mesVigente = netMensalRows.find(r=>r.mes===mesHoje) || netMensalRows[netMensalRows.length-1];
+  const mesVigenteFull = mesVigente ? (IR.net410Data.porMes||[]).find(m=>m.mes===mesVigente.mes) : null;
+  const motivosMes = mesVigenteFull ? (mesVigenteFull.porObs||[]).slice().sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral)).slice(0,12) : [];
   const topItensValor = ((IR.itemDivSaldo && IR.itemDivSaldo.topItensAbsValor) || []).slice(0, 10);
   const maxItemValor = Math.max(1, ...topItensValor.map(i=>i.absValor));
+  const topItensQtd = ((IR.itemDivSaldo && IR.itemDivSaldo.topItensAbsQtd) || []).slice(0, 10);
+  const maxItemQtd = Math.max(1, ...topItensQtd.map(i=>i.absQtd));
   const proj = irCalcProjecaoAcuracia(ind);
   const html = `<div class="rp-page">
     <div class="rp-hero">
@@ -2257,6 +2266,18 @@ function irGerarRelatorioEmail(){
         <tbody><tr><td>NET</td>${netMensalRows.map(r=>`<td style="color:${r.net>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(r.net)}</td>`).join('')}<td style="font-weight:800;">${irFmtMoney(netMensalTotal)}</td></tr></tbody>
       </table></div>
     </div>` : ''}
+
+    ${motivosMes.length ? `${sectionTitle('🔖','Motivos do NET — '+irEsc(mesVigente.label+'/'+mesVigente.mes.slice(0,4)),'quebra do NET do mês vigente por motivo da observação WMS')}
+    <div class="rp-panel"><table class="rp-table">
+      <thead><tr><th>Motivo</th><th>Considera NET?</th><th>Entrada</th><th>Saída</th><th>Total</th></tr></thead>
+      <tbody>${motivosMes.map(o=>`<tr>
+        <td><span class="mono">${irEsc(o.id)}</span> — ${irEsc(irLegenda410(o.id, IR.net410Legenda))}</td>
+        <td>${o.considerarNet?'Sim':'Não'}</td>
+        <td style="color:#1F8A52;">${irFmtMoney(o.entrada)}</td>
+        <td style="color:#C0392B;">${irFmtMoney(o.saida)}</td>
+        <td style="color:${o.totalGeral>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(o.totalGeral)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : ''}
 
     ${sectionTitle('🟡','Status do Inventário','percentual de locais contados')}
     <div class="rp-panel rp-panel-pad">
@@ -2306,11 +2327,11 @@ function irGerarRelatorioEmail(){
       ${irBuildContadosPorDiaSvg(ind.contadosPorDia, IR_META_DIARIA)}
     </div>` : ''}
 
-    ${ind.divergentesPorDia && ind.divergentesPorDia.length ? `${sectionTitle('⚠️','Peças Divergentes por Dia','soma da diferença absoluta, por dia de fechamento do local')}
+    ${ind.divergentesPorDia && ind.divergentesPorDia.length ? `${sectionTitle('⚠️','Peças Divergentes por Dia (abs.)','soma da diferença absoluta, por dia de fechamento do local')}
     <div class="rp-panel rp-panel-pad">
       ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#FA4616', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'pecas', fmt:irFmtInt})}
     </div>
-    ${sectionTitle('💰','Valor Divergente por Dia','soma do valor divergente absoluto (QRY0843), por dia de fechamento do local')}
+    ${sectionTitle('💰','Valor Divergente por Dia (abs.)','soma do valor divergente absoluto (QRY0843), por dia de fechamento do local')}
     <div class="rp-panel rp-panel-pad">
       ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#1D1F2A', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'valor', fmt:irFmtMoneyCompact})}
     </div>
@@ -2319,9 +2340,9 @@ function irGerarRelatorioEmail(){
       ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#001A72', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'locais', fmt:irFmtInt})}
     </div>` : ''}
 
-    ${sectionTitle('🛣️','10 Ruas mais divergentes','por peças divergentes')}
+    ${sectionTitle('🛣️','10 Ruas mais divergentes','por peças divergentes (abs.)')}
     <div class="rp-panel"><table class="rp-table">
-      <thead><tr><th>Rua</th><th>Peças divergentes</th><th>Locais divergentes</th><th>Valor divergente</th><th>Acurácia Peças</th><th>Acurácia Locais</th><th>Acurácia Valor</th></tr></thead>
+      <thead><tr><th>Rua</th><th>Peças div. (abs.)</th><th>Locais divergentes</th><th>Valor div. (abs.)</th><th>Acurácia Peças</th><th>Acurácia Locais</th><th>Acurácia Valor</th></tr></thead>
       <tbody>${rua.slice(0, 10).map(r=>`<tr>
         <td>${irEsc(r.chave)}</td>
         <td>${irFmtInt(r.pecasDivergentes)}</td>
@@ -2333,7 +2354,16 @@ function irGerarRelatorioEmail(){
       </tr>`).join('') || '<tr><td colspan="7">Sem divergências registradas.</td></tr>'}</tbody>
     </table></div>
 
-    ${topItensValor.length ? `${sectionTitle('🏷️','Itens mais Divergentes (Valor)','maior divergência absoluta de valor, '+irItemDivEscopoLabel())}
+    ${topItensQtd.length ? `${sectionTitle('🏷️','Itens mais Divergentes (Peças · ABS)','maior divergência absoluta de peças, '+irItemDivEscopoLabel())}
+    <div class="rp-panel rp-panel-pad">
+      ${topItensQtd.map(i=>`<div class="rp-hbar-row rp-hbar-row-item">
+        <div class="rp-hbar-label" title="${irEsc(i.item)} — ${irEsc(i.descricao)}"><span class="mono">${irEsc(i.item)}</span> — ${irEsc(irResumirDescricao(i.descricao)||i.item)}</div>
+        <div class="rp-hbar-track"><div class="rp-hbar-fill" style="width:${Math.round(i.absQtd/maxItemQtd*100)}%;"></div></div>
+        <div class="rp-hbar-val">${irFmtInt(i.absQtd)}</div>
+      </div>`).join('')}
+    </div>` : ''}
+
+    ${topItensValor.length ? `${sectionTitle('🏷️','Itens mais Divergentes (Valor · ABS)','maior divergência absoluta de valor, '+irItemDivEscopoLabel())}
     <div class="rp-panel rp-panel-pad">
       ${topItensValor.map(i=>`<div class="rp-hbar-row rp-hbar-row-item">
         <div class="rp-hbar-label" title="${irEsc(i.item)} — ${irEsc(i.descricao)}"><span class="mono">${irEsc(i.item)}</span> — ${irEsc(irResumirDescricao(i.descricao)||i.item)}</div>
@@ -7004,7 +7034,7 @@ function irRenderConfiguracoes(){
   </div>
   <div class="panel">
     <h3>Boletim por e-mail — destinatários</h3>
-    <p class="field-hint" style="margin-bottom:12px;">Salvos aqui, todo clique em "Preparar boletim para enviar por e-mail" já abre o rascunho preenchido com esses destinatários — só falta anexar a imagem e enviar.</p>
+    <p class="field-hint" style="margin-bottom:12px;">Salvos aqui, todo clique em "Report" já abre o rascunho preenchido com esses destinatários — só falta anexar a imagem e enviar.</p>
     <div class="two-col">
       <div><label>Para</label><input type="text" id="ir-cfg-email-para" placeholder="fulano@lojadomecanico.com.br" value="${irEsc((IR.boletimEmail||{}).para||'')}"></div>
       <div><label>Cc (responsáveis)</label><input type="text" id="ir-cfg-email-cc" placeholder="ciclano@lojadomecanico.com.br; beltrano@lojadomecanico.com.br" value="${irEsc((IR.boletimEmail||{}).cc||'')}"></div>
