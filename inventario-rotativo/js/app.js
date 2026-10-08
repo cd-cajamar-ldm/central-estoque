@@ -2253,7 +2253,9 @@ function irGerarRelatorioEmail(){
   const mesHoje = new Date().toISOString().slice(0,7);
   const mesVigente = netMensalRows.find(r=>r.mes===mesHoje) || netMensalRows[netMensalRows.length-1];
   const mesVigenteFull = mesVigente ? (IR.net410Data.porMes||[]).find(m=>m.mes===mesVigente.mes) : null;
-  const motivosMesTodos = mesVigenteFull ? (mesVigenteFull.porObs||[]).slice().sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral)) : [];
+  // Só motivo que entra no NET — motivo "Não" (ex.: Baixa Insumo) não compõe o
+  // número e só confundia aparecendo do lado do que realmente soma.
+  const motivosMesTodos = mesVigenteFull ? (mesVigenteFull.porObs||[]).filter(o=>o.considerarNet).sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral)) : [];
   const motivosMes = motivosMesTodos.slice(0,12);
   // O Total usa ganhos/perdas/net já calculados pelo worker (mesmo campo que gera a
   // linha do mês na tabela "NET Mensal" acima) — e não a soma dos motivos exibidos:
@@ -2294,17 +2296,15 @@ function irGerarRelatorioEmail(){
 
     ${motivosMes.length ? `${sectionTitle('🔖','Motivos do NET — '+irEsc(mesVigente.label+'/'+mesVigente.mes.slice(0,4)),'quebra do NET do mês vigente por motivo da observação WMS')}
     <div class="rp-panel"><table class="rp-table">
-      <thead><tr><th>Motivo</th><th>Considera NET?</th><th>Entrada</th><th>Saída</th><th>Total</th></tr></thead>
+      <thead><tr><th>Motivo</th><th>Entrada</th><th>Saída</th><th>Total</th></tr></thead>
       <tbody>${motivosMes.map(o=>`<tr>
         <td><span class="mono">${irEsc(o.id)}</span> — ${irEsc(irLegenda410(o.id, IR.net410Legenda))}</td>
-        <td>${o.considerarNet?'Sim':'Não'}</td>
         <td style="color:#1F8A52;">${irFmtMoney(o.entrada)}</td>
         <td style="color:#C0392B;">${irFmtMoney(o.saida)}</td>
         <td style="color:${o.totalGeral>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(o.totalGeral)}</td>
       </tr>`).join('')}
       <tr>
         <td style="font-weight:800;">NET do mês</td>
-        <td></td>
         <td style="color:#1F8A52;font-weight:800;">${irFmtMoney(motivosMesTotal.entrada)}</td>
         <td style="color:#C0392B;font-weight:800;">${irFmtMoney(motivosMesTotal.saida)}</td>
         <td style="color:${motivosMesTotal.totalGeral>=0?'#001A72':'#C0392B'};font-weight:800;">${irFmtMoney(motivosMesTotal.totalGeral)}</td>
