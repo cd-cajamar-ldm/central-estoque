@@ -2765,10 +2765,6 @@ const IR_AVULSAS = [
    onFile:'irOnFile390Est', onDrop:'irOnDropFile390Est', remove:'irRemoveFile390Est',
    processa:'irProcessarEst390', botao:'Processar estoque', arquivo:()=>IR.est390File,
    rodando:()=>IR.est390Processing, prog:()=>IR.est390Progress, idStage:'ir-390-stage', idFill:'ir-390-fill'},
-  {id:'160', icone:'⏱️', titulo:'QRY0160', sub:'Data de movimento', input:'ir-file-160',
-   onFile:'irOnFile160', onDrop:'irOnDropFile160', remove:'irRemoveFile160',
-   processa:'irProcessar160', botao:'Processar pendência', arquivo:()=>IR.est160File,
-   rodando:()=>IR.est160Processing, prog:()=>IR.est160Progress, idStage:'ir-160-stage', idFill:'ir-160-fill'},
   {id:'410', icone:'📄', titulo:'QRY410', sub:'Perdas e ganhos', input:'ir-file-410',
    onFile:'irOnFile410', onDrop:'irOnDropFile410', remove:'irRemoveFile410',
    processa:'irProcessar410', botao:'Processar QRY410', arquivo:()=>IR.net410File,
@@ -2779,12 +2775,6 @@ function irAvulsaEstado(id){
   if(id==='390'){
     const f = IR.est390Ficha;
     return f ? irFmtInt(f.locais)+' endereços · '+irFmtInt(f.itens)+' itens · '+irFmtDate(f.importadoEm) : 'nunca importada';
-  }
-  if(id==='160'){
-    const m = IR.est390Meta;
-    return (m && m.fonte==='160')
-      ? irFmtInt(m.locais)+' endereços · '+irFmtInt(m.pecasTotal)+' peças · '+irFmtDate(m.importadoEm)
-      : 'nunca importada';
   }
   const anos = IR.net410Anos || [];
   if(!anos.length) return 'nunca importada';
@@ -2866,7 +2856,6 @@ const IR_PASTA_SUPORTA = typeof window !== 'undefined' && typeof window.showDire
    ciclo são os mesmos do IR_FILE_TYPES de propósito — um só lugar pra errar. */
 const IR_PASTA_BASES = [
   {id:'390', label:'QRY0390', desc:'Estoque por endereço', pattern:IR_PAT.p390, auto:true},
-  {id:'160', label:'QRY0160', desc:'Data de movimento',    pattern:IR_PAT.p160, auto:true},
   {id:'410', label:'QRY410',  desc:'Perdas e ganhos',      pattern:IR_PAT.p410, auto:true},
   {id:'843', label:'QRY0843', desc:'Ajustes do ciclo',     pattern:IR_PAT.p843, slot:'f843'},
   {id:'cong',label:'Base Congelada', desc:'Locais do ciclo', pattern:IR_PAT.pCong, slot:'fCong'},
@@ -3122,7 +3111,7 @@ function irRenderPastaPanel(){
     ${IR.pastaErro ? `<p class="pasta-erro">${irEsc(IR.pastaErro)}</p>` : ''}
     ${irRenderPastaCiclos()}
     <details class="pc-det">
-      <summary>Bases fora do ciclo (QRY0390, QRY0160, QRY410)</summary>
+      <summary>Bases fora do ciclo (QRY0390, QRY410)</summary>
       <div class="table-wrap"><table class="pasta-table">
         <thead><tr><th>Base</th><th>Arquivo na pasta</th><th>Modificado em</th><th>Situação</th></tr></thead>
         <tbody>${IR_PASTA_BASES.map(linha).join('')}</tbody>
