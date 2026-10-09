@@ -91,6 +91,19 @@ tbody{background:#fff}
 .inv-info b{color:#111}
 tr.novo td{background:#fff6cc}
 #orc-body tr{cursor:pointer}
+/* Locais a Inventariar (bloco multi-registro, igual à WMIN0010) */
+.mr-head,.mr-row{display:grid;grid-template-columns:150px 1fr 60px;gap:2px}
+.mr-head{padding:0 18px 3px 2px}
+.mr-head span{padding-left:2px}
+.mr-head .r{text-align:right;padding-right:2px}
+.mr-body{height:262px;overflow-y:scroll;padding:2px}
+.mr-row{margin-bottom:2px;cursor:pointer}
+.mr-row input{width:100%;height:23px;cursor:pointer;background:#fff}
+.mr-row.sel input{background:#bfe3e3}
+.mr-row.vazio{cursor:default}
+.mr-row.vazio input{cursor:default}
+.mr-foot{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:6px}
+.mr-foot select{width:170px;background:#d7e8e9}
 /* Árvore LOG → Rua → Local */
 .tree-log td{font-weight:bold;background:#eef4f4}
 .tree-x1 td{background:#f7fafa}
@@ -175,9 +188,10 @@ tr.novo td{background:#fff6cc}
    </fieldset>
   </div>
   <fieldset id="fs-adicionados">
-   <legend>Locais Adicionados ao Inventário</legend>
-   <div class="inv-info" id="add-info"></div>
-   <div class="table-scroll"><table><thead><tr><th style="width:26px"><input type="checkbox" id="add-all"></th><th style="width:110px">Local</th><th>Descrição</th><th style="width:70px">Rua (X1)</th><th style="width:70px">LOG</th><th style="width:110px">Situação</th></tr></thead><tbody id="add-body"></tbody></table></div>
+   <legend>Locais a Inventariar</legend>
+   <div class="mr-head"><span>Local</span><span>Descrição</span><span class="r"># Conf.</span></div>
+   <div class="mr-body" id="add-body"></div>
+   <div class="mr-foot"><label class="fieldlabel">Situação</label><select id="add-sit" disabled><option></option><option>Pendente</option><option>Adicionado</option><option>Liberado</option><option>Contado</option><option>Liquidado</option></select></div>
   </fieldset>
   <div class="lowergrid">
    <fieldset>
@@ -280,11 +294,10 @@ tr.selected-row td{background:#e4eeee!important}
   b('Liquidar').disabled=inv.sit!=='Contado'||lk;b('Cancelar').disabled=!['Aberto','Liberado'].includes(inv.sit)||!n||lk;
   $('#demo-contar').disabled=inv.sit!=='Liberado'||lk;
  }
- function renderAdded(){const inv=invAtual(),ls=locaisInv(cur);
-  $('#add-info').innerHTML=`Inventário <b>${inv.num}</b> · ${inv.sit} · <b>${ls.length}</b> locais`+(inv.faixa.length?` · ${inv.faixa.join(' + ')}`:'')+(ultimos.size?` · <b>${ultimos.size}</b> incluídos agora (destacados)`:'');
-  $('#add-body').innerHTML=ls.length?ls.map(m=>`<tr class="${ultimos.has(m.local)?'novo':''}"><td><input type="checkbox" data-local="${m.local}"></td><td>${m.local}</td><td>${m.desc}</td><td>${m.rua}</td><td>${m.log}</td><td>${m.sit}</td></tr>`).join('')
-   :'<tr><td colspan="6" style="color:#666">Nenhum local neste inventário. Informe uma faixa em Critérios (ou marque “Locais orçados”) e clique em Adicionar Locais.</td></tr>';
-  $('#add-all').checked=false;
+ function renderAdded(){const ls=locaisInv(cur),conf=$$('.checkarea input[type=text]')[0].value||'1';
+  const linhas=ls.map(m=>`<div class="mr-row" data-local="${m.local}"><input readonly value="${m.local}"><input readonly value="${m.desc}"><input readonly value="${conf}" style="text-align:right"></div>`);
+  for(let k=ls.length;k<10;k++)linhas.push('<div class="mr-row vazio"><input readonly><input readonly><input readonly></div>');
+  $('#add-body').innerHTML=linhas.join('');$('#add-sit').value='';
  }
  // Orçados x Contados: LOG → X1 → X1 X2 → Local
  const abertosTree=new Set();
@@ -343,8 +356,8 @@ tr.selected-row td{background:#e4eeee!important}
   const inv=invParaAdicionar();ok.forEach(incluir);addFaixa(inv,descFaixa(c,false));mostrarAdicionados();
   if(bloq.length&&$$('.criteria-foot input[type=checkbox]')[0].checked){msg(ok.length+' local(is) adicionado(s) ao inventário '+inv.num+'. '+bloq.length+' não pode(m) ser inventariado(s): já contado(s) ou em outro inventário do ciclo.');return}
   msg(ok.length+' local(is) adicionado(s) ao inventário '+inv.num+'.'+(bloq.length?' '+bloq.length+' ignorado(s) (já contados ou em outro inventário).':''))}
- function removerLocais(){if(travado())return;const marcados=$$('#add-body input[type=checkbox]:checked').map(x=>x.dataset.local);
-  if(!marcados.length){msg('Marque os locais a remover em “Locais Adicionados ao Inventário”.');return}
+ function removerLocais(){if(travado())return;const marcados=$$('#add-body .mr-row.sel').map(x=>x.dataset.local);
+  if(!marcados.length){msg('Selecione os locais a remover em “Locais a Inventariar”.');return}
   marcados.forEach(l=>{const m=byLocal(l);m.sit='Pendente';m.inv='';ultimos.delete(l)});render();msg(marcados.length+' local(is) removido(s) do inventário '+cur+'.')}
  function liberar(){if(travado())return;const inv=invAtual(),n=locaisInv(inv.num).length;if(inv.sit!=='Aberto'||!n)return;
   locaisInv(inv.num).forEach(m=>m.sit='Liberado');inv.sit='Liberado';inv.ini=hoje();ultimos=new Set();render();
@@ -360,6 +373,8 @@ tr.selected-row td{background:#e4eeee!important}
  function consultarInv(v){v=v.trim();if(!v){if(invAtual().sit!=='Aberto'||locaisInv(cur).length)novoInventario();ultimos=new Set();render();return}
   const inv=INVS.find(i=>i.num===v);if(!inv){msg('Inventário '+v+' não pertence ao '+CICLO+'.');$('#inv-num').value=cur;return}cur=v;ultimos=new Set();render()}
  document.addEventListener('click',function(e){
+  const mr=e.target.closest('#add-body .mr-row');
+  if(mr){if(mr.classList.contains('vazio'))return;mr.classList.toggle('sel');const m=byLocal(mr.dataset.local);$('#add-sit').value=mr.classList.contains('sel')&&m?(contado(m)?m.sit:m.sit):'';return}
   const trOrc=e.target.closest('#orc-body tr');
   if(trOrc){$$('#orc-body tr').forEach(r=>r!==trOrc&&r.classList.remove('selected-row'));trOrc.classList.toggle('selected-row');return}
   let b=e.target.closest('button');if(!b)return;let t=b.textContent.trim().toLowerCase();
@@ -382,7 +397,6 @@ tr.selected-row td{background:#e4eeee!important}
   if(t==='cancelar'&&b.closest('.rowbuttons')){cancelarInv();return}
  });
  document.addEventListener('change',function(e){
-  if(e.target.id==='add-all'){$$('#add-body input[type=checkbox]').forEach(c=>c.checked=e.target.checked);return}
   if(e.target.id==='ci-fim'){renderCiclo();return}
   if(e.target.id==='inv-num'){consultarInv(e.target.value);return}
   if(e.target.matches('input[type=checkbox]')){let tr=e.target.closest('tr');if(tr&&tr.closest('.lowergrid'))tr.classList.toggle('selected-row',e.target.checked);if(e.target.closest('.lowergrid thead')){let table=e.target.closest('table');$$('tbody input[type=checkbox]',table).forEach(c=>{c.checked=e.target.checked;c.closest('tr')?.classList.toggle('selected-row',c.checked)})}}});
