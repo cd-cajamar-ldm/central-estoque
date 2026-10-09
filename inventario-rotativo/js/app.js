@@ -2815,7 +2815,11 @@ function irFmtDataHora(s){
   return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 function irRenderBasesAvulsas(){
-  const temFicha = !!(IR._itemInfo && IR._itemInfo.size);
+  // Mesma fonte que o card da 390 usa pra mostrar "X endereços · Y itens" (logo
+  // abaixo) — não o cache de IR._itemInfo, que só carrega quando a aba Auditoria
+  // é visitada. Usar o cache aqui fazia o aviso "importe a 390 antes" persistir
+  // mesmo com a 390 certinha, só por ninguém ter aberto a Auditoria ainda.
+  const temFicha = !!IR.est390Ficha;
   const cartao = b=>{
     const arq = b.arquivo(), rodando = b.rodando(), prog = b.prog();
     return `<div class="av-card ${arq?'has-file':''}">
