@@ -18,6 +18,7 @@ fieldset{border:1px solid #80aeb3;margin:0 0 5px;padding:5px 7px 7px;min-width:0
 legend{padding:0 3px;font-weight:bold;font-size:13px}
 label{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 input,select,textarea{font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#111;background:#fff;border:1px solid #79a7ab;border-radius:2px;height:24px;padding:2px 4px;box-shadow:inset 1px 1px 1px #e8e8e8}
+input[readonly]{background:#f1f4f4}
 input[type=checkbox]{height:13px;width:13px;margin:0 2px 0 0;accent-color:#777}
 button{font-family:Tahoma,Arial,sans-serif;font-size:12px;color:#111;background:#c7c7c7;border:1px solid #f7f7f7;border-right-color:#777;border-bottom-color:#777;padding:3px 11px;height:25px;box-shadow:inset 1px 1px #eee;white-space:nowrap}
 button:active{border-color:#777 #f7f7f7 #f7f7f7 #777}
@@ -52,13 +53,14 @@ tbody{background:#fff}
 .num{text-align:center}
 .smallbtn{height:20px;padding:0 7px;font-size:11px}
 .scrollbox{overflow:auto;border:1px solid #8bafb2;background:#fff}
+.scrollbox th{position:sticky;top:0;background:#d7e8e9;z-index:1}
 .logtable{max-height:130px}
 .logtable table{font-size:11px}
 .logtable td,.logtable th{height:21px;padding:2px 4px}
 .subrow td{background:#e8eeee}
 .loglist{padding:4px 13px 5px 28px;background:#e9eeee;border:1px solid #a1b7b9}
-.lowergrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.lowergrid fieldset{min-height:250px}
+.lowergrid,.invgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lowergrid fieldset,.invgrid fieldset{min-height:250px}
 .table-scroll{height:170px;overflow:auto;border:1px solid #8bafb2;background:#fff}
 .table-scroll th{position:sticky;top:0;background:#d7e8e9}
 .table-actions{display:flex;gap:8px;margin-top:7px}
@@ -71,6 +73,11 @@ tbody{background:#fff}
 .popup-fields .fieldlabel{text-align:right}
 .popup-fields textarea{height:58px;resize:none}
 .popup-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+/* Ciclo */
+.ciclo-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ciclo-row .sep{width:10px}
+.ciclo-hint{margin-top:5px;color:#444}
+.ciclo-hint b{color:#111}
 /* Cronograma Orçado */
 .cronbtn{display:block;width:100%;height:28px;margin:0 0 5px;font-weight:bold;text-align:left;padding-left:12px}
 .cron-panel{display:none}
@@ -79,6 +86,18 @@ tbody{background:#fff}
 .cron-scroll table{width:1500px}
 .cron-scroll th{position:sticky;top:0;background:#d7e8e9;z-index:1}
 .cron-info{margin-top:5px;color:#333}
+/* Locais adicionados / Inventários do ciclo */
+.inv-info{margin-bottom:5px;color:#333}
+.inv-info b{color:#111}
+tr.cur-inv td{background:#e4eeee}
+tr.novo td{background:#fff6cc}
+#inv-body tr{cursor:pointer}
+#orc-body tr{cursor:pointer}
+/* Árvore LOG → Rua → Local */
+.tree-log td{font-weight:bold;background:#eef4f4}
+.tree-rua td:first-child{padding-left:20px}
+.tree-loc td{font-size:11px;height:21px;color:#333}
+.tree-loc td:first-child{padding-left:38px}
 @media(max-width:1100px){body{overflow:auto}.window{width:1100px}}
 </style>
 </head>
@@ -87,28 +106,40 @@ tbody{background:#fff}
  <div class="titlebar"><span class="appicon"></span><strong>WMIN0400.1</strong><span>Programação de Inventário</span><span class="spacer"></span><span class="winbtn">⌁</span><span class="winbtn">_</span><span class="winbtn">□</span><span class="winbtn">×</span></div>
  <div class="content">
   <fieldset>
+   <legend>Ciclo</legend>
+   <div class="ciclo-row">
+    <label class="fieldlabel">Ciclo</label><input id="ci-nome" value="3º Ciclo 2026" style="width:110px" readonly>
+    <span class="sep"></span><label class="fieldlabel">Tipo</label><input value="Rotativo" style="width:80px" readonly>
+    <span class="sep"></span><label class="fieldlabel">Início</label><input id="ci-ini" value="01/07/2026" style="width:90px">
+    <label class="fieldlabel">Fim</label><input id="ci-fim" value="30/09/2026" style="width:90px">
+    <span class="sep"></span><label class="fieldlabel">Situação</label><input id="ci-sit" value="Aberto" style="width:90px" readonly>
+    <span class="spacer" style="flex:1"></span><button id="ci-liq">Liquidar Ciclo</button>
+   </div>
+   <div class="ciclo-hint" id="ci-hint"></div>
+  </fieldset>
+  <fieldset>
    <legend>Inventário</legend>
    <div class="topgrid">
     <div class="fields">
-     <label class="fieldlabel">Inventário</label><input value="452812"><label class="fieldlabel">Requisição</label><input value="108450">
+     <label class="fieldlabel">Inventário</label><input id="inv-num" value="452812" readonly><label class="fieldlabel">Requisição</label><input value="108450">
      <label class="fieldlabel">Planta</label><input value="2"><span></span><span></span>
      <label class="fieldlabel">Tipo</label><select><option selected>Rotativo</option><option>Cíclico</option><option>Curva</option><option>Global</option></select><input value="Rotativo" style="display:none"><span></span><span></span>
-     <label class="fieldlabel">Situação</label><select><option selected>Aberto</option></select><label class="fieldlabel">Ciclo</label><input value="3º Ciclo 2026">
+     <label class="fieldlabel">Situação</label><select id="inv-sit"><option>Aberto</option><option>Liberado</option><option>Contado</option><option>Liquidado</option><option>Cancelado</option></select><label class="fieldlabel">Ciclo</label><input value="3º Ciclo 2026" readonly>
      <label class="fieldlabel">Obs.</label><input class="full" value="AIR - CICLO ROTATIVO DE INVENTARIO">
     </div>
     <div class="checkarea">
      <div><label><input type="checkbox">Simulação</label></div><div><label><input type="checkbox">Inventariar Quantidade</label></div>
      <div><label><input type="checkbox">Inventariar Lote</label></div><div><label><input type="checkbox">Inventariar Restrição</label></div>
      <div><label><input type="checkbox">Inventariar RG</label></div><div><label># Conf. padrão</label><input type="text" value="5"></div>
-     <div><label>Início</label><input type="text" value="01/01/2026"></div><div><label>Fim</label><input type="text" value="31/03/2026"></div>
+     <div><label>Início</label><input type="text" id="inv-ini" value="" readonly></div><div><label>Fim</label><input type="text" id="inv-fim" value="" readonly></div>
     </div>
    </div>
-   <div class="rowbuttons"><button>Adicionar Locais</button><button>Remover Locais</button><button>Liberar</button><button disabled>Liquidado</button><button>Cancelar</button></div>
+   <div class="rowbuttons"><button>Adicionar Locais</button><button>Remover Locais</button><button>Liberar</button><button>Liquidar</button><button>Cancelar</button></div>
   </fieldset>
   <button class="cronbtn">Cronograma Orçado +</button>
   <fieldset class="cron-panel">
    <legend>Cronograma Orçado</legend>
-   <div class="cron-scroll"><table><thead><tr><th style="width:95px">Ciclo</th><th style="width:75px">Tipo</th><th style="width:270px">Observação</th><th style="width:60px">Rua (X1)</th><th style="width:60px">LOG</th><th style="width:105px">Local</th><th style="width:170px">Descrição</th><th style="width:90px">Dt. Orçada</th><th style="width:85px">Inventário</th><th style="width:95px">Dt. Contagem</th><th style="width:200px">Usuário</th><th style="width:95px">Situação</th></tr></thead><tbody id="cron-body"></tbody></table></div>
+   <div class="cron-scroll"><table><thead><tr><th style="width:95px">Ciclo</th><th style="width:75px">Tipo</th><th style="width:270px">Observação</th><th style="width:60px">Rua (X1)</th><th style="width:60px">LOG</th><th style="width:120px">Local</th><th style="width:170px">Descrição</th><th style="width:90px">Dt. Orçada</th><th style="width:85px">Inventário</th><th style="width:95px">Dt. Contagem</th><th style="width:200px">Usuário</th><th style="width:95px">Situação</th></tr></thead><tbody id="cron-body"></tbody></table></div>
    <div class="cron-info" id="cron-info"></div>
   </fieldset>
   <div class="middle">
@@ -137,37 +168,42 @@ tbody{background:#fff}
     <legend>Orçados x Contados por LOG</legend>
     <div class="scrollbox" style="max-height:330px">
      <table>
-      <thead><tr><th style="width:26%">Rua (X1)</th><th class="num">Orçados</th><th class="num">Contados</th><th class="num">Pendentes</th><th style="width:80px">Ação</th></tr></thead>
-      <tbody>
-       <tr><td>MZN</td><td class="num">100</td><td class="num">99</td><td class="num">1</td><td><button class="smallbtn">Recolher −</button></td></tr>
-       <tr><td colspan="5" style="padding:0"><div class="loglist"><div style="font-weight:bold;margin-bottom:4px">Grupo Classe (LOG)</div><div class="logtable"><table><thead><tr><th>LOG</th><th class="num">Orçados</th><th class="num">Contados</th><th class="num">Pendentes</th></tr></thead><tbody><tr><td>LOG 1</td><td class="num">48</td><td class="num">48</td><td class="num">0</td></tr><tr><td>LOG 2</td><td class="num">39</td><td class="num">39</td><td class="num">0</td></tr><tr><td>LOG 3</td><td class="num">12</td><td class="num">11</td><td class="num">1</td></tr><tr><td>LOG 4</td><td class="num">1</td><td class="num">1</td><td class="num">0</td></tr></tbody></table></div></div></td></tr>
-       <tr><td>PPP</td><td class="num">85</td><td class="num">84</td><td class="num">1</td><td><button class="smallbtn">Expandir +</button></td></tr>
-       <tr><td>BAS</td><td class="num">120</td><td class="num">64</td><td class="num">56</td><td><button class="smallbtn">Expandir +</button></td></tr>
-       <tr><td>MZB</td><td class="num">60</td><td class="num">60</td><td class="num">0</td><td><button class="smallbtn">Expandir +</button></td></tr>
-       <tr><td>COF</td><td class="num">34</td><td class="num">34</td><td class="num">0</td><td><button class="smallbtn">Expandir +</button></td></tr>
-      </tbody>
+      <thead><tr><th style="width:34%">LOG / Rua (X1) / Local</th><th class="num">Orçados</th><th class="num">Contados</th><th class="num">Pendentes</th><th style="width:80px">Ação</th></tr></thead>
+      <tbody id="tree-body"></tbody>
      </table>
     </div>
+   </fieldset>
+  </div>
+  <div class="invgrid">
+   <fieldset id="fs-adicionados">
+    <legend>Locais Adicionados ao Inventário</legend>
+    <div class="inv-info" id="add-info"></div>
+    <div class="table-scroll"><table><thead><tr><th style="width:26px"><input type="checkbox" id="add-all"></th><th style="width:125px">Local</th><th>Descrição</th><th style="width:55px">Rua</th><th style="width:55px">LOG</th><th style="width:85px">Situação</th></tr></thead><tbody id="add-body"></tbody></table></div>
+   </fieldset>
+   <fieldset>
+    <legend>Inventários do Ciclo</legend>
+    <div class="inv-info">Um ciclo reúne vários inventários; cada inventário pertence a um único ciclo.</div>
+    <div class="table-scroll"><table><thead><tr><th style="width:70px">Inventário</th><th>Faixa / Critério</th><th class="num" style="width:55px">Locais</th><th class="num" style="width:65px">Contados</th><th style="width:80px">Situação</th><th style="width:120px">Ação</th></tr></thead><tbody id="inv-body"></tbody></table></div>
    </fieldset>
   </div>
   <div class="lowergrid">
    <fieldset>
     <legend>Locais Pendentes do Ciclo</legend>
     <div class="table-scroll"><table><thead><tr><th style="width:26px"><input type="checkbox"></th><th>Local</th><th>Descrição</th><th style="width:55px">LOG</th><th style="width:55px">Rua</th><th style="width:95px">Situação</th></tr></thead><tbody>
-     <tr><td><input type="checkbox"></td><td>MZN-01-01-03</td><td>Porta-palete nível 3</td><td>LOG 3</td><td>MZN</td><td>Pendente</td></tr>
-     <tr><td><input type="checkbox"></td><td>BAS-02-04-01</td><td>Estante baixa</td><td>LOG 2</td><td>BAS</td><td>Pendente</td></tr>
-     <tr><td><input type="checkbox"></td><td>BAS-02-04-02</td><td>Estante baixa</td><td>LOG 2</td><td>BAS</td><td>Pendente</td></tr>
-     <tr><td><input type="checkbox"></td><td>BAS-03-02-01</td><td>Porta-palete nível 1</td><td>LOG 1</td><td>BAS</td><td>Pendente</td></tr>
-     <tr><td><input type="checkbox"></td><td>BAS-03-02-02</td><td>Porta-palete nível 2</td><td>LOG 1</td><td>BAS</td><td>Pendente</td></tr>
-     <tr><td><input type="checkbox"></td><td>PPP-01-05-04</td><td>Picking unitário</td><td>LOG 4</td><td>PPP</td><td>Pendente</td></tr>
+     <tr><td><input type="checkbox"></td><td>MZN-001-001-03</td><td>Porta-palete nível 3</td><td>LOG 3</td><td>MZN</td><td>Pendente</td></tr>
+     <tr><td><input type="checkbox"></td><td>BAS-002-004-01</td><td>Estante baixa</td><td>LOG 2</td><td>BAS</td><td>Pendente</td></tr>
+     <tr><td><input type="checkbox"></td><td>BAS-002-004-02</td><td>Estante baixa</td><td>LOG 2</td><td>BAS</td><td>Pendente</td></tr>
+     <tr><td><input type="checkbox"></td><td>BAS-003-002-01</td><td>Porta-palete nível 1</td><td>LOG 1</td><td>BAS</td><td>Pendente</td></tr>
+     <tr><td><input type="checkbox"></td><td>BAS-003-002-02</td><td>Porta-palete nível 2</td><td>LOG 1</td><td>BAS</td><td>Pendente</td></tr>
+     <tr><td><input type="checkbox"></td><td>PPP-001-005-04</td><td>Picking unitário</td><td>LOG 4</td><td>PPP</td><td>Pendente</td></tr>
     </tbody></table></div>
     <div class="table-actions"><button>Adicionar à contagem</button><button>Exportar pendentes</button></div>
    </fieldset>
    <fieldset>
     <legend>Locais Orçados</legend>
-    <div class="table-scroll"><table><thead><tr><th>Local</th><th style="width:65px">LOG</th><th style="width:105px">Situação</th></tr></thead><tbody>
-     <tr><td>MZN-01-01-01</td><td>LOG 1</td><td>Liquidado</td></tr><tr><td>MZN-01-01-02</td><td>LOG 1</td><td>Contado</td></tr><tr><td>MZN-01-01-03</td><td>LOG 3</td><td>Orçado</td></tr><tr><td>PPP-01-02-01</td><td>LOG 2</td><td>Liquidado</td></tr><tr><td>BAS-02-04-01</td><td>LOG 2</td><td>Orçado</td></tr><tr><td>MZB-04-01-01</td><td>LOG 4</td><td>Cancelado</td></tr><tr><td>COF-02-02-02</td><td>LOG 3</td><td>Contado</td></tr></tbody></table></div>
-    <div class="table-actions"><button>Trocar Local</button><button>Cancelar Contagem</button></div>
+    <div class="table-scroll"><table><thead><tr><th>Local</th><th style="width:65px">LOG</th><th style="width:105px">Situação</th></tr></thead><tbody id="orc-body">
+     <tr><td>MZN-001-001-01</td><td>LOG 1</td><td>Liquidado</td></tr><tr><td>MZN-001-001-02</td><td>LOG 1</td><td>Contado</td></tr><tr><td>MZN-001-001-03</td><td>LOG 3</td><td>Orçado</td></tr><tr><td>PPP-001-002-01</td><td>LOG 2</td><td>Liquidado</td></tr><tr><td>BAS-002-004-01</td><td>LOG 2</td><td>Orçado</td></tr><tr><td>MZB-004-001-01</td><td>LOG 4</td><td>Cancelado</td></tr><tr><td>COF-002-002-02</td><td>LOG 3</td><td>Contado</td></tr></tbody></table></div>
+    <div class="table-actions"><button>Cancelar Contagem</button></div>
    </fieldset>
   </div>
   <div class="statusbar">WMS Bseller&nbsp;&nbsp; | &nbsp;&nbsp;WMIN0400.1&nbsp;&nbsp; | &nbsp;&nbsp;Programação de Inventário</div>
@@ -175,100 +211,192 @@ tbody{background:#fff}
 </div>
 
 <style>
-.toast-msg{position:fixed;right:18px;bottom:18px;background:#e5f2f4;border:1px solid #6d9297;padding:8px 14px;z-index:1000;box-shadow:2px 2px 4px #888;max-width:380px}
+.toast-msg{position:fixed;right:18px;bottom:18px;background:#e5f2f4;border:1px solid #6d9297;padding:8px 14px;z-index:1000;box-shadow:2px 2px 4px #888;max-width:420px}
 tr.selected-row td{background:#e4eeee!important}
 </style>
 <script>
 (function(){
  const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
- function msg(t){let n=$('.toast-msg');if(!n){n=document.createElement('div');n.className='toast-msg';document.body.appendChild(n)}n.textContent=t;n.style.display='block';clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>n.style.display='none',3000)}
- function btn(t){return $$('button').find(b=>b.textContent.trim().toLowerCase()===t.toLowerCase())}
+ function msg(t){let n=$('.toast-msg');if(!n){n=document.createElement('div');n.className='toast-msg';document.body.appendChild(n)}n.textContent=t;n.style.display='block';clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>n.style.display='none',5000)}
  function field(label){let l=$$('label').find(x=>x.textContent.trim().replace(/\s+/g,' ').replace(':','').toLowerCase()===label.toLowerCase());return l?(l.nextElementSibling&&l.nextElementSibling.matches('input,select,textarea')?l.nextElementSibling:l.parentElement.querySelector('input,select,textarea')):null}
- function openPopup(){let shade=$('.popup-shade');if(shade){shade.style.display='flex';return}let p=document.createElement('div');p.className='popup-shade';p.innerHTML=`<div class="popup"><div class="titlebar"><span class="appicon"></span><strong>Cancelar Contagem</strong><span class="spacer"></span><span class="winbtn close-popup" style="cursor:pointer">×</span></div><div class="popup-body"><fieldset><legend>Cancelar Contagem</legend><div class="popup-fields"><label class="fieldlabel">Local</label><input id="cancel-local" value="" readonly><label class="fieldlabel">Motivo *</label><select id="cancel-motivo" required><option value="">Selecione...</option><option>Erro de endereçamento</option><option>Local incorreto</option><option>Contagem indevida</option><option>Outro</option></select><label class="fieldlabel">Nova observação</label><textarea id="cancel-obs">AIR - CICLO ROTATIVO DE INVENTARIO - CONTAGEM CANCELADA</textarea></div></fieldset><div class="popup-actions"><button class="confirm-cancel">Confirmar</button><button class="close-popup">Voltar</button></div></div></div>`;document.body.appendChild(p);p.style.display='flex';let row=$('tr.selected-row');$('#cancel-local').value=row?row.cells[0].textContent.trim():'MZN-01-01-01'}
+ function openPopup(){let shade=$('.popup-shade');if(shade){shade.style.display='flex';let row=$('tr.selected-row');$('#cancel-local').value=row?row.cells[0].textContent.trim():'';return}let p=document.createElement('div');p.className='popup-shade';p.innerHTML=`<div class="popup"><div class="titlebar"><span class="appicon"></span><strong>Cancelar Contagem</strong><span class="spacer"></span><span class="winbtn close-popup" style="cursor:pointer">×</span></div><div class="popup-body"><fieldset><legend>Cancelar Contagem</legend><div class="popup-fields"><label class="fieldlabel">Local</label><input id="cancel-local" value="" readonly><label class="fieldlabel">Motivo *</label><select id="cancel-motivo" required><option value="">Selecione...</option><option>Erro de endereçamento</option><option>Local incorreto</option><option>Contagem indevida</option><option>Outro</option></select><label class="fieldlabel">Nova observação</label><textarea id="cancel-obs">AIR - CICLO ROTATIVO DE INVENTARIO - CONTAGEM CANCELADA</textarea></div></fieldset><div class="popup-actions"><button class="confirm-cancel">Confirmar</button><button class="close-popup">Voltar</button></div></div></div>`;document.body.appendChild(p);p.style.display='flex';let row=$('tr.selected-row');$('#cancel-local').value=row?row.cells[0].textContent.trim():'MZN-001-001-01'}
  function closePopup(){let s=$('.popup-shade');if(s)s.style.display='none'}
- function selectedRow(){return $('tr.selected-row')}
+ function selectedRow(){return $('#orc-body tr.selected-row')}
  function setStatus(row,status){if(row&&row.cells.length){row.cells[row.cells.length-1].textContent=status;row.classList.remove('selected-row')}}
- // ---- Cronograma Orçado (modelo QRY0014) ----
- const CICLO='3º Ciclo 2026',OBS='AIR - CICLO ROTATIVO DE INVENTARIO',INV_ANT='452790',USR='MECA_GUSTAVOLEOPOLDINO';
- // [orçados, contados] por LOG 1..4 — mesmos totais de "Orçados x Contados por LOG"
+
+ // ================= MODELO: Ciclo → Inventários → Locais =================
+ // Local = X1 (rua) - X2 (prédio) - X3 (posição) - X4 (nível)
+ const CICLO='3º Ciclo 2026',OBS='AIR - CICLO ROTATIVO DE INVENTARIO',USR='MECA_GUSTAVOLEOPOLDINO',RUAS=['MZN','PPP','BAS','MZB','COF'];
+ // [orçados, contados] por LOG 1..4
  const PLANO={MZN:[[48,48],[39,39],[12,11],[1,1]],PPP:[[30,30],[25,25],[20,20],[10,9]],BAS:[[40,20],[40,20],[30,18],[10,6]],MZB:[[20,20],[20,20],[15,15],[5,5]],COF:[[12,12],[10,10],[8,8],[4,4]]};
- // locais já presentes nas tabelas da tela
- const FIXOS=[['MZN-01-01-01',1,'Porta-palete nível 1','Liquidado'],['MZN-01-01-02',1,'Porta-palete nível 2','Contado'],['MZN-01-01-03',3,'Porta-palete nível 3','Pendente'],
-  ['PPP-01-02-01',2,'Porta-palete nível 2','Liquidado'],['PPP-01-05-04',4,'Picking unitário','Pendente'],
-  ['BAS-02-04-01',2,'Estante baixa','Pendente'],['BAS-02-04-02',2,'Estante baixa','Pendente'],['BAS-03-02-01',1,'Porta-palete nível 1','Pendente'],['BAS-03-02-02',1,'Porta-palete nível 2','Pendente'],
-  ['COF-02-02-02',3,'Cofre gaveta 2','Contado']];
+ const INV_RUA={MZN:'452790',PPP:'452790',MZB:'452801',COF:'452801',BAS:'452805'};
+ const FIXOS=[['MZN-001-001-01',1,'Porta-palete nível 1','Liquidado','452790'],['MZN-001-001-02',1,'Porta-palete nível 2','Contado','452808'],['MZN-001-001-03',3,'Porta-palete nível 3','Pendente'],
+  ['PPP-001-002-01',2,'Porta-palete nível 2','Liquidado','452790'],['PPP-001-005-04',4,'Picking unitário','Pendente'],
+  ['BAS-002-004-01',2,'Estante baixa','Pendente'],['BAS-002-004-02',2,'Estante baixa','Pendente'],['BAS-003-002-01',1,'Porta-palete nível 1','Pendente'],['BAS-003-002-02',1,'Porta-palete nível 2','Pendente'],
+  ['COF-002-002-02',3,'Cofre gaveta 2','Contado','452808']];
+ const INV_DT={'452790':['15/07/2026','31/07/2026'],'452801':['05/08/2026','20/08/2026'],'452805':['02/09/2026','18/09/2026'],'452808':['25/09/2026','']};
  const contado=m=>m.sit==='Contado'||m.sit==='Liquidado';
- function novo(local,log,desc,sit,tipo,obs){let [rua,p,n,a]=local.split('-');let c=contado(sit?{sit}:{});return{local,rua,pred:+p,niv:+n,apto:+a,log:'LOG '+log,desc,sit,tipo:tipo||'Rotativo',obs:obs||OBS,dtOrc:'0'+(1+(+p%9))+'/10/2026'.slice(-8),inv:c?INV_ANT:'',dtCont:c?(10+(+p%18))+'/09/2026':'',usr:c?USR:''}}
- function descPadrao(rua,n,a){return rua==='MZB'?'Estante mezanino':rua==='COF'?'Cofre gaveta '+a:'Porta-palete nível '+n}
+ function novo(local,log,desc,sit,inv,tipo,obs){const [rua,x2,x3,x4]=local.split('-');const c=sit==='Contado'||sit==='Liquidado';
+  return{local,rua,x2:+x2,x3:+x3,x4:+x4,log:'LOG '+log,desc,sit,inv:inv||'',tipo:tipo||'Rotativo',obs:obs||OBS,dtOrc:'0'+(1+(+x3%9))+'/07/2026',dtCont:c?(INV_DT[inv]||['','25/09/2026'])[1]||'25/09/2026':'',usr:c?USR:''}}
  const MODELO=[];
- Object.keys(PLANO).forEach(rua=>{
-  const usados=new Set(FIXOS.filter(f=>f[0].startsWith(rua)).map(f=>f[0]));let p=1,n=1,a=0;
-  const prox=()=>{let c;do{a++;if(a>4){a=1;n++}if(n>6){n=1;p++}c=rua+'-'+String(p).padStart(2,'0')+'-'+String(n).padStart(2,'0')+'-'+String(a).padStart(2,'0')}while(usados.has(c));usados.add(c);return c};
+ RUAS.forEach(rua=>{
+  const usados=new Set(FIXOS.filter(f=>f[0].startsWith(rua)).map(f=>f[0]));let pos=0;
+  const prox=()=>{let c;do{pos++;c=rua+'-001-'+String(pos).padStart(3,'0')+'-00'}while(usados.has(c));usados.add(c);return c};
+  const desc=()=>rua==='MZB'?'Estante mezanino':rua==='COF'?'Cofre gaveta':'Porta-palete';
   PLANO[rua].forEach(([orc,cont],i)=>{const log=i+1,fx=FIXOS.filter(f=>f[0].startsWith(rua)&&f[1]===log);
-   fx.forEach(f=>MODELO.push(novo(f[0],log,f[2],f[3])));
-   let kc=cont-fx.filter(f=>f[3]!=='Pendente').length,kp=(orc-cont)-fx.filter(f=>f[3]==='Pendente').length;
-   for(let j=0;j<kc;j++){let c=prox(),[,,nn,aa]=c.split('-');MODELO.push(novo(c,log,descPadrao(rua,+nn,+aa),j%3?'Contado':'Liquidado'))}
-   for(let j=0;j<kp;j++){let c=prox(),[,,nn,aa]=c.split('-');MODELO.push(novo(c,log,descPadrao(rua,+nn,+aa),'Pendente'))}});
+   fx.forEach(f=>MODELO.push(novo(f[0],log,f[2],f[3],f[4])));
+   const kc=cont-fx.filter(f=>f[3]!=='Pendente').length,kp=(orc-cont)-fx.filter(f=>f[3]==='Pendente').length;
+   for(let j=0;j<kc;j++)MODELO.push(novo(prox(),log,desc(),'Liquidado',INV_RUA[rua]));
+   for(let j=0;j<kp;j++)MODELO.push(novo(prox(),log,desc(),'Pendente'))});
  });
  // fora do ciclo (não atendem Tipo Rotativo + Obs "AIR - ")
- MODELO.push(novo('MZB-05-01-01',2,'Estante mezanino','Orçado','Cíclico'),novo('COF-03-01-01',4,'Cofre gaveta 1','Orçado','Rotativo','INVENTARIO COFRE MENSAL'));
+ MODELO.push(novo('MZB-005-001-01',2,'Estante mezanino','Pendente','','Cíclico'),novo('COF-003-001-01',4,'Cofre gaveta 1','Pendente','','Rotativo','INVENTARIO COFRE MENSAL'));
  const byLocal=l=>MODELO.find(m=>m.local===l);
- const pendenteCiclo=m=>m.tipo==='Rotativo'&&m.obs.startsWith('AIR - ')&&!contado(m);
- // amostra exibida na grade (~20 linhas)
- const pick=(rua,log,pend)=>MODELO.find(m=>m.rua===rua&&m.log==='LOG '+log&&!FIXOS.some(f=>f[0]===m.local)&&(pend?m.sit==='Pendente':contado(m)));
- const AMOSTRA=[...FIXOS.map(f=>byLocal(f[0])),pick('MZN',2,0),pick('PPP',3,0),pick('BAS',3,1),pick('BAS',4,1),pick('MZB',1,0),pick('MZB',3,0),pick('COF',1,0),pick('COF',4,0),byLocal('MZB-05-01-01'),byLocal('COF-03-01-01')]
-  .filter(Boolean).sort((x,y)=>['MZN','PPP','BAS','MZB','COF'].indexOf(x.rua)-['MZN','PPP','BAS','MZB','COF'].indexOf(y.rua)||x.local.localeCompare(y.local));
- function renderCron(){
-  $('#cron-body').innerHTML=AMOSTRA.map(m=>`<tr><td>${CICLO}</td><td>${m.tipo}</td><td>${m.obs}</td><td>${m.rua}</td><td>${m.log}</td><td>${m.local}</td><td>${m.desc}</td><td>${m.dtOrc}</td><td>${m.inv}</td><td>${m.dtCont}</td><td>${m.usr}</td><td>${m.sit}</td></tr>`).join('');
-  const ciclo=MODELO.filter(m=>m.tipo==='Rotativo'&&m.obs.startsWith('AIR - '));
-  $('#cron-info').textContent=`Exibindo ${AMOSTRA.length} de ${MODELO.length} registros   |   Orçados no ciclo: ${ciclo.length}   |   Contados: ${ciclo.filter(contado).length}   |   Adicionados: ${ciclo.filter(m=>m.sit==='Adicionado').length}   |   Pendentes: ${ciclo.filter(m=>m.sit==='Pendente').length}`;
+ const doCiclo=m=>m.tipo==='Rotativo'&&m.obs.startsWith('AIR - ');
+ const pendenteCiclo=m=>doCiclo(m)&&!contado(m);
+
+ const INVS=[
+  {num:'452790',faixa:'MZN-001-001-00 até PPP-001-130-00',sit:'Liquidado',ini:'15/07/2026',fim:'31/07/2026'},
+  {num:'452801',faixa:'MZB-001-001-00 até COF-001-130-00',sit:'Liquidado',ini:'05/08/2026',fim:'20/08/2026'},
+  {num:'452805',faixa:'BAS-001-001-00 até BAS-001-130-00 (parcial)',sit:'Liquidado',ini:'02/09/2026',fim:'18/09/2026'},
+  {num:'452808',faixa:'Recontagem: MZN-001-001-02; COF-002-002-02',sit:'Contado',ini:'25/09/2026',fim:''},
+  {num:'452812',faixa:'',sit:'Aberto',ini:'',fim:''}];
+ let cur='452812',cicloSit='Aberto',ultimos=new Set();
+ const invAtual=()=>INVS.find(i=>i.num===cur);
+ const locaisInv=n=>MODELO.filter(m=>m.inv===n);
+ const hoje=()=>{const d=new Date();return d.toLocaleDateString('pt-BR')};
+ const parseData=s=>{const p=(s||'').split('/');return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):null};
+ const travado=()=>cicloSit==='Liquidado'&&(msg('Ciclo liquidado: dados travados para alteração.'),true);
+
+ // ================= RENDER =================
+ function renderCiclo(){
+  const ciclo=MODELO.filter(doCiclo),pend=ciclo.filter(m=>!contado(m)).length;
+  const abertos=INVS.filter(i=>!['Liquidado','Cancelado'].includes(i.sit)&&locaisInv(i.num).length);
+  const fim=parseData($('#ci-fim').value),fimOk=fim&&new Date()>fim;
+  const falta=[];if(!fimOk)falta.push('prazo do ciclo ainda não terminou ('+$('#ci-fim').value+')');if(pend)falta.push(pend+' locais ainda não contados');if(abertos.length)falta.push(abertos.length+' inventário(s) não liquidado(s): '+abertos.map(i=>i.num).join(', '));
+  $('#ci-sit').value=cicloSit;
+  $('#ci-hint').innerHTML=`Orçados: <b>${ciclo.length}</b> &nbsp;|&nbsp; Contados: <b>${ciclo.length-pend}</b> &nbsp;|&nbsp; Pendentes: <b>${pend}</b> &nbsp;|&nbsp; Inventários: <b>${INVS.filter(i=>i.sit!=='Cancelado'&&locaisInv(i.num).length).length}</b> &nbsp;&nbsp;—&nbsp;&nbsp; `+
+   (cicloSit==='Liquidado'?'Ciclo liquidado: dados travados para alteração.':falta.length?'Liquidar Ciclo disponível quando: '+falta.join('; ')+'.':'Ciclo pronto para liquidar.');
+  $('#ci-liq').disabled=cicloSit==='Liquidado'||falta.length>0;
  }
- function setSit(local,sit){const m=byLocal(local);if(m&&!contado(m)){m.sit=sit;renderCron()}}
- // ---- Critérios de seleção de Locais ----
+ function renderInv(){const inv=invAtual(),n=locaisInv(cur).length;
+  $('#inv-num').value=inv.num;$('#inv-sit').value=inv.sit;$('#inv-ini').value=inv.ini;$('#inv-fim').value=inv.fim;
+  const b=t=>$$('.rowbuttons button').find(x=>x.textContent.trim()===t),ab=inv.sit==='Aberto'&&cicloSit!=='Liquidado';
+  b('Adicionar Locais').disabled=!ab;b('Remover Locais').disabled=!ab||!n;b('Liberar').disabled=!ab||!n;
+  b('Liquidar').disabled=inv.sit!=='Contado'||cicloSit==='Liquidado';b('Cancelar').disabled=!['Aberto','Liberado'].includes(inv.sit)||!n||cicloSit==='Liquidado';
+ }
+ function renderAdded(){const inv=invAtual(),ls=locaisInv(cur);
+  $('#add-info').innerHTML=`Inventário <b>${inv.num}</b> · ${inv.sit} · <b>${ls.length}</b> locais`+(inv.faixa?` · ${inv.faixa}`:'')+(ultimos.size?` · <b>${ultimos.size}</b> incluídos agora (destacados)`:'');
+  $('#add-body').innerHTML=ls.length?ls.map(m=>`<tr class="${ultimos.has(m.local)?'novo':''}"><td><input type="checkbox" data-local="${m.local}"></td><td>${m.local}</td><td>${m.desc}</td><td>${m.rua}</td><td>${m.log}</td><td>${m.sit}</td></tr>`).join('')
+   :'<tr><td colspan="6" style="color:#666">Nenhum local neste inventário. Informe uma faixa em Critérios (ou marque “Locais orçados”) e clique em Adicionar Locais.</td></tr>';
+  $('#add-all').checked=false;
+ }
+ function renderInvTable(){
+  $('#inv-body').innerHTML=INVS.map(i=>{const ls=locaisInv(i.num),c=ls.filter(contado).length;
+   const acao=i.sit==='Liberado'?'<button class="smallbtn" data-acao="contar">Simular contagem</button>':i.sit==='Contado'?'<button class="smallbtn" data-acao="liquidar">Liquidar</button>':'';
+   return `<tr data-inv="${i.num}" class="${i.num===cur?'cur-inv':''}"><td>${i.num}</td><td>${i.faixa||'<span style="color:#777">(em montagem)</span>'}</td><td class="num">${ls.length}</td><td class="num">${c}</td><td>${i.sit}</td><td>${cicloSit==='Liquidado'?'':acao}</td></tr>`}).join('');
+ }
+ const abertosTree=new Set();
+ function renderTree(){const ciclo=MODELO.filter(doCiclo),cnt=a=>[a.length,a.filter(contado).length,a.filter(m=>!contado(m)).length];let h='';
+  [1,2,3,4].forEach(l=>{const L='LOG '+l,la=ciclo.filter(m=>m.log===L),[o,c,p]=cnt(la),k=L,op=abertosTree.has(k);
+   h+=`<tr class="tree-log"><td>${L}</td><td class="num">${o}</td><td class="num">${c}</td><td class="num">${p}</td><td><button class="smallbtn" data-tree="${k}">${op?'Recolher −':'Expandir +'}</button></td></tr>`;
+   if(!op)return;
+   RUAS.forEach(r=>{const ra=la.filter(m=>m.rua===r);if(!ra.length)return;const [o,c,p]=cnt(ra),k2=L+'|'+r,op2=abertosTree.has(k2);
+    h+=`<tr class="tree-rua"><td>${r}</td><td class="num">${o}</td><td class="num">${c}</td><td class="num">${p}</td><td><button class="smallbtn" data-tree="${k2}">${op2?'Recolher −':'Expandir +'}</button></td></tr>`;
+    if(op2)ra.forEach(m=>h+=`<tr class="tree-loc"><td>${m.local}</td><td colspan="3">${m.sit}${m.inv?' · Inv. '+m.inv:''}</td><td></td></tr>`)})});
+  $('#tree-body').innerHTML=h;
+ }
+ // amostra exibida na grade do Cronograma (~20 linhas)
+ const pick=(rua,log,pend)=>MODELO.find(m=>m.rua===rua&&m.log==='LOG '+log&&!FIXOS.some(f=>f[0]===m.local)&&(pend?m.sit==='Pendente':contado(m)));
+ const AMOSTRA=[...FIXOS.map(f=>byLocal(f[0])),pick('MZN',2,0),pick('PPP',3,0),pick('BAS',3,1),pick('BAS',4,1),pick('MZB',1,0),pick('MZB',3,0),pick('COF',1,0),pick('COF',4,0),byLocal('MZB-005-001-01'),byLocal('COF-003-001-01')]
+  .filter(Boolean).sort((x,y)=>RUAS.indexOf(x.rua)-RUAS.indexOf(y.rua)||x.local.localeCompare(y.local));
+ function renderCron(){
+  $('#cron-body').innerHTML=AMOSTRA.map(m=>`<tr><td>${CICLO}</td><td>${m.tipo}</td><td>${m.obs}</td><td>${m.rua}</td><td>${m.log}</td><td>${m.local}</td><td>${m.desc}</td><td>${m.dtOrc}</td><td>${m.inv}</td><td>${m.dtCont}</td><td>${m.usr}</td><td>${doCiclo(m)?m.sit:'Fora do ciclo'}</td></tr>`).join('');
+  const ciclo=MODELO.filter(doCiclo),q=s=>ciclo.filter(m=>m.sit===s).length;
+  $('#cron-info').textContent=`Exibindo ${AMOSTRA.length} de ${MODELO.length} registros   |   Orçados no ciclo: ${ciclo.length}   |   Contados: ${ciclo.filter(contado).length}   |   Adicionados: ${q('Adicionado')}   |   Liberados: ${q('Liberado')}   |   Pendentes: ${q('Pendente')}`;
+ }
+ function refreshTables(){
+  const pend=$$('.lowergrid table')[0].querySelector('tbody');
+  Array.from(pend.rows).forEach(r=>{const m=byLocal(r.cells[1].textContent.trim());if(m)r.cells[r.cells.length-1].textContent=contado(m)?'Contado':m.sit});
+  Array.from($('#orc-body').rows).forEach(r=>{const s=r.cells[2];if(s.textContent==='Cancelado')return;const m=byLocal(r.cells[0].textContent.trim());if(m)s.textContent=m.sit==='Pendente'||m.sit==='Adicionado'?'Orçado':m.sit});
+ }
+ function render(){renderCiclo();renderInv();renderAdded();renderInvTable();renderTree();renderCron();refreshTables()}
+
+ // ================= AÇÕES =================
  function criterios(){const cr=$('.criteria'),pr=$$('.pair',cr).map(d=>d.querySelector('input').value.trim().toUpperCase()),co=$$('.coords',cr).map(d=>$$('input',d).map(i=>i.value.trim().toUpperCase())),se=$$('select',cr).map(s=>s.value);
-  return{local:pr[0],classe:pr[1],predio:pr[2],outros:pr.slice(3).some(Boolean)||!!se[0],ini:co[0],fim:co[1],par:se[1],
-   algum:pr.some(Boolean)||co.flat().some(Boolean)||se.some(Boolean)}}
+  let ini=co[0],fim=co[1];if(!fim.some(Boolean))fim=ini.slice();
+  return{local:pr[0],classe:pr[1],predio:pr[2],ini,fim,par:se[1],algum:pr.some(Boolean)||ini.some(Boolean)||se.some(Boolean)}}
+ // faixa: compara (X1,X2,X3,X4) em ordem; coordenada vazia = sem limite
+ function dentro(m,lim,dir){const v=[m.rua,m.x2,m.x3,m.x4];for(let i=0;i<4;i++){if(lim[i]==='')return true;const l=i?+lim[i]:lim[i];if(v[i]===l)continue;return dir>0?v[i]>l:v[i]<l}return true}
  function atende(m,c){
   if(c.local&&!m.local.startsWith(c.local))return false;
   if(c.classe&&m.log!=='LOG '+c.classe.replace(/\D/g,''))return false;
-  if(c.predio&&m.pred!==+c.predio)return false;
-  const v=[m.rua,m.pred,m.niv,m.apto];
-  for(let i=0;i<4;i++){const lo=c.ini[i],hi=c.fim[i];if(i===0){if(lo&&v[0]<lo)return false;if(hi&&v[0]>hi)return false}else{if(lo&&v[i]<+lo)return false;if(hi&&v[i]>+hi)return false}}
-  if(c.par==='Par'&&m.niv%2)return false;if(c.par==='Ímpar'&&!(m.niv%2))return false;
+  if(c.predio&&m.x2!==+c.predio)return false;
+  if(!dentro(m,c.ini,1)||!dentro(m,c.fim,-1))return false;
+  if(c.par==='Par'&&m.x3%2)return false;if(c.par==='Ímpar'&&!(m.x3%2))return false;
   return true}
- function incluir(m){const budget=$$('.lowergrid table')[1].querySelector('tbody');
-  if(!Array.from(budget.rows).some(x=>x.cells[0].textContent.trim()===m.local)){let nr=budget.insertRow();nr.insertCell().textContent=m.local;nr.insertCell().textContent=m.log;nr.insertCell().textContent='Orçado'}
-  if(pendenteCiclo(m)){const pend=$$('.lowergrid table')[0].querySelector('tbody');let r=Array.from(pend.rows).find(x=>x.cells[1]&&x.cells[1].textContent.trim()===m.local);
-   if(!r){r=pend.insertRow();r.insertCell().innerHTML='<input type="checkbox">';[m.local,m.desc,m.log,m.rua,''].forEach(t=>r.insertCell().textContent=t)}
-   r.cells[r.cells.length-1].textContent='Adicionado';r.querySelector('input[type=checkbox]').checked=false;r.classList.remove('selected-row');m.sit='Adicionado'}}
- function adicionarLocais(){const c=criterios();
-  if($('#locais-orcados').checked){
-   const sel=MODELO.filter(m=>pendenteCiclo(m)&&m.sit==='Pendente'&&atende(m,c));
+ const fmt=c=>c.join('-');
+ function descFaixa(c,orc){let s=c.ini.some(Boolean)?fmt(c.ini)+' até '+fmt(c.fim):c.local?'Local '+c.local:c.classe?'Classe '+c.classe:'';return orc?('Locais orçados'+(s?' · '+s:'')):s||'Critérios'}
+ function incluir(m){const inv=invAtual();m.sit='Adicionado';m.inv=inv.num;ultimos.add(m.local);
+  const budget=$('#orc-body');if(!Array.from(budget.rows).some(x=>x.cells[0].textContent.trim()===m.local)){let nr=budget.insertRow();nr.insertCell().textContent=m.local;nr.insertCell().textContent=m.log;nr.insertCell().textContent='Orçado'}
+  if(pendenteCiclo(m)){const pend=$$('.lowergrid table')[0].querySelector('tbody');if(!Array.from(pend.rows).some(x=>x.cells[1]&&x.cells[1].textContent.trim()===m.local)){const r=pend.insertRow();r.insertCell().innerHTML='<input type="checkbox">';[m.local,m.desc,m.log,m.rua,''].forEach(t=>r.insertCell().textContent=t)}}}
+ function mostrarAdicionados(){render();$('#fs-adicionados').scrollIntoView({behavior:'smooth',block:'center'})}
+ function adicionarLocais(){if(travado())return;const inv=invAtual();if(inv.sit!=='Aberto'){msg('O inventário '+inv.num+' está '+inv.sit+'. Selecione o inventário em aberto em “Inventários do Ciclo”.');return}
+  const c=criterios(),orc=$('#locais-orcados').checked;ultimos=new Set();
+  if(orc){const sel=MODELO.filter(m=>pendenteCiclo(m)&&m.sit==='Pendente'&&atende(m,c));
    if(!sel.length){msg(c.algum?'Nenhum local pendente do ciclo atende aos critérios informados.':'Não há locais pendentes no ciclo.');return}
-   sel.forEach(incluir);renderCron();msg(sel.length+' locais pendentes do ciclo adicionados à contagem.');return}
-  if(!c.algum){msg('Preencha ao menos um critério ou marque “Locais orçados” antes de adicionar locais.');return}
-  const hit=MODELO.filter(m=>atende(m,c)),ok=hit.filter(m=>!contado(m)&&m.sit!=='Adicionado'),bloq=hit.filter(contado);
-  ok.forEach(incluir);renderCron();
-  if(bloq.length&&$$('.criteria-foot input[type=checkbox]')[0].checked){msg(ok.length+' local(is) adicionado(s). '+bloq.length+' não pode(m) ser inventariado(s): já contado(s) no ciclo.');return}
-  msg(ok.length?ok.length+' local(is) adicionado(s) à contagem.':'Nenhum local atende aos critérios informados.')}
- renderCron();
- document.addEventListener('click',function(e){let b=e.target.closest('button');if(!b)return;let t=b.textContent.trim().toLowerCase();
-  if(t.includes('expandir')||t.includes('recolher')){let tr=b.closest('tr'),next=tr&&tr.nextElementSibling;if(next&&next.cells.length===1&&next.cells[0].colSpan>1){let hide=next.style.display!=='none';next.style.display=hide?'none':'';b.textContent=hide?'Expandir +':'Recolher −'}else{msg('Detalhamento por LOG disponível para a rua MZN nesta amostra.')}return}
-  if(t==='exportar pendentes'){let table=$$('.lowergrid table')[0];if(!table)return;let rows=$$('tr',table).filter(r=>r.querySelector('input[type=checkbox]')?.checked||r.parentElement.tagName==='THEAD');let csv=rows.map(r=>$$('th,td',r).map(c=>'"'+c.innerText.trim().replace(/"/g,'""')+'"').join(',')).join('\r\n');let blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='locais_pendentes.csv';a.click();URL.revokeObjectURL(a.href);msg('Arquivo CSV exportado.');return}
-  if(t==='adicionar à contagem'){let table=$$('.lowergrid table')[0],chosen=table?$$('tbody tr',table).filter(r=>r.querySelector('input[type=checkbox]')?.checked):[];if(!chosen.length){msg('Selecione ao menos um local pendente.');return}let budget=$$('.lowergrid table')[1].querySelector('tbody');chosen.forEach(r=>{let local=r.cells[1].textContent.trim(),log=r.cells[3].textContent.trim();if(!Array.from(budget.rows).some(x=>x.cells[0].textContent.trim()===local)){let nr=budget.insertRow();nr.insertCell().textContent=local;nr.insertCell().textContent=log;nr.insertCell().textContent='Orçado'}r.cells[r.cells.length-1].textContent='Adicionado';r.querySelector('input[type=checkbox]').checked=false;setSit(local,'Adicionado')});msg(chosen.length+' local(is) adicionado(s) à contagem.');return}
-  if(t==='cancelar contagem'){if(!selectedRow()){msg('Selecione uma linha na tabela Locais Orçados antes de cancelar.');return}openPopup();return}
-  if(t==='confirmar' || b.classList.contains('confirm-cancel')){let motivo=$('#cancel-motivo'),obs=$('#cancel-obs');if(!motivo||!motivo.value){msg('Informe o motivo do cancelamento.');motivo&&motivo.focus();return}let row=selectedRow();if(!row&&$('#cancel-local')&&$('#cancel-local').value){row=$$('.lowergrid table')[1]&&$$('tbody tr',$$('.lowergrid table')[1]).find(r=>r.cells[0].textContent.trim()===$('#cancel-local').value.trim());}if(row){let local=row.cells[0].textContent.trim();setStatus(row,'Cancelado');setSit(local,'Pendente');let pending=$$('.lowergrid table')[0]?.querySelector('tbody');if(pending){let nr=pending.insertRow(0);nr.insertCell().innerHTML='<input type="checkbox">';nr.insertCell().textContent=local;nr.insertCell().textContent='Local devolvido ao ciclo';nr.insertCell().textContent='LOG 1';nr.insertCell().textContent=local.split('-')[0]||'MZN';nr.insertCell().textContent='Pendente'} }let o=field('Obs.');if(o&&obs)o.value=obs.value;closePopup();msg('Contagem cancelada. Local voltou para Pendente e observação atualizada.');return}
-  if(t==='voltar'||b.classList.contains('close-popup')||t==='×'){closePopup();return}
+   sel.forEach(incluir);inv.faixa=[inv.faixa,descFaixa(c,true)].filter(Boolean).join(' + ');mostrarAdicionados();msg(sel.length+' locais pendentes do ciclo adicionados à contagem do inventário '+inv.num+'.');return}
+  if(!c.algum){msg('Informe uma faixa (Coorden.Ini / Coorden.Fim) ou outro critério, ou marque “Locais orçados”.');return}
+  const hit=MODELO.filter(m=>atende(m,c)),ok=hit.filter(m=>m.sit==='Pendente'),bloq=hit.filter(m=>m.sit!=='Pendente');
+  ok.forEach(incluir);if(ok.length)inv.faixa=[inv.faixa,descFaixa(c,false)].filter(Boolean).join(' + ');mostrarAdicionados();
+  if(bloq.length&&$$('.criteria-foot input[type=checkbox]')[0].checked){msg(ok.length+' local(is) adicionado(s) ao inventário '+inv.num+'. '+bloq.length+' não pode(m) ser inventariado(s): já contado(s) ou em outro inventário do ciclo.');return}
+  msg(ok.length?ok.length+' local(is) adicionado(s) ao inventário '+inv.num+'.'+(bloq.length?' '+bloq.length+' ignorado(s) (já contados ou em outro inventário).':''):'Nenhum local disponível na faixa informada.')}
+ function removerLocais(){if(travado())return;const marcados=$$('#add-body input[type=checkbox]:checked').map(x=>x.dataset.local);
+  if(!marcados.length){msg('Marque os locais a remover em “Locais Adicionados ao Inventário”.');return}
+  marcados.forEach(l=>{const m=byLocal(l);m.sit='Pendente';m.inv='';ultimos.delete(l)});render();msg(marcados.length+' local(is) removido(s) do inventário '+cur+'.')}
+ function liberar(){if(travado())return;const inv=invAtual(),n=locaisInv(inv.num).length;if(inv.sit!=='Aberto'||!n)return;
+  locaisInv(inv.num).forEach(m=>m.sit='Liberado');inv.sit='Liberado';inv.ini=hoje();
+  const prox=String(Math.max(...INVS.map(i=>+i.num))+1);INVS.push({num:prox,faixa:'',sit:'Aberto',ini:'',fim:''});cur=prox;ultimos=new Set();render();
+  msg('Inventário '+inv.num+' liberado com '+n+' locais para contagem. Novo inventário '+prox+' aberto para a próxima faixa.')}
+ function contar(num){const inv=INVS.find(i=>i.num===num);locaisInv(num).forEach(m=>{m.sit='Contado';m.dtCont=hoje();m.usr=USR});inv.sit='Contado';render();msg('Contagem do inventário '+num+' concluída (simulação). Todos os locais contados: já pode liquidar.')}
+ function liquidar(num){if(travado())return;const inv=INVS.find(i=>i.num===num);if(inv.sit!=='Contado'){msg('O inventário só pode ser liquidado com todos os locais contados.');return}
+  locaisInv(num).forEach(m=>m.sit='Liquidado');inv.sit='Liquidado';inv.fim=hoje();render();msg('Inventário '+num+' liquidado. Ajustes de estoque enviados ao sistema.')}
+ function cancelarInv(){if(travado())return;const inv=invAtual();if(!['Aberto','Liberado'].includes(inv.sit))return;
+  const n=locaisInv(inv.num).length;locaisInv(inv.num).forEach(m=>{m.sit='Pendente';m.inv=''});inv.sit='Cancelado';inv.fim=hoje();
+  if(!INVS.some(i=>i.sit==='Aberto')){const prox=String(Math.max(...INVS.map(i=>+i.num))+1);INVS.push({num:prox,faixa:'',sit:'Aberto',ini:'',fim:''});cur=prox}
+  ultimos=new Set();render();msg('Inventário '+inv.num+' cancelado. '+n+' local(is) voltaram a Pendente no ciclo.')}
+ function liquidarCiclo(){cicloSit='Liquidado';render();$$('.criteria input,.criteria select,#ci-ini,#ci-fim').forEach(x=>x.disabled=true);
+  msg(CICLO+' liquidado. Dados do ciclo travados para alteração; os ajustes já foram enviados na liquidação de cada inventário.')}
+
+ document.addEventListener('click',function(e){
+  const trInv=e.target.closest('#inv-body tr');
+  if(trInv&&!e.target.closest('button')){cur=trInv.dataset.inv;ultimos=new Set();render();return}
+  const trOrc=e.target.closest('#orc-body tr');
+  if(trOrc){$$('#orc-body tr').forEach(r=>r!==trOrc&&r.classList.remove('selected-row'));trOrc.classList.toggle('selected-row');return}
+  let b=e.target.closest('button');if(!b)return;let t=b.textContent.trim().toLowerCase();
+  if(b.dataset.tree){const k=b.dataset.tree;abertosTree.has(k)?abertosTree.delete(k):abertosTree.add(k);renderTree();return}
+  if(b.dataset.acao){const num=b.closest('tr').dataset.inv;b.dataset.acao==='contar'?contar(num):liquidar(num);return}
   if(t.startsWith('cronograma orçado')){let p=$('.cron-panel');p.classList.toggle('open');b.textContent='Cronograma Orçado '+(p.classList.contains('open')?'−':'+');return}
-  if(t==='liberar'){let s=field('Situação');if(s){s.innerHTML='<option>Aberto</option><option selected>Liberado</option><option>Liquidado</option><option>Cancelado</option>'}msg('Inventário liberado (simulação).');return}
-  if(t==='cancelar'&& !b.closest('.popup')){let s=field('Situação');if(s)s.value='Cancelado';msg('Cancelamento do inventário registrado na simulação.');return}
+  if(b.id==='ci-liq'){liquidarCiclo();return}
+  if(t==='exportar pendentes'){let table=$$('.lowergrid table')[0];if(!table)return;let rows=$$('tr',table).filter(r=>r.querySelector('input[type=checkbox]')?.checked||r.parentElement.tagName==='THEAD');let csv=rows.map(r=>$$('th,td',r).map(c=>'"'+c.innerText.trim().replace(/"/g,'""')+'"').join(',')).join('\r\n');let blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='locais_pendentes.csv';a.click();URL.revokeObjectURL(a.href);msg('Arquivo CSV exportado.');return}
+  if(t==='adicionar à contagem'){if(travado())return;const inv=invAtual();if(inv.sit!=='Aberto'){msg('Selecione o inventário em aberto em “Inventários do Ciclo”.');return}
+   let table=$$('.lowergrid table')[0],chosen=$$('tbody tr',table).filter(r=>r.querySelector('input[type=checkbox]')?.checked);if(!chosen.length){msg('Selecione ao menos um local pendente.');return}
+   ultimos=new Set();let n=0;chosen.forEach(r=>{const m=byLocal(r.cells[1].textContent.trim());r.querySelector('input[type=checkbox]').checked=false;r.classList.remove('selected-row');if(m&&m.sit==='Pendente'){incluir(m);n++}});
+   if(n)inv.faixa=[inv.faixa,'Seleção manual'].filter(Boolean).join(' + ');mostrarAdicionados();msg(n+' local(is) adicionado(s) ao inventário '+inv.num+'.');return}
+  if(t==='cancelar contagem'){if(travado())return;if(!selectedRow()){msg('Selecione uma linha na tabela Locais Orçados antes de cancelar.');return}openPopup();return}
+  if(t==='confirmar' || b.classList.contains('confirm-cancel')){let motivo=$('#cancel-motivo'),obs=$('#cancel-obs');if(!motivo||!motivo.value){msg('Informe o motivo do cancelamento.');motivo&&motivo.focus();return}let row=selectedRow();if(!row&&$('#cancel-local')&&$('#cancel-local').value){row=$$('#orc-body tr').find(r=>r.cells[0].textContent.trim()===$('#cancel-local').value.trim());}if(row){let local=row.cells[0].textContent.trim();setStatus(row,'Cancelado');const m=byLocal(local);if(m&&!contado(m)){m.sit='Pendente';m.inv=''}let pending=$$('.lowergrid table')[0]?.querySelector('tbody');if(pending&&!Array.from(pending.rows).some(r=>r.cells[1]&&r.cells[1].textContent.trim()===local)){let nr=pending.insertRow(0);nr.insertCell().innerHTML='<input type="checkbox">';nr.insertCell().textContent=local;nr.insertCell().textContent=m?m.desc:'Local devolvido ao ciclo';nr.insertCell().textContent=m?m.log:'LOG 1';nr.insertCell().textContent=local.split('-')[0]||'MZN';nr.insertCell().textContent='Pendente'}render()}let o=field('Obs.');if(o&&obs)o.value=obs.value;closePopup();msg('Contagem cancelada. Local voltou para Pendente e observação atualizada.');return}
+  if(t==='voltar'||b.classList.contains('close-popup')||t==='×'){closePopup();return}
   if(t==='adicionar locais'){adicionarLocais();return}
-  if(t==='remover locais'){let row=selectedRow();if(row){row.remove();msg('Local removido da lista de orçados.')}else msg('Selecione uma linha em Locais Orçados para remover.');return}
-  if(t==='trocar local'){let row=selectedRow();if(!row){msg('Selecione um local na tabela Locais Orçados.');return}let novo=prompt('Informe o novo código do local:',row.cells[0].textContent.trim());if(novo&&novo.trim()){row.cells[0].textContent=novo.trim();msg('Local atualizado na simulação.')}return}
+  if(t==='remover locais'){removerLocais();return}
+  if(t==='liberar'){liberar();return}
+  if(t==='liquidar'&&b.closest('.rowbuttons')){liquidar(cur);return}
+  if(t==='cancelar'&&b.closest('.rowbuttons')){cancelarInv();return}
  });
- document.addEventListener('change',function(e){if(e.target.matches('input[type=checkbox]')){let tr=e.target.closest('tr');if(tr&&tr.closest('.lowergrid'))tr.classList.toggle('selected-row',e.target.checked);if(e.target.closest('thead')){let table=e.target.closest('table');$$('tbody input[type=checkbox]',table).forEach(c=>{c.checked=e.target.checked;c.closest('tr')?.classList.toggle('selected-row',c.checked)})}}});
- // Interações disponíveis também na versão com popup já aberto.
- let shade=$('.popup-shade');if(shade){let motivo=$('select',shade);if(motivo)motivo.id='cancel-motivo';let obs=$('textarea',shade);if(obs)obs.id='cancel-obs';let local=$('input',shade);if(local)local.id='cancel-local';let confirm=$$('button',shade).find(x=>x.textContent.trim()==='Confirmar');if(confirm)confirm.classList.add('confirm-cancel');$$('button',shade).filter(x=>['Voltar','×'].includes(x.textContent.trim())).forEach(x=>x.classList.add('close-popup'));}
+ document.addEventListener('change',function(e){
+  if(e.target.id==='add-all'){$$('#add-body input[type=checkbox]').forEach(c=>c.checked=e.target.checked);return}
+  if(e.target.id==='ci-fim'){renderCiclo();return}
+  if(e.target.matches('input[type=checkbox]')){let tr=e.target.closest('tr');if(tr&&tr.closest('.lowergrid'))tr.classList.toggle('selected-row',e.target.checked);if(e.target.closest('.lowergrid thead')){let table=e.target.closest('table');$$('tbody input[type=checkbox]',table).forEach(c=>{c.checked=e.target.checked;c.closest('tr')?.classList.toggle('selected-row',c.checked)})}}});
+ render();
 })();
 </script>
 </body>
