@@ -2719,10 +2719,6 @@ const IR_AVULSAS = [
    onFile:'irOnFile390Est', onDrop:'irOnDropFile390Est', remove:'irRemoveFile390Est',
    processa:'irProcessarEst390', botao:'Processar estoque', arquivo:()=>IR.est390File,
    rodando:()=>IR.est390Processing, prog:()=>IR.est390Progress, idStage:'ir-390-stage', idFill:'ir-390-fill'},
-  {id:'160', icone:'⏱️', titulo:'QRY0160', sub:'Data de movimento', input:'ir-file-160',
-   onFile:'irOnFile160', onDrop:'irOnDropFile160', remove:'irRemoveFile160',
-   processa:'irProcessar160', botao:'Processar pendência', arquivo:()=>IR.est160File,
-   rodando:()=>IR.est160Processing, prog:()=>IR.est160Progress, idStage:'ir-160-stage', idFill:'ir-160-fill'},
   {id:'410', icone:'📄', titulo:'QRY410', sub:'Perdas e ganhos', input:'ir-file-410',
    onFile:'irOnFile410', onDrop:'irOnDropFile410', remove:'irRemoveFile410',
    processa:'irProcessar410', botao:'Processar QRY410', arquivo:()=>IR.net410File,
@@ -2733,12 +2729,6 @@ function irAvulsaEstado(id){
   if(id==='390'){
     const f = IR.est390Ficha;
     return f ? irFmtInt(f.locais)+' endereços · '+irFmtInt(f.itens)+' itens · '+irFmtDate(f.importadoEm) : 'nunca importada';
-  }
-  if(id==='160'){
-    const m = IR.est390Meta;
-    return (m && m.fonte==='160')
-      ? irFmtInt(m.locais)+' endereços · '+irFmtInt(m.pecasTotal)+' peças · '+irFmtDate(m.importadoEm)
-      : 'nunca importada';
   }
   const anos = IR.net410Anos || [];
   if(!anos.length) return 'nunca importada';
@@ -2769,7 +2759,6 @@ function irFmtDataHora(s){
   return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 function irRenderBasesAvulsas(){
-  const temFicha = !!(IR._itemInfo && IR._itemInfo.size);
   const cartao = b=>{
     const arq = b.arquivo(), rodando = b.rodando(), prog = b.prog();
     return `<div class="av-card ${arq?'has-file':''}">
@@ -2791,7 +2780,6 @@ function irRenderBasesAvulsas(){
           <button class="btn-link" onclick="${b.remove}()">Remover</button>
         </div>`
       : `<div class="av-acoes"><button class="btn btn-secondary" onclick="document.getElementById('${b.input}').click()">Selecionar</button></div>`}
-      ${b.id==='160' && !temFicha ? `<p class="av-aviso">Importe a QRY0390 antes: o valor e o LOG saem de lá.</p>` : ''}
     </div>`;
   };
   return `<div class="panel">
@@ -2816,7 +2804,6 @@ const IR_PASTA_SUPORTA = typeof window !== 'undefined' && typeof window.showDire
    ciclo são os mesmos do IR_FILE_TYPES de propósito — um só lugar pra errar. */
 const IR_PASTA_BASES = [
   {id:'390', label:'QRY0390', desc:'Estoque por endereço', pattern:IR_PAT.p390, auto:true},
-  {id:'160', label:'QRY0160', desc:'Data de movimento',    pattern:IR_PAT.p160, auto:true},
   {id:'410', label:'QRY410',  desc:'Perdas e ganhos',      pattern:IR_PAT.p410, auto:true},
   {id:'843', label:'QRY0843', desc:'Ajustes do ciclo',     pattern:IR_PAT.p843, slot:'f843'},
   {id:'cong',label:'Base Congelada', desc:'Locais do ciclo', pattern:IR_PAT.pCong, slot:'fCong'},
@@ -3072,7 +3059,7 @@ function irRenderPastaPanel(){
     ${IR.pastaErro ? `<p class="pasta-erro">${irEsc(IR.pastaErro)}</p>` : ''}
     ${irRenderPastaCiclos()}
     <details class="pc-det">
-      <summary>Bases fora do ciclo (QRY0390, QRY0160, QRY410)</summary>
+      <summary>Bases fora do ciclo (QRY0390, QRY410)</summary>
       <div class="table-wrap"><table class="pasta-table">
         <thead><tr><th>Base</th><th>Arquivo na pasta</th><th>Modificado em</th><th>Situação</th></tr></thead>
         <tbody>${IR_PASTA_BASES.map(linha).join('')}</tbody>
@@ -6290,10 +6277,12 @@ function irRenderDivTabela(c){
   });
   const o = IR.divOrdem || {col:'absValor', dir:'desc'};
   const seta = k => o.col===k ? (o.dir==='desc'?' ▾':' ▴') : '';
-  // Absoluto é o número grande (é ele que diz o tamanho do erro); o NET some
-  // pequeno do lado só pra comparar — quando os dois batem, o item é um ofensor
-  // normal; quando o NET é bem menor que o absoluto, foi aquele NET que escondia
-  // o problema até agora (é o caso "compensado").
+  // Absoluto é o número grande (é ele que diz o tamanho do erro); o NET do ANO
+  // some pequeno do lado só pra comparar — quando os dois batem, o item é um
+  // ofensor normal; quando o NET do ano é bem menor que o absoluto, foi aquele
+  // NET que escondia o problema até agora (é o caso "compensado"). Sempre o do
+  // ano, nunca o do período filtrado: filtrar por mês não pode fazer um item
+  // compensado no ano parecer um ofensor novo só porque um mês sozinho pesou.
   const numAbs = (abs, net, fmt) => `<td class="mono">${fmt(abs)}<span class="ofe-net-sub ${net<0?'neg':(net>0?'pos':'')}">net ${net>0?'+':''}${fmt(net)}</span></td>`;
   const linha = i=>{
     const aberto = IR.divExpandido===i.item;
@@ -6309,8 +6298,8 @@ function irRenderDivTabela(c){
       <td><input type="checkbox" ${sel.has(i.item)?'checked':''} onchange="irDivToggleItem('${irEsc(i.item)}')"></td>
       <td class="mono">${irEsc(i.item)}</td>
       <td title="${irEsc(i.descricao||'')}">${irEsc(irResumirDescricao(i.descricao))}</td>
-      ${numAbs(i.absValor, i.netValor, irFmtMoney)}
-      ${numAbs(i.absQtd, i.netQtd, irFmtInt)}
+      ${numAbs(i.absValor, i.netValorAno, irFmtMoney)}
+      ${numAbs(i.absQtd, i.netQtdAno, irFmtInt)}
       <td class="mono ofe-ano ${i.netValorAno<0?'neg':(i.netValorAno>0?'pos':'')}">${i.netValorAno>0?'+':''}${irFmtMoney(i.netValorAno)}</td>
       <td class="mono ofe-ano ${i.netQtdAno<0?'neg':(i.netQtdAno>0?'pos':'')}">${i.netQtdAno>0?'+':''}${irFmtInt(i.netQtdAno)}</td>
       <td class="mono"><button class="btn-link" onclick="irDivExpandir('${irEsc(i.item)}')">${irFmtInt(i.nLocais)} ${aberto?'▾':'▸'}</button></td>
