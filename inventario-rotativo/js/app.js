@@ -6277,10 +6277,12 @@ function irRenderDivTabela(c){
   });
   const o = IR.divOrdem || {col:'absValor', dir:'desc'};
   const seta = k => o.col===k ? (o.dir==='desc'?' ▾':' ▴') : '';
-  // Absoluto é o número grande (é ele que diz o tamanho do erro); o NET some
-  // pequeno do lado só pra comparar — quando os dois batem, o item é um ofensor
-  // normal; quando o NET é bem menor que o absoluto, foi aquele NET que escondia
-  // o problema até agora (é o caso "compensado").
+  // Absoluto é o número grande (é ele que diz o tamanho do erro); o NET do ANO
+  // some pequeno do lado só pra comparar — quando os dois batem, o item é um
+  // ofensor normal; quando o NET do ano é bem menor que o absoluto, foi aquele
+  // NET que escondia o problema até agora (é o caso "compensado"). Sempre o do
+  // ano, nunca o do período filtrado: filtrar por mês não pode fazer um item
+  // compensado no ano parecer um ofensor novo só porque um mês sozinho pesou.
   const numAbs = (abs, net, fmt) => `<td class="mono">${fmt(abs)}<span class="ofe-net-sub ${net<0?'neg':(net>0?'pos':'')}">net ${net>0?'+':''}${fmt(net)}</span></td>`;
   const linha = i=>{
     const aberto = IR.divExpandido===i.item;
@@ -6296,8 +6298,8 @@ function irRenderDivTabela(c){
       <td><input type="checkbox" ${sel.has(i.item)?'checked':''} onchange="irDivToggleItem('${irEsc(i.item)}')"></td>
       <td class="mono">${irEsc(i.item)}</td>
       <td title="${irEsc(i.descricao||'')}">${irEsc(irResumirDescricao(i.descricao))}</td>
-      ${numAbs(i.absValor, i.netValor, irFmtMoney)}
-      ${numAbs(i.absQtd, i.netQtd, irFmtInt)}
+      ${numAbs(i.absValor, i.netValorAno, irFmtMoney)}
+      ${numAbs(i.absQtd, i.netQtdAno, irFmtInt)}
       <td class="mono ofe-ano ${i.netValorAno<0?'neg':(i.netValorAno>0?'pos':'')}">${i.netValorAno>0?'+':''}${irFmtMoney(i.netValorAno)}</td>
       <td class="mono ofe-ano ${i.netQtdAno<0?'neg':(i.netQtdAno>0?'pos':'')}">${i.netQtdAno>0?'+':''}${irFmtInt(i.netQtdAno)}</td>
       <td class="mono"><button class="btn-link" onclick="irDivExpandir('${irEsc(i.item)}')">${irFmtInt(i.nLocais)} ${aberto?'▾':'▸'}</button></td>
