@@ -2068,45 +2068,6 @@ function irCalcItemSaldo(divergencias){
     topItensAbsValor: itens.filter(i=>i.absValor>0).sort((a,b)=>b.absValor-a.absValor).slice(0,20)
   };
 }
-// Rua/log de cada local, pra dar contexto a uma divergência que só tem o id do
-// local (d.local) — mesma fonte (IR.locais) e mesma regra de rua (irRuaDoLocal)
-// usadas no resto do app.
-function irLocalInfoMapa(){
-  if(IR._localInfo && IR._localInfoCiclo===(IR.cicloAtivo||{}).id) return IR._localInfo;
-  const m = new Map();
-  for(const l of (IR.locais||[])) if(l.idLocal) m.set(l.idLocal, {rua: irRuaDoLocal(l)||'(sem rua)', log: l.grupoClasse||'(sem log)'});
-  IR._localInfo = m; IR._localInfoCiclo = (IR.cicloAtivo||{}).id;
-  return m;
-}
-/* Resumo automático do último dia com fechamento registrado — "o que puxou o
-   ciclo pra esse número", pro texto do e-mail do Report. Mesmo recorte AIR do
-   resto do boletim (irEhCicloLegadoAIR). Curto de propósito: ver o comentário
-   sobre tamanho do mailto em irGerarRelatorioEmail. */
-function irResumoUltimoDiaFechado(ind){
-  const dias = (ind.divergentesPorDia||[]).map(d=>d.dia).filter(Boolean).sort();
-  const diaAlvo = dias[dias.length-1];
-  if(!diaAlvo) return null;
-  const ca = IR.cicloAtivo;
-  const soAIR = !(ca && irEhCicloLegadoAIR(ca.numero, ca.dataAbertura));
-  const infoLocal = irLocalInfoMapa();
-  const linhas = (IR.divergencias||[]).filter(d=>
-    d.diaFechamento===diaAlvo && d.diferenca!==0 && IR_LOCAIS_CONCLUIDO.has(d.statusLocal) &&
-    (!soAIR || String(d.motivo||'').trim().toUpperCase()==='AIR')
-  );
-  if(!linhas.length) return null;
-  const totalPecas = linhas.reduce((s,d)=>s+Math.abs(d.diferenca),0);
-  const porLog = new Map(), porRua = new Map(), porItem = new Map();
-  for(const d of linhas){
-    const info = infoLocal.get(d.local) || {rua:'(sem rua)', log:'(sem log)'};
-    porLog.set(info.log, (porLog.get(info.log)||0)+Math.abs(d.diferenca));
-    porRua.set(info.rua, (porRua.get(info.rua)||0)+Math.abs(d.diferenca));
-    porItem.set(d.item, (porItem.get(d.item)||0)+Math.abs(d.diferenca));
-  }
-  const top = mapa => Array.from(mapa.entries()).sort((a,b)=>b[1]-a[1])[0];
-  const topLog = top(porLog), topRua = top(porRua);
-  const topItens = Array.from(porItem.entries()).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([item])=>item);
-  return {dia:diaAlvo, totalPecas, log: topLog?topLog[0]:null, rua: topRua?topRua[0]:null, itens: topItens};
-}
 // Busca as divergências do escopo escolhido pro painel "Itens mais Divergentes":
 // só o ciclo ativo (padrão, já carregado em memória), um ano inteiro (soma de todos
 // os ciclos abertos naquele ano) ou todos os ciclos já processados. É por isso que
@@ -2464,19 +2425,12 @@ function irGerarRelatorioEmail(){
   const saudacao = hora<12 ? 'Bom dia' : (hora<18 ? 'Boa tarde' : 'Boa noite');
   // Os números (Acurácia Peças/Local/Valor, Locais concluídos) saíram daqui —
   // já estão na imagem do boletim, repetir em texto era redundante.
-  // "Por que o ciclo está assim": resumo automático do último dia com
-  // fechamento registrado — o que puxou a divergência (log/rua/itens) — pra não
-  // mandar só o número sem contexto. Fica de fora se não tiver dado desse dia.
-  const resumoDia = irResumoUltimoDiaFechado(ind);
-  const paragrafoDia = resumoDia
-    ? `\n\nEm ${irFmtDate(resumoDia.dia)}: ${irFmtInt(resumoDia.totalPecas)} peças divergentes, concentradas na ${resumoDia.log}${resumoDia.rua?', rua '+resumoDia.rua:''}${resumoDia.itens.length?' (itens '+resumoDia.itens.join(', ')+')':''}.`
-    : '';
   // Corpo bem curto de propósito: um mailto com Para + Cc (muitos endereços) +
   // corpo longo pode passar do limite de tamanho de URL que o Windows aceita ao
   // abrir o programa de e-mail padrão — o excesso é cortado sem aviso, e o que
   // sobra pode embaralhar onde "Para" termina e "Cc" começa. Corpo curto dá mais
   // folga pra lista de destinatários não ser cortada.
-  const corpo = `${saudacao}, segue o report referente ao Inventário Rotativo (${irCicloLabel(c)}).${paragrafoDia}
+  const corpo = `${saudacao}, segue o boletim do ${c.numero}º ciclo.
 
 [Cole a imagem aqui — Ctrl+V]`;
   irBaixarBoletimImagem(html, `Boletim_Ciclo_${c.numero}_${new Date().toISOString().slice(0,10)}.png`, {
@@ -2805,11 +2759,6 @@ function irFmtDataHora(s){
   return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 function irRenderBasesAvulsas(){
-  // Mesma fonte que o card da 390 usa pra mostrar "X endereços · Y itens" (logo
-  // abaixo) — não o cache de IR._itemInfo, que só carrega quando a aba Auditoria
-  // é visitada. Usar o cache aqui fazia o aviso "importe a 390 antes" persistir
-  // mesmo com a 390 certinha, só por ninguém ter aberto a Auditoria ainda.
-  const temFicha = !!IR.est390Ficha;
   const cartao = b=>{
     const arq = b.arquivo(), rodando = b.rodando(), prog = b.prog();
     return `<div class="av-card ${arq?'has-file':''}">
@@ -2831,7 +2780,6 @@ function irRenderBasesAvulsas(){
           <button class="btn-link" onclick="${b.remove}()">Remover</button>
         </div>`
       : `<div class="av-acoes"><button class="btn btn-secondary" onclick="document.getElementById('${b.input}').click()">Selecionar</button></div>`}
-      ${b.id==='160' && !temFicha ? `<p class="av-aviso">Importe a QRY0390 antes: o valor e o LOG saem de lá.</p>` : ''}
     </div>`;
   };
   return `<div class="panel">
