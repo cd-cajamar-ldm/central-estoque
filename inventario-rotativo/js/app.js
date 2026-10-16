@@ -257,6 +257,11 @@ async function irLoadCicloData(cicloId){
   IR.itemDivFiltro = {tipo:'ciclo'};
   IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
   IR.comparativoCiclos = null; // recarrega no próximo render do Dashboard (irCarregarComparativoCiclos)
+  // O cache por ano (Mês/Ano/De-Até na aba Divergências) só é montado uma vez por
+  // ano na sessão e nunca mais revalidado — se o ciclo recém-carregado trouxer dia
+  // novo (reimportação com dados mais recentes), o filtro "De/Até" continuava preso
+  // no último dia do cache antigo, mesmo com o gráfico já mostrando o dia novo.
+  IR.divAnoCache = null;
   // Sem await: a tela abre com o que tem e se refaz quando o recálculo terminar.
   irRecalcularSeMotorAntigo();
 }
