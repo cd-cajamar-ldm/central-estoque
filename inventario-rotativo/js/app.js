@@ -2273,7 +2273,6 @@ function irGerarRelatorioEmail(){
   const maxItemValor = Math.max(1, ...topItensValor.map(i=>i.absValor));
   const topItensQtd = ((IR.itemDivSaldo && IR.itemDivSaldo.topItensAbsQtd) || []).slice(0, 10);
   const maxItemQtd = Math.max(1, ...topItensQtd.map(i=>i.absQtd));
-  const proj = irCalcProjecaoAcuracia(ind);
   const html = `<div class="rp-page">
     <div class="rp-hero">
       <div class="rp-hero-top">
@@ -2407,16 +2406,6 @@ function irGerarRelatorioEmail(){
         <div class="rp-hbar-track"><div class="rp-hbar-fill" style="width:${Math.round(i.absValor/maxItemValor*100)}%;"></div></div>
         <div class="rp-hbar-val">${irFmtMoney(i.absValor)}</div>
       </div>`).join('')}
-    </div>` : ''}
-
-    ${proj ? `${sectionTitle('🔮','Projeção de Acurácia (Peças)','se o ritmo diário de peças contadas e divergentes se mantiver até o fim do ciclo')}
-    <div class="rp-panel rp-panel-pad">
-      <div class="rp-proj-row">
-        <div class="rp-proj-stat"><div class="rp-proj-n ${proj.atual>=ind.meta?'good':'bad'}">${irFmtPct(proj.atual)}</div><div class="rp-proj-l">Acurácia atual</div></div>
-        <div class="rp-proj-arrow">→</div>
-        <div class="rp-proj-stat"><div class="rp-proj-n ${proj.projetada>=ind.meta?'good':'bad'}">${irFmtPct(proj.projetada)}</div><div class="rp-proj-l">Projetada (fim do ciclo)</div></div>
-      </div>
-      <p class="field-hint" style="margin-top:14px;text-align:center;">Com base em ${irFmtInt(Math.round(proj.taxaDivDia))} peças divergentes/dia e ${irFmtInt(Math.round(proj.taxaContDia))} peças contadas/dia (média do ciclo até aqui), projetado para os ${irFmtInt(proj.diasRestantes)} dias úteis restantes.</p>
     </div>` : ''}
 
     </div>
