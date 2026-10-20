@@ -661,50 +661,89 @@ function mdRenderAjustes(){
 }
 
 /* Descasados: respeita a busca, o base (total/disponível) e o filtro
-   Equalizado da tela — exporta só o que está sendo mostrado ali. */
+   Equalizado da tela — exporta só o que está sendo mostrado ali. Duas abas,
+   pelo sentido do movimento: bloquear (0 → 86) e liberar (86 → 0) nunca se
+   misturam na digitação do coletor, então não fazia sentido numa lista só. */
 function mdExportarAjustePivot(){
-  mdGerarCsvAjuste(mdPlanoAjuste(mdPaisFiltrados(), MD.base));
+  const plano = mdPlanoAjuste(mdPaisFiltrados(), MD.base);
+  mdGerarXlsxAjuste([
+    {titulo:'Bloquear (0 para 86)', linhas: plano.filter(l=>l.sentido==='bloquear')},
+    {titulo:'Liberar (86 para 0)', linhas: plano.filter(l=>l.sentido==='liberar')}
+  ]);
 }
 /* Ajustes de Restrição: corrige as células fora da regra (não é o plano de
    pareamento da aba Descasados — ver mdPlanoCorrecaoRestricao), respeitando
-   classe e X1/X2 marcados nas duas matrizes. */
+   classe e X1/X2 marcados nas duas matrizes. Separado por destino pelo mesmo
+   motivo do pivô: quase tudo vai pra 0 (WN), mas a rara linha com um destino
+   diferente (só uma restrição cadastrada, sem WN) não deve se misturar. */
 function mdExportarAjusteClasses(){
-  mdGerarCsvAjuste(mdPlanoCorrecaoRestricao().filter(l=>
+  const plano = mdPlanoCorrecaoRestricao().filter(l=>
     MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
-  ));
+  );
+  mdGerarXlsxAjuste([
+    {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
+    {titulo:'Para outras restrições', linhas: plano.filter(l=>l.para!==MD_SIGLA_VENDAVEL)}
+  ]);
 }
 
-/* Só o que vai pro coletor: local, item, restrição de/para, quantidade,
-   endereço (pra achar a peça) e o alerta de estoque duplo. O resto (pai,
-   descrição, saldo, preço...) é conferência que já está na tela — não
-   precisa duplicar na planilha. */
-function mdGerarCsvAjuste(lista){
-  if(!lista.length){ irShowToast('Não há ajuste para exportar.'); return; }
+/* Só o que vai pro coletor: local, item, restrição de/para, quantidade e
+   endereço (pra achar a peça). O resto (pai, descrição, saldo, preço...) é
+   conferência que já está na tela — não precisa duplicar na planilha.
+
+   .xlsx de verdade (não CSV): é o único jeito de ter mais de uma aba e de
+   marcar Local/EAN como NÚMERO com formato "sem decimal" ao mesmo tempo —
+   um CSV não carrega esse tipo de informação por célula. CSV também foi o
+   que obrigava forçar texto com aspa simples na frente pra fugir da notação
+   científica do Excel (5E+09, 7,89862E+12), e a aspa acabava colando junto
+   quando alguém copiava o valor pro coletor, que não entende e barra com
+   "FORMATO INVÁLIDO". Número de verdade, com formato de inteiro, resolve as
+   duas coisas de uma vez: sem notação científica e sem símbolo estranho.
+
+   xlsx-js-style (carregada só no index.html, não no worker) em vez da xlsx
+   comum: a versão livre do SheetJS não grava estilo nenhum no arquivo — cor
+   de cabeçalho, zebra etc. saem sempre em branco. */
+function mdGerarXlsxAjuste(blocos){
+  const COR_LARANJA = 'FE5000', COR_AZUL = '001A72', COR_BRANCO = 'FFFFFF', COR_ZEBRA = 'FFF4EE';
   const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço'];
-  const cel = v=>{
-    const s = String(v ?? '');
-    return /[;"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
-  };
-  // Local (coletor) e EAN são só dígitos compridos (10 e 13 casas) — sem
-  // forçar texto o Excel "adivinha" que é número e mostra em notação
-  // científica (5E+09, 7,89862E+12), cortando dígitos de verdade. A aspa
-  // simples na frente força texto e some da visualização — mesmo truque de
-  // qualquer exportador de CSV com código/EAN comprido.
-  const celTexto = v=>{ const s = String(v ?? ''); return s ? cel("'"+s) : ''; };
-  const linhas = lista.map(l=>[
-    celTexto(l.localColetor), celTexto(l.ean), cel(l.codDe), cel(l.codPara), cel(irFmtInt(l.quantidade)), cel(l.endereco)
-  ].join(';'));
-  // BOM na frente: sem ele o Excel em pt-BR abre o arquivo como Latin-1 e come
-  // todos os acentos das descrições.
-  const csv = '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço
+
+  function construirAba(linhas){
+    const dados = linhas.map(l=>[
+      Number(l.localColetor) || 0, Number(l.ean) || 0, Number(l.codDe) || 0,
+      Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || ''
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([cab, ...dados]);
+    cab.forEach((_, c)=>{
+      const cel = ws[XLSX.utils.encode_cell({r:0, c})];
+      if(cel) cel.s = {
+        fill: {fgColor:{rgb:COR_LARANJA}},
+        font: {bold:true, color:{rgb:COR_BRANCO}},
+        alignment: {horizontal:'center', vertical:'center'},
+        border: {bottom:{style:'thin', color:{rgb:COR_AZUL}}}
+      };
+    });
+    dados.forEach((_, ri)=>{
+      const zebra = ri % 2 === 1;
+      for(let c=0; c<cab.length; c++){
+        const cel = ws[XLSX.utils.encode_cell({r:ri+1, c})];
+        if(!cel) continue;
+        cel.s = {alignment:{vertical:'center'}, ...(zebra ? {fill:{fgColor:{rgb:COR_ZEBRA}}} : {})};
+        if(colNumerica.has(c)) cel.z = '0';
+      }
+    });
+    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28}];
+    return ws;
+  }
+
+  const comLinhas = blocos.filter(b=>b.linhas.length);
+  if(!comLinhas.length){ irShowToast('Não há ajuste para exportar.'); return; }
+  const wb = XLSX.utils.book_new();
+  for(const bloco of comLinhas) XLSX.utils.book_append_sheet(wb, construirAba(bloco.linhas), bloco.titulo);
+
   const hoje = new Date().toISOString().slice(0,10);
-  a.href = url; a.download = `ajuste-restricao-multiplos-${hoje}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
-  irShowToast(irFmtInt(lista.length)+' linhas exportadas.');
+  XLSX.writeFile(wb, `ajuste-restricao-multiplos-${hoje}.xlsx`);
+  const total = comLinhas.reduce((a,b)=>a+b.linhas.length, 0);
+  irShowToast(irFmtInt(total)+' linhas exportadas.');
 }
 
 /* ============================================================
