@@ -457,6 +457,13 @@ function mdRestricaoPermitidaEm(chave, valor, sigla){
    nada é corrigido (mesmo critério da validação da matriz). */
 function mdPlanoCorrecaoRestricao(){
   const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+  // Um componente pode estar em mais de um múltiplo (ver PR #373) — junta
+  // todos os pais pra não perder referência nenhuma na planilha exportada.
+  const paisPorComponente = new Map();
+  for(const e of (MD.estrutura||[])){
+    if(!paisPorComponente.has(e.componente)) paisPorComponente.set(e.componente, []);
+    paisPorComponente.get(e.componente).push(e.pai);
+  }
   const out = [];
   for(const s of (MD.saldos||[])){
     for(const loc of (s.locais||[])){
@@ -482,7 +489,8 @@ function mdPlanoCorrecaoRestricao(){
           localColetor: mdLocalColetor(loc.local),
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
-          componente: s.item, ean: s.ean, quantidade,
+          componente: s.item, pai: (paisPorComponente.get(s.item) || []).join('/'),
+          ean: s.ean, quantidade,
           preco, valor: quantidade * preco,
           totalComponente: s[campo]
         });
@@ -713,17 +721,18 @@ function mdExportarAjusteClasses(){
    de cabeçalho, zebra etc. saem sempre em branco. */
 function mdGerarXlsxAjuste(blocos){
   const COR_LARANJA = 'FE5000', COR_AZUL = '001A72', COR_BRANCO = 'FFFFFF', COR_ZEBRA = 'FFF4EE';
-  // Item (o código do componente) entra só como referência pra achar o item
-  // certo em caso de EAN duplicado entre SKUs diferentes — não é campo que se
-  // cola no coletor, por isso fica no fim, fora da sequência Local/EAN/Orig/
-  // Dest/Qtde que é exatamente a ordem dos campos na tela.
-  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Item'];
-  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço e Item
+  // Item pai (o código do múltiplo, não do componente) entra só como
+  // referência pra achar o item certo em caso de EAN duplicado entre SKUs
+  // diferentes — não é campo que se cola no coletor, por isso fica no fim,
+  // fora da sequência Local/EAN/Orig/Dest/Qtde que é exatamente a ordem dos
+  // campos na tela.
+  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Item pai'];
+  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço e Item pai
 
   function construirAba(linhas){
     const dados = linhas.map(l=>[
       Number(l.localColetor) || 0, Number(l.ean) || 0, Number(l.codDe) || 0,
-      Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '', String(l.componente || '')
+      Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '', String(l.pai || '')
     ]);
     const ws = XLSX.utils.aoa_to_sheet([cab, ...dados]);
     cab.forEach((_, c)=>{
