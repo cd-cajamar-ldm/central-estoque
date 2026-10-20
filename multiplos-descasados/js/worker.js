@@ -60,7 +60,8 @@ function post(type, payload){ self.postMessage({type, ...payload}); }
    nomes evita que o módulo quebre se ela voltar ao formato antigo. */
 const ALIAS_390 = {
   item: ['ID_ITEM_FILHO','Item'], itemPai: ['ITEM_PAI'],
-  descricao: ['NOME_ITEM_FILHO','NOME_ITEM_PAI','Descrição','Descricao'],
+  descricao: ['NOME_ITEM_FILHO','Descrição','Descricao'],
+  descricaoPai: ['NOME_ITEM_PAI'],
   local: ['ID_LOCAL','Local'], descLocal: ['DESC_LOCAL'],
   quantidade: ['QTDE','Quantidade'], qtdeDisp: ['QTDE_DISP'], qtdeRom: ['QTDE_ROM'],
   valoriza: ['VALORIZA'], valorUnitario: ['VALOR_UNITARIO'],
@@ -176,6 +177,11 @@ async function runPipeline390({buf390}){
       it = {
         item,
         nome: String(getVal(row, r.descricao) ?? '').trim(),
+        // Nome do ITEM PAI (o múltiplo), não do componente — a 390 traz os
+        // dois nomes, um por coluna. Sem isso, a tela de Descasados mostrava
+        // o nome do componente marcado VALORIZA na linha do pai, que não é o
+        // nome certo quando o pai tem nome próprio na 390.
+        nomePai: String(getVal(row, r.descricaoPai) ?? '').trim(),
         ean: String(getVal(row, r.ean) ?? '').trim(),
         valorUnitario: parseNumber(getVal(row, r.valorUnitario)),
         // VALORIZA diz se o item carrega valor. Componente marcado como não

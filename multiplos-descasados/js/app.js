@@ -322,7 +322,7 @@ function mdRenderPivot(){
     const idPai = 'p-'+p.pai;
     const paiAberto = MD.pivotExpandido.has(idPai);
     const alerta = p.faltantes > 0
-      ? `<span class="md-tag md-tag-bad">${p.faltantes} sem peça</span>`
+      ? `<span class="md-tag md-tag-bad">${p.faltantes} falta componente${p.faltantes>1?'s':''}</span>`
       : (p.completos === 0 ? `<span class="md-tag md-tag-bad">0 vendáveis</span>` : '');
     linhas += `<tr class="md-piv-pai">
       <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome,46))} ${alerta}</td>
