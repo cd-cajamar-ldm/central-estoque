@@ -143,6 +143,7 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       return {
         componente: c.componente,
         nome: (s && s.nome) || '',
+        nomePai: (s && s.nomePai) || '',
         ean: (s && s.ean) || '',
         inInterface: c.inInterface,
         qtdePorMultiplo: c.qtde > 0 ? c.qtde : 1,
@@ -187,10 +188,12 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       }
     }
 
-    // Componente sem nenhuma peça vendável é o que trava o conjunto: enquanto
-    // ele não chegar, nenhuma peça dos outros vira múltiplo. A ação aí é
-    // diferente — é ir atrás da peça que falta, não bloquear.
-    const faltantes = linhas.filter(l=>l.wn === 0 && l.bloqueado === 0).length;
+    // "Falta componente" é o item cadastrado na estrutura que não tem NENHUM
+    // saldo no CD, em restrição nenhuma — não ter WN nem 86 não quer dizer que
+    // a peça não existe, pode estar em outra restrição (DT, WA...) e ainda
+    // assim travar o conjunto, mas isso não é "faltando", é descasado em
+    // outro lugar. Só conta quem realmente não tem peça física nenhuma.
+    const faltantes = linhas.filter(l=>l.total === 0).length;
 
     // Valor do múltiplo montado: preço do pai quando a 278 foi importada, senão
     // a soma do que os componentes carregam na própria 390.
@@ -198,7 +201,12 @@ function mdCalcularPais(estrutura, saldos, precos, base){
 
     pais.push({
       pai,
-      nome: (linhas.find(l=>l.inInterface==='S' && l.nome) || linhas.find(l=>l.nome) || {}).nome || '',
+      // Nome do PAI, não do componente — a 390 traz os dois nomes em colunas
+      // separadas (NOME_ITEM_PAI e NOME_ITEM_FILHO). Sem o nome do pai (390
+      // antiga), cai pro nome do componente que carrega o valor, pior que o
+      // nome certo mas melhor que ficar em branco.
+      nome: (linhas.find(l=>l.nomePai) || {}).nomePai
+        || (linhas.find(l=>l.inInterface==='S' && l.nome) || linhas.find(l=>l.nome) || {}).nome || '',
       componentes: linhas.sort((a,b)=>(b.bloquear + b.liberar) - (a.bloquear + a.liberar) || a.componente.localeCompare(b.componente)),
       nComponentes: linhas.length,
       completos, completosPotencial,
