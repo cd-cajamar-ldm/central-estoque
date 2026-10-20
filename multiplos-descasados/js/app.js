@@ -349,8 +349,7 @@ function mdRenderPivot(){
 
   const headerCols = restricoes.map(s=>{
     const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-    return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
-      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${irEsc(mdCodRestricao(s))}${mdSetaOrdem(chave, s)}</th>`;
+    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${irEsc(mdCodRestricao(s))}</th>`;
   }).join('');
 
   return `<div class="panel">
