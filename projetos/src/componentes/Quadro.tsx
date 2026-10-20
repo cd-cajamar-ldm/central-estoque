@@ -23,6 +23,10 @@ interface Props<T extends CartaoDoQuadro> {
   /* Trocar a coluna de lugar. Quando existe, o cabecalho ganha as setas
      — e a ordem do quadro deixa de exigir uma ida a configuracao. */
   aoReordenar?: (coluna: ColunaDoQuadro, direcao: -1 | 1) => void | Promise<void>;
+  /* Soltar um cartao antes de outro (ou no fim, com antesDeId nulo) —
+     tanto reorganizar dentro da mesma coluna quanto trocar de coluna numa
+     posicao especifica. Sem isto, soltar so muda a coluna (aoMover). */
+  aoReordenarCartao?: (item: T, coluna: string, antesDeId: string | null) => void | Promise<void>;
 }
 
 /* Quadro de colunas com arrastar e soltar, no espirito do Jira. Usa a
@@ -32,12 +36,20 @@ interface Props<T extends CartaoDoQuadro> {
    No celular nao ha arrastar - por isso todo cartao tambem tem o seletor
    de situacao na propria lista, que continua sendo o caminho garantido. */
 const CHAVE_RECOLHIDAS = 'projetos.colunas-recolhidas';
+const CHAVE_ZOOM = 'projetos.quadro-zoom';
+const ZOOM_MINIMO = 0.5;
+const ZOOM_MAXIMO = 1.5;
+const ZOOM_PASSO = 0.1;
 
 export default function Quadro<T extends CartaoDoQuadro>({
-  colunas, itens, aoMover, aoAbrir, cartao, rodape, aoReordenar,
+  colunas, itens, aoMover, aoAbrir, cartao, rodape, aoReordenar, aoReordenarCartao,
 }: Props<T>) {
   const [arrastado, setArrastado] = useState<string | null>(null);
   const [alvo, setAlvo] = useState<string | null>(null);
+  /* Cartao sobre o qual se esta arrastando, e se o solto entra antes ou
+     depois dele — e o que desenha a linha indicando onde o cartao vai
+     parar. */
+  const [alvoCartao, setAlvoCartao] = useState<{ id: string; pos: 'antes' | 'depois' } | null>(null);
   /* Coluna recolhida vira uma faixa fina com o nome em pe e a contagem.
      Com muitas situacoes, encolher "Cancelado" e "Concluido" e o que
      faz as colunas do meio caberem na tela sem rolagem lateral. A
@@ -46,6 +58,19 @@ export default function Quadro<T extends CartaoDoQuadro>({
     try { return JSON.parse(localStorage.getItem(CHAVE_RECOLHIDAS) ?? '[]') as string[]; }
     catch { return []; }
   });
+  /* Quadro grande, tela pequena: encolher o quadro inteiro cabe mais
+     coluna sem rolar de lado; aumentar deixa cartao e texto maiores. A
+     escolha e de quem esta olhando, entao fica no navegador. */
+  const [zoom, setZoom] = useState<number>(() => {
+    try { return Number(localStorage.getItem(CHAVE_ZOOM)) || 1; }
+    catch { return 1; }
+  });
+
+  function mudarZoom(novo: number) {
+    const limitado = Math.round(Math.min(ZOOM_MAXIMO, Math.max(ZOOM_MINIMO, novo)) * 100) / 100;
+    setZoom(limitado);
+    try { localStorage.setItem(CHAVE_ZOOM, String(limitado)); } catch { /* só não lembra */ }
+  }
 
   function alternarRecolhida(id: string) {
     setRecolhidas((atual) => {
@@ -56,13 +81,36 @@ export default function Quadro<T extends CartaoDoQuadro>({
   }
 
   return (
-    /* A altura da caixa e limitada de proposito: com o quadro inteiro
-       rolando na pagina, a barra de rolagem lateral ficava la embaixo, e
-       ver a coluna da direita exigia descer, rolar e subir de novo.
-       Presa a 70% da altura da tela, a barra fica sempre a vista e as
-       colunas rolam por dentro. */
-    <div data-quadro="colunas" className="max-h-[70vh] overflow-auto">
-      <div className="flex min-w-max gap-3 p-3">
+    <div>
+      <div className="mb-1 flex items-center justify-end gap-1">
+        <button
+          className="rounded px-1.5 py-0.5 text-sm font-bold text-tinta-suave hover:bg-papel hover:text-roxo-escuro disabled:opacity-30"
+          disabled={zoom <= ZOOM_MINIMO}
+          onClick={() => mudarZoom(zoom - ZOOM_PASSO)}
+          title="Diminuir o quadro"
+        >−</button>
+        <button
+          className="w-11 rounded px-1 py-0.5 text-[11px] font-bold text-tinta-suave hover:bg-papel hover:text-roxo-escuro"
+          onClick={() => mudarZoom(1)}
+          title="Voltar ao tamanho normal"
+        >{Math.round(zoom * 100)}%</button>
+        <button
+          className="rounded px-1.5 py-0.5 text-sm font-bold text-tinta-suave hover:bg-papel hover:text-roxo-escuro disabled:opacity-30"
+          disabled={zoom >= ZOOM_MAXIMO}
+          onClick={() => mudarZoom(zoom + ZOOM_PASSO)}
+          title="Aumentar o quadro"
+        >+</button>
+      </div>
+      {/* A altura da caixa e limitada de proposito: com o quadro inteiro
+         rolando na pagina, a barra de rolagem lateral ficava la embaixo, e
+         ver a coluna da direita exigia descer, rolar e subir de novo.
+         Presa a 70% da altura da tela, a barra fica sempre a vista e as
+         colunas rolam por dentro. */}
+      <div data-quadro="colunas" className="max-h-[70vh] overflow-auto">
+      <div
+        className="flex min-w-max gap-3 p-3"
+        style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: `${100 / zoom}%` }}
+      >
         {colunas.map((coluna, indice) => {
           const daColuna = itens.filter((i) => i.coluna === coluna.id);
           const recolhida = recolhidas.includes(coluna.id);
@@ -81,7 +129,9 @@ export default function Quadro<T extends CartaoDoQuadro>({
                   setAlvo(null);
                   const item = itens.find((i) => i.id === arrastado);
                   setArrastado(null);
-                  if (item && item.coluna !== coluna.id) void aoMover(item, coluna.id);
+                  if (!item || item.coluna === coluna.id) return;
+                  if (aoReordenarCartao) void aoReordenarCartao(item, coluna.id, null);
+                  else void aoMover(item, coluna.id);
                 }}
                 onClick={() => alternarRecolhida(coluna.id)}
                 title={`Abrir ${coluna.rotulo}`}
@@ -107,9 +157,15 @@ export default function Quadro<T extends CartaoDoQuadro>({
               onDrop={(e) => {
                 e.preventDefault();
                 setAlvo(null);
+                setAlvoCartao(null);
                 const item = itens.find((i) => i.id === arrastado);
                 setArrastado(null);
-                if (item && item.coluna !== coluna.id) void aoMover(item, coluna.id);
+                if (!item) return;
+                /* Disparado so quando o solto cai no fundo da coluna, fora de
+                   qualquer cartao — sobre um cartao quem responde e o proprio
+                   cartao, que impede isto de rodar tambem (stopPropagation). */
+                if (aoReordenarCartao) void aoReordenarCartao(item, coluna.id, null);
+                else if (item.coluna !== coluna.id) void aoMover(item, coluna.id);
               }}
               className={`flex w-64 shrink-0 flex-col rounded-xl border p-2 transition ${
                 alvo === coluna.id ? 'border-roxo bg-roxo-suave' : 'border-linha bg-papel'
@@ -148,18 +204,54 @@ export default function Quadro<T extends CartaoDoQuadro>({
               </div>
 
               <div className="flex-1 space-y-2">
-                {daColuna.map((item) => (
-                  <div
-                    key={item.id}
-                    draggable
-                    onDragStart={() => setArrastado(item.id)}
-                    onDragEnd={() => { setArrastado(null); setAlvo(null); }}
-                    onClick={() => aoAbrir?.(item)}
-                    className={`cursor-grab rounded-lg border border-linha bg-white p-2.5 shadow-card transition active:cursor-grabbing ${
-                      arrastado === item.id ? 'opacity-50' : 'hover:shadow-alto'
-                    }`}
-                  >
-                    {cartao(item)}
+                {daColuna.map((item, indiceCartao) => (
+                  <div key={item.id}>
+                    {alvoCartao?.id === item.id && alvoCartao.pos === 'antes' && (
+                      <div className="mb-2 h-1 rounded-full bg-roxo" />
+                    )}
+                    <div
+                      draggable
+                      onDragStart={() => setArrastado(item.id)}
+                      onDragEnd={() => { setArrastado(null); setAlvo(null); setAlvoCartao(null); }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        /* Sem aoReordenarCartao (quadro de tarefas) nao ha onde
+                           gravar a posicao — a linha so apareceria e nunca
+                           surtiria efeito. */
+                        if (!aoReordenarCartao || arrastado === item.id) return;
+                        const retangulo = e.currentTarget.getBoundingClientRect();
+                        const meio = retangulo.top + retangulo.height / 2;
+                        setAlvoCartao({ id: item.id, pos: e.clientY < meio ? 'antes' : 'depois' });
+                      }}
+                      onDragLeave={() => setAlvoCartao((atual) => (atual?.id === item.id ? null : atual))}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        /* Para o drop da coluna (que so acrescenta no fim) nao
+                           rodar tambem e desfazer a posicao escolhida aqui. */
+                        e.stopPropagation();
+                        const arrastadoItem = itens.find((i) => i.id === arrastado);
+                        const pos = alvoCartao?.id === item.id ? alvoCartao.pos : 'antes';
+                        setArrastado(null);
+                        setAlvo(null);
+                        setAlvoCartao(null);
+                        if (!arrastadoItem || arrastadoItem.id === item.id) return;
+                        if (aoReordenarCartao) {
+                          const antesDeId = pos === 'antes' ? item.id : (daColuna[indiceCartao + 1]?.id ?? null);
+                          void aoReordenarCartao(arrastadoItem, coluna.id, antesDeId);
+                        } else if (arrastadoItem.coluna !== coluna.id) {
+                          void aoMover(arrastadoItem, coluna.id);
+                        }
+                      }}
+                      onClick={() => aoAbrir?.(item)}
+                      className={`cursor-grab rounded-lg border border-linha bg-white p-2.5 shadow-card transition active:cursor-grabbing ${
+                        arrastado === item.id ? 'opacity-50' : 'hover:shadow-alto'
+                      }`}
+                    >
+                      {cartao(item)}
+                    </div>
+                    {alvoCartao?.id === item.id && alvoCartao.pos === 'depois' && (
+                      <div className="mt-2 h-1 rounded-full bg-roxo" />
+                    )}
                   </div>
                 ))}
                 {!daColuna.length && (
@@ -173,6 +265,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

@@ -110,6 +110,7 @@ function Icone({ nome }: { nome: Pagina | 'tema' | 'menu' | 'voltar' }) {
 export default function App() {
   const {
     dados, historico, ajustes, carregando, erro,
+    temPrecoSalvo, temSaldo390Salvo,
     importar, carregarDemo, limpar, ajustarResponsavel, desfazerAjuste,
   } = useDados();
   const [pagina, setPagina] = useState<Pagina>('geral');
@@ -147,6 +148,19 @@ export default function App() {
     for (const [item, url] of dados?.fotos ?? []) m.set(String(item), url);
     return m;
   }, [dados]);
+
+  /* Preco de custo do item pai (SIGEQ278) e valor unitario por
+     componente (QRY0390), importados a parte. Mapas vazios quando nao
+     importados: o dashboard mostra R$ 0 parado, nunca quebra por falta
+     do arquivo. */
+  const precos = useMemo(
+    () => new Map<string, number>(dados?.precos ?? []),
+    [dados]
+  );
+  const saldo390 = useMemo(
+    () => new Map<string, number>(dados?.saldo390 ?? []),
+    [dados]
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', tema === 'escuro' ? 'dark' : 'light');
@@ -342,11 +356,19 @@ export default function App() {
           {carregando ? (
             <Vazio icone="⏳">Carregando dados salvos…</Vazio>
           ) : !dados ? (
-            <Importar aoImportar={importar} aoVerExemplo={carregarDemo} erro={erro} />
+            <Importar
+              aoImportar={importar}
+              aoVerExemplo={carregarDemo}
+              erro={erro}
+              temPrecoSalvo={temPrecoSalvo}
+              temSaldo390Salvo={temSaldo390Salvo}
+            />
           ) : paginaAtual === 'geral' ? (
             <DashboardGeral
               componentes={dados.componentes}
               fotos={fotos}
+              precos={precos}
+              saldo390={saldo390}
               busca={busca}
               divergencias={dados.divergencias}
               ajustes={ajustes}

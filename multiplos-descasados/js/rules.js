@@ -63,12 +63,16 @@ function mdNomeRestricao(sigla){ return MD_NOME_POR_SIGLA[sigla] || sigla || '�
 const MD_ORDEM_RESTRICOES = [MD_SIGLA_VENDAVEL, MD_SIGLA_BLOQUEIO]
   .concat(MD_RESTRICOES.map(r=>r.sigla).filter(s=>s!==MD_SIGLA_VENDAVEL && s!==MD_SIGLA_BLOQUEIO));
 
-/* O coletor pede o endereço como 5000 + ID do local: o operador digita
-   5000132564 pro local 132564. O relatório já sai assim, pronto pra colar. */
-const MD_PREFIXO_LOCAL = '5000';
+/* O coletor pede o endereço com 10 dígitos: ID do local completado com zero à
+   esquerda depois do 5 (5000132564 pro local 132564, de 6 dígitos). Local de
+   7 dígitos usa menos zero (500 em vez de 5000) pra fechar nos mesmos 10 —
+   grudar sempre "5000" na frente estourava o endereço quando o local vinha
+   com um dígito a mais. */
 function mdLocalColetor(idLocal){
   const s = String(idLocal ?? '').trim();
-  return s ? MD_PREFIXO_LOCAL + s : '';
+  if(!s) return '';
+  const prefixo = '5' + '0'.repeat(Math.max(0, 9 - s.length));
+  return prefixo + s;
 }
 
 /* Normaliza código de item. A 051 traz o código como número (857513.0) e a 390
@@ -139,6 +143,7 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       return {
         componente: c.componente,
         nome: (s && s.nome) || '',
+        ean: (s && s.ean) || '',
         inInterface: c.inInterface,
         qtdePorMultiplo: c.qtde > 0 ? c.qtde : 1,
         wn, bloqueado: bloq,
@@ -161,16 +166,18 @@ function mdCalcularPais(estrutura, saldos, precos, base){
     const completos = Math.floor(Math.min(...linhas.map(l=>l.wn / l.qtdePorMultiplo)));
     const completosPotencial = Math.floor(Math.min(...linhas.map(l=>(l.wn + l.bloqueado) / l.qtdePorMultiplo)));
 
-    let bloquearPecas = 0, liberarPecas = 0, bloquearValor = 0, compsSobraSemPreco = 0, compsComSobra = 0;
+    let bloquearPecas = 0, liberarPecas = 0, bloquearValor = 0, liberarValor = 0, compsSobraSemPreco = 0, compsComSobra = 0;
     for(const l of linhas){
       const alvo = completosPotencial * l.qtdePorMultiplo;
       l.alvoWn = alvo;
       l.bloquear = Math.max(0, l.wn - alvo);
       l.liberar = Math.max(0, Math.min(l.bloqueado, alvo - l.wn));
       l.valorBloquear = l.bloquear * l.preco;
+      l.valorLiberar = l.liberar * l.preco;
       bloquearPecas += l.bloquear;
       liberarPecas += l.liberar;
       bloquearValor += l.valorBloquear;
+      liberarValor += l.valorLiberar;
       if(l.bloquear > 0){
         compsComSobra++;
         // Peça descasada sem preço nenhum: o valor da tela sai subestimado e a
@@ -200,6 +207,7 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       compsSobraSemPreco,
       bloquearPecas, liberarPecas,
       sobraValor: bloquearValor,
+      liberarValor,
       valorMultiplo,
       wnTotal: linhas.reduce((a,l)=>a + l.wn, 0),
       bloqueadoTotal: linhas.reduce((a,l)=>a + l.bloqueado, 0),
@@ -216,7 +224,7 @@ function mdCalcularPais(estrutura, saldos, precos, base){
 function mdResumo(pais){
   const r = {
     paisComEstoque: pais.length, paisDescasados: 0,
-    bloquearPecas: 0, liberarPecas: 0, sobraValor: 0,
+    bloquearPecas: 0, liberarPecas: 0, sobraValor: 0, liberarValor: 0,
     completos: 0, completosPotencial: 0,
     paisIncompletos: 0, componentesComSobra: 0, componentesSemPreco: 0,
     paisABloquear: 0, paisALiberar: 0
@@ -227,6 +235,7 @@ function mdResumo(pais){
     r.bloquearPecas += p.bloquearPecas;
     r.liberarPecas += p.liberarPecas;
     r.sobraValor += p.sobraValor;
+    r.liberarValor += p.liberarValor;
     r.componentesComSobra += p.compsComSobra;
     r.componentesSemPreco += p.compsSobraSemPreco;
     if(p.descasado) r.paisDescasados++;
@@ -246,24 +255,41 @@ function mdResumo(pais){
    sair, porque é assim que a tela 12.MOVI funciona e porque o sistema só
    aceita a baixa se aquele endereço tiver mesmo o saldo naquela restrição.
 
-   Os endereços são consumidos do maior saldo pro menor: menos linhas pra
-   digitar, e a sobra costuma estar concentrada num endereço só. */
+   E precisa ser por LOTE, não só por endereço: quando o mesmo endereço tem
+   mais de um lote (a 390 traz uma linha por lote), o coletor recusa mover
+   uma quantidade que precise juntar dois lotes — dá "IMPOSSÍVEL FUNDIR". Por
+   isso a alocação usa `refs` (um lote por entrada), nunca o total já somado
+   do endereço: cada linha do plano sai do tamanho exato de UM lote, sempre
+   executável num passo só.
+
+   Os lotes são consumidos do maior saldo pro menor: menos linhas pra
+   digitar, e a sobra costuma estar concentrada num lote só. */
 function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
-  const disponiveis = (locais || [])
-    .filter(l=>String(l.restricao || '').toUpperCase() === sigla && (l[campo] || 0) > 0)
-    .sort((a,b)=>(b[campo] || 0) - (a[campo] || 0));
+  const disponiveis = [];
+  for(const l of (locais || [])){
+    if(String(l.restricao || '').toUpperCase() !== sigla) continue;
+    // refs é o normal (um lote por linha da 390); sem ele (dado antigo em
+    // cache), cai pro total do endereço — pior que o ideal, mas não quebra.
+    const refs = (l.refs && l.refs.length) ? l.refs : [{qtde: l.qtde, qtdeDisp: l.qtdeDisp}];
+    for(const ref of refs){
+      const saldo = ref[campo] || 0;
+      if(saldo > 0) disponiveis.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: saldo});
+    }
+  }
+  disponiveis.sort((a,b)=>b.saldoLocal - a.saldoLocal);
+
   const out = [];
   let resta = quantidade;
   for(const l of disponiveis){
     if(resta <= 0) break;
-    const usa = Math.min(resta, l[campo] || 0);
-    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, saldoLocal: l[campo] || 0, quantidade: usa});
+    const usa = Math.min(resta, l.saldoLocal);
+    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: l.saldoLocal, quantidade: usa});
     resta -= usa;
   }
   // Sobrou quantidade sem endereço: a soma por restrição e a soma por endereço
   // não fecharam. Devolvido como linha "sem endereço" pra aparecer na tela em
   // vez de sumir da conta.
-  if(resta > 0) out.push({local:'', desc:'', predio:'', clal:'', saldoLocal:0, quantidade: resta, semEndereco:true});
+  if(resta > 0) out.push({local:'', desc:'', predio:'', clal:'', x1:'', x2:'', saldoLocal:0, quantidade: resta, semEndereco:true});
   return out;
 }
 
@@ -284,11 +310,11 @@ function mdPlanoAjuste(pais, base){
             de: a.de, para: a.para,
             codDe: mdCodRestricao(a.de), codPara: mdCodRestricao(a.para),
             localColetor: mdLocalColetor(alvo.local),
-            local: alvo.local, endereco: alvo.desc, predio: alvo.predio, clal: alvo.clal,
+            local: alvo.local, endereco: alvo.desc, predio: alvo.predio, clal: alvo.clal, x1: alvo.x1, x2: alvo.x2,
             saldoLocal: alvo.saldoLocal, semEndereco: !!alvo.semEndereco,
             quantidade: alvo.quantidade,
             pai: p.pai, nomePai: p.nome,
-            componente: c.componente, nome: c.nome,
+            componente: c.componente, nome: c.nome, ean: c.ean,
             inInterface: c.inInterface,
             qtdePorMultiplo: c.qtdePorMultiplo,
             wn: c.wn, bloqueado: c.bloqueado, alvoWn: c.alvoWn,

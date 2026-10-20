@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { percentualEfetivo } from '@/dominio/arvore';
 import { comprimirImagem } from '@/lib/imagem';
@@ -218,10 +218,16 @@ export function useCarteira(pronto = true): Carteira {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  /* So a primeira carga troca a tela inteira por "Carregando…" — uma
+     edicao qualquer (status, responsavel, arrastar no quadro) tambem
+     recarrega a carteira, e sem esta guarda a pagina piscava e voltava
+     pro topo a cada troca, porque o conteudo sumia e reaparecia menor
+     por um instante. */
+  const jaCarregouUmaVez = useRef(false);
 
   const recarregar = useCallback(async () => {
     if (!pronto) return;
-    setCarregando(true);
+    if (!jaCarregouUmaVez.current) setCarregando(true);
     try {
       const [p, q] = await Promise.all([listarProjetos(), listarPessoas()]);
       setProjetos(p);
@@ -230,6 +236,7 @@ export function useCarteira(pronto = true): Carteira {
     } catch (e) {
       setErro(mensagemDeErro(e));
     } finally {
+      jaCarregouUmaVez.current = true;
       setCarregando(false);
     }
   }, [pronto]);

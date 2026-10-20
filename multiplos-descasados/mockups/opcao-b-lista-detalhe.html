@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Opção B — Lista + Detalhe · Múltiplos Descasados</title>
+<link rel="stylesheet" href="../css/theme.css">
+<link rel="stylesheet" href="../css/modulo.css">
+<style>
+  .md-split{ display:grid; grid-template-columns:360px 1fr; gap:14px; align-items:start; }
+  @media(max-width:900px){ .md-split{ grid-template-columns:1fr; } }
+  .md-rank{ display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--radius-lg); overflow:hidden; max-height:calc(100vh - 300px); overflow-y:auto; }
+  .md-rank-row{ background:var(--surface); padding:10px 12px; cursor:pointer; display:flex; flex-direction:column; gap:3px; border-left:3px solid transparent; }
+  .md-rank-row:hover{ background:var(--blue-light); }
+  .md-rank-row.sel{ background:var(--orange-light); border-left-color:var(--orange); }
+  .md-rank-top{ display:flex; justify-content:space-between; gap:8px; }
+  .md-rank-top .mono{ font-size:11px; color:var(--ink-soft); }
+  .md-rank-nome{ font-size:12px; color:var(--ink); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .md-rank-valor{ font-family:'SFMono-Regular',Consolas,monospace; font-weight:800; font-size:12.5px; color:var(--danger); white-space:nowrap; }
+  .md-rank-row.only-liberar .md-rank-valor{ color:var(--success); }
+  .md-rank-tags{ display:flex; gap:6px; }
+  .md-detail{ position:sticky; top:0; }
+  .md-detail-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+  .md-detail-head h2{ font-size:16px; color:var(--ink); }
+  .md-detail-head .mono{ color:var(--ink-soft); font-size:12px; }
+  .md-detail-valor{ font-family:'SFMono-Regular',Consolas,monospace; font-weight:800; font-size:20px; color:var(--danger); }
+  .md-detail-stats{ display:flex; gap:18px; margin:10px 0 14px; flex-wrap:wrap; }
+  .md-detail-stat .n{ font-family:'SFMono-Regular',Consolas,monospace; font-size:19px; font-weight:800; color:var(--ink); }
+  .md-detail-stat .l{ font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="content" style="height:100vh;">
+  <div class="topbar">
+    <div class="topbar-titles"><h1>Múltiplos Descasados</h1></div>
+  </div>
+  <div class="page-scroll">
+
+    <div class="kpi-grid">
+      <div class="kpi-card bad"><div class="num">R$ 811.626,68</div><div class="label">Valor descasado agora</div></div>
+      <div class="kpi-card bad"><div class="num">977</div><div class="label">Peças a bloquear</div></div>
+      <div class="kpi-card good"><div class="num">26</div><div class="label">Peças a liberar</div></div>
+      <div class="kpi-card orange"><div class="num">142</div><div class="label">Múltiplos a ajustar</div></div>
+    </div>
+
+    <div class="md-split">
+      <div>
+        <input class="md-busca" style="width:100%; margin-bottom:8px;" type="search" placeholder="Buscar...">
+        <div class="md-rank" id="rank"></div>
+      </div>
+      <div class="panel md-detail" id="detalhe"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="mock-data.js"></script>
+<script>
+function fmtInt(n){ return Math.round(n).toLocaleString('pt-BR'); }
+function fmtMoney(n){ return n.toLocaleString('pt-BR', {style:'currency', currency:'BRL'}); }
+
+let selecionado = MOCK_PAIS[0].pai;
+
+function renderRank(){
+  const lista = MOCK_PAIS.slice().sort((a,b)=>b.valor-a.valor);
+  document.getElementById('rank').innerHTML = lista.map(p=>{
+    const bloq = p.comps.filter(c=>c.acao==='bloquear').reduce((a,c)=>a+c.qtd,0);
+    const lib = p.comps.filter(c=>c.acao==='liberar').reduce((a,c)=>a+c.qtd,0);
+    const onlyLib = lib>0 && bloq===0;
+    return `<div class="md-rank-row ${p.pai===selecionado?'sel':''} ${onlyLib?'only-liberar':''}" onclick="selecionar('${p.pai}')">
+      <div class="md-rank-top">
+        <span class="mono">${p.pai}</span>
+        <span class="md-rank-valor">${fmtMoney(p.valor)}</span>
+      </div>
+      <div class="md-rank-nome">${p.nome}</div>
+      <div class="md-rank-tags">
+        ${bloq ? `<span class="md-tag md-tag-bad">bloquear ${fmtInt(bloq)}</span>` : ''}
+        ${lib ? `<span class="md-tag md-tag-good">liberar ${fmtInt(lib)}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderDetalhe(){
+  const p = MOCK_PAIS.find(x=>x.pai===selecionado);
+  if(!p) return;
+  const linhas = p.comps.map(c=>{
+    if(!c.acao){
+      return `<tr><td class="mono md-left">${c.componente}</td><td class="md-left">${c.nome}</td>
+        <td class="mono">${fmtInt(c.wn)}</td><td class="mono">${fmtInt(c.ai||0)}</td><td class="md-left">—</td></tr>`;
+    }
+    const verbo = c.acao==='bloquear' ? 'bloquear' : 'liberar';
+    const cls = c.acao==='bloquear' ? 'md-tag-bad' : 'md-tag-good';
+    return `<tr class="${c.acao==='bloquear'?'md-comp-sobra':'md-comp-liberar'}">
+      <td class="mono md-left">${c.componente}</td><td class="md-left">${c.nome}</td>
+      <td class="mono">${fmtInt(c.wn)}</td><td class="mono">${fmtInt(c.ai||0)}</td>
+      <td class="md-left"><span class="md-tag ${cls}">${verbo} ${fmtInt(c.qtd)}</span>
+        <span class="field-hint">local 5000${c.local} · ${c.endereco} · saldo ${c.saldoLocal}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('detalhe').innerHTML = `
+    <div class="md-detail-head">
+      <div>
+        <span class="mono">${p.pai}</span>
+        <h2>${p.nome}</h2>
+      </div>
+      <div class="md-detail-valor">${fmtMoney(p.valor)}</div>
+    </div>
+    <div class="md-detail-stats">
+      <div class="md-detail-stat"><div class="n pos">${fmtInt(p.vendaveis)}</div><div class="l">vendáveis agora</div></div>
+      <div class="md-detail-stat"><div class="n">${fmtInt(p.potencial)}</div><div class="l">possíveis se o 86 voltar</div></div>
+    </div>
+    <div class="table-wrap">
+      <table class="aud-table">
+        <thead><tr><th>Componente</th><th>Descrição</th><th class="num">WN (0)</th><th class="num">AI (86)</th><th>Ação / onde</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>`;
+}
+
+function selecionar(pai){
+  selecionado = pai;
+  renderRank();
+  renderDetalhe();
+}
+
+renderRank();
+renderDetalhe();
+</script>
+</body>
+</html>

@@ -43,6 +43,9 @@ export interface Projeto {
   inicio_real: string | null;
   fim_real: string | null;
   percentual: number;
+  /* Posicao dentro da coluna do quadro (por status), definida ao
+     arrastar. Nula: vai para o fim. */
+  ordem: number | null;
   criado_por: string | null;
   criado_em: string;
   atualizado_em: string;

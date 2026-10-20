@@ -208,6 +208,9 @@ button{ font-family:inherit; cursor:pointer; }
   background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.18);
   border-radius:10px; padding:6px 14px; min-width:110px;
 }
+/* Mesmo motivo do .topbar-filters[hidden] acima — sem isto, esconder só a caixa
+   de Ciclo (aba NET) via JS não tinha efeito nenhum. */
+.tb-filter[hidden]{ display:none; }
 .tb-filter label{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6B7280; }
 .tb-filter #cycleBadge, .tb-filter select{
   background:transparent; border:none; color:#001A72; font-size:12.5px; font-weight:800; font-family:inherit;
@@ -464,7 +467,7 @@ button{ font-family:inherit; cursor:pointer; }
 .bi-cluster{ display:flex; gap:11px; align-items:flex-end; height:100%; }
 .bi-cluster .bi-vbar{ width:24px; max-width:none; }
 .bi-cluster-bar{ display:flex; flex-direction:column; align-items:center; }
-.bi-cluster-val{ font-size:12.5px; font-weight:700; margin-bottom:3px; white-space:nowrap; }
+.bi-cluster-val{ font-size:15px; font-weight:700; margin-bottom:3px; white-space:nowrap; }
 /* Separação visual clara entre um Log e outro (cada um é um grupo de 3 barras) —
    sem isso os clusters ficavam visualmente colados uns nos outros. */
 .bi-vbars-grouped > .bi-vbar-col:not(:last-child){ border-right:1px solid var(--line); padding-right:22px; margin-right:0; }
@@ -534,6 +537,7 @@ table.table-dense tbody td{ padding:3px 10px; font-size:12.5px; }
 .mes-chart svg{ display:block; width:100%; min-width:620px; height:auto; }
 .mes-grid{ stroke:var(--mes-grid); stroke-width:1; }
 .mes-meta{ stroke:var(--ink-soft); stroke-width:1.5; }
+.mes-ciclo-div{ stroke:var(--line); stroke-width:1; stroke-dasharray:3 3; }
 .mes-axis{ fill:var(--ink-soft); font-size:10px; font-family:'SFMono-Regular',Consolas,monospace; }
 /* Contado e divergente usam a MESMA cor de rótulo (tinta cheia) — a cor está
    na coluna, não no número. */
@@ -663,6 +667,63 @@ table.prod-rank td{ white-space:nowrap; }
 .ofe-num.neg strong{ color:var(--danger); }
 .ofe-num.pos strong{ color:var(--success); }
 
+/* ---------- CARTÕES DOS CICLOS + BURNDOWN (Comparativo) ---------- */
+/* auto-fit: três ciclos processados ocupam a largura toda; quando o quarto entra,
+   os quatro se ajustam sozinhos. */
+.cc-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px; }
+.cc-card{ border:1px solid var(--line); border-radius:12px; background:var(--surface);
+  display:flex; flex-direction:column; overflow:hidden; }
+/* Ciclo aberto fica marcado: os números dele são parciais e não se comparam de
+   igual pra igual com os fechados. */
+.cc-card.aberto{ border-color:var(--orange); box-shadow:0 0 0 1px var(--orange); }
+.cc-top{ display:flex; align-items:center; gap:8px; padding:12px 14px 0; }
+.cc-top h4{ margin:0; font-size:15px; font-weight:800; }
+.cc-tag{ margin-left:auto; font-size:9.5px; font-weight:800; letter-spacing:.05em;
+  text-transform:uppercase; border-radius:99px; padding:2px 8px; }
+.cc-tag.ab{ background:var(--orange-light); color:var(--orange); }
+.cc-tag.en{ background:var(--surface2); color:var(--ink-soft); }
+.cc-per{ margin:4px 14px 0; font-size:11px; color:var(--ink-soft); }
+.cc-kpi{ padding:6px 14px 10px; display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+.cc-acc{ min-width:0; }
+.cc-big{ margin:0; font-size:clamp(17px, 2.1vw, 24px); font-weight:800; line-height:1;
+  font-family:'SFMono-Regular',Consolas,monospace; }
+.cc-big.good{ color:var(--success); } .cc-big.neg{ color:var(--danger); }
+.cc-lbl{ display:block; font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+.cc-bar{ display:block; position:relative; height:6px; border-radius:99px;
+  background:var(--surface2); margin-top:6px; overflow:visible; }
+.cc-bar i{ display:block; height:100%; border-radius:99px; background:var(--orange); }
+.cc-meta{ position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink); opacity:.45; }
+.cc-grupo{ padding:2px 14px; font-size:9.5px; font-weight:800; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--ink-soft); background:var(--surface2);
+  border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.cc-lin{ display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  padding:3px 14px; font-size:12px; line-height:1.35; border-bottom:1px solid var(--line); }
+.cc-lin span{ color:var(--ink-soft); }
+.cc-lin b{ font-family:'SFMono-Regular',Consolas,monospace; font-weight:700; white-space:nowrap; }
+.cc-lin b.good{ color:var(--success); } .cc-lin b.neg{ color:var(--danger); }
+.cc-lin b em{ font-style:normal; font-family:inherit; font-size:10.5px; font-weight:400;
+  color:var(--ink-soft); margin-left:4px; }
+.cc-rod{ margin-top:auto; display:flex; align-items:center; justify-content:space-between;
+  gap:8px; padding:6px 14px; background:var(--surface2); border-top:1px solid var(--line); font-size:11.5px; }
+.cc-rod .good{ color:var(--success); font-weight:700; }
+.cc-rod .neg{ color:var(--danger); font-weight:700; }
+@media (max-width:600px){ .cc-grid{ grid-template-columns:1fr; } }
+
+.bd-legenda{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px; }
+.bd-sw-ideal{ background:var(--ink-soft); }
+.bd-sw-real{ background:var(--orange); }
+.bd-ideal{ fill:none; stroke:var(--ink-soft); stroke-width:1.5; stroke-dasharray:5 4; }
+.bd-real{ fill:none; stroke:var(--orange); stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; }
+.bd-pt{ fill:var(--orange); }
+.bd-rot{ fill:var(--ink); font-size:10px; font-weight:700;
+  font-family:'SFMono-Regular',Consolas,monospace; paint-order:stroke;
+  stroke:var(--surface); stroke-width:3px; stroke-linejoin:round; }
+.bd-dia{ fill:var(--ink-soft); font-size:9.5px; font-weight:600;
+  font-family:'SFMono-Regular',Consolas,monospace; }
+.bd-mes-box{ fill:var(--surface2); }
+.bd-mes-lbl{ fill:var(--ink-soft); font-size:10px; font-weight:800; letter-spacing:.08em; }
+.bd-mes-sep{ stroke:var(--line); stroke-width:1; stroke-dasharray:3 3; }
+
 .ofe-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
 .ofe-head h3{ margin:0; }
 .ofe-acoes{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -689,6 +750,12 @@ table.ofe-table th.ofe-ano, table.ofe-table td.ofe-ano{ background:var(--surface
 :root[data-theme="dark"] table.ofe-table td.ofe-ano{ background:rgba(255,255,255,.04); }
 :root[data-theme="dark"] table.ofe-table tr.sel{ background:rgba(250,70,22,.16); }
 
+/* Net pequeno embaixo do absoluto: o absoluto é o número que importa (tamanho real
+   do erro), o net é só contexto — quando os dois batem é ofensor normal, quando o
+   net é bem menor foi ele que escondia o item até agora ("compensado"). */
+table.ofe-table td .ofe-net-sub{ display:block; font-size:10px; font-weight:500; color:var(--ink-soft); margin-top:1px; }
+table.ofe-table td .ofe-net-sub.neg{ color:var(--ink-soft); }
+table.ofe-table td .ofe-net-sub.pos{ color:var(--ink-soft); }
 .ofe-tag{ font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; padding:2px 8px; border-radius:100px; white-space:nowrap; }
 .ofe-tag.perda{ color:var(--danger); background:var(--danger-light); }
 .ofe-tag.ganho{ color:var(--success); background:var(--success-light); }
@@ -992,7 +1059,7 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
    o app, pra ler tranquilo em qualquer tamanho de tela. Cores fixas (não usam
    variáveis de tema claro/escuro) porque vira uma imagem estática. ---------- */
 #irPrintArea{ display:none; }
-.rp-page{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; color:#1D1F2A; background:#E7EAF1; padding:0 0 28px; max-width:920px; }
+.rp-page{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,Arial,sans-serif; color:#1D1F2A; background:#E7EAF1; padding:0 0 28px; max-width:920px; }
 
 .rp-hero{ background:#001A72; color:#fff; padding:34px 40px 26px; position:relative; }
 .rp-hero::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:4px; background:linear-gradient(90deg,#FA4616,#FF7A4D,#FA4616); }
@@ -1042,11 +1109,13 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-donut-stat .l{ font-size:12.5px; color:#6B7280; font-weight:600; margin-top:3px; }
 .rp-month-list{ flex:1.4; min-width:220px; display:flex; flex-direction:column; gap:9px; align-self:stretch; justify-content:center; }
 .rp-month-title{ font-size:11px; font-weight:700; color:#6B7280; text-transform:uppercase; letter-spacing:.03em; margin-bottom:2px; }
-.rp-month-row{ display:grid; grid-template-columns:110px 1fr 56px; align-items:center; gap:10px; }
+.rp-month-row{ display:grid; grid-template-columns:100px 1fr 74px; align-items:center; gap:10px; }
 .rp-month-label{ font-size:11.5px; color:#1D1F2A; font-weight:600; }
 .rp-month-track{ background:#EEF0F4; border-radius:5px; height:12px; overflow:hidden; }
 .rp-month-fill{ height:100%; background:#FA4616; border-radius:5px; }
-.rp-month-val{ text-align:right; font-family:'SFMono-Regular',Consolas,monospace; font-size:11.5px; font-weight:700; color:#1D1F2A; }
+.rp-month-val{ text-align:right; font-family:'SFMono-Regular',Consolas,monospace; font-size:11.5px; font-weight:700; color:#1D1F2A; line-height:1.35; white-space:nowrap; }
+.rp-month-val-sub{ display:block; font-size:9.5px; font-weight:600; color:#6B7280; }
+.rp-month-val-head{ text-align:right; font-size:9px; font-weight:700; color:#9098C0; text-transform:uppercase; letter-spacing:.02em; white-space:nowrap; }
 .rp-chart-legend{ margin:8px 0 0; font-size:10.5px; color:#6B7280; }
 .rp-hbar-row{ display:grid; grid-template-columns:70px 1fr 52px; align-items:center; gap:10px; padding:5px 0; font-size:11px; }
 .rp-hbar-row + .rp-hbar-row{ border-top:1px solid #EEF0F4; }
@@ -1054,6 +1123,16 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-hbar-track{ background:#EEF0F4; border-radius:4px; height:12px; overflow:hidden; }
 .rp-hbar-fill{ height:100%; background:#FA4616; border-radius:4px; }
 .rp-hbar-val{ text-align:right; font-family:'SFMono-Regular',Consolas,monospace; font-size:10.5px; font-weight:700; color:#1D1F2A; }
+/* Linha de item (código + descrição) é bem mais longa que "LOG 1" — label mais
+   largo que o .rp-hbar-row padrão, senão a descrição toda fica espremida. */
+.rp-hbar-row-item{ grid-template-columns:230px 1fr 86px; }
+.rp-hbar-row-item .rp-hbar-label{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rp-proj-row{ display:flex; align-items:center; justify-content:center; gap:28px; }
+.rp-proj-stat{ text-align:center; }
+.rp-proj-n{ font-family:'SFMono-Regular',Consolas,monospace; font-size:32px; font-weight:800; color:#1D1F2A; }
+.rp-proj-n.good{ color:#1F8A52; } .rp-proj-n.bad{ color:#C0392B; }
+.rp-proj-l{ font-size:11.5px; color:#6B7280; font-weight:600; margin-top:4px; }
+.rp-proj-arrow{ font-size:22px; color:#9AA1B4; }
 .rp-table{ width:100%; border-collapse:collapse; font-size:11px; }
 .rp-table th{ text-align:left; background:#F6F7FA; color:#4B5165; padding:9px 12px; font-size:9.5px; font-weight:700; border-bottom:1px solid #E4E7EE; }
 .rp-table td{ padding:8px 12px; border-bottom:1px solid #EEF0F4; }
@@ -1464,3 +1543,49 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .atualiza-bar[hidden]{ display:none; }
 .atualiza-bar button{ background:var(--orange); color:#fff; border:none; border-radius:7px;
   padding:6px 12px; font-size:12px; font-weight:800; font-family:inherit; cursor:pointer; }
+
+/* Acurácias por Log — um cartão por log, anel de peças + barras finas. */
+.lg-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; }
+.lg-card{ border:1px solid var(--line); border-radius:14px; padding:14px 14px 8px; text-align:center;
+  background:var(--surface); }
+.lg-card.total{ background:var(--surface2); }
+.lg-card.alerta{ border-color:color-mix(in srgb, var(--danger) 35%, var(--line)); }
+.lg-head{ display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:20px; margin-bottom:10px; }
+.lg-head h4{ margin:0; font-size:12.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.lg-tag{ font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--danger);
+  background:color-mix(in srgb, var(--danger) 12%, transparent); border-radius:99px; padding:3px 7px; }
+.lg-ring{ position:relative; width:120px; height:120px; margin:0 auto 10px; }
+.lg-ring-val{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
+.lg-num{ font-size:24px; font-weight:800; line-height:1; font-family:'SFMono-Regular',Consolas,monospace; }
+.lg-num.good{ color:var(--success); } .lg-num.neg{ color:var(--danger); }
+.lg-cap{ font-size:9px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft); }
+.lg-mini{ display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line); }
+.lg-mini-lbl{ font-size:11px; color:var(--ink-soft); min-width:50px; text-align:left; }
+.lg-mini-tr{ position:relative; flex:1; height:5px; border-radius:99px; background:var(--surface2); }
+.lg-mini-tr i{ display:block; height:100%; border-radius:99px; }
+.lg-mini-mk{ position:absolute; top:-2.5px; bottom:-2.5px; width:2px; background:var(--ink); opacity:.45; border-radius:2px; }
+.lg-mini-pc{ font-size:11.5px; font-weight:700; min-width:46px; text-align:right;
+  font-family:'SFMono-Regular',Consolas,monospace; }
+.lg-mini-pc.good{ color:var(--success); } .lg-mini-pc.neg{ color:var(--danger); }
+
+/* Aba Produtividade */
+.pv-kpis{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:11px; }
+.pv-k{ border:1px solid var(--line); border-radius:12px; padding:12px 13px; }
+.pv-n{ font-size:20px; font-weight:800; line-height:1.1;
+  font-family:'SFMono-Regular',Consolas,monospace; }
+.pv-n.good{ color:var(--success); } .pv-n.neg{ color:var(--danger); }
+.pv-l{ font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--ink-soft); margin-top:5px; }
+.pv-h{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+.pv-tab td.n, .pv-tab th.n{ text-align:right; }
+.pv-pos{ display:inline-block; min-width:22px; color:var(--ink-soft); font-weight:700; }
+.pv-bar{ display:inline-block; vertical-align:middle; width:88px; height:6px; border-radius:99px;
+  background:var(--surface2); margin-right:8px; }
+.pv-bar i{ display:block; height:100%; border-radius:99px; background:var(--orange); }
+.pv-pill{ display:inline-block; min-width:54px; padding:2px 8px; border-radius:99px;
+  font-weight:700; font-size:11.5px; font-family:'SFMono-Regular',Consolas,monospace;
+  background:var(--surface2); color:var(--ink-soft); }
+.pv-pill.ok{ background:color-mix(in srgb, var(--success) 12%, transparent); color:var(--success); }
+.pv-pill.medio{ background:color-mix(in srgb, #B45309 14%, transparent); color:#B45309; }
+.pv-pill.ruim{ background:color-mix(in srgb, var(--danger) 12%, transparent); color:var(--danger); }
+.pv-tot td{ font-weight:800; background:var(--surface2); }
