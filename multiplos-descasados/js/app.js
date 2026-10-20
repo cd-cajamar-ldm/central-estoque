@@ -143,8 +143,10 @@ function mdPaisFiltrados(){
       p.componentes.some(c=>c.componente.includes(termo) || (c.nome||'').toLowerCase().includes(termo))
     );
   }
-  const acoes = p=>p.bloquearPecas + p.liberarPecas;
-  return lista.slice().sort((a,b)=>b.sobraValor - a.sobraValor || acoes(b) - acoes(a));
+  // Item pai com menos peça no total é quem corre mais risco de cancelamento
+  // se for romaneado sem ter como atender o pedido — aparece primeiro, tanto
+  // aqui na tela quanto na planilha exportada (mdGerarXlsxAjuste).
+  return lista.slice().sort((a,b)=>a.pecasTotal - b.pecasTotal || b.sobraValor - a.sobraValor);
 }
 
 /* ============================================================
