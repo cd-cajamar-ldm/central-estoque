@@ -957,7 +957,7 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <div class="kpi-block-body">${tilesHtml}</div>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 28; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 29; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
