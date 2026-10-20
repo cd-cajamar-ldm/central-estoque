@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 28;
+const IR_INDICADORES_VERSION = 29;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1255,7 +1255,11 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   locaisCanceladosAposBater, locaisCanceladosInterrompidos}){
   // Escopo do ciclo: a base congelada, inteira. Local fora dela não entra em
   // indicador nenhum; local dentro dela entra, seja qual for o prefixo do endereço.
-  const congelados = congeladosTodos;
+  // A planilha tem 1 linha por (Local, Nº Inventário) — um local reaberto/recontado
+  // no meio do ciclo ganha um Nº Inventário novo e aparece de novo, com o MESMO
+  // idLocal. Sem este dedup, "Locais totais (orçados)" contava a mesma posição
+  // física 2x (uma por reabertura), inflando o total acima do nº real de locais.
+  const congelados = Array.from(new Map(congeladosTodos.map(l=>[l.idLocal, l])).values());
   const noCiclo = new Set(congeladosTodos.map(l=>l.idLocal));
   const statusPorLocal = new Map();
   for(const [local, st] of statusPorLocalTodos) if(noCiclo.has(local)) statusPorLocal.set(local, st);
