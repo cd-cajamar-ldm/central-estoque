@@ -466,7 +466,9 @@ function mdPlanoCorrecaoRestricao(){
       const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
       const preco = s.valorUnitario || 0;
       for(const ref of refs){
-        const quantidade = ref[campo] || 0;
+        // Quantidade romaneada (QTDE_ROM) já está separada pra um pedido —
+        // abate do que dá pra corrigir, igual ao plano de pareamento.
+        const quantidade = Math.max(0, (ref[campo] || 0) - (ref.qtdeRom || 0));
         if(!quantidade) continue;
         out.push({
           de: loc.restricao, para: destino,
@@ -475,7 +477,8 @@ function mdPlanoCorrecaoRestricao(){
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
           componente: s.item, ean: s.ean, quantidade,
-          preco, valor: quantidade * preco
+          preco, valor: quantidade * preco,
+          totalComponente: s[campo]
         });
       }
     }
@@ -735,7 +738,14 @@ function mdGerarXlsxAjuste(blocos){
     return ws;
   }
 
-  const comLinhas = blocos.filter(b=>b.linhas.length);
+  // Item com menos saldo total é o que corre mais risco de cancelamento se
+  // for romaneado sem ter peça pra atender o pedido — sai primeiro na
+  // planilha pra ser resolvido antes. Critério por item (WN+86+outras), não
+  // pela quantidade da própria linha: duas linhas do mesmo item comprado
+  // ficam juntas, ordenadas pelo item, não espalhadas pela tabela.
+  const comLinhas = blocos
+    .map(b=>({...b, linhas: b.linhas.slice().sort((a,c)=>(a.totalComponente ?? 0) - (c.totalComponente ?? 0))}))
+    .filter(b=>b.linhas.length);
   if(!comLinhas.length){ irShowToast('Não há ajuste para exportar.'); return; }
   const wb = XLSX.utils.book_new();
   for(const bloco of comLinhas) XLSX.utils.book_append_sheet(wb, construirAba(bloco.linhas), bloco.titulo);

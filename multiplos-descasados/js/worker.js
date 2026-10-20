@@ -201,6 +201,10 @@ async function runPipeline390({buf390}){
     // QTDE_DISP pode não vir na extração antiga; sem ela, o disponível é a
     // própria quantidade, senão a visão "só disponível" zeraria o módulo.
     const disp = r.qtdeDisp ? parseNumber(getVal(row, r.qtdeDisp)) : qtde;
+    // QTDE_ROM: quanto do lote já está romaneado (separado pra um pedido).
+    // Guardado por lote pra quem monta o plano de ajuste abater do que pode
+    // mexer — estoque romaneado não é pra entrar na sugestão de restrição.
+    const rom = r.qtdeRom ? parseNumber(getVal(row, r.qtdeRom)) : 0;
     const restricao = String(getVal(row, r.restricao) ?? '').trim().toUpperCase();
     it.qtde += qtde;
     it.qtdeDisp += disp;
@@ -220,14 +224,15 @@ async function runPipeline390({buf390}){
         predio: String(getVal(row, r.predio) ?? '').trim(),
         clal: String(getVal(row, r.classeLocal) ?? '').trim(),
         restricao,
-        qtde: 0, qtdeDisp: 0, lotes: 0, refs: []
+        qtde: 0, qtdeDisp: 0, qtdeRom: 0, lotes: 0, refs: []
       };
       it.porLocal.set(chave, lugar);
     }
     lugar.qtde += qtde;
     lugar.qtdeDisp += disp;
+    lugar.qtdeRom += rom;
     lugar.lotes++;
-    lugar.refs.push({qtde, qtdeDisp: disp});
+    lugar.refs.push({qtde, qtdeDisp: disp, qtdeRom: rom});
   }
   for(const it of porItem.values()){
     // Map não sobrevive à gravação estruturada do IndexedDB do jeito que a tela

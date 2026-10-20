@@ -272,7 +272,10 @@ function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
     // cache), cai pro total do endereço — pior que o ideal, mas não quebra.
     const refs = (l.refs && l.refs.length) ? l.refs : [{qtde: l.qtde, qtdeDisp: l.qtdeDisp}];
     for(const ref of refs){
-      const saldo = ref[campo] || 0;
+      // Quantidade romaneada (QTDE_ROM) já está separada pra um pedido — não
+      // entra na conta do que dá pra mover. Sobrando parte não-romaneada no
+      // mesmo lote, essa parte continua concorrendo normalmente.
+      const saldo = Math.max(0, (ref[campo] || 0) - (ref.qtdeRom || 0));
       if(saldo > 0) disponiveis.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: saldo});
     }
   }
@@ -319,7 +322,8 @@ function mdPlanoAjuste(pais, base){
             qtdePorMultiplo: c.qtdePorMultiplo,
             wn: c.wn, bloqueado: c.bloqueado, alvoWn: c.alvoWn,
             completos: p.completos, completosPotencial: p.completosPotencial,
-            preco: c.preco, valor: alvo.quantidade * c.preco
+            preco: c.preco, valor: alvo.quantidade * c.preco,
+            totalComponente: c.total
           });
         }
       }
