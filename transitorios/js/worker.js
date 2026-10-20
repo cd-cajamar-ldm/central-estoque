@@ -1,8 +1,9 @@
 /* ============================================================
    Web Worker — Gestão de Transitórios
    ============================================================
-   Só o que o transitório precisa: QRY0390 (ficha do item e do endereço),
-   QRY0160 (saldo por endereço com data de movimento) e QRY410 (ganhos do ano,
+   Só o que o transitório precisa: QRY0390 (ficha do item e do endereço — é dela
+   que sai quanto tem em cada endereço), QRY0160 (só pra anexar a DATA de
+   movimento por cima, pro cálculo de idade do saldo) e QRY410 (ganhos do ano,
    que viram a coluna "provável duplicidade").
 
    O cálculo do ciclo rotativo (843, congelada, 278, 051) não está aqui: é do
@@ -212,9 +213,30 @@ async function runPipeline390({buf390}){
   await irSalvarLocalInfo(linhas.map(l=>({
     local:l.local, desc:l.desc, x1:l.x1, x2:l.x2, clal:l.clal, predio:l.predio, log:l.log
   })));
-  // A QRY0390 grava só as FICHAS (item e endereço). O agregado por endereço é da
-  // QRY0160, que tem a data de movimento — se as duas escrevessem no mesmo lugar,
-  // reimportar a 390 apagaria as datas e a tabela de transitórios voltava a zero.
+  // QUANTIDADE e VALOR por endereço são da 390 — ela é quem sabe o saldo de
+  // endereço "virtual" (ANE, LIT GIO, MOV LOG...) que a QRY0160 não traz inteira,
+  // e que por isso zerava na tela mesmo tendo saldo real. A 160 entra só depois,
+  // por cima, pra anexar a DATA (idade do saldo); sem ela ainda, o saldo da 390
+  // fica sem data mas não desaparece. Guarda a data que já estava gravada pra
+  // reimportar a 390 não apagar o que a 160 já tinha anexado.
+  const estoqueAnterior = new Map((await irGetEstoqueLocais()).map(l=>[l.local, l]));
+  const estoqueLinhas = linhas.map(l=>{
+    const velho = estoqueAnterior.get(l.local);
+    return Object.assign({}, l, {
+      porDia: (velho && velho.porDia) || {}, porDiaValor: (velho && velho.porDiaValor) || {}
+    });
+  });
+  const semClasse = estoqueLinhas.filter(l=>!l.clal).length;
+  // Sem classe MAS com data (= a 160 já viu esse endereço) é sinal de endereço
+  // que a 160 conhece e a 390 não — o mesmo descasamento que antes só aparecia
+  // depois de importar a 160; agora também é visível logo após reimportar a 390.
+  const semBase390 = estoqueLinhas.filter(l=>!l.clal && Object.keys(l.porDia).length>0).length;
+  const temData = estoqueLinhas.some(l=>Object.keys(l.porDia).length>0);
+  await irSalvarEstoqueLocais(estoqueLinhas, {
+    fonte: temData ? '160' : '390', semClasse, semBase390,
+    importadoEm: new Date().toISOString(),
+    linhas: rows.length, locais: estoqueLinhas.length, itens: porItem.size, valorTotal, pecasTotal
+  });
   await irSetConfig('estoque390-ficha', {
     atualizadoEm, importadoEm: new Date().toISOString(),
     linhas: rows.length, locais: linhas.length, itens: porItem.size, valorTotal, pecasTotal
@@ -233,10 +255,14 @@ async function runPipeline160({buf160}){
   post('progress', {stage:'Lendo as fichas da QRY0390...', pct:12});
   const ficha = new Map((await irGetItemInfoTodos()).map(f=>[f.item, f]));
   const fichaLocal = new Map((await irGetLocalInfoTodos()).map(f=>[f.local, f]));
+  // Quanto tem em cada endereço é da 390 (ver runPipeline390); aqui só soma a DATA
+  // por cima. O que já estava gravado continua a fonte de qtd/valor/clal — a 160
+  // nunca mais decide isso sozinha.
+  const base = new Map((await irGetEstoqueLocais()).map(l=>[l.local, l]));
 
   post('progress', {stage:'Agregando '+rows.length+' linha(s) por endereço...', pct:20});
   const porLocal = new Map();
-  let valorTotal = 0, pecasTotal = 0, semFicha = 0, semClasse = 0, n = 0;
+  let semFicha = 0, n = 0;
   const itensVistos = new Set();
   for(const row of rows){
     if(++n % 20000 === 0) post('progress', {stage:'Linha '+n+' de '+rows.length+'...', pct:20+Math.round(n/rows.length*60)});
@@ -257,8 +283,8 @@ async function runPipeline160({buf160}){
         x1: String(getVal(row, r.x1) ?? '').trim() || fl.x1 || '',
         x2: String(getVal(row, r.x2) ?? '').trim() || fl.x2 || '',
         clal: fl.clal || '', predio: fl.predio || '', log:'',
-        // porDia guarda peças E valor: o gráfico de acúmulo por idade é em reais,
-        // e sem o valor por dia não dá pra montar sem reprocessar tudo de novo.
+        // Só usada quando o endereço é NOVO pra 390 (ver fallback abaixo) — porDia
+        // guarda peças E valor porque o gráfico de acúmulo por idade é em reais.
         qtd:0, valor:0, itens:0, porLog:{}, porDia:{}, porDiaValor:{}, _itens:new Set()};
       porLocal.set(local, g);
     }
@@ -271,14 +297,31 @@ async function runPipeline160({buf160}){
     g.porLog[lg] = (g.porLog[lg] || 0) + qtd;
     if(!g.log) g.log = lg;
     if(item){ g._itens.add(item); itensVistos.add(item); }
-    valorTotal += valor; pecasTotal += qtd;
   }
-  const linhas = Array.from(porLocal.values()).map(g=>{ g.itens = g._itens.size; delete g._itens; return g; });
-  for(const l of linhas) if(!l.clal) semClasse++;
+  // Endereço que a 390 já conhece: fica com qtd/valor/clal da 390, só ganha a data
+  // desta 160 por cima. Endereço que só a 160 trouxe (a 390 não tem ficha dele
+  // ainda): usa o que foi possível apurar aqui mesmo, igual sempre foi.
+  const linhas = [];
+  for(const [local, g] of porLocal){
+    const baseRow = base.get(local);
+    if(baseRow){ linhas.push(Object.assign({}, baseRow, {porDia: g.porDia, porDiaValor: g.porDiaValor})); continue; }
+    g.itens = g._itens.size; delete g._itens;
+    linhas.push(g);
+  }
+  // Endereço que a 390 trouxe mas não apareceu nesta 160: mantém qtd/valor/clal,
+  // zera a data — ela é foto do dia, saldo sem movimento recente não tem o que mostrar.
+  for(const [local, baseRow] of base){
+    if(porLocal.has(local)) continue;
+    linhas.push(Object.assign({}, baseRow, {porDia:{}, porDiaValor:{}}));
+  }
+  const semClasse = linhas.filter(l=>!l.clal).length;
+  const semBase390 = linhas.filter(l=>!l.clal && Object.keys(l.porDia).length>0).length;
+  const valorTotal = linhas.reduce((s,l)=>s+l.valor, 0);
+  const pecasTotal = linhas.reduce((s,l)=>s+l.qtd, 0);
 
   post('progress', {stage:'Gravando estoque no IndexedDB...', pct:88});
   await irSalvarEstoqueLocais(linhas, {
-    fonte:'160', semClasse, importadoEm: new Date().toISOString(),
+    fonte:'160', semClasse, semBase390, importadoEm: new Date().toISOString(),
     linhas: rows.length, locais: linhas.length, itens: itensVistos.size,
     valorTotal, pecasTotal, semFicha
   });
