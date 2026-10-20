@@ -124,7 +124,11 @@ function mdPais(){
   if(MD._cache && MD._cacheBase === MD.base) return MD._cache;
   if(!MD.estrutura || !MD.saldos) return [];
   const saldos = new Map(MD.saldos.map(s=>[s.item, s]));
-  const precos = new Map((MD.precos||[]).map(p=>[p.item, p.preco]));
+  // Mapa completo (preço E nome), não só o preço — a SIGEQ278 traz o nome do
+  // PRÓPRIO item pai, a fonte mais confiável que existe pra esse nome: é
+  // keyed pelo código do pai direto, sem depender de a 390 repetir um nome de
+  // componente na coluna NOME_ITEM_PAI (nem sempre vem preenchida).
+  const precos = new Map((MD.precos||[]).map(p=>[p.item, p]));
   MD._cache = mdCalcularPais(MD.estrutura, saldos, precos, MD.base);
   MD._cacheBase = MD.base;
   return MD._cache;
@@ -322,10 +326,10 @@ function mdRenderPivot(){
     const idPai = 'p-'+p.pai;
     const paiAberto = MD.pivotExpandido.has(idPai);
     const alerta = p.faltantes > 0
-      ? `<span class="md-tag md-tag-bad">${p.faltantes} falta componente${p.faltantes>1?'s':''}</span>`
+      ? `<span class="md-tag md-tag-falta">${p.faltantes} falta componente${p.faltantes>1?'s':''}</span>`
       : (p.completos === 0 ? `<span class="md-tag md-tag-bad">0 vendáveis</span>` : '');
     linhas += `<tr class="md-piv-pai">
-      <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome,46))} ${alerta}</td>
+      <td class="md-left"><span class="md-piv-nome"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome,46))}</span>${alerta}</td>
       ${mdPivColunas(mdPaiTotaisPorSigla(p, restricoes), restricoes, p.pecasTotal)}
     </tr>`;
     if(!paiAberto) continue;

@@ -125,7 +125,8 @@ function mdCalcularPais(estrutura, saldos, precos, base){
 
   const pais = [];
   for(const [pai, comps] of porPai){
-    const precoPai = precos.get(pai) || 0;
+    const infoPai = precos.get(pai) || {};
+    const precoPai = infoPai.preco || 0;
     let temSaldo = false;
     const linhas = comps.map(c=>{
       const s = saldos.get(c.componente) || null;
@@ -201,11 +202,17 @@ function mdCalcularPais(estrutura, saldos, precos, base){
 
     pais.push({
       pai,
-      // Nome do PAI, não do componente — a 390 traz os dois nomes em colunas
-      // separadas (NOME_ITEM_PAI e NOME_ITEM_FILHO). Sem o nome do pai (390
-      // antiga), cai pro nome do componente que carrega o valor, pior que o
-      // nome certo mas melhor que ficar em branco.
-      nome: (linhas.find(l=>l.nomePai) || {}).nomePai
+      // Nome do PAI, não do componente. Ordem de confiança:
+      // 1) SIGEQ278, pelo código do PRÓPRIO pai — é a fonte mais confiável que
+      //    existe, porque não depende de nenhum componente carregar o nome
+      //    certo. 2) NOME_ITEM_PAI da 390, só quando difere do nome do próprio
+      //    componente que carregou o valor (na prática a coluna às vezes vem
+      //    preenchida igual ao NOME_ITEM_FILHO daquela linha, o que não é o
+      //    nome do pai — nesse caso ela não serve). 3) Sem nenhuma das duas,
+      //    cai pro nome do componente que carrega o valor, pior que o nome
+      //    certo mas melhor que ficar em branco.
+      nome: infoPai.nome
+        || (linhas.find(l=>l.nomePai && l.nomePai !== l.nome) || {}).nomePai
         || (linhas.find(l=>l.inInterface==='S' && l.nome) || linhas.find(l=>l.nome) || {}).nome || '',
       componentes: linhas.sort((a,b)=>(b.bloquear + b.liberar) - (a.bloquear + a.liberar) || a.componente.localeCompare(b.componente)),
       nComponentes: linhas.length,
