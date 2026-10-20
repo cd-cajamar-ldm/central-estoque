@@ -101,18 +101,26 @@ async function runPipeline051({buf051}){
   validateColumns(r, ['itemPai','itemComponente'], 'ZBIQ0051');
 
   post('progress', {stage:'Montando a estrutura dos múltiplos...', pct:45});
-  // A chave é o componente: a extração traz cada componente uma vez só, ligado
-  // a um pai. Se um dia vier repetido, a última linha vence — e o número de
-  // duplicatas volta pra tela pra ninguém descobrir isso por acaso.
-  const porComponente = new Map();
-  let duplicatas = 0, semPai = 0;
+  // A chave é componente+pai, não só o componente: um componente pode ser
+  // parte de mais de um múltiplo (ex.: uma base usada em dois modelos de
+  // elevador diferentes). Chave só por componente apagava essa segunda
+  // ligação em silêncio — a última linha "vencia" e o componente sumia do
+  // múltiplo anterior sem nenhum aviso, descasando a conta de bloquear/
+  // liberar daquele pai. "Duplicata" agora é só a mesma linha (componente
+  // + pai) repetida de verdade; componente em mais de um pai conta à parte.
+  const porChave = new Map();
+  const componentesVistos = new Set();
+  let duplicatas = 0, semPai = 0, compartilhados = 0;
   for(const row of rows){
     const componente = mdNormItemKey(getVal(row, r.itemComponente));
     const pai = mdNormItemKey(getVal(row, r.itemPai));
     if(!componente || !pai){ semPai++; continue; }
-    if(porComponente.has(componente)) duplicatas++;
+    const chave = componente + '|' + pai;
+    if(porChave.has(chave)) duplicatas++;
+    else if(componentesVistos.has(componente)) compartilhados++;
+    componentesVistos.add(componente);
     const qtde = parseNumber(getVal(row, r.qtde));
-    porComponente.set(componente, {
+    porChave.set(chave, {
       componente, pai,
       qtde: qtde > 0 ? qtde : 1,
       inInterface: String(getVal(row, r.inInterface) ?? '').trim().toUpperCase(),
@@ -120,16 +128,16 @@ async function runPipeline051({buf051}){
       datahora: String(getVal(row, r.datahora) ?? '').trim()
     });
   }
-  const linhas = Array.from(porComponente.values());
+  const linhas = Array.from(porChave.values());
   const pais = new Set(linhas.map(l=>l.pai));
 
   post('progress', {stage:'Gravando...', pct:80});
   await mdSalvarEstrutura(linhas, {
     importadoEm: new Date().toISOString(),
     linhas: rows.length, componentes: linhas.length, pais: pais.size,
-    duplicatas, semPai
+    duplicatas, semPai, compartilhados
   });
-  post('done051', {componentes: linhas.length, pais: pais.size, duplicatas, semPai});
+  post('done051', {componentes: linhas.length, pais: pais.size, duplicatas, semPai, compartilhados});
 }
 
 /* ---------- QRY0390 — SALDO DOS COMPONENTES ----------

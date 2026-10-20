@@ -709,13 +709,17 @@ function mdExportarAjusteClasses(){
    de cabeçalho, zebra etc. saem sempre em branco. */
 function mdGerarXlsxAjuste(blocos){
   const COR_LARANJA = 'FE5000', COR_AZUL = '001A72', COR_BRANCO = 'FFFFFF', COR_ZEBRA = 'FFF4EE';
-  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço'];
-  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço
+  // Item (o código do componente) entra só como referência pra achar o item
+  // certo em caso de EAN duplicado entre SKUs diferentes — não é campo que se
+  // cola no coletor, por isso fica no fim, fora da sequência Local/EAN/Orig/
+  // Dest/Qtde que é exatamente a ordem dos campos na tela.
+  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Item'];
+  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço e Item
 
   function construirAba(linhas){
     const dados = linhas.map(l=>[
       Number(l.localColetor) || 0, Number(l.ean) || 0, Number(l.codDe) || 0,
-      Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || ''
+      Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '', String(l.componente || '')
     ]);
     const ws = XLSX.utils.aoa_to_sheet([cab, ...dados]);
     cab.forEach((_, c)=>{
@@ -736,7 +740,7 @@ function mdGerarXlsxAjuste(blocos){
         if(colNumerica.has(c)) cel.z = '0';
       }
     });
-    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28}];
+    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28},{wch:12}];
     return ws;
   }
 
@@ -810,7 +814,8 @@ function mdProcessar(id){
       mdSetArquivo(id, null);
       await mdRecarregar();
       if(msg.type === 'done051'){
-        irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.');
+        irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.'
+          +(msg.compartilhados ? ' · '+irFmtInt(msg.compartilhados)+' componentes usados em mais de um múltiplo' : ''));
       } else if(msg.type === 'done390'){
         irShowToast(irFmtInt(msg.itens)+' componentes com saldo'+(msg.semSaldo ? ' · '+irFmtInt(msg.semSaldo)+' sem saldo' : '')+'.');
       } else if(msg.type === 'done278'){
@@ -836,7 +841,9 @@ function mdProcessar(id){
 function mdEstadoBase(id){
   if(id==='051'){
     const m = MD.estruturaMeta;
-    return m ? irFmtInt(m.pais)+' múltiplos · '+irFmtInt(m.componentes)+' componentes · '+irFmtDate(m.importadoEm) : 'nunca importada';
+    if(!m) return 'nunca importada';
+    return irFmtInt(m.pais)+' múltiplos · '+irFmtInt(m.componentes)+' componentes · '+irFmtDate(m.importadoEm)
+      +(m.compartilhados ? ' · '+irFmtInt(m.compartilhados)+' componentes em mais de um múltiplo' : '');
   }
   if(id==='390'){
     const m = MD.saldoMeta;
