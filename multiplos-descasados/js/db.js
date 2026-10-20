@@ -9,7 +9,7 @@
    este módulo nunca lê.
    ============================================================ */
 const MD_DB_NAME = 'multiplos_descasados_v1';
-const MD_DB_VERSION = 1;
+const MD_DB_VERSION = 2;
 
 const MD_STORES = {
   // Estrutura do múltiplo (ZBIQ0051): uma linha por COMPONENTE, apontando pro
@@ -47,9 +47,19 @@ function mdOpenDBNaVersao(versao){
     const req = indexedDB.open(MD_DB_NAME, versao);
     req.onupgradeneeded = (e)=>{
       const db = e.target.result;
+      // v2: a chave da estrutura era só o componente — um componente que é
+      // parte de mais de um múltiplo (ex.: uma base usada em dois modelos)
+      // perdia a segunda ligação em silêncio, o segundo put() sobrescrevia o
+      // primeiro. Recria o store com chave componente+pai; dado antigo salvo
+      // sob o bug não tem valor pra manter — some com o store e volta vazio,
+      // pedindo reimportar a ZBIQ0051.
+      if(e.oldVersion < 2 && db.objectStoreNames.contains(MD_STORES.estrutura)){
+        db.deleteObjectStore(MD_STORES.estrutura);
+      }
       if(!db.objectStoreNames.contains(MD_STORES.estrutura)){
-        const s = db.createObjectStore(MD_STORES.estrutura, {keyPath:'componente'});
+        const s = db.createObjectStore(MD_STORES.estrutura, {keyPath:'chave'});
         s.createIndex('pai', 'pai', {unique:false});
+        s.createIndex('componente', 'componente', {unique:false});
       }
       if(!db.objectStoreNames.contains(MD_STORES.saldo)){
         db.createObjectStore(MD_STORES.saldo, {keyPath:'item'});
@@ -106,7 +116,10 @@ async function mdGetAll(storeKey){
 
 /* ---------- Estrutura (ZBIQ0051) ---------- */
 async function mdSalvarEstrutura(linhas, meta){
-  await mdSubstituirTudo(MD_STORES.estrutura, linhas);
+  // chave do registro é componente+pai (ver onupgradeneeded) — um componente
+  // pode estar em mais de um múltiplo, então só ele não serve de chave única.
+  const comChave = linhas.map(l=>({...l, chave: l.componente+'|'+l.pai}));
+  await mdSubstituirTudo(MD_STORES.estrutura, comChave);
   await mdSetConfig('estrutura-meta', meta);
 }
 async function mdGetEstrutura(){ return mdGetAll(MD_STORES.estrutura); }
