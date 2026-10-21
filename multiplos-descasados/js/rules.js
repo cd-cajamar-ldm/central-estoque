@@ -295,11 +295,18 @@ function mdResumo(pais){
    executável num passo só.
 
    Os lotes são consumidos do maior saldo pro menor: menos linhas pra
-   digitar, e a sobra costuma estar concentrada num lote só. */
-function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
+   digitar, e a sobra costuma estar concentrada num lote só.
+
+   restricaoPermitida (opcional): mesma regra de classe/X1 de Configurações
+   usada antes de parear (mdPais). Endereço de reversa com WN fora da regra
+   não conta como vendável de verdade — não pode virar origem de um bloquear
+   (0→86) nem de um liberar (86→0) só porque a coluna diz WN/86. Quem precisa
+   de ajuste é sempre o endereço "certo" (ex.: o do CD), nunca a reversa. */
+function mdAlocarPorEndereco(locais, sigla, quantidade, campo, restricaoPermitida){
   const disponiveis = [];
   for(const l of (locais || [])){
     if(String(l.restricao || '').toUpperCase() !== sigla) continue;
+    if(restricaoPermitida && !restricaoPermitida(l)) continue;
     // refs é o normal (um lote por linha da 390); sem ele (dado antigo em
     // cache), cai pro total do endereço — pior que o ideal, mas não quebra.
     const refs = (l.refs && l.refs.length) ? l.refs : [{qtde: l.qtde, qtdeDisp: l.qtdeDisp}];
@@ -329,8 +336,11 @@ function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
 }
 
 /* Uma linha por endereço e sentido — é exatamente o que será digitado.
-   base: 'qtde' ou 'qtdeDisp', o mesmo corte usado no cálculo. */
-function mdPlanoAjuste(pais, base){
+   base: 'qtde' ou 'qtdeDisp', o mesmo corte usado no cálculo.
+   restricaoPermitida: mesma regra passada pra mdCalcularPais — sem ela aqui,
+   o bloquear/liberar já calculado sem a reversa contar como WN/86 de verdade
+   ainda poderia escolher a própria reversa como endereço de execução. */
+function mdPlanoAjuste(pais, base, restricaoPermitida){
   const campo = base === 'qtdeDisp' ? 'qtdeDisp' : 'qtde';
   const out = [];
   for(const p of pais){
@@ -339,7 +349,7 @@ function mdPlanoAjuste(pais, base){
       if(c.bloquear > 0) acoes.push({sentido:'bloquear', de: MD_SIGLA_VENDAVEL, para: MD_SIGLA_BLOQUEIO, qtd: c.bloquear});
       if(c.liberar > 0) acoes.push({sentido:'liberar', de: MD_SIGLA_BLOQUEIO, para: MD_SIGLA_VENDAVEL, qtd: c.liberar});
       for(const a of acoes){
-        for(const alvo of mdAlocarPorEndereco(c.locais, a.de, a.qtd, campo)){
+        for(const alvo of mdAlocarPorEndereco(c.locais, a.de, a.qtd, campo, restricaoPermitida)){
           out.push({
             sentido: a.sentido,
             de: a.de, para: a.para,
