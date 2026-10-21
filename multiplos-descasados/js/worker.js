@@ -163,10 +163,43 @@ async function runPipeline390({buf390}){
 
   post('progress', {stage:'Cruzando com os componentes...', pct:35});
   const porItem = new Map();
+  // Auditoria: agrega TODO item com saldo na 390 (múltiplo ou não), por
+  // item+local+restrição, sem lote/refs — só o suficiente pra apontar endereço e
+  // quantidade errada na aba Auditoria de Restrição. O `porItem` acima continua
+  // só com componente de múltiplo (é o que o resto do módulo usa pra parear).
+  const porAuditoria = new Map();
   let atualizadoEm = '', linhasUsadas = 0;
   for(const row of rows){
     const item = mdNormItemKey(getVal(row, r.item));
-    if(!item || !componentes.has(item)) continue;
+    if(!item) continue;
+
+    const local = String(getVal(row, r.local) ?? '').trim();
+    const restricao = String(getVal(row, r.restricao) ?? '').trim().toUpperCase();
+    const qtde = parseNumber(getVal(row, r.quantidade));
+    const disp = r.qtdeDisp ? parseNumber(getVal(row, r.qtdeDisp)) : qtde;
+    const rom = r.qtdeRom ? parseNumber(getVal(row, r.qtdeRom)) : 0;
+    const chaveAud = item + '|' + local + '|' + restricao;
+    let aud = porAuditoria.get(chaveAud);
+    if(!aud){
+      aud = {
+        chave: chaveAud, item, local, restricao,
+        nome: String(getVal(row, r.descricao) ?? '').trim(),
+        ean: String(getVal(row, r.ean) ?? '').trim(),
+        valorUnitario: parseNumber(getVal(row, r.valorUnitario)),
+        desc: String(getVal(row, r.descLocal) ?? '').trim(),
+        predio: String(getVal(row, r.predio) ?? '').trim(),
+        x1: String(getVal(row, r.x1) ?? '').trim(),
+        x2: String(getVal(row, r.x2) ?? '').trim(),
+        clal: String(getVal(row, r.classeLocal) ?? '').trim(),
+        qtde: 0, qtdeDisp: 0, qtdeRom: 0
+      };
+      porAuditoria.set(chaveAud, aud);
+    }
+    aud.qtde += qtde;
+    aud.qtdeDisp += disp;
+    aud.qtdeRom += rom;
+
+    if(!componentes.has(item)) continue;
     linhasUsadas++;
     if(!atualizadoEm){
       const at = getVal(row, r.atualizadoEm);
@@ -211,22 +244,12 @@ async function runPipeline390({buf390}){
       };
       porItem.set(item, it);
     }
-    const qtde = parseNumber(getVal(row, r.quantidade));
-    // QTDE_DISP pode não vir na extração antiga; sem ela, o disponível é a
-    // própria quantidade, senão a visão "só disponível" zeraria o módulo.
-    const disp = r.qtdeDisp ? parseNumber(getVal(row, r.qtdeDisp)) : qtde;
-    // QTDE_ROM: quanto do lote já está romaneado (separado pra um pedido).
-    // Guardado por lote pra quem monta o plano de ajuste abater do que pode
-    // mexer — estoque romaneado não é pra entrar na sugestão de restrição.
-    const rom = r.qtdeRom ? parseNumber(getVal(row, r.qtdeRom)) : 0;
-    const restricao = String(getVal(row, r.restricao) ?? '').trim().toUpperCase();
     it.qtde += qtde;
     it.qtdeDisp += disp;
     const acc = it.porRestricao[restricao] || (it.porRestricao[restricao] = {qtde:0, qtdeDisp:0});
     acc.qtde += qtde;
     acc.qtdeDisp += disp;
     if(!it.valorUnitario) it.valorUnitario = parseNumber(getVal(row, r.valorUnitario));
-    const local = String(getVal(row, r.local) ?? '').trim();
     const chave = local + '|' + restricao;
     let lugar = it.porLocal.get(chave);
     if(!lugar){
@@ -256,7 +279,7 @@ async function runPipeline390({buf390}){
     delete it.porLocal;
   }
 
-  post('progress', {stage:'Gravando saldos...', pct:80});
+  post('progress', {stage:'Gravando saldos...', pct:75});
   const linhas = Array.from(porItem.values());
   const semSaldo = componentes.size - linhas.length;
   await mdSalvarSaldo(linhas, {
@@ -264,6 +287,14 @@ async function runPipeline390({buf390}){
     atualizadoEm,
     linhas: rows.length, linhasUsadas,
     itens: linhas.length, componentesEstrutura: componentes.size, semSaldo
+  });
+
+  post('progress', {stage:'Gravando auditoria de restrição...', pct:90});
+  const linhasAuditoria = Array.from(porAuditoria.values());
+  await mdSalvarAuditoria(linhasAuditoria, {
+    importadoEm: new Date().toISOString(),
+    atualizadoEm,
+    linhas: rows.length, enderecos: linhasAuditoria.length
   });
   post('done390', {itens: linhas.length, linhas: rows.length, linhasUsadas, semSaldo});
 }

@@ -9,7 +9,7 @@
    este módulo nunca lê.
    ============================================================ */
 const MD_DB_NAME = 'multiplos_descasados_v1';
-const MD_DB_VERSION = 2;
+const MD_DB_VERSION = 3;
 
 const MD_STORES = {
   // Estrutura do múltiplo (ZBIQ0051): uma linha por COMPONENTE, apontando pro
@@ -23,6 +23,11 @@ const MD_STORES = {
   // Preço de custo por item (SIGEQ278), opcional — usado quando a 390 vem com
   // VALOR_UNITARIO zerado, que é o caso dos múltiplos hoje.
   preco: 'preco',
+  // Saldo de TODO item com estoque na QRY0390, componente de múltiplo ou não —
+  // agregado por item+local+restrição (sem lote, sem detalhe de refs). Existe só
+  // pra Auditoria de Restrição enxergar item fora de múltiplo com restrição
+  // errada, que o store `saldo` (filtrado pela estrutura) nunca vê.
+  auditoria: 'auditoria',
   config: 'config'
 };
 
@@ -66,6 +71,9 @@ function mdOpenDBNaVersao(versao){
       }
       if(!db.objectStoreNames.contains(MD_STORES.preco)){
         db.createObjectStore(MD_STORES.preco, {keyPath:'item'});
+      }
+      if(!db.objectStoreNames.contains(MD_STORES.auditoria)){
+        db.createObjectStore(MD_STORES.auditoria, {keyPath:'chave'});
       }
       if(!db.objectStoreNames.contains(MD_STORES.config)){
         db.createObjectStore(MD_STORES.config, {keyPath:'key'});
@@ -140,6 +148,14 @@ async function mdSalvarPrecos(linhas, meta){
 }
 async function mdGetPrecos(){ return mdGetAll(MD_STORES.preco); }
 async function mdGetPrecoMeta(){ return mdGetConfig('preco-meta'); }
+
+/* ---------- Auditoria de restrição (QRY0390 inteira, não só a estrutura) ---------- */
+async function mdSalvarAuditoria(linhas, meta){
+  await mdSubstituirTudo(MD_STORES.auditoria, linhas);
+  await mdSetConfig('auditoria-meta', meta);
+}
+async function mdGetAuditoria(){ return mdGetAll(MD_STORES.auditoria); }
+async function mdGetAuditoriaMeta(){ return mdGetConfig('auditoria-meta'); }
 
 /* ---------- Config chave/valor ---------- */
 async function mdSetConfig(key, valor){

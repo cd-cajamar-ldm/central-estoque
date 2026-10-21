@@ -16,11 +16,12 @@
    ============================================================ */
 const MD_APP_VERSION = 'v2';
 const MD = {
-  estrutura:null, saldos:null, precos:null,
-  estruturaMeta:null, saldoMeta:null, precoMeta:null,
+  estrutura:null, saldos:null, precos:null, auditoria:null,
+  estruturaMeta:null, saldoMeta:null, precoMeta:null, auditoriaMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
+  buscaAuditoria:'',
   pivotExpandido:new Set(),
   tela:'descasados',
   regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
@@ -872,7 +873,7 @@ function mdExportarAjusteClasses(){
    xlsx-js-style (carregada só no index.html, não no worker) em vez da xlsx
    comum: a versão livre do SheetJS não grava estilo nenhum no arquivo — cor
    de cabeçalho, zebra etc. saem sempre em branco. */
-function mdGerarXlsxAjuste(blocos){
+function mdGerarXlsxAjuste(blocos, prefixoArquivo){
   const COR_LARANJA = 'FE5000', COR_AZUL = '001A72', COR_BRANCO = 'FFFFFF', COR_ZEBRA = 'FFF4EE';
   // Item pai (o código do múltiplo, não do componente) entra só como
   // referência pra achar o item certo em caso de EAN duplicado entre SKUs
@@ -923,9 +924,118 @@ function mdGerarXlsxAjuste(blocos){
   for(const bloco of comLinhas) XLSX.utils.book_append_sheet(wb, construirAba(bloco.linhas), bloco.titulo);
 
   const hoje = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `ajuste-restricao-multiplos-${hoje}.xlsx`);
+  XLSX.writeFile(wb, `${prefixoArquivo || 'ajuste-restricao-multiplos'}-${hoje}.xlsx`);
   const total = comLinhas.reduce((a,b)=>a+b.linhas.length, 0);
   irShowToast(irFmtInt(total)+' linhas exportadas.');
+}
+
+/* ============================================================
+   TELA — AUDITORIA DE RESTRIÇÃO
+   ============================================================
+   Mesma régua de Configurações (classe/X1), mas aplicada a TODO item com
+   saldo na QRY0390 — não só componente de múltiplo. Existe porque um item
+   fora de múltiplo com restrição errada nunca aparece em Ajustes de
+   Restrição, que só enxerga o que a estrutura (ZBIQ0051) conhece. */
+function mdTemDadosAuditoria(){ return !!(MD.auditoria && MD.auditoria.length); }
+
+function mdPlanoAuditoria(){
+  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+  const out = [];
+  for(const row of (MD.auditoria||[])){
+    const regra = mdRegraViolada(row);
+    if(!regra) continue;
+    // Mesmo critério de mdPlanoCorrecaoRestricao: 86 nunca é destino aqui, e
+    // mais de uma restrição permitida sem WN não dá pra escolher sem chute.
+    const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
+      : (regra.length===1 && regra[0] !== MD_SIGLA_BLOQUEIO ? regra[0] : null);
+    if(!destino) continue;
+    const quantidade = Math.max(0, (row[campo] || 0) - (row.qtdeRom || 0));
+    if(!quantidade) continue;
+    out.push({
+      de: row.restricao, para: destino,
+      codDe: mdCodRestricao(row.restricao), codPara: mdCodRestricao(destino),
+      localColetor: mdLocalColetor(row.local),
+      local: row.local, endereco: row.desc, predio: row.predio,
+      clal: row.clal, x1: row.x1, x2: row.x2,
+      item: row.item, nome: row.nome, ean: row.ean, quantidade,
+      preco: row.valorUnitario || 0, valor: quantidade * (row.valorUnitario || 0),
+      totalComponente: row.qtde
+    });
+  }
+  return out;
+}
+const MD_LIMITE_AUDITORIA = 300;
+function mdRenderAuditoria(){
+  if(!mdTemDadosAuditoria()){
+    return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 para auditar a restrição de todos os itens.', "irSwitchTab('importacao')", 'Ir para a importação');
+  }
+  let plano = mdPlanoAuditoria();
+  const termo = (MD.buscaAuditoria || '').trim().toLowerCase();
+  if(termo) plano = plano.filter(l =>
+    l.item.toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo) ||
+    (l.local||'').toLowerCase().includes(termo) || (l.clal||'').toLowerCase().includes(termo) ||
+    (l.x1||'').toLowerCase().includes(termo));
+  plano.sort((a,b)=>b.valor - a.valor);
+
+  const semBloqueio = plano.filter(l=>l.de !== MD_SIGLA_BLOQUEIO);
+  const resumo = {
+    itens: new Set(semBloqueio.map(l=>l.item)).size,
+    pecas: semBloqueio.reduce((a,l)=>a+l.quantidade, 0),
+    valor: semBloqueio.reduce((a,l)=>a+l.valor, 0)
+  };
+
+  const linhas = plano.slice(0, MD_LIMITE_AUDITORIA).map(l=>`<tr>
+    <td class="md-left mono">${irEsc(l.item)}</td>
+    <td class="md-left">${irEsc(l.nome)}</td>
+    <td class="md-left mono">${irEsc(l.local)}</td>
+    <td class="md-left mono">${irEsc(l.clal)}</td>
+    <td class="md-left mono">${irEsc(l.x1)}</td>
+    <td class="md-cel-erro">${irEsc(mdCodRestricao(l.de)+' '+l.de)}</td>
+    <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
+    <td>${irFmtInt(l.quantidade)}</td>
+    <td class="num-money">${irFmtMoney(l.valor)}</td>
+  </tr>`).join('');
+
+  return `<div class="panel">
+    <div class="md-head">
+      <h3>Auditoria de Restrição</h3>
+      <button class="btn btn-primary" onclick="mdExportarAuditoria()">Baixar relatório</button>
+    </div>
+    <p class="field-hint" style="margin-bottom:12px;">
+      Todo item com saldo na QRY0390, componente de múltiplo ou não, com restrição fora da regra configurada em Configurações.
+    </p>
+    ${mdKpisCorrecao(resumo)}
+    ${mdAvisoSemRegra()}
+    <div class="md-filtros">
+      <input id="mdBuscaAuditoria" class="md-busca" type="search" placeholder="Buscar item, local, classe ou X1..."
+             value="${irEsc(MD.buscaAuditoria)}" oninput="mdBuscarAuditoria(this.value)">
+    </div>
+    ${!plano.length ? '<p class="field-hint">Nenhuma restrição fora da regra encontrada.</p>' : `
+    <div class="md-piv-wrap">
+      <table class="md-piv">
+        <thead><tr>
+          <th class="md-left">Item</th><th class="md-left">Descrição</th><th class="md-left">Local</th>
+          <th class="md-left">Classe</th><th class="md-left">X1</th>
+          <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    ${plano.length > MD_LIMITE_AUDITORIA ? `<p class="field-hint" style="margin-top:8px;">Mostrando as ${irFmtInt(MD_LIMITE_AUDITORIA)} maiores por valor, de ${irFmtInt(plano.length)} linhas. Baixe o relatório pra ver tudo.</p>` : ''}
+    `}
+  </div>`;
+}
+function mdBuscarAuditoria(v){
+  MD.buscaAuditoria = v;
+  clearTimeout(window.__mdBuscaAuditoriaTimer);
+  window.__mdBuscaAuditoriaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBuscaAuditoria')?.focus(); }, 220);
+}
+function mdExportarAuditoria(){
+  const plano = mdPlanoAuditoria();
+  mdGerarXlsxAjuste([
+    {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
+    {titulo:'Para outras restrições', linhas: plano.filter(l=>l.para!==MD_SIGLA_VENDAVEL)}
+  ], 'auditoria-restricao');
 }
 
 /* ============================================================
@@ -1162,6 +1272,7 @@ function mdRenderConfiguracoes(){
 const MD_TELAS = {
   descasados:['Múltiplos Descasados','Componente sem par no estoque: dimensão, onde está e quanto vale.'],
   ajustes:['Ajustes de Restrição','O que bloquear em 86 e o que devolver para venda, linha a linha.'],
+  auditoria:['Auditoria de Restrição','Restrição fora da regra em qualquer item com saldo, múltiplo ou não.'],
   indicadores:['Indicadores','Panorama dos múltiplos descasados pra mostrar ao setor.'],
   configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
   importacao:['Importação','ZBIQ0051, QRY0390 e SIGEQ278 — as bases do módulo.']
@@ -1184,6 +1295,7 @@ function irRenderView(){
   }
   raiz.innerHTML = MD.tela==='importacao'    ? mdRenderImportacao()
                  : MD.tela==='ajustes'       ? mdRenderAjustes()
+                 : MD.tela==='auditoria'     ? mdRenderAuditoria()
                  : MD.tela==='indicadores'   ? mdRenderIndicadores()
                  : MD.tela==='configuracoes' ? mdRenderConfiguracoes()
                  : mdRenderDescasados();
@@ -1203,9 +1315,11 @@ async function mdRecarregar(){
   MD.estrutura = await mdGetEstrutura();
   MD.saldos = await mdGetSaldo();
   MD.precos = await mdGetPrecos();
+  MD.auditoria = await mdGetAuditoria();
   MD.estruturaMeta = await mdGetEstruturaMeta();
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
+  MD.auditoriaMeta = await mdGetAuditoriaMeta();
   MD.regras = {
     clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || {},
     x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {}
