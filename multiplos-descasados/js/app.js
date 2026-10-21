@@ -948,19 +948,52 @@ function mdSetRegra(chave, valor, sigla, permitido){
   // sem isso a tela ficava com o cálculo antigo até trocar de base ou aba.
   mdInvalidarCache();
   irRenderView();
+  // irRenderView troca o innerHTML da tabela inteira e derruba o foco — sem
+  // devolver pro mesmo checkbox, marcar várias casas em sequência com teclado
+  // (seta + espaço) perderia a posição a cada tecla.
+  for(const cb of document.querySelectorAll('input[type="checkbox"][data-chave]')){
+    if(cb.dataset.chave === chave && cb.dataset.valor === valor && cb.dataset.sigla === sigla){ cb.focus(); break; }
+  }
 }
+/* Navegação por seta na matriz de Configurações — marcar casa a casa com o
+   mouse é lento numa tabela com dezenas de X1/X2. Espaço já marca/desmarca
+   sozinho (comportamento nativo do checkbox); só falta mover o foco. */
+function mdConfigNav(e, el){
+  const tecla = e.key;
+  if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(tecla)) return;
+  e.preventDefault();
+  const td = el.closest('td');
+  const tr = td.closest('tr');
+  if(tecla === 'ArrowLeft' || tecla === 'ArrowRight'){
+    const dir = tecla === 'ArrowRight' ? 1 : -1;
+    let alvo = td;
+    do { alvo = dir > 0 ? alvo.nextElementSibling : alvo.previousElementSibling; }
+    while(alvo && !alvo.querySelector('input[type="checkbox"]'));
+    if(alvo) alvo.querySelector('input[type="checkbox"]').focus();
+    return;
+  }
+  const colIdx = Array.from(tr.children).indexOf(td);
+  const alvoTr = tecla === 'ArrowDown' ? tr.nextElementSibling : tr.previousElementSibling;
+  const alvoTd = alvoTr && alvoTr.children[colIdx];
+  const cb = alvoTd && alvoTd.querySelector('input[type="checkbox"]');
+  if(cb) cb.focus();
+}
+/* 0 (WN) e 86 (AI) são as duas restrições que todo mundo mexe o tempo
+   inteiro — ficam lado a lado, igual já é no pivô (MD_ORDEM_RESTRICOES),
+   em vez do 86 isolado lá no fim da tabela depois de mais 13 colunas. */
+const MD_RESTRICOES_CONFIG = MD_ORDEM_RESTRICOES.map(sigla=>MD_RESTRICOES.find(r=>r.sigla===sigla));
 function mdRenderConfiguracoes(){
   const secoes = MD_DIMENSOES.map(dim=>{
     const valores = mdValoresConhecidos(dim.chave);
     if(!valores.length) return '';
-    const headerCols = MD_RESTRICOES.map(r=>
+    const headerCols = MD_RESTRICOES_CONFIG.map(r=>
       `<th title="${irEsc(r.sigla+' — '+r.nome)}">${irEsc(r.cod)}</th>`
     ).join('');
     const linhas = valores.map(v=>{
       const regra = MD.regras[dim.chave][v] || [];
-      const cels = MD_RESTRICOES.map(r=>{
+      const cels = MD_RESTRICOES_CONFIG.map(r=>{
         const marcado = regra.includes(r.sigla);
-        return `<td><input type="checkbox" ${marcado?'checked':''} onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)"></td>`;
+        return `<td><input type="checkbox" ${marcado?'checked':''} data-chave="${irEsc(dim.chave)}" data-valor="${irEsc(v)}" data-sigla="${r.sigla}" onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)" onkeydown="mdConfigNav(event, this)"></td>`;
       }).join('');
       return `<tr><td class="md-left mono">${irEsc(v)}</td>${cels}</tr>`;
     }).join('');
