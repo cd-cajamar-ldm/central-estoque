@@ -436,7 +436,7 @@ function mdRenderDescasados(){
    estoque bom voltando pra venda. */
 function mdPlano(){
   if(MD._plano && MD._planoBase === MD.base) return MD._plano;
-  MD._plano = mdPlanoAjuste(mdPais(), MD.base);
+  MD._plano = mdPlanoAjuste(mdPais(), MD.base, mdRestricaoPermitida);
   MD._planoBase = MD.base;
   return MD._plano;
 }
@@ -515,8 +515,11 @@ function mdPlanoCorrecaoRestricao(){
     for(const loc of (s.locais||[])){
       const regra = mdRegraViolada(loc);
       if(!regra) continue;
+      // 86 nunca é destino de correção, nem como única restrição permitida
+      // cadastrada por engano — quem decide o que vai pra 86 é sempre o
+      // pareamento da aba Descasados, nunca esta correção de restrição.
       const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
-        : (regra.length===1 ? regra[0] : null);
+        : (regra.length===1 && regra[0] !== MD_SIGLA_BLOQUEIO ? regra[0] : null);
       if(!destino) continue;
       const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
       const preco = s.valorUnitario || 0;
@@ -724,7 +727,7 @@ function mdRenderAjustes(){
    pelo sentido do movimento: bloquear (0 → 86) e liberar (86 → 0) nunca se
    misturam na digitação do coletor, então não fazia sentido numa lista só. */
 function mdExportarAjustePivot(){
-  const plano = mdPlanoAjuste(mdPaisFiltrados(), MD.base);
+  const plano = mdPlanoAjuste(mdPaisFiltrados(), MD.base, mdRestricaoPermitida);
   mdGerarXlsxAjuste([
     {titulo:'Bloquear (0 para 86)', linhas: plano.filter(l=>l.sentido==='bloquear')},
     {titulo:'Liberar (86 para 0)', linhas: plano.filter(l=>l.sentido==='liberar')}
