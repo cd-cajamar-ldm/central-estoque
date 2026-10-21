@@ -309,11 +309,14 @@ function mdSetaOrdem(chave, col){
 
 /* Nome comprido não cabe numa linha compacta: mostra o início e o fim, que é
    o trecho que costuma diferenciar um item do outro (cor, medida, modelo). */
-function mdTruncarNome(nome, max){
-  if(!nome || nome.length <= max) return nome || '';
-  const inicio = nome.slice(0, Math.ceil(max*0.65));
-  const fim = nome.slice(-Math.floor(max*0.28));
-  return inicio.trim() + '…' + fim.trim();
+/* Só a primeira e a última palavra da descrição — o meio (tamanho, cor,
+   variação...) não ajuda a identificar o item na lista e só empurrava o fim
+   do nome (geralmente a marca ou o diferencial) pra fora da linha. */
+function mdTruncarNome(nome){
+  if(!nome) return '';
+  const palavras = nome.trim().split(/\s+/);
+  if(palavras.length <= 2) return nome.trim();
+  return palavras[0] + ' … ' + palavras[palavras.length - 1];
 }
 
 /* Soma por restrição no nível do pai: cada componente já traz o próprio total
@@ -366,7 +369,7 @@ function mdRenderPivot(){
       ? `<span class="md-tag md-tag-falta">${p.faltantes} falta componente${p.faltantes>1?'s':''}</span>`
       : (p.completos === 0 ? `<span class="md-tag md-tag-bad">0 vendáveis</span>` : '');
     linhas += `<tr class="md-piv-pai">
-      <td class="md-left"><span class="md-piv-nome"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome,46))}</span>${alerta}</td>
+      <td class="md-left"><span class="md-piv-nome"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome))}</span>${alerta}</td>
       ${mdPivColunas(mdPaiTotaisPorSigla(p, restricoes), restricoes, p.pecasTotal)}
     </tr>`;
     if(!paiAberto) continue;
@@ -375,7 +378,7 @@ function mdRenderPivot(){
       const compAberto = MD.pivotExpandido.has(idComp);
       const tagValor = c.inInterface==='S' ? ' <span class="md-tag md-tag-info" title="Carrega o valor do múltiplo (in_interface = S)">valor</span>' : '';
       linhas += `<tr class="md-piv-comp">
-        <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idComp}')">${compAberto?'−':'+'}</button><span class="mono">${irEsc(c.componente)}</span> ${irEsc(mdTruncarNome(c.nome,46))}${tagValor}</td>
+        <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idComp}')">${compAberto?'−':'+'}</button><span class="mono">${irEsc(c.componente)}</span> ${irEsc(mdTruncarNome(c.nome))}${tagValor}</td>
         ${mdPivColunas(c.porRestricao, restricoes, c.total)}
       </tr>`;
       if(!compAberto) continue;
