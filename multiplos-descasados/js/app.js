@@ -48,7 +48,10 @@ const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
    depois. */
 const MD_DIMENSOES = [
   {chave:'clal', titulo:'Classe', valor:o=>o.clal || '—'},
-  {chave:'x1', titulo:'X1/X2', valor:o=>[o.x1, o.x2].filter(Boolean).join(' ') || '—'}
+  // Só X1 (não X1+X2 combinado): por X1+X2 dava uma linha pra cada sub-endereço
+  // (PP 008, PP 009, PP 010...), moroso demais pra revisar. X1 sozinho agrupa
+  // tudo isso numa linha só.
+  {chave:'x1', titulo:'X1', valor:o=>o.x1 || '—'}
 ];
 const MD_DIM_POR_CHAVE = {};
 MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
