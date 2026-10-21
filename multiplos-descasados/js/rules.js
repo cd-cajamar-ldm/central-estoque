@@ -41,6 +41,7 @@ const MD_RESTRICOES = [
   {cod:'15', sigla:'WQ', nome:'Sem condições de venda (quebra)'},
   {cod:'20', sigla:'RT', nome:'Em conferência do recebimento'},
   {cod:'25', sigla:'WE', nome:'Amostra / correção de cadastro / assistência técnica'},
+  {cod:'34', sigla:'LT', nome:'Litígio'},
   {cod:'35', sigla:'WV', nome:'Fora do prazo de validade'},
   {cod:'40', sigla:'WL', nome:'Estoque físico não localizado'},
   {cod:'50', sigla:'WT', nome:'Análise de item'},
