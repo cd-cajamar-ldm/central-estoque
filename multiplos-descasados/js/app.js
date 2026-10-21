@@ -129,7 +129,10 @@ function mdPais(){
   // keyed pelo código do pai direto, sem depender de a 390 repetir um nome de
   // componente na coluna NOME_ITEM_PAI (nem sempre vem preenchida).
   const precos = new Map((MD.precos||[]).map(p=>[p.item, p]));
-  MD._cache = mdCalcularPais(MD.estrutura, saldos, precos, MD.base);
+  // mdRestricaoPermitida aplica a regra de classe/X1 (Configurações) ANTES de
+  // parear: WN ou 86 num endereço fora da regra (ex.: reversa cadastrada como
+  // WN) não conta como vendável/múltiplo incompleto de verdade.
+  MD._cache = mdCalcularPais(MD.estrutura, saldos, precos, MD.base, mdRestricaoPermitida);
   MD._cacheBase = MD.base;
   return MD._cache;
 }
@@ -444,6 +447,21 @@ function mdRestricaoPermitidaEm(chave, valor, sigla){
   return !regra || regra.includes(sigla);
 }
 
+/* Restrição de um endereço batendo com a regra configurada pra classe/X1+X2
+   dele — a mesma checagem usada pra corrigir (abaixo) e pra decidir, antes de
+   parear (mdPais em mdPais/mdCalcularPais), se um WN ou 86 mal classificado
+   (ex.: endereço de reversa cadastrado como WN) deve ou não contar como
+   vendável/múltiplo incompleto de verdade. Sem regra pra nenhuma dimensão do
+   endereço, não dá pra dizer se está errado — conta como permitida. */
+function mdRegraViolada(loc){
+  for(const dim of MD_DIMENSOES){
+    const r = mdRegraDe(dim.chave, dim.valor(loc));
+    if(r && !r.includes(loc.restricao)) return r;
+  }
+  return null;
+}
+function mdRestricaoPermitida(loc){ return mdRegraViolada(loc) === null; }
+
 /* Plano de correção de restrição (aba Ajustes de Restrição) — não confundir
    com o plano de pareamento de múltiplos descasados (aba Descasados, outra
    lógica, outro botão). Aqui o problema é a REGRA configurada em
@@ -467,11 +485,7 @@ function mdPlanoCorrecaoRestricao(){
   const out = [];
   for(const s of (MD.saldos||[])){
     for(const loc of (s.locais||[])){
-      let regra = null;
-      for(const dim of MD_DIMENSOES){
-        const r = mdRegraDe(dim.chave, dim.valor(loc));
-        if(r && !r.includes(loc.restricao)){ regra = r; break; }
-      }
+      const regra = mdRegraViolada(loc);
       if(!regra) continue;
       const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
         : (regra.length===1 ? regra[0] : null);
@@ -930,6 +944,9 @@ function mdSetRegra(chave, valor, sigla, permitido){
   if(permitido) atual.add(sigla); else atual.delete(sigla);
   MD.regras[chave][valor] = Array.from(atual);
   mdSetConfig(MD_CONFIG_KEY_POR_DIM[chave], MD.regras[chave]);
+  // O pareamento de Descasados agora também depende da regra (ver mdPais) —
+  // sem isso a tela ficava com o cálculo antigo até trocar de base ou aba.
+  mdInvalidarCache();
   irRenderView();
 }
 function mdRenderConfiguracoes(){
