@@ -35,30 +35,35 @@
 /* Legenda de restrições do WMS. O coletor pede o CÓDIGO (0, 86), a 390 traz a
    SIGLA (WN, AI) — o módulo precisa das duas pontas: a sigla pra ler a planilha
    e o código pra escrever o relatório que vai ser digitado. */
+/* "curto" é a palavra que aparece em cima do código, na matriz de
+   Configurações e no pivô — só pra dar norte rápido sem precisar passar o
+   mouse no tooltip pra ler o nome inteiro. */
 const MD_RESTRICOES = [
-  {cod:'0',  sigla:'WN', nome:'Estoque vendável'},
-  {cod:'10', sigla:'WA', nome:'Estoque reversa'},
-  {cod:'15', sigla:'WQ', nome:'Sem condições de venda (quebra)'},
-  {cod:'20', sigla:'RT', nome:'Em conferência do recebimento'},
-  {cod:'25', sigla:'WE', nome:'Amostra / correção de cadastro / assistência técnica'},
-  {cod:'34', sigla:'LT', nome:'Litígio'},
-  {cod:'35', sigla:'WV', nome:'Fora do prazo de validade'},
-  {cod:'40', sigla:'WL', nome:'Estoque físico não localizado'},
-  {cod:'50', sigla:'WT', nome:'Análise de item'},
-  {cod:'55', sigla:'WR', nome:'Reparo interno'},
-  {cod:'60', sigla:'AT', nome:'Múltiplos incompletos da reversa (componentes)'},
-  {cod:'61', sigla:'SS', nome:'Componentes de peças da marca própria'},
-  {cod:'62', sigla:'DT', nome:'Restrição de triagem'},
-  {cod:'65', sigla:'WD', nome:'Devolução de obsoletos ou acordo comercial'},
-  {cod:'75', sigla:'WS', nome:'Leilão'},
-  {cod:'86', sigla:'AI', nome:'Múltiplos incompletos dentro do estoque'}
+  {cod:'0',  sigla:'WN', nome:'Estoque vendável', curto:'Vendável'},
+  {cod:'10', sigla:'WA', nome:'Estoque reversa', curto:'Reversa'},
+  {cod:'15', sigla:'WQ', nome:'Sem condições de venda (quebra)', curto:'Quebra'},
+  {cod:'20', sigla:'RT', nome:'Em conferência do recebimento', curto:'Conferência'},
+  {cod:'25', sigla:'WE', nome:'Amostra / correção de cadastro / assistência técnica', curto:'Amostra'},
+  {cod:'34', sigla:'LT', nome:'Litígio', curto:'Litígio'},
+  {cod:'35', sigla:'WV', nome:'Fora do prazo de validade', curto:'Validade'},
+  {cod:'40', sigla:'WL', nome:'Estoque físico não localizado', curto:'Não localizado'},
+  {cod:'50', sigla:'WT', nome:'Análise de item', curto:'Análise'},
+  {cod:'55', sigla:'WR', nome:'Reparo interno', curto:'Reparo'},
+  {cod:'60', sigla:'AT', nome:'Múltiplos incompletos da reversa (componentes)', curto:'Múlt. reversa'},
+  {cod:'61', sigla:'SS', nome:'Componentes de peças da marca própria', curto:'Marca própria'},
+  {cod:'62', sigla:'DT', nome:'Restrição de triagem', curto:'Triagem'},
+  {cod:'65', sigla:'WD', nome:'Devolução de obsoletos ou acordo comercial', curto:'Obsoleto'},
+  {cod:'75', sigla:'WS', nome:'Leilão', curto:'Leilão'},
+  {cod:'86', sigla:'AI', nome:'Múltiplos incompletos dentro do estoque', curto:'Incompleto'}
 ];
 const MD_SIGLA_VENDAVEL = 'WN';   // código 0
 const MD_SIGLA_BLOQUEIO = 'AI';   // código 86
 const MD_COD_POR_SIGLA = MD_RESTRICOES.reduce((m,r)=>{ m[r.sigla] = r.cod; return m; }, {});
 const MD_NOME_POR_SIGLA = MD_RESTRICOES.reduce((m,r)=>{ m[r.sigla] = r.nome; return m; }, {});
+const MD_CURTO_POR_SIGLA = MD_RESTRICOES.reduce((m,r)=>{ m[r.sigla] = r.curto; return m; }, {});
 function mdCodRestricao(sigla){ return MD_COD_POR_SIGLA[sigla] ?? ''; }
 function mdNomeRestricao(sigla){ return MD_NOME_POR_SIGLA[sigla] || sigla || '—'; }
+function mdRotuloCurto(sigla){ return MD_CURTO_POR_SIGLA[sigla] || sigla || '—'; }
 /* Ordem das colunas de restrição na tela: primeiro as duas que mandam no
    módulo (vendável e bloqueio), depois as outras na ordem da legenda. */
 const MD_ORDEM_RESTRICOES = [MD_SIGLA_VENDAVEL, MD_SIGLA_BLOQUEIO]

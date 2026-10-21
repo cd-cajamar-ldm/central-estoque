@@ -219,6 +219,13 @@ function mdBarraFiltros(){
   </div>`;
 }
 
+/* Cabeçalho de coluna de restrição, nos dois tamanhos: uma palavra curta em
+   cima (pra não precisar do tooltip só pra saber o que é) e o código do WMS
+   embaixo, que é o que se digita no coletor. */
+function mdRotuloColunaHtml(sigla){
+  return `<span class="md-col-rotulo">${irEsc(mdRotuloCurto(sigla))}</span><span class="md-col-codigo">${irEsc(mdCodRestricao(sigla))}</span>`;
+}
+
 /* Colunas de restrição da tela: as que realmente aparecem no estoque destes
    componentes, na ordem da legenda. Restrição sem nenhuma peça não vira coluna
    vazia — a tabela já é larga. */
@@ -385,7 +392,7 @@ function mdRenderPivot(){
 
   const headerCols = restricoes.map(s=>{
     const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${irEsc(mdCodRestricao(s))}</th>`;
+    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${mdRotuloColunaHtml(s)}</th>`;
   }).join('');
 
   return `<div class="panel">
@@ -632,7 +639,7 @@ function mdRenderMatrizPor(chave){
   const headerCols = restricoes.map(s=>{
     const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
     return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
-      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${irEsc(mdCodRestricao(s))}${mdSetaOrdem(chave, s)}</th>`;
+      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${mdRotuloColunaHtml(s)}${mdSetaOrdem(chave, s)}</th>`;
   }).join('');
 
   // Com o filtro de restrições ligado, a soma das colunas na tela não fecha
@@ -1018,7 +1025,7 @@ function mdRenderConfiguracoes(){
     const valores = mdValoresConhecidos(dim.chave);
     if(!valores.length) return '';
     const headerCols = MD_RESTRICOES_CONFIG.map(r=>
-      `<th title="${irEsc(r.sigla+' — '+r.nome)}">${irEsc(r.cod)}</th>`
+      `<th title="${irEsc(r.sigla+' — '+r.nome)}">${mdRotuloColunaHtml(r.sigla)}</th>`
     ).join('');
     const linhas = valores.map(v=>{
       const regra = MD.regras[dim.chave][v] || [];
