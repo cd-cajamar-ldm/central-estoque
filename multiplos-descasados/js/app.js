@@ -168,13 +168,40 @@ function mdBuscar(v){
   clearTimeout(window.__mdBuscaTimer);
   window.__mdBuscaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBusca')?.focus(); }, 220);
 }
-function mdKpis(resumo){
+/* LOG (LOG_ITEM da 390) é a linha de produto/responsável do item — diferente
+   da classe física do endereço (CLAL/X1/X2). Agrupa o valor bloqueado
+   (mesma sobra vendável do KPI "Valor descasado") por essa linha pra apontar
+   qual LOG concentra mais descasamento, não só o total geral. */
+function mdLogMaisDivergente(pais){
+  const porLog = new Map();
+  for(const p of pais){
+    for(const c of p.componentes){
+      if(!(c.bloquear > 0)) continue;
+      const chave = c.log || '(sem LOG)';
+      if(!porLog.has(chave)) porLog.set(chave, {log: chave, valor: 0, pecas: 0, pais: new Set()});
+      const acc = porLog.get(chave);
+      acc.valor += c.valorBloquear || 0;
+      acc.pecas += c.bloquear;
+      acc.pais.add(p.pai);
+    }
+  }
+  let maior = null;
+  for(const acc of porLog.values()) if(!maior || acc.valor > maior.valor) maior = acc;
+  return maior ? {log: maior.log, valor: maior.valor, pecas: maior.pecas, nPais: maior.pais.size} : null;
+}
+function mdKpis(resumo, pais){
+  const divergente = mdLogMaisDivergente(pais || []);
+  const cardLog = divergente
+    ? `<div class="kpi-card bad"><div class="num">${irEsc(divergente.log)}</div>
+        <div class="label">LOG mais divergente — ${irFmtMoney(divergente.valor)} em ${irFmtInt(divergente.nPais)} ${divergente.nPais===1?'múltiplo':'múltiplos'}</div></div>`
+    : `<div class="kpi-card good"><div class="num">—</div><div class="label">LOG mais divergente — nenhum descasado agora</div></div>`;
   return `<div class="kpi-grid">
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.paisDescasados)}</div><div class="label">Múltiplos a ajustar</div></div>
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.bloquearPecas)}</div><div class="label">Peças a bloquear (0 → 86)</div></div>
     <div class="kpi-card good"><div class="num">${irFmtInt(resumo.liberarPecas)}</div><div class="label">Peças a liberar (86 → 0)</div></div>
     <div class="kpi-card bad"><div class="num num-money">${irFmtMoney(resumo.sobraValor)}</div><div class="label">Valor descasado</div></div>
     <div class="kpi-card good"><div class="num num-money">${irFmtMoney(resumo.liberarValor)}</div><div class="label">Valor a liberar</div></div>
+    ${cardLog}
   </div>`;
 }
 
@@ -391,7 +418,8 @@ function mdRenderDescasados(){
       : 'A estrutura já está aqui. Falta a QRY0390 com o saldo dos componentes.';
     return irEmptyState('Sem bases importadas', falta, "irSwitchTab('importacao')", 'Ir para a importação');
   }
-  return mdKpis(mdResumo(mdPais())) + mdBarraFiltros() + mdRenderPivot();
+  const pais = mdPais();
+  return mdKpis(mdResumo(pais), pais) + mdBarraFiltros() + mdRenderPivot();
 }
 
 /* ============================================================

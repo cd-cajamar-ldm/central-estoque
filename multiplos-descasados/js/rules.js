@@ -162,6 +162,7 @@ function mdCalcularPais(estrutura, saldos, precos, base, restricaoPermitida){
         nome: (s && s.nome) || '',
         nomePai: (s && s.nomePai) || '',
         ean: (s && s.ean) || '',
+        log: (s && s.log) || '',
         inInterface: c.inInterface,
         qtdePorMultiplo: c.qtde > 0 ? c.qtde : 1,
         wn, bloqueado: bloq,
