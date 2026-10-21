@@ -175,22 +175,41 @@ function mdBuscar(v){
    da classe física do endereço (CLAL/X1/X2). Agrupa o valor bloqueado
    (mesma sobra vendável do KPI "Valor descasado") por essa linha pra apontar
    qual LOG concentra mais descasamento, não só o total geral. */
-function mdLogMaisDivergente(pais){
-  const porLog = new Map();
+/* Agrupa os componentes com sobra bloqueada (mesmo critério do KPI "Valor
+   descasado") por uma chave qualquer — usado tanto pelo "LOG mais divergente"
+   dos KPIs quanto pelos rankings da aba Indicadores. Ordenado do maior valor
+   pro menor. */
+function mdAgruparComponentesBloqueados(pais, chaveFn){
+  const porChave = new Map();
   for(const p of pais){
     for(const c of p.componentes){
       if(!(c.bloquear > 0)) continue;
-      const chave = c.log || '(sem LOG)';
-      if(!porLog.has(chave)) porLog.set(chave, {log: chave, valor: 0, pecas: 0, pais: new Set()});
-      const acc = porLog.get(chave);
+      const chave = chaveFn(c) || '—';
+      if(!porChave.has(chave)) porChave.set(chave, {chave, valor:0, pecas:0, pais:new Set()});
+      const acc = porChave.get(chave);
       acc.valor += c.valorBloquear || 0;
       acc.pecas += c.bloquear;
       acc.pais.add(p.pai);
     }
   }
-  let maior = null;
-  for(const acc of porLog.values()) if(!maior || acc.valor > maior.valor) maior = acc;
-  return maior ? {log: maior.log, valor: maior.valor, pecas: maior.pecas, nPais: maior.pais.size} : null;
+  return Array.from(porChave.values())
+    .map(a=>({chave:a.chave, valor:a.valor, pecas:a.pecas, nPais:a.pais.size}))
+    .sort((a,b)=>b.valor - a.valor);
+}
+/* Não existe campo de fornecedor em nenhuma base importada (ZBIQ0051,
+   QRY0390, SIGEQ278) — a última palavra do nome do componente é o jeito que
+   tem hoje de aproximar isso, já que no cadastro ela costuma ser a marca/
+   fabricante (ex. "...DOBRAVEL EQUIPAMENTOS", "...8T 26PC 4003-P MARCON"). */
+function mdUltimaPalavra(nome){
+  if(!nome) return '';
+  const palavras = nome.trim().split(/\s+/);
+  return palavras[palavras.length - 1] || '';
+}
+function mdRankingPorLog(pais){ return mdAgruparComponentesBloqueados(pais, c=>c.log || '(sem LOG)'); }
+function mdRankingPorFornecedor(pais){ return mdAgruparComponentesBloqueados(pais, c=>mdUltimaPalavra(c.nome) || '(sem nome)'); }
+function mdLogMaisDivergente(pais){
+  const topo = mdRankingPorLog(pais)[0];
+  return topo ? {log: topo.chave, valor: topo.valor, pecas: topo.pecas, nPais: topo.nPais} : null;
 }
 function mdKpis(resumo, pais){
   const divergente = mdLogMaisDivergente(pais || []);
@@ -433,6 +452,80 @@ function mdRenderDescasados(){
   }
   const pais = mdPais();
   return mdKpis(mdResumo(pais), pais) + mdBarraFiltros() + mdRenderPivot();
+}
+
+/* ============================================================
+   TELA — INDICADORES
+   ============================================================
+   Painel só de leitura, pra mostrar ao setor como estão os múltiplos
+   descasados agora — mesmos números da aba Descasados, organizados por LOG,
+   por fornecedor aproximado (sem campo próprio nas bases, usa a última
+   palavra do nome) e pelos itens pai mais críticos. Nada clicável, nada de
+   filtro — é retrato, não ferramenta de trabalho. */
+function mdRenderRanking(titulo, labelColuna, ranking, limite){
+  const linhas = (ranking || []).slice(0, limite || 10);
+  if(!linhas.length){
+    return `<div class="panel"><h3>${irEsc(titulo)}</h3><p class="field-hint">Nenhum descasamento no momento.</p></div>`;
+  }
+  const corpo = linhas.map((l,i)=>`<tr>
+    <td class="md-left">${i+1}</td>
+    <td class="md-left">${irEsc(l.chave)}</td>
+    <td>${irFmtInt(l.pecas)}</td>
+    <td>${irFmtInt(l.nPais)}</td>
+    <td>${irFmtMoney(l.valor)}</td>
+  </tr>`).join('');
+  return `<div class="panel">
+    <h3>${irEsc(titulo)}</h3>
+    <div class="md-piv-wrap">
+      <table class="md-piv">
+        <thead><tr>
+          <th class="md-left">#</th>
+          <th class="md-left">${irEsc(labelColuna)}</th>
+          <th>Peças a bloquear</th>
+          <th>Múltiplos</th>
+          <th>Valor descasado</th>
+        </tr></thead>
+        <tbody>${corpo}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+function mdRenderTopPais(pais, limite){
+  const lista = pais.filter(p=>p.sobraValor > 0).sort((a,b)=>b.sobraValor - a.sobraValor).slice(0, limite || 10);
+  if(!lista.length){
+    return `<div class="panel"><h3>Itens pai mais críticos</h3><p class="field-hint">Nenhum múltiplo descasado no momento.</p></div>`;
+  }
+  const corpo = lista.map((p,i)=>`<tr>
+    <td class="md-left">${i+1}</td>
+    <td class="md-left"><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome))}</td>
+    <td>${irFmtInt(p.bloquearPecas)}</td>
+    <td>${irFmtMoney(p.sobraValor)}</td>
+  </tr>`).join('');
+  return `<div class="panel">
+    <h3>Itens pai mais críticos</h3>
+    <div class="md-piv-wrap">
+      <table class="md-piv">
+        <thead><tr>
+          <th class="md-left">#</th>
+          <th class="md-left">Item pai</th>
+          <th>Peças a bloquear</th>
+          <th>Valor descasado</th>
+        </tr></thead>
+        <tbody>${corpo}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+function mdRenderIndicadores(){
+  if(!mdTemDados()){
+    return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 pra ver os indicadores.', "irSwitchTab('importacao')", 'Ir para a importação');
+  }
+  const pais = mdPais();
+  return mdKpis(mdResumo(pais), pais)
+    + `<p class="field-hint" style="margin:14px 0;">Panorama pra mostrar ao setor como estão os múltiplos descasados agora.</p>`
+    + mdRenderRanking('Por LOG', 'LOG', mdRankingPorLog(pais))
+    + mdRenderRanking('Por fornecedor (aproximado pela última palavra do nome)', 'Fornecedor', mdRankingPorFornecedor(pais))
+    + mdRenderTopPais(pais);
 }
 
 /* ============================================================
@@ -1067,6 +1160,7 @@ function mdRenderConfiguracoes(){
 const MD_TELAS = {
   descasados:['Múltiplos Descasados','Componente sem par no estoque: dimensão, onde está e quanto vale.'],
   ajustes:['Ajustes de Restrição','O que bloquear em 86 e o que devolver para venda, linha a linha.'],
+  indicadores:['Indicadores','Panorama dos múltiplos descasados pra mostrar ao setor.'],
   configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
   importacao:['Importação','ZBIQ0051, QRY0390 e SIGEQ278 — as bases do módulo.']
 };
@@ -1088,6 +1182,7 @@ function irRenderView(){
   }
   raiz.innerHTML = MD.tela==='importacao'    ? mdRenderImportacao()
                  : MD.tela==='ajustes'       ? mdRenderAjustes()
+                 : MD.tela==='indicadores'   ? mdRenderIndicadores()
                  : MD.tela==='configuracoes' ? mdRenderConfiguracoes()
                  : mdRenderDescasados();
   if(mesmaTela) raiz.querySelectorAll('.md-piv-wrap').forEach((el, i)=>{ if(scrolls[i]) el.scrollTop = scrolls[i]; });
