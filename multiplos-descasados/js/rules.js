@@ -114,8 +114,11 @@ function mdSaldoRestricao(saldo, sigla, campo){
    estrutura: linhas da 051 {componente, pai, qtde, inInterface}
    saldos:    Map item -> {porRestricao, locais, valorUnitario, nome, ...}
    precos:    Map item -> preço de custo (SIGEQ278), pode vir vazio
-   base:      'qtde' (tudo que existe) ou 'qtdeDisp' (só o disponível) */
-function mdCalcularPais(estrutura, saldos, precos, base){
+   base:      'qtde' (tudo que existe) ou 'qtdeDisp' (só o disponível)
+   restricaoPermitida: função opcional (endereço)->bool, a mesma regra de
+   classe/X1 da aba Ajustes de Restrição (ver mdRestricaoPermitida em app.js).
+   Sem ela, todo WN/86 do dado conta pro pareamento, como sempre foi. */
+function mdCalcularPais(estrutura, saldos, precos, base, restricaoPermitida){
   const campo = base === 'qtdeDisp' ? 'qtdeDisp' : 'qtde';
   const porPai = new Map();
   for(const linha of estrutura){
@@ -132,8 +135,21 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       const s = saldos.get(c.componente) || null;
       const total = s ? (s[campo] || 0) : 0;
       if(total > 0) temSaldo = true;
-      const wn = mdSaldoRestricao(s, MD_SIGLA_VENDAVEL, campo);
-      const bloq = mdSaldoRestricao(s, MD_SIGLA_BLOQUEIO, campo);
+      let wn = mdSaldoRestricao(s, MD_SIGLA_VENDAVEL, campo);
+      let bloq = mdSaldoRestricao(s, MD_SIGLA_BLOQUEIO, campo);
+      // Endereço em WN ou 86 mas fora da regra de classe/X1 (ex.: reversa
+      // cadastrada como WN) não é vendável nem múltiplo incompleto de
+      // verdade ali — é saldo mal classificado no WMS. Desconta do WN/86
+      // que entra no pareamento; some em "outras" como qualquer restrição
+      // que não participa, sem mudar o total nem a coluna exibida na tela.
+      if(restricaoPermitida && s && s.locais){
+        for(const loc of s.locais){
+          const v = loc[campo] || 0;
+          if(!v || restricaoPermitida(loc)) continue;
+          if(loc.restricao === MD_SIGLA_VENDAVEL) wn -= v;
+          else if(loc.restricao === MD_SIGLA_BLOQUEIO) bloq -= v;
+        }
+      }
       const porRestricao = {};
       if(s && s.porRestricao){
         for(const sigla in s.porRestricao){
