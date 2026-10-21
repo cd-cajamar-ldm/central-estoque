@@ -48,10 +48,12 @@ const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
    depois. */
 const MD_DIMENSOES = [
   {chave:'clal', titulo:'Classe', valor:o=>o.clal || '—'},
-  // Só X1 (não X1+X2 combinado): por X1+X2 dava uma linha pra cada sub-endereço
-  // (PP 008, PP 009, PP 010...), moroso demais pra revisar. X1 sozinho agrupa
-  // tudo isso numa linha só.
-  {chave:'x1', titulo:'X1', valor:o=>o.x1 || '—'}
+  // Só o PREFIXO do X1: na extração real o campo X1 já vem como "BLC 001",
+  // "BLM 011" etc. (não é X1="BLC" + X2="001" separados) — usar o campo
+  // inteiro continuava dando uma linha por sub-endereço. A primeira palavra
+  // é o bloco de verdade (BLC, BLM, BIN...), que é o nível que importa pra
+  // essa régua.
+  {chave:'x1', titulo:'X1', valor:o=>(o.x1 || '').trim().split(/\s+/)[0] || '—'}
 ];
 const MD_DIM_POR_CHAVE = {};
 MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
