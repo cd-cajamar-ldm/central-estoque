@@ -68,7 +68,7 @@ tr.md-piv-pai td{ background:var(--orange-light); font-weight:800; }
    nome/código entram num grupo à esquerda e o alerta vai pro final da célula,
    com espaço de verdade entre os dois. */
 tr.md-piv-pai td.md-left{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.md-piv-nome{ overflow:hidden; text-overflow:ellipsis; }
+.md-piv-nome{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 tr.md-piv-comp td{ background:var(--blue-light); font-weight:700; }
 tr.md-piv-comp td.md-left{ padding-left:26px; }
 tr.md-piv-leaf td{ background:var(--surface); color:var(--ink-soft); font-weight:400; }
