@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v4';
+const MD_APP_VERSION = 'v5';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -584,18 +584,26 @@ function mdRestricaoPermitidaEm(chave, valor, sigla){
   return !regra || regra.includes(sigla);
 }
 
-/* Restrição de um endereço batendo com a regra configurada pra classe/X1+X2
-   dele — a mesma checagem usada pra corrigir (abaixo) e pra decidir, antes de
+/* Restrição de um endereço batendo com a regra configurada pra classe/X1 dele
+   — a mesma checagem usada pra corrigir (abaixo) e pra decidir, antes de
    parear (mdPais em mdPais/mdCalcularPais), se um WN ou 86 mal classificado
    (ex.: endereço de reversa cadastrado como WN) deve ou não contar como
-   vendável/múltiplo incompleto de verdade. Sem regra pra nenhuma dimensão do
-   endereço, não dá pra dizer se está errado — conta como permitida. */
+   vendável/múltiplo incompleto de verdade.
+
+   X1 manda primeiro, por ser mais específico que a classe (o endereço físico
+   importa mais que a categoria geral do item); a classe só é olhada quando o
+   X1 não resolve — sem regra pra ele, ou com regra que não inclui a
+   restrição atual. Se a classe permitir ali, vale a classe (ex.: X1=GAI só
+   permite WN, mas a classe CARGA permite Reversa — um item CARGA num
+   endereço GAI em Reversa está certo, não é descasamento de verdade). Sem
+   regra pra nenhuma das duas, não dá pra dizer se está errado — conta como
+   permitida. */
 function mdRegraViolada(loc){
-  for(const dim of MD_DIMENSOES){
-    const r = mdRegraDe(dim.chave, dim.valor(loc));
-    if(r && !r.includes(loc.restricao)) return r;
-  }
-  return null;
+  const regraX1 = mdRegraDe('x1', MD_DIM_POR_CHAVE.x1.valor(loc));
+  const regraClasse = mdRegraDe('clal', MD_DIM_POR_CHAVE.clal.valor(loc));
+  if(regraX1 && regraX1.includes(loc.restricao)) return null;
+  if(regraClasse && regraClasse.includes(loc.restricao)) return null;
+  return regraX1 || regraClasse || null;
 }
 function mdRestricaoPermitida(loc){ return mdRegraViolada(loc) === null; }
 
