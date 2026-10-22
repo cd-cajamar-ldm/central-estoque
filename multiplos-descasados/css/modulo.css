@@ -85,6 +85,15 @@ tr.md-piv-pai:hover td, tr.md-piv-comp:hover td, tr.md-piv-leaf:hover td{ filter
    cheio, some qualquer outro destaque (WN/AI) — é o alerta que manda. */
 table.md-piv td.md-cel-erro{ background:var(--danger); color:#fff; font-weight:800; }
 
+/* Aviso operacional (não é erro de restrição): mesmo item+local+restrição em
+   2+ estoques trava a Alt.Restrição Local em massa no coletor — precisa ir
+   por Alt.Restrição Estoque (Shift+F6). Laranja da marca, não vermelho, pra
+   não confundir com a célula de restrição errada. */
+.md-badge-aviso{
+  display:inline-block; padding:2px 8px; border-radius:999px;
+  background:var(--orange); color:#fff; font-weight:700; font-size:11px; white-space:nowrap;
+}
+
 /* Checkbox de seleção de classe (matriz de Ajustes) e da tabela de
    Configurações: centralizado, sem herdar o alinhamento numérico da coluna. */
 table.md-piv td.md-piv-check{ text-align:center; }
