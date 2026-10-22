@@ -47,6 +47,7 @@ const MD_RESTRICOES = [
   {cod:'34', sigla:'LT', nome:'Litígio', curto:'Litígio'},
   {cod:'35', sigla:'WV', nome:'Fora do prazo de validade', curto:'Validade'},
   {cod:'40', sigla:'WL', nome:'Estoque físico não localizado', curto:'Não localizado'},
+  {cod:'45', sigla:'WI', nome:'Insumos', curto:'Insumos'},
   {cod:'50', sigla:'WT', nome:'Análise de item', curto:'Análise'},
   {cod:'55', sigla:'WR', nome:'Reparo interno', curto:'Reparo'},
   {cod:'60', sigla:'AT', nome:'Múltiplos incompletos da reversa (componentes)', curto:'Múlt. reversa'},
