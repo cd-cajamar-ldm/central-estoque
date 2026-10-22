@@ -1895,42 +1895,50 @@ function irRenderDivergentesPorDiaPanel(ind){
   if(!rows.length) return '';
   const diaLabel = (dia)=> new Date(dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
   const META = ind.meta;
-  // Altura em px (não %) com piso mínimo: quando a divergência é bem menor que o
-  // total do dia (o normal), uma % pura arredondava pra 0-1px e a barra sumia —
-  // ficava parecendo que o dado tinha sumido, não que era só pequeno.
-  const BAR_MAX_PX = 96, BAR_MIN_PX = 4;
-  const chart = (campoDiv, campoSist, fmt, titulo, variant)=>{
+  // Desenhado em SVG (igual ao mockup aprovado) em vez de divs flex: cada dia
+  // ocupa uma fatia de largura FIXA calculada geometricamente, então a grade
+  // nunca fica torta por causa do tamanho do número. Uma linha vertical entre
+  // cada fatia deixa nítido onde um dia termina e o outro começa.
+  const H = 236, padT = 54, padB = 28, padL = 4, padR = 10;
+  const plotH = H - padT - padB;
+  const chart = (campoDiv, campoSist, fmt, titulo, slot)=>{
+    const n = rows.length;
+    const W = padL + padR + slot*n;
     const maxS = Math.max(1, ...rows.map(r=>r[campoSist]||0));
-    const px = (v)=> v>0 ? Math.max(BAR_MIN_PX, Math.round(v/maxS*BAR_MAX_PX)) : 0;
+    const barW = slot*0.3, gap = slot*0.08;
+    const base = padT + plotH;
+    let svg = '';
+    for(let i=1;i<n;i++){
+      const x = padL + i*slot;
+      svg += `<line x1="${x}" y1="${padT-22}" x2="${x}" y2="${base}" style="stroke:var(--line);stroke-width:1"/>`;
+    }
+    svg += `<line x1="${padL}" y1="${base}" x2="${padL+slot*n}" y2="${base}" style="stroke:var(--line);stroke-width:1"/>`;
+    rows.forEach((r,i)=>{
+      const sist = r[campoSist]||0, div = r[campoDiv]||0;
+      const acc = sist>0 ? 1-div/sist : 1;
+      const cx = padL + i*slot + slot/2;
+      const hS = sist>0 ? Math.max(3, Math.round(sist/maxS*plotH)) : 0;
+      const hD = div>0 ? Math.max(3, Math.round(div/maxS*plotH)) : 0;
+      const xS = cx - barW - gap/2, xD = cx + gap/2;
+      const good = acc>=META;
+      svg += `<rect x="${cx-27}" y="${padT-44}" width="54" height="19" rx="9.5" style="fill:var(${good?'--success-light':'--danger-light'})"/>`;
+      svg += `<text x="${cx}" y="${padT-30}" text-anchor="middle" font-size="11" font-weight="800" style="fill:var(${good?'--success':'--danger'})">${irFmtPct(acc)}</text>`;
+      svg += `<rect x="${xS}" y="${base-hS}" width="${barW}" height="${hS}" rx="3" style="fill:var(--blue)"/>`;
+      svg += `<rect x="${xD}" y="${base-hD}" width="${barW}" height="${hD}" rx="3" style="fill:var(--orange)"/>`;
+      svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:var(--blue)">${fmt(sist)}</text>`;
+      svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:var(--orange)">${fmt(div)}</text>`;
+      svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:var(--ink-soft)">${diaLabel(r.dia)}</text>`;
+    });
     return `<div class="panel">
       <h3>${titulo}</h3>
       <div class="bi-vbars-scroll">
-        <div class="bi-vbars bi-vbars-combo">
-          ${rows.map(r=>{
-            const sist = r[campoSist]||0, div = r[campoDiv]||0;
-            const acc = sist>0 ? 1-div/sist : 1;
-            return `<div class="bi-vbar-col bi-vbar-col-combo combo-${variant}">
-              <div class="bi-acc-balloon ${acc>=META?'good':'bad'}">${irFmtPct(acc)}</div>
-              <div class="bi-vbar-combo">
-                <div class="bi-vbar-mini">
-                  <div class="bi-vbar-val">${fmt(sist)}</div>
-                  <div class="bi-vbar" style="height:${px(sist)}px;"></div>
-                </div>
-                <div class="bi-vbar-mini">
-                  <div class="bi-vbar-val">${fmt(div)}</div>
-                  <div class="bi-vbar orange" style="height:${px(div)}px;"></div>
-                </div>
-              </div>
-              <div class="bi-vbar-label">${diaLabel(r.dia)}</div>
-            </div>`;
-          }).join('')}
-        </div>
+        <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${svg}</svg>
       </div>
     </div>`;
   };
-  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)','int')
-    + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente por Dia (abs.)','money')
-    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia','int');
+  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)',76)
+    + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente por Dia (abs.)',104)
+    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia',76);
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];
