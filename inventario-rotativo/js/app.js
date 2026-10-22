@@ -1900,7 +1900,7 @@ function irRenderDivergentesPorDiaPanel(ind){
     return `<div class="panel">
       <h3>${titulo}</h3>
       <div class="bi-vbars-scroll">
-        <div class="bi-vbars">
+        <div class="bi-vbars bi-vbars-combo">
           ${rows.map(r=>{
             const sist = r[campoSist]||0, div = r[campoDiv]||0;
             const acc = sist>0 ? 1-div/sist : 1;

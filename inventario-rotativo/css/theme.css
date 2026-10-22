@@ -432,10 +432,14 @@ button{ font-family:inherit; cursor:pointer; }
 .bi-vbars-scroll .bi-vbar-col{ flex:1 0 48px; width:auto; min-width:max-content; padding-inline:5px; }
 
 /* Par sistêmica/divergente por dia (mesma escala) + balão de acurácia acima —
-   "X Divergentes por Dia" do Dashboard. */
-.bi-vbar-col-combo{ padding-inline:10px; }
-.bi-vbar-combo{ display:flex; align-items:flex-end; gap:6px; }
-.bi-vbar-mini{ display:flex; flex-direction:column; align-items:center; }
+   "X Divergentes por Dia" do Dashboard. Precisa de mais altura que o .bi-vbars
+   padrão (150px): balão + 2 rótulos de valor + par de barras + dia, tudo
+   empilhado. E cada nível precisa de altura EM PIXELS (não %), senão a altura
+   em % da barra não tem contra o que se calcular e ela desaparece (altura 0). */
+.bi-vbars-combo{ height:196px; }
+.bi-vbar-col-combo{ padding-inline:10px; justify-content:flex-end; }
+.bi-vbar-combo{ display:flex; align-items:flex-end; gap:6px; height:106px; }
+.bi-vbar-mini{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
 .bi-vbar-mini .bi-vbar{ width:18px; max-width:none; }
 .bi-acc-balloon{ font-size:11px; font-weight:800; padding:2px 9px; border-radius:10px; margin-bottom:8px; white-space:nowrap; }
 .bi-acc-balloon.good{ color:var(--success); background:var(--success-light); }
