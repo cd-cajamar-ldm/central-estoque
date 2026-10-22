@@ -1897,8 +1897,9 @@ function irRenderDivergentesPorDiaPanel(ind){
   const META = ind.meta;
   // Desenhado em SVG (igual ao mockup aprovado) em vez de divs flex: cada dia
   // ocupa uma fatia de largura FIXA calculada geometricamente, então a grade
-  // nunca fica torta por causa do tamanho do número. Uma linha vertical entre
-  // cada fatia deixa nítido onde um dia termina e o outro começa.
+  // nunca fica torta por causa do tamanho do número. Um cartão com borda
+  // própria em volta de cada fatia deixa nítido onde um dia termina e o
+  // outro começa.
   const H = 236, padT = 54, padB = 28, padL = 4, padR = 10;
   const plotH = H - padT - padB;
   const chart = (campoDiv, campoSist, fmt, titulo, slot)=>{
@@ -1908,11 +1909,10 @@ function irRenderDivergentesPorDiaPanel(ind){
     const barW = slot*0.3, gap = slot*0.08;
     const base = padT + plotH;
     let svg = '';
-    for(let i=1;i<n;i++){
-      const x = padL + i*slot;
-      svg += `<line x1="${x}" y1="${padT-22}" x2="${x}" y2="${base}" style="stroke:var(--line);stroke-width:1"/>`;
+    for(let i=0;i<n;i++){
+      const x = padL + i*slot + 3;
+      svg += `<rect x="${x}" y="${padT-22}" width="${slot-6}" height="${base-(padT-22)}" rx="8" style="fill:none;stroke:var(--line);stroke-width:1"/>`;
     }
-    svg += `<line x1="${padL}" y1="${base}" x2="${padL+slot*n}" y2="${base}" style="stroke:var(--line);stroke-width:1"/>`;
     rows.forEach((r,i)=>{
       const sist = r[campoSist]||0, div = r[campoDiv]||0;
       const acc = sist>0 ? 1-div/sist : 1;
