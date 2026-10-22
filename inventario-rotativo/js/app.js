@@ -1890,60 +1890,83 @@ function irRenderContadosPorDiaPanel(ind){
    balão acima do par, mesmo critério de meta usado no resto do app.
    Um gráfico por linha (não mais lado a lado): com duas barras por dia em vez
    de uma, o grid de 3 colunas ficava apertado demais pra ler. */
+// Barras sistêmica x divergente lado a lado, por dia, com balão de acurácia
+// acima do par e um cartão com borda própria em volta de cada dia (deixa
+// nítido onde um dia termina e o outro começa). Compartilhado entre o
+// Dashboard (rola, sem truncar os dias) e o boletim por e-mail (imagem
+// estática de largura fixa — sem como rolar, então trunca pros últimos dias
+// que couberem, como os outros gráficos do boletim já faziam).
+function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
+  opts = opts||{};
+  const slot = opts.slot || 76;
+  const meta = opts.meta!=null ? opts.meta : 0.97;
+  const cores = opts.colors || {sist:'var(--blue)', div:'var(--orange)', good:'var(--success)', goodBg:'var(--success-light)', bad:'var(--danger)', badBg:'var(--danger-light)', line:'var(--line)', axis:'var(--ink-soft)'};
+  const diaLabel = (dia)=> new Date(dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const H = 236, padT = 54, padB = 28, padL = 4, padR = 10;
+  const plotH = H - padT - padB;
+  let rowsVisiveis = rows, omitidos = 0;
+  if(opts.fixedW){
+    const maxDias = Math.max(1, Math.floor((opts.fixedW-padL-padR)/slot));
+    rowsVisiveis = rows.length > maxDias ? rows.slice(rows.length-maxDias) : rows;
+    omitidos = rows.length - rowsVisiveis.length;
+  }
+  const n = rowsVisiveis.length;
+  const W = padL + padR + slot*n;
+  const maxS = Math.max(1, ...rowsVisiveis.map(r=>r[campoSist]||0));
+  const barW = slot*0.3, gap = slot*0.08;
+  const base = padT + plotH;
+  let svg = '';
+  for(let i=0;i<n;i++){
+    const x = padL + i*slot + 3;
+    svg += `<rect x="${x}" y="${padT-22}" width="${slot-6}" height="${base-(padT-22)}" rx="8" style="fill:none;stroke:${cores.line};stroke-width:1"/>`;
+  }
+  rowsVisiveis.forEach((r,i)=>{
+    const sist = r[campoSist]||0, div = r[campoDiv]||0;
+    const acc = sist>0 ? 1-div/sist : 1;
+    const cx = padL + i*slot + slot/2;
+    const hS = sist>0 ? Math.max(3, Math.round(sist/maxS*plotH)) : 0;
+    const hD = div>0 ? Math.max(3, Math.round(div/maxS*plotH)) : 0;
+    const xS = cx - barW - gap/2, xD = cx + gap/2;
+    const good = acc>=meta;
+    svg += `<rect x="${cx-27}" y="${padT-44}" width="54" height="19" rx="9.5" style="fill:${good?cores.goodBg:cores.badBg}"/>`;
+    svg += `<text x="${cx}" y="${padT-30}" text-anchor="middle" font-size="11" font-weight="800" style="fill:${good?cores.good:cores.bad}">${irFmtPct(acc)}</text>`;
+    svg += `<rect x="${xS}" y="${base-hS}" width="${barW}" height="${hS}" rx="3" style="fill:${cores.sist}"/>`;
+    svg += `<rect x="${xD}" y="${base-hD}" width="${barW}" height="${hD}" rx="3" style="fill:${cores.div}"/>`;
+    svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${cores.sist}">${fmt(sist)}</text>`;
+    svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${cores.div}">${fmt(div)}</text>`;
+    svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:${cores.axis}">${diaLabel(r.dia)}</text>`;
+  });
+  // preserveAspectRatio="none": o desenho estica pra preencher a largura do
+  // elemento (100%) sem mexer na altura. No Dashboard isso faz o gráfico
+  // ocupar o painel todo quando os dias cabem (min-width é o piso: só rola
+  // quando não cabem mais). No boletim (fixedW) o container já tem largura
+  // fixa e os dias já foram truncados pra caber, então não precisa de piso.
+  const style = opts.fixedW ? `display:block;` : `width:100%;min-width:${W}px;height:${H}px;display:block;`;
+  const svgHtml = `<svg width="${opts.fixedW?'100%':W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="${style}">${svg}</svg>`;
+  return { svgHtml, omitidos, total: rows.length, visiveis: n };
+}
 function irRenderDivergentesPorDiaPanel(ind){
   const rows = ind.divergentesPorDia||[];
   if(!rows.length) return '';
-  const diaLabel = (dia)=> new Date(dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
   const META = ind.meta;
-  // Desenhado em SVG (igual ao mockup aprovado) em vez de divs flex: cada dia
-  // ocupa uma fatia de largura FIXA calculada geometricamente, então a grade
-  // nunca fica torta por causa do tamanho do número. Um cartão com borda
-  // própria em volta de cada fatia deixa nítido onde um dia termina e o
-  // outro começa.
-  const H = 236, padT = 54, padB = 28, padL = 4, padR = 10;
-  const plotH = H - padT - padB;
+  const legenda = `<div class="bi-combo-legend">
+    <span><i style="background:var(--blue)"></i>Sistêmica</span>
+    <span><i style="background:var(--orange)"></i>Divergente</span>
+  </div>`;
   const chart = (campoDiv, campoSist, fmt, titulo, slot)=>{
-    const n = rows.length;
-    const W = padL + padR + slot*n;
-    const maxS = Math.max(1, ...rows.map(r=>r[campoSist]||0));
-    const barW = slot*0.3, gap = slot*0.08;
-    const base = padT + plotH;
-    let svg = '';
-    for(let i=0;i<n;i++){
-      const x = padL + i*slot + 3;
-      svg += `<rect x="${x}" y="${padT-22}" width="${slot-6}" height="${base-(padT-22)}" rx="8" style="fill:none;stroke:var(--line);stroke-width:1"/>`;
-    }
-    rows.forEach((r,i)=>{
-      const sist = r[campoSist]||0, div = r[campoDiv]||0;
-      const acc = sist>0 ? 1-div/sist : 1;
-      const cx = padL + i*slot + slot/2;
-      const hS = sist>0 ? Math.max(3, Math.round(sist/maxS*plotH)) : 0;
-      const hD = div>0 ? Math.max(3, Math.round(div/maxS*plotH)) : 0;
-      const xS = cx - barW - gap/2, xD = cx + gap/2;
-      const good = acc>=META;
-      svg += `<rect x="${cx-27}" y="${padT-44}" width="54" height="19" rx="9.5" style="fill:var(${good?'--success-light':'--danger-light'})"/>`;
-      svg += `<text x="${cx}" y="${padT-30}" text-anchor="middle" font-size="11" font-weight="800" style="fill:var(${good?'--success':'--danger'})">${irFmtPct(acc)}</text>`;
-      svg += `<rect x="${xS}" y="${base-hS}" width="${barW}" height="${hS}" rx="3" style="fill:var(--blue)"/>`;
-      svg += `<rect x="${xD}" y="${base-hD}" width="${barW}" height="${hD}" rx="3" style="fill:var(--orange)"/>`;
-      svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:var(--blue)">${fmt(sist)}</text>`;
-      svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:var(--orange)">${fmt(div)}</text>`;
-      svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:var(--ink-soft)">${diaLabel(r.dia)}</text>`;
-    });
-    // preserveAspectRatio="none" + width:100% (com min-width no tamanho natural):
-    // quando os dias cabem na largura do painel, o gráfico estica pra ocupar
-    // o espaço todo em vez de sobrar vazio à direita; quando não cabem, a
-    // largura natural vira o piso e o excesso rola (preserveAspectRatio:none
-    // só estica o desenho, nunca encolhe as fatias abaixo do piso).
+    const { svgHtml } = irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, {slot, meta:META});
     return `<div class="panel">
       <h3>${titulo}</h3>
-      <div class="bi-vbars-scroll">
-        <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;min-width:${W}px;height:${H}px;display:block;">${svg}</svg>
-      </div>
+      ${legenda}
+      <div class="bi-vbars-scroll">${svgHtml}</div>
     </div>`;
   };
-  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)',76)
+  // Largura por dia IGUAL nos 3 (a mesma do gráfico de valor, que precisa de
+  // mais espaço pro rótulo em R$): senão peças e locais mostravam mais dias
+  // na tela que valor ao mesmo tempo, quebrando o padrão visual entre eles.
+  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)',104)
     + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente por Dia (abs.)',104)
-    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia',76);
+    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia',104);
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];
@@ -2334,18 +2357,35 @@ function irGerarRelatorioEmail(){
       ${irBuildContadosPorDiaSvg(ind.contadosPorDia, IR_META_DIARIA)}
     </div>` : ''}
 
-    ${ind.divergentesPorDia && ind.divergentesPorDia.length ? `${sectionTitle('⚠️','Peças Divergentes por Dia (abs.)','soma da diferença absoluta, por dia de fechamento do local')}
+    ${ind.divergentesPorDia && ind.divergentesPorDia.length ? (()=>{
+      // Mesmo gráfico pareado (sistêmica x divergente) do Dashboard, só que com
+      // cores em hex fixo (não var(--...)) — o boletim vira imagem via
+      // html2canvas, que não resolve variável de CSS de forma confiável — e
+      // largura fixa (800, igual aos outros gráficos do boletim): sem como
+      // rolar numa imagem estática, então trunca pros últimos dias que couberem.
+      const rpComboCores = {good:'#1F8A52', goodBg:'rgba(31,138,82,.10)', bad:'#C0392B', badBg:'rgba(200,56,18,.10)', line:'#E4E7EE', axis:'#6B7280'};
+      const rpComboLegend = (corSist, corDiv)=>`<div style="display:flex;gap:14px;font-size:11px;font-weight:600;color:#6B7280;margin-bottom:8px;">
+        <span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:${corSist};"></i>Sistêmica</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;"><i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:${corDiv};"></i>Divergente</span>
+      </div>`;
+      const rpComboNota = (omitidos, total)=> omitidos>0 ? `<div style="font-size:11px;color:#6B7280;margin-bottom:6px;">Mostrando os últimos ${total-omitidos} de ${total} dias</div>` : '';
+      // Largura por dia igual nos 3 (ver mesmo ajuste no Dashboard).
+      const pecas = irBuildDivergentesComboSvg(ind.divergentesPorDia,'pecas','sistema',irFmtInt,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, sist:'#001A72', div:'#FA4616'}});
+      const valor = irBuildDivergentesComboSvg(ind.divergentesPorDia,'valor','sistemaValor',irFmtMoneyCompact,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, sist:'#001A72', div:'#FA4616'}});
+      const locais = irBuildDivergentesComboSvg(ind.divergentesPorDia,'locais','locaisTotal',irFmtInt,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, sist:'#001A72', div:'#FA4616'}});
+      return `${sectionTitle('⚠️','Peças Divergentes por Dia (abs.)','soma da diferença absoluta, por dia de fechamento do local')}
     <div class="rp-panel rp-panel-pad">
-      ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#FA4616', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'pecas', fmt:irFmtInt})}
+      ${rpComboNota(pecas.omitidos, pecas.total)}${rpComboLegend('#001A72','#FA4616')}${pecas.svgHtml}
     </div>
     ${sectionTitle('💰','Valor Divergente por Dia (abs.)','soma do valor divergente absoluto (QRY0843), por dia de fechamento do local')}
     <div class="rp-panel rp-panel-pad">
-      ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#1D1F2A', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'valor', fmt:irFmtMoneyCompact})}
+      ${rpComboNota(valor.omitidos, valor.total)}${rpComboLegend('#001A72','#FA4616')}${valor.svgHtml}
     </div>
     ${sectionTitle('📍','Locais Divergentes por Dia','locais fechados com pelo menos 1 item divergente, por dia')}
     <div class="rp-panel rp-panel-pad">
-      ${irBuildContadosPorDiaSvg(ind.divergentesPorDia, null, {colors:{bar:'#001A72', grid:'#E4E7EE', axis:'#6B7280', label:'#1D1F2A'}, campo:'locais', fmt:irFmtInt})}
-    </div>` : ''}
+      ${rpComboNota(locais.omitidos, locais.total)}${rpComboLegend('#001A72','#FA4616')}${locais.svgHtml}
+    </div>`;
+    })() : ''}
 
     ${sectionTitle('🛣️','10 Ruas mais divergentes','por peças divergentes (abs.)')}
     <div class="rp-panel"><table class="rp-table">
