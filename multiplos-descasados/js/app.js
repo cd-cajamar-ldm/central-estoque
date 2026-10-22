@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v2';
+const MD_APP_VERSION = 'v3';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -632,6 +632,14 @@ function mdPlanoCorrecaoRestricao(){
       if(!destino) continue;
       const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
       const preco = s.valorUnitario || 0;
+      // Mesmo item+local+restrição em mais de um lote (duas "entradas de
+      // estoque" separadas, mesma linha podendo até repetir a quantidade) trava
+      // a 10.MOVI Alt.Restrição Local (altera tudo do local de uma vez, sem
+      // conseguir escolher qual estoque) com erro — tem que ir por
+      // Alt.Restrição Estoque (Shift+F6), igual já é feito pra 86. Não vale pra
+      // linha que SAI de 86: essa já é sempre por quantidade específica, nunca
+      // em massa por local, então o erro nunca aparece ali.
+      const quebrado = loc.lotes > 1 && loc.restricao !== MD_SIGLA_BLOQUEIO;
       for(const ref of refs){
         // Quantidade romaneada (QTDE_ROM) já está separada pra um pedido —
         // abate do que dá pra corrigir, igual ao plano de pareamento.
@@ -644,7 +652,7 @@ function mdPlanoCorrecaoRestricao(){
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
           componente: s.item, nome: s.nome, pai: (paisPorComponente.get(s.item) || []).join('/'),
-          ean: s.ean, quantidade,
+          ean: s.ean, quantidade, quebrado,
           preco, valor: quantidade * preco,
           totalComponente: s[campo]
         });
@@ -880,13 +888,14 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
   // diferentes — não é campo que se cola no coletor, por isso fica no fim,
   // fora da sequência Local/EAN/Orig/Dest/Qtde que é exatamente a ordem dos
   // campos na tela.
-  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Item pai'];
-  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço e Item pai
+  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Obs','Item pai'];
+  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço, Obs e Item pai
 
   function construirAba(linhas){
     const dados = linhas.map(l=>[
       Number(l.localColetor) || 0, Number(l.ean) || 0, Number(l.codDe) || 0,
-      Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '', String(l.pai || '')
+      Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '',
+      l.quebrado ? 'Alt.Restrição Estoque (Shift+F6) — 2 estoques' : '', String(l.pai || '')
     ]);
     const ws = XLSX.utils.aoa_to_sheet([cab, ...dados]);
     cab.forEach((_, c)=>{
@@ -907,17 +916,21 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
         if(colNumerica.has(c)) cel.z = '0';
       }
     });
-    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28},{wch:12}];
+    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28},{wch:34},{wch:12}];
     return ws;
   }
 
-  // Item com menos saldo total é o que corre mais risco de cancelamento se
-  // for romaneado sem ter peça pra atender o pedido — sai primeiro na
-  // planilha pra ser resolvido antes. Critério por item (WN+86+outras), não
-  // pela quantidade da própria linha: duas linhas do mesmo item comprado
-  // ficam juntas, ordenadas pelo item, não espalhadas pela tabela.
+  // Linha marcada `quebrado` trava a Alt.Restrição Local em massa — fica por
+  // último na aba pra fazer as em massa primeiro, sem interrupção, e deixar
+  // só as de Alt.Restrição Estoque (Shift+F6) pro final. Dentro de cada grupo,
+  // item com menos saldo total é o que corre mais risco de cancelamento se for
+  // romaneado sem ter peça pra atender o pedido — sai primeiro, pra ser
+  // resolvido antes. Critério por item (WN+86+outras), não pela quantidade da
+  // própria linha: duas linhas do mesmo item comprado ficam juntas, ordenadas
+  // pelo item, não espalhadas pela tabela.
   const comLinhas = blocos
-    .map(b=>({...b, linhas: b.linhas.slice().sort((a,c)=>(a.totalComponente ?? 0) - (c.totalComponente ?? 0))}))
+    .map(b=>({...b, linhas: b.linhas.slice().sort((a,c)=>
+      (a.quebrado?1:0) - (c.quebrado?1:0) || (a.totalComponente ?? 0) - (c.totalComponente ?? 0))}))
     .filter(b=>b.linhas.length);
   if(!comLinhas.length){ irShowToast('Não há ajuste para exportar.'); return; }
   const wb = XLSX.utils.book_new();
@@ -947,7 +960,10 @@ function mdRenderAuditoria(){
     l.componente.toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo) ||
     (l.local||'').toLowerCase().includes(termo) || (l.clal||'').toLowerCase().includes(termo) ||
     (l.x1||'').toLowerCase().includes(termo));
-  plano.sort((a,b)=>b.valor - a.valor);
+  // Quebrado (2+ estoques no mesmo item+local+restrição) trava a Alt.Restrição
+  // Local em massa — fica por último, igual na planilha exportada, pra fazer
+  // as em massa primeiro e deixar só as de Shift+F6 pro final.
+  plano.sort((a,b)=>(a.quebrado?1:0) - (b.quebrado?1:0) || b.valor - a.valor);
 
   const resumo = mdResumoCorrecao();
 
@@ -961,6 +977,7 @@ function mdRenderAuditoria(){
     <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
     <td>${irFmtInt(l.quantidade)}</td>
     <td class="num-money">${irFmtMoney(l.valor)}</td>
+    <td class="md-left">${l.quebrado ? '<span class="md-badge-aviso" title="2+ estoques no mesmo item/local/restrição — não dá pra fazer em massa, use Alt.Restrição Estoque (Shift+F6)">Shift+F6 (2 estoques)</span>' : ''}</td>
   </tr>`).join('');
 
   return `<div class="panel">
@@ -983,7 +1000,7 @@ function mdRenderAuditoria(){
         <thead><tr>
           <th class="md-left">Item</th><th class="md-left">Descrição</th><th class="md-left">Local</th>
           <th class="md-left">Classe</th><th class="md-left">X1</th>
-          <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th>
+          <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th><th class="md-left">Obs</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
