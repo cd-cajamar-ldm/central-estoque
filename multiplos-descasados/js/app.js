@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v8';
+const MD_APP_VERSION = 'v9';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -52,14 +52,16 @@ const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
    duas matrizes separadas. Chave de config própria por dimensão pra não
    perder a regra de classe (CLAL) já salva quando X1/X2 foram adicionados
    depois. */
+/* Ordem das tabelas em Configurações e Ajustes de Restrição — X1 primeiro
+   (endereço físico, mais usado no dia a dia), Classe depois. */
 const MD_DIMENSOES = [
-  {chave:'clal', titulo:'Classe', valor:o=>o.clal || '—'},
   // Só o PREFIXO do X1: na extração real o campo X1 já vem como "BLC 001",
   // "BLM 011" etc. (não é X1="BLC" + X2="001" separados) — usar o campo
   // inteiro continuava dando uma linha por sub-endereço. A primeira palavra
   // é o bloco de verdade (BLC, BLM, BIN...), que é o nível que importa pra
   // essa régua.
-  {chave:'x1', titulo:'X1', valor:o=>(o.x1 || '').trim().split(/\s+/)[0] || '—'}
+  {chave:'x1', titulo:'X1', valor:o=>(o.x1 || '').trim().split(/\s+/)[0] || '—'},
+  {chave:'clal', titulo:'Classe', valor:o=>o.clal || '—'}
 ];
 const MD_DIM_POR_CHAVE = {};
 MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
