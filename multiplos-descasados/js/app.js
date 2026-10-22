@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v5';
+const MD_APP_VERSION = 'v6';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -24,7 +24,12 @@ const MD = {
   buscaAuditoria:'',
   pivotExpandido:new Set(),
   tela:'descasados',
-  regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
+  regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas] — valendo de verdade (salvo)
+  // Rascunho da tela de Configurações: o que está marcado na hora só entra em
+  // MD.regras (e passa a valer no pareamento/Ajustes/Auditoria) quando a
+  // pessoa clica em "Salvar Configuração" — clique errado no meio de uma
+  // conferência não pode mudar o resultado sozinho.
+  regrasRascunho:{clal:{}, x1:{}},
   selecionadas:{clal:null, x1:null}, // dimensão -> null (todas) | Set() (só as marcadas)
   restricoesSel:null,             // null = todas as colunas | Set() = só estas siglas
   restricoesAberto:false,         // lista de restrições aberta ou recolhida
@@ -1211,15 +1216,15 @@ function mdValoresConhecidos(chave){
   for(const v in (MD.regras[chave]||{})) set.add(v);
   return Array.from(set).sort();
 }
+/* Só mexe no RASCUNHO (MD.regrasRascunho) — não salva, não invalida cache, não
+   afeta pareamento nem Ajustes/Auditoria. Só "Salvar Configuração" (abaixo)
+   promove o rascunho pra valer de verdade; clicar errado no meio de uma
+   conferência não muda resultado nenhum sozinho. */
 function mdSetRegra(chave, valor, sigla, permitido){
-  if(!MD.regras[chave]) MD.regras[chave] = {};
-  const atual = new Set(MD.regras[chave][valor] || []);
+  if(!MD.regrasRascunho[chave]) MD.regrasRascunho[chave] = {};
+  const atual = new Set(MD.regrasRascunho[chave][valor] || []);
   if(permitido) atual.add(sigla); else atual.delete(sigla);
-  MD.regras[chave][valor] = Array.from(atual);
-  mdSetConfig(MD_CONFIG_KEY_POR_DIM[chave], MD.regras[chave]);
-  // O pareamento de Descasados agora também depende da regra (ver mdPais) —
-  // sem isso a tela ficava com o cálculo antigo até trocar de base ou aba.
-  mdInvalidarCache();
+  MD.regrasRascunho[chave][valor] = Array.from(atual);
   irRenderView();
   // irRenderView troca o innerHTML da tabela inteira e derruba o foco — sem
   // devolver pro mesmo checkbox, marcar várias casas em sequência com teclado
@@ -1251,6 +1256,24 @@ function mdConfigNav(e, el){
   const cb = alvoTd && alvoTd.querySelector('input[type="checkbox"]');
   if(cb) cb.focus();
 }
+function mdRascunhoAlterado(){
+  return JSON.stringify(MD.regrasRascunho) !== JSON.stringify(MD.regras);
+}
+function mdSalvarConfiguracao(){
+  MD.regras = { clal: {...MD.regrasRascunho.clal}, x1: {...MD.regrasRascunho.x1} };
+  mdSetConfig(MD_CONFIG_KEY_POR_DIM.clal, MD.regras.clal);
+  mdSetConfig(MD_CONFIG_KEY_POR_DIM.x1, MD.regras.x1);
+  // Só agora o pareamento de Descasados e Ajustes/Auditoria de Restrição
+  // passam a enxergar a mudança (ver mdPais/mdPlanoCorrecaoRestricao).
+  mdInvalidarCache();
+  irRenderView();
+  irShowToast('Configuração salva.');
+}
+function mdDescartarRascunho(){
+  MD.regrasRascunho = { clal: {...MD.regras.clal}, x1: {...MD.regras.x1} };
+  irRenderView();
+  irShowToast('Alterações descartadas.');
+}
 /* 0 (WN) e 86 (AI) são as duas restrições que todo mundo mexe o tempo
    inteiro — ficam lado a lado, igual já é no pivô (MD_ORDEM_RESTRICOES),
    em vez do 86 isolado lá no fim da tabela depois de mais 13 colunas. */
@@ -1263,7 +1286,7 @@ function mdRenderConfiguracoes(){
       `<th title="${irEsc(r.sigla+' — '+r.nome)}">${mdRotuloColunaHtml(r.sigla)}</th>`
     ).join('');
     const linhas = valores.map(v=>{
-      const regra = MD.regras[dim.chave][v] || [];
+      const regra = MD.regrasRascunho[dim.chave][v] || [];
       const cels = MD_RESTRICOES_CONFIG.map(r=>{
         const marcado = regra.includes(r.sigla);
         return `<td><input type="checkbox" ${marcado?'checked':''} data-chave="${irEsc(dim.chave)}" data-valor="${irEsc(v)}" data-sigla="${r.sigla}" onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)" onkeydown="mdConfigNav(event, this)"></td>`;
@@ -1284,10 +1307,55 @@ function mdRenderConfiguracoes(){
   if(!secoes){
     return irEmptyState('Sem valores ainda', 'Importe a QRY0390 para ver as classes de local (CLAL, X1, X2) dos componentes de múltiplo.', "irSwitchTab('importacao')", 'Ir para a importação');
   }
-  return `<p class="field-hint" style="margin-bottom:14px;">
-    Marque, por classe/X1/X2, quais restrições podem existir ali. O que estiver fora disso aparece em vermelho
-    nas matrizes da aba Ajustes de Restrição. Sem marcação nenhuma, não é validado.
-  </p>${secoes}`;
+  const alterado = mdRascunhoAlterado();
+  return `<div class="panel md-head" style="position:sticky; top:0; z-index:5; margin-bottom:14px;">
+    <div>
+      <strong>${alterado ? 'Há marcações não salvas' : 'Nada pendente de salvar'}</strong>
+      <p class="field-hint" style="margin:4px 0 0;">
+        Marcar/desmarcar aqui não muda nada ainda — só depois de clicar em "Salvar Configuração"
+        o pareamento de múltiplos e os Ajustes/Auditoria de Restrição passam a usar a regra nova.
+      </p>
+    </div>
+    <div class="md-chips">
+      ${alterado ? `<button class="btn-link" onclick="mdDescartarRascunho()">Descartar alterações</button>` : ''}
+      <button class="btn btn-primary" onclick="mdSalvarConfiguracao()" ${alterado ? '' : 'disabled'}>Salvar Configuração</button>
+      <button class="chip" onclick="mdExportarConfiguracao()">Exportar configuração</button>
+      <button class="chip" onclick="document.getElementById('mdImportarConfigInput').click()">Importar configuração</button>
+      <input type="file" id="mdImportarConfigInput" accept=".json" style="display:none" onchange="mdImportarConfiguracao(this.files[0]); this.value='';">
+    </div>
+  </div>${secoes}`;
+}
+/* Configuração é só local (IndexedDB do navegador) — troca de pessoa, de
+   navegador, ou cache limpo (ver conversa sobre apagar cache) perde tudo e
+   obriga a remarcar do zero. Exportar/importar um arquivinho com as regras
+   resolve isso sem precisar construir nada no servidor (não tem servidor). */
+function mdExportarConfiguracao(){
+  const payload = JSON.stringify({ versao: 1, clal: MD.regras.clal, x1: MD.regras.x1 }, null, 2);
+  const blob = new Blob([payload], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'configuracao-restricao-multiplos-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  irShowToast('Configuração exportada.');
+}
+function mdImportarConfiguracao(file){
+  if(!file) return;
+  file.text().then(texto=>{
+    let dados;
+    try{ dados = JSON.parse(texto); }
+    catch(e){ irShowToast('Arquivo inválido: não é um JSON de configuração.', true); return; }
+    if(!dados || typeof dados !== 'object' || (!dados.clal && !dados.x1)){
+      irShowToast('Arquivo inválido: não tem regras de classe nem de X1.', true);
+      return;
+    }
+    // Cai no rascunho, igual uma marcação manual — só "Salvar Configuração"
+    // promove pra valer de verdade (ver mdSetRegra/mdSalvarConfiguracao).
+    MD.regrasRascunho = { clal: dados.clal || {}, x1: dados.x1 || {} };
+    irRenderView();
+    irShowToast('Configuração importada — clique em "Salvar Configuração" pra valer.');
+  }).catch(()=>irShowToast('Erro ao ler o arquivo.', true));
 }
 
 /* ============================================================
@@ -1346,6 +1414,7 @@ async function mdRecarregar(){
     clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || {},
     x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {}
   };
+  MD.regrasRascunho = { clal: {...MD.regras.clal}, x1: {...MD.regras.x1} };
   mdInvalidarCache();
 }
 async function irInit(){
