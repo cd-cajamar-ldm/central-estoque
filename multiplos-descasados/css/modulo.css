@@ -13,6 +13,16 @@
 .md-busca:focus{ outline:none; border-color:var(--orange); }
 .md-chips{ display:flex; gap:6px; flex-wrap:wrap; }
 
+/* Linha de filtro por coluna (Auditoria de Restrição): um input embaixo de
+   cada título — a coluna já diz o que é, sem precisar de rótulo dentro da
+   célula. Fundo neutro (não laranja) pra não competir com o cabeçalho. */
+table.md-piv tr.md-filtro-linha td{ background:var(--surface); padding:4px 6px; }
+.md-col-filtro{
+  width:100%; background:var(--paper); border:1px solid var(--line); border-radius:6px;
+  padding:4px 7px; font-size:11.5px; color:var(--ink); box-sizing:border-box;
+}
+.md-col-filtro:focus{ outline:none; border-color:var(--orange); }
+
 .md-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
 
 .md-left{ text-align:left !important; }
