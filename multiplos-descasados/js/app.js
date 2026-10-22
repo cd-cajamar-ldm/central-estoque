@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v3';
+const MD_APP_VERSION = 'v4';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -1118,6 +1118,36 @@ function mdEstadoBase(id){
   return m ? irFmtInt(m.pais)+' pais com preço · '+irFmtDate(m.importadoEm) : 'nunca importada';
 }
 
+/* Restrição no estoque real que não está na legenda (MD_RESTRICOES) — sem
+   isso ela fica muda (sem nome, sem entrar nas regras de Configurações) e
+   ninguém percebe. Varre TODO saldo (já é o CD inteiro, não só componente de
+   múltiplo) em vez de confiar só na legenda cadastrada à mão. */
+function mdRestricoesDesconhecidas(){
+  const conhecidas = new Set(MD_RESTRICOES.map(r=>r.sigla));
+  const porSigla = new Map();
+  for(const s of (MD.saldos||[])){
+    for(const loc of (s.locais||[])){
+      if(!loc.restricao || conhecidas.has(loc.restricao)) continue;
+      const atual = porSigla.get(loc.restricao) || {sigla: loc.restricao, enderecos: 0, qtde: 0};
+      atual.enderecos++;
+      atual.qtde += loc.qtde || 0;
+      porSigla.set(loc.restricao, atual);
+    }
+  }
+  return Array.from(porSigla.values()).sort((a,b)=>b.qtde - a.qtde);
+}
+function mdAvisoRestricoesDesconhecidas(){
+  const desconhecidas = mdRestricoesDesconhecidas();
+  if(!desconhecidas.length) return '';
+  const itens = desconhecidas.map(d=>
+    `<strong>${irEsc(d.sigla)}</strong> (${irFmtInt(d.enderecos)} endereço${d.enderecos===1?'':'s'}, ${irFmtInt(d.qtde)} peças)`
+  ).join(', ');
+  return `<div class="panel md-aviso">
+    Restrição não cadastrada na legenda: ${itens}. Sem cadastrar, ela fica sem nome
+    e não entra nas regras de Configurações. Avise o código e o significado pra eu adicionar.
+  </div>`;
+}
+
 function mdRenderImportacao(){
   const temEstrutura = !!(MD.estrutura && MD.estrutura.length);
   const cartao = b=>{
@@ -1155,7 +1185,8 @@ function mdRenderImportacao(){
       e o preço do conjunto está no item pai, que não tem estoque próprio.
     </p>
     <div class="av-grid">${MD_BASES.map(cartao).join('')}</div>
-  </div>`;
+  </div>
+  ${mdAvisoRestricoesDesconhecidas()}`;
 }
 
 /* ============================================================
