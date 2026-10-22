@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 29;
+const IR_INDICADORES_VERSION = 30;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1522,19 +1522,27 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // aqui olha SÓ pros locais que fecharam com pelo menos 1 item divergente. Alimenta
   // o painel do Dashboard "Peças/Valor/Locais Divergentes por Dia" (mesmo layout do
   // gráfico de Produtividade, sem linha de meta) e o boletim.
-  const diaDivMap = new Map(); // dia -> {pecas, valorAbs, locaisSet}
+  // sistema/sistemaValor/locaisTotal somam TODO item (divergente ou não) do dia —
+  // é a base (denominador) que dá a acurácia do dia nos gráficos "X Divergentes
+  // por Dia". Mesmo recorte de locais que já alimentava pecas/valor/locais (sem
+  // isso os dois lados da conta vinham de bases diferentes).
+  const diaDivMap = new Map(); // dia -> {pecas, valorAbs, locaisSet, sistema, sistemaValor, locaisTotalSet}
   for(const d of divergencias){
-    if(d.diferenca===0) continue;
     const final = diaFinalPorLocal.get(d.local);
     if(!final) continue;
-    if(!diaDivMap.has(final.dia)) diaDivMap.set(final.dia, {pecas:0, valorAbs:0, locaisSet:new Set()});
+    if(!diaDivMap.has(final.dia)) diaDivMap.set(final.dia, {pecas:0, valorAbs:0, locaisSet:new Set(), sistema:0, sistemaValor:0, locaisTotalSet:new Set()});
     const g = diaDivMap.get(final.dia);
+    g.sistema += (d.qtdeSistema||0);
+    g.sistemaValor += valorSistema(d);
+    g.locaisTotalSet.add(d.local);
+    if(d.diferenca===0) continue;
     g.pecas += Math.abs(d.diferenca);
     g.valorAbs += Math.abs(d.vlDivergencia);
     g.locaisSet.add(d.local);
   }
   const divergentesPorDia = Array.from(diaDivMap.entries())
-    .map(([dia,g])=>({dia, pecas:g.pecas, valor:g.valorAbs, locais:g.locaisSet.size}))
+    .map(([dia,g])=>({dia, pecas:g.pecas, valor:g.valorAbs, locais:g.locaisSet.size,
+      sistema:g.sistema, sistemaValor:g.sistemaValor, locaisTotal:g.locaisTotalSet.size}))
     .sort((a,b)=>a.dia.localeCompare(b.dia));
 
   // Consolidado por MÊS (YYYY-MM) — alimenta o painel "Evolução mensal" do Dashboard.

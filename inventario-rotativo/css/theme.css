@@ -431,6 +431,16 @@ button{ font-family:inherit; cursor:pointer; }
    recuo lateral garante um respiro entre rótulos de colunas seguidas. */
 .bi-vbars-scroll .bi-vbar-col{ flex:1 0 48px; width:auto; min-width:max-content; padding-inline:5px; }
 
+/* Par sistêmica/divergente por dia (mesma escala) + balão de acurácia acima —
+   "X Divergentes por Dia" do Dashboard. */
+.bi-vbar-col-combo{ padding-inline:10px; }
+.bi-vbar-combo{ display:flex; align-items:flex-end; gap:6px; }
+.bi-vbar-mini{ display:flex; flex-direction:column; align-items:center; }
+.bi-vbar-mini .bi-vbar{ width:18px; max-width:none; }
+.bi-acc-balloon{ font-size:11px; font-weight:800; padding:2px 9px; border-radius:10px; margin-bottom:8px; white-space:nowrap; }
+.bi-acc-balloon.good{ color:var(--success); background:var(--success-light); }
+.bi-acc-balloon.bad{ color:var(--danger); background:var(--danger-light); }
+
 /* Status do Inventário (rosca + estatísticas) */
 .status-donut-row{ display:flex; align-items:center; gap:28px; flex-wrap:wrap; }
 .status-donut-stats{ display:flex; flex-direction:column; gap:14px; flex:1; min-width:160px; }

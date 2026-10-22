@@ -957,13 +957,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <div class="kpi-block-body">${tilesHtml}</div>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 29; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 30; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v229';
+const IR_APP_VERSION = 'v230';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1094,8 +1094,6 @@ function irRenderDashboard(){
       ${irRenderStatusInventarioPanel(ind)}
     </div>
     ${irRenderCiclosCards()}
-    ${irBurndownCiclo(IR.cicloAtivo, ind)}
-    ${irRenderPorLogPanel(ind)}
     ${irRenderContadosPorDiaPanel(ind)}
     ${irRenderDivergentesPorDiaPanel(ind)}
     ${irRenderLogTablePanel(ind)}
@@ -1403,52 +1401,6 @@ function irCalcLogTotal(rows){
     pecasContadas, pecasSaldoLogico, pecasDivergentes, vlFisicoTotal, vlSaldoLogico, valorDivergenteAbsoluto,
     locaisContados, locaisDivergentes, locaisOrcados: sum('locaisOrcados')
   };
-}
-function irRenderPorLogPanel(ind){
-  const rows = irFiltrarLogsValidos(ind.porLog);
-  if(!rows.length) return `<div class="panel"><h3>Acurácias e NET por Log</h3><p class="field-hint">Nenhum log com locais contados ainda.</p></div>`;
-  const rowsComTotal = [...rows, irCalcLogTotal(rows)];
-  IR._porLogMap = new Map(rowsComTotal.map(r=>[r.chave, r]));
-  const META = IR_META_ACURACIA;
-  /* Um cartão por log: anel com a acurácia de peças (a manchete) e duas barras
-     finas para posições e valores. A marca da meta aparece no anel e nas barras,
-     sempre na mesma posição, então não precisa de legenda pra ler. */
-  const anel = (v) => {
-    const R = 52, C = 2*Math.PI*R, off = C*(1-(v||0)), bad = (v||0) < META;
-    return `<div class="lg-ring">
-      <svg viewBox="0 0 120 120" width="120" height="120">
-        <g transform="rotate(-90 60 60)">
-          <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="9"/>
-          <circle cx="60" cy="60" r="${R}" fill="none" stroke="${bad?'var(--danger)':'var(--orange)'}" stroke-width="9"
-            stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/>
-          <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--ink-soft)" stroke-width="13"
-            stroke-dasharray="1.6 ${(C-1.6).toFixed(1)}" stroke-dashoffset="${(-C*META).toFixed(1)}" opacity=".7"/>
-        </g>
-      </svg>
-      <div class="lg-ring-val"><span class="lg-num ${bad?'neg':'good'}">${irFmtPct(v)}</span><span class="lg-cap">Peças</span></div>
-    </div>`;
-  };
-  const barra = (rot, v, cor) => {
-    const bad = (v||0) < META;
-    return `<div class="lg-mini"><span class="lg-mini-lbl">${irEsc(rot)}</span>
-      <span class="lg-mini-tr"><i style="width:${((v||0)*100).toFixed(1)}%;background:${cor}"></i><span class="lg-mini-mk" style="left:${(META*100).toFixed(1)}%"></span></span>
-      <span class="lg-mini-pc ${bad?'neg':'good'}">${irFmtPct(v)}</span></div>`;
-  };
-  const cards = rowsComTotal.map(r=>{
-    const alerta = !r.isTotal && (r.acuraciaPecas||0) < META;
-    return `<div class="lg-card${r.isTotal?' total':''}${alerta?' alerta':''}"
-      onmouseenter="irShowLogTooltip(event,'${irEsc(r.chave)}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
-      <div class="lg-head"><h4>${r.isTotal?'TOTAL':irEsc(r.chave)}</h4>${alerta?'<span class="lg-tag">atenção</span>':''}</div>
-      ${anel(r.acuraciaPecas)}
-      ${barra('Posições', r.acuraciaPosicoes, 'var(--blue)')}
-      ${barra('Valores', r.acuraciaValor, 'var(--ink)')}
-    </div>`;
-  }).join('');
-  return `<div class="panel">
-    <div class="ofe-head"><h3>Acurácias por Log</h3>
-      <span class="field-hint">Meta ${irFmtPct(META)} · o traço cinza no anel e nas barras marca a meta</span></div>
-    <div class="lg-grid">${cards}</div>
-  </div>`;
 }
 /* Gráfico de barras (Acurácias por Log) pro boletim — SVG estático com o
    rótulo da % acima de cada barra, cores fixas (vira imagem). */
@@ -1907,23 +1859,6 @@ function irRenderPioresRuas(ind){
     </div>`).join('')}
   </div>`;
 }
-function irShowLogTooltip(ev, chave){
-  const r = (IR._porLogMap||new Map()).get(chave);
-  const tt = document.getElementById('irChartTooltip');
-  if(!tt || !r) return;
-  tt.innerHTML = `<div class="ct-title">${irEsc(chave)}</div>
-    <table>
-      <tbody>
-        <tr><td>Peças</td><td class="mono">${irFmtPct(r.acuraciaPecas)}</td></tr>
-        <tr><td>Posições</td><td class="mono">${irFmtPct(r.acuraciaPosicoes)}</td></tr>
-        <tr><td>Valores</td><td class="mono">${irFmtPct(r.acuraciaValor)}</td></tr>
-        <tr><td>Locais contados</td><td class="mono">${irFmtInt(r.locaisContados)} de ${irFmtInt(r.locaisOrcados)}</td></tr>
-        <tr><td>NET</td><td class="mono">${irFmtMoney(r.valorDivergenteLiquido)}</td></tr>
-      </tbody>
-    </table>`;
-  tt.classList.remove('hidden');
-  irMoveDiaTooltip(ev);
-}
 function irRenderContadosPorDiaPanel(ind){
   const rows = ind.contadosPorDia||[];
   if(!rows.length) return `<div class="panel"><h3>Contados por Dia</h3><p class="field-hint">Nenhuma contagem registrada ainda.</p></div>`;
@@ -1949,30 +1884,48 @@ function irRenderContadosPorDiaPanel(ind){
 // Dia" (barras por dia da Data Fim/Situação da rodada final do local), mas sem a
 // linha de meta, já que aqui não existe uma meta diária de divergência. Ajuda a
 // responder "quando o NET desviou" com números concretos, não só o total do mês.
+/* Cada dia mostra o par sistêmica (base) × divergente, na MESMA escala — a
+   divergência aparece pequena perto da base, de propósito, porque é assim que
+   ela é de verdade. A acurácia do dia (1 − divergente ÷ sistêmica) vira um
+   balão acima do par, mesmo critério de meta usado no resto do app.
+   Um gráfico por linha (não mais lado a lado): com duas barras por dia em vez
+   de uma, o grid de 3 colunas ficava apertado demais pra ler. */
 function irRenderDivergentesPorDiaPanel(ind){
   const rows = ind.divergentesPorDia||[];
   if(!rows.length) return '';
   const diaLabel = (dia)=> new Date(dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-  const chart = (campo, cor, fmt, titulo)=>{
-    const max = Math.max(1, ...rows.map(r=>r[campo]));
+  const META = ind.meta;
+  const chart = (campoDiv, campoSist, fmt, titulo)=>{
+    const maxS = Math.max(1, ...rows.map(r=>r[campoSist]||0));
     return `<div class="panel">
       <h3>${titulo}</h3>
       <div class="bi-vbars-scroll">
         <div class="bi-vbars">
-          ${rows.map(r=>`<div class="bi-vbar-col">
-            <div class="bi-vbar-val">${fmt(r[campo])}</div>
-            <div class="bi-vbar ${cor}" style="height:${Math.round(r[campo]/max*100)}%;"></div>
-            <div class="bi-vbar-label">${diaLabel(r.dia)}</div>
-          </div>`).join('')}
+          ${rows.map(r=>{
+            const sist = r[campoSist]||0, div = r[campoDiv]||0;
+            const acc = sist>0 ? 1-div/sist : 1;
+            return `<div class="bi-vbar-col bi-vbar-col-combo">
+              <div class="bi-acc-balloon ${acc>=META?'good':'bad'}">${irFmtPct(acc)}</div>
+              <div class="bi-vbar-combo">
+                <div class="bi-vbar-mini">
+                  <div class="bi-vbar-val">${fmt(sist)}</div>
+                  <div class="bi-vbar" style="height:${Math.round(sist/maxS*100)}%;"></div>
+                </div>
+                <div class="bi-vbar-mini">
+                  <div class="bi-vbar-val">${fmt(div)}</div>
+                  <div class="bi-vbar orange" style="height:${Math.round(div/maxS*100)}%;"></div>
+                </div>
+              </div>
+              <div class="bi-vbar-label">${diaLabel(r.dia)}</div>
+            </div>`;
+          }).join('')}
         </div>
       </div>
     </div>`;
   };
-  return `<div class="bi-grid-3">
-    ${chart('pecas','orange',irFmtInt,'Peças Divergentes por Dia (abs.)')}
-    ${chart('valor','ink',irFmtMoney,'Valor Divergente por Dia (abs.)')}
-    ${chart('locais','blue',irFmtInt,'Locais Divergentes por Dia')}
-  </div>`;
+  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)')
+    + chart('valor','sistemaValor',irFmtMoney,'Valor Divergente por Dia (abs.)')
+    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia');
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];
@@ -6710,121 +6663,8 @@ function irExportarLocaisPendentesCsv(rua){
    COMPARATIVO ENTRE CICLOS
    ============================================================ */
 /* ============================================================
-   CARTÕES DOS CICLOS + BURNDOWN (aba Comparativo)
+   CARTÕES DOS CICLOS (aba Comparativo)
    ============================================================ */
-/* Dias úteis do ciclo, um a um — o irDiasUteisEntre() de rules.js só devolve a
-   CONTAGEM, e o burndown precisa de cada dia pra marcar o eixo. Mesma régua:
-   sem sábado, sem domingo e sem feriado de Cajamar. */
-function irDiasUteisDoCiclo(dataAbertura, dataTermino){
-  if(!dataAbertura || !dataTermino) return [];
-  const cache = new Map();
-  const [a1,a2,a3] = dataAbertura.slice(0,10).split('-').map(Number);
-  const [t1,t2,t3] = dataTermino.slice(0,10).split('-').map(Number);
-  const cur = new Date(a1, a2-1, a3), fim = new Date(t1, t2-1, t3);
-  const dias = [];
-  // Teto de segurança: data de término digitada errada (ano 2206) travaria a tela.
-  while(cur<=fim && dias.length < 400){
-    const ds = cur.getDay();
-    if(ds!==0 && ds!==6 && !irEhFeriadoCajamar(cur, cache)){
-      dias.push(cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0'));
-    }
-    cur.setDate(cur.getDate()+1);
-  }
-  return dias;
-}
-/* Burndown do ciclo do filtro: quanto falta contar, dia a dia.
-
-   A linha de referência é reta — total de locais dividido pelos dias úteis do
-   ciclo, que é a meta diária. A linha cheia é o real: locais congelados menos o
-   acumulado de locais contados até aquele dia. Contagem feita em sábado, domingo
-   ou feriado não some: ela entra no primeiro dia útil seguinte, senão o real
-   "pularia" degraus que o eixo não tem. */
-function irBurndownCiclo(ciclo, ind){
-  if(!ciclo || !ind) return '';
-  const total = ind.locaisCongelados || 0;
-  /* O ciclo é trimestral: o eixo é o trimestre inteiro, não a primeira/última
-     data de contagem do arquivo (que encurtava o ciclo em curso e inflava a
-     meta diária). Mesma regra do período no cartão (irPeriodoTrimestre). */
-  const per = irPeriodoTrimestre(ciclo) || {inicio: ciclo.dataAbertura, fim: ciclo.dataPrevistaTermino};
-  const dias = irDiasUteisDoCiclo(per.inicio, per.fim);
-  if(!total || dias.length<2) return '';
-  const porDia = new Map();
-  for(const d of (ind.contadosPorDia||[])) porDia.set(d.dia, (porDia.get(d.dia)||0) + (d.total||0));
-  // Cada contagem vai pro primeiro dia útil >= o dia dela (quem contou no sábado
-  // aparece na segunda). O que for anterior à abertura entra no primeiro dia.
-  const contadoNoDia = dias.map(()=>0);
-  for(const [dia, qtd] of porDia){
-    let i = dias.findIndex(d=>d>=dia);
-    if(i<0) i = dias.length-1;
-    contadoNoDia[i] += qtd;
-  }
-  const hoje = new Date().toISOString().slice(0,10);
-  const metaDia = total/(dias.length-1 || 1);
-  /* Largura por dia, não fixa: com 65 dias úteis num SVG de 760 os números do eixo
-     viram um borrão. O .mes-chart rola na horizontal quando não cabe.
-     padB maior: embaixo dos dias ainda entra a faixa do mês. */
-  const W = Math.max(760, 86 + dias.length*26), H=300, padL=56, padR=24, padT=30, padB=58;
-  const plotW = W-padL-padR, plotH = H-padT-padB;
-  const x = i => padL + (plotW*i)/(dias.length-1);
-  const y = v => padT + plotH - (plotH*Math.max(0, Math.min(total, v)))/total;
-  let acum = 0, real = [], ideal = [];
-  dias.forEach((dia,i)=>{
-    acum += contadoNoDia[i];
-    ideal.push([x(i), y(total - metaDia*i)]);
-    // Só desenha o real até hoje: linha caindo até zero no futuro é promessa, não dado.
-    /* Restante nunca é negativo: a 843 pode fechar mais visitas do que a base
-       congelada tem locais (local revisitado em inventário novo), e sem o piso o
-       rótulo mostrava "-7.693 locais restantes". */
-    if(dia <= hoje) real.push([x(i), y(total - acum), dia, Math.max(0, total - acum)]);
-  });
-  const path = pts => pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-  /* Eixo X: TODO dia útil do ciclo, só o número do dia. De que mês ele é, quem diz
-     é a faixa logo abaixo — repetir "01/07" em cada marca gastava o dobro do espaço
-     pra dizer a mesma coisa. */
-  const baseY = padT + plotH;
-  const eixoX = dias.map((dia,i)=>
-    `<text x="${x(i).toFixed(1)}" y="${(baseY+15).toFixed(1)}" text-anchor="middle" class="bd-dia">${irEsc(dia.slice(8,10))}</text>`).join('');
-  /* Faixa de mês: uma caixa por mês, cobrindo os dias daquele mês, com a divisa
-     subindo até o gráfico. É o que dá a noção de "passou um mês e falta tanto". */
-  const meio = dias.length>1 ? (x(1)-x(0))/2 : 10;
-  let faixaMes = '', ini = 0;
-  for(let i=1; i<=dias.length; i++){
-    if(i===dias.length || dias[i].slice(0,7)!==dias[ini].slice(0,7)){
-      const x1 = x(ini) - (ini>0 ? meio : 8);
-      const x2 = x(i-1) + (i<dias.length ? meio : 8);
-      const nomeMes = IR_MES_ABREV[parseInt(dias[ini].slice(5,7),10)-1] || '';
-      faixaMes += `<rect x="${x1.toFixed(1)}" y="${(baseY+22).toFixed(1)}" width="${(x2-x1).toFixed(1)}" height="18" rx="4" class="bd-mes-box"/>`
-               +  `<text x="${((x1+x2)/2).toFixed(1)}" y="${(baseY+34.5).toFixed(1)}" text-anchor="middle" class="bd-mes-lbl">${irEsc(nomeMes.toUpperCase())}</text>`;
-      if(i<dias.length) faixaMes += `<line x1="${x2.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${padT}" y2="${(baseY+22).toFixed(1)}" class="bd-mes-sep"/>`;
-      ini = i;
-    }
-  }
-  const eixoY = [0,0.25,0.5,0.75,1].map(f=>{
-    const v = total*f, yy = y(v);
-    return `<line x1="${padL}" x2="${W-padR}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" class="mes-grid"/>`
-         + `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" text-anchor="end" class="mes-mon">${irEsc(irFmtInt(v))}</text>`;
-  }).join('');
-  const pontos = real.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" class="bd-pt"><title>${irEsc(irFmtDate(p[2])+'\n'+irFmtInt(p[3])+' locais restantes')}</title></circle>`).join('');
-  /* Rótulo de dados: o restante escrito em cima do ponto. Em todos os dias vira um
-     borrão, então sai de N em N — e o último dia entra sempre, que é o número que
-     interessa ("falta tanto"). */
-  const passoRot = Math.max(1, Math.ceil(real.length/10));
-  const rotulos = real.map((p,i)=> (i%passoRot===0 || i===real.length-1)
-    ? `<text x="${p[0].toFixed(1)}" y="${(p[1]-9).toFixed(1)}" text-anchor="middle" class="bd-rot">${irEsc(irFmtInt(p[3]))}</text>` : '').join('');
-  return `<div class="panel">
-    <div class="ofe-head"><h3>Burndown</h3></div>
-    <div class="bd-legenda">
-      <span class="mes-lg"><span class="mes-sw bd-sw-ideal"></span>Referência ${irFmtInt(Math.round(metaDia))}/dia · ${dias.length} dias úteis · ${irEsc(irFmtDate(dias[0]))} a ${irEsc(irFmtDate(dias[dias.length-1]))}</span>
-      <span class="mes-lg"><span class="mes-sw bd-sw-real"></span>Restante</span>
-    </div>
-    <div class="mes-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Burndown do ciclo">
-      ${eixoY}
-      <path d="${path(ideal)}" class="bd-ideal"/>
-      ${real.length>1 ? `<path d="${path(real)}" class="bd-real"/>` : ''}
-      ${pontos}${rotulos}${eixoX}${faixaMes}
-    </svg></div>
-  </div>`;
-}
 /* Um cartão por ciclo do ano em curso. O ano vem do ciclo selecionado no topo —
    trocar o filtro troca o conjunto de cartões. */
 function irRenderCiclosCards(){
