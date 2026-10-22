@@ -14,14 +14,15 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v10';
+const MD_APP_VERSION = 'v11';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
-  buscaAuditoria:'',
+  // Filtro por coluna da Auditoria de Restrição — chave => texto digitado.
+  filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:''},
   pivotExpandido:new Set(),
   tela:'descasados',
   regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas] — valendo de verdade (salvo)
@@ -983,11 +984,15 @@ function mdRenderAuditoria(){
     return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 para auditar a restrição de todos os itens.', "irSwitchTab('importacao')", 'Ir para a importação');
   }
   let plano = mdPlanoCorrecaoRestricao();
-  const termo = (MD.buscaAuditoria || '').trim().toLowerCase();
-  if(termo) plano = plano.filter(l =>
-    l.componente.toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo) ||
-    (l.local||'').toLowerCase().includes(termo) || (l.clal||'').toLowerCase().includes(termo) ||
-    (l.x1||'').toLowerCase().includes(termo));
+  // Um filtro por coluna (Item/Descrição/Local/Classe/X1), todos precisam bater
+  // ao mesmo tempo — é assim que se estreita rápido numa tabela de milhares de
+  // linhas: filtra a classe, depois refina pelo X1, sem perder o que já achou.
+  const filtros = MD.filtrosAuditoria;
+  for(const campo in filtros){
+    const termo = (filtros[campo] || '').trim().toLowerCase();
+    if(!termo) continue;
+    plano = plano.filter(l => (l[campo] || '').toLowerCase().includes(termo));
+  }
   // Quebrado (2+ estoques no mesmo item+local+restrição) trava a Alt.Restrição
   // Local em massa — fica por último, igual na planilha exportada, pra fazer
   // as em massa primeiro e deixar só as de Shift+F6 pro final.
@@ -1018,29 +1023,44 @@ function mdRenderAuditoria(){
     </p>
     ${mdKpisCorrecao(resumo)}
     ${mdAvisoSemRegra()}
-    <div class="md-filtros">
-      <input id="mdBuscaAuditoria" class="md-busca" type="search" placeholder="Buscar item, local, classe ou X1..."
-             value="${irEsc(MD.buscaAuditoria)}" oninput="mdBuscarAuditoria(this.value)">
-    </div>
-    ${!plano.length ? '<p class="field-hint">Nenhuma restrição fora da regra encontrada.</p>' : `
+    ${!plano.length && !mdFiltroAuditoriaAtivo() ? '<p class="field-hint">Nenhuma restrição fora da regra encontrada.</p>' : `
     <div class="md-piv-wrap">
       <table class="md-piv">
-        <thead><tr>
-          <th class="md-left">Item</th><th class="md-left">Descrição</th><th class="md-left">Local</th>
-          <th class="md-left">Classe</th><th class="md-left">X1</th>
-          <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th><th class="md-left">Obs</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th class="md-left">Item</th><th class="md-left">Descrição</th><th class="md-left">Local</th>
+            <th class="md-left">Classe</th><th class="md-left">X1</th>
+            <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th><th class="md-left">Obs</th>
+          </tr>
+          <tr class="md-filtro-linha">
+            ${mdFiltroColunaHtml('componente')}${mdFiltroColunaHtml('nome')}${mdFiltroColunaHtml('local')}
+            ${mdFiltroColunaHtml('clal')}${mdFiltroColunaHtml('x1')}
+            <td></td><td></td><td></td><td></td><td></td>
+          </tr>
+        </thead>
         <tbody>${linhas}</tbody>
       </table>
     </div>
+    ${!plano.length ? '<p class="field-hint" style="margin-top:8px;">Nenhuma linha bate com os filtros.</p>' : ''}
     ${plano.length > MD_LIMITE_AUDITORIA ? `<p class="field-hint" style="margin-top:8px;">Mostrando as ${irFmtInt(MD_LIMITE_AUDITORIA)} maiores por valor, de ${irFmtInt(plano.length)} linhas. Baixe o relatório pra ver tudo.</p>` : ''}
     `}
   </div>`;
 }
-function mdBuscarAuditoria(v){
-  MD.buscaAuditoria = v;
-  clearTimeout(window.__mdBuscaAuditoriaTimer);
-  window.__mdBuscaAuditoriaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBuscaAuditoria')?.focus(); }, 220);
+function mdFiltroAuditoriaAtivo(){
+  return Object.values(MD.filtrosAuditoria).some(v=>(v||'').trim());
+}
+/* Input de filtro embaixo do título da coluna, sem rótulo dentro da célula —
+   a coluna já diz o que é, o campo só precisa existir ali pra filtrar. */
+function mdFiltroColunaHtml(campo){
+  return `<td><input type="text" class="md-col-filtro" data-campo="${campo}" value="${irEsc(MD.filtrosAuditoria[campo])}" oninput="mdFiltrarAuditoria('${campo}', this.value)"></td>`;
+}
+function mdFiltrarAuditoria(campo, v){
+  MD.filtrosAuditoria[campo] = v;
+  clearTimeout(window.__mdFiltroAuditoriaTimer);
+  window.__mdFiltroAuditoriaTimer = setTimeout(()=>{
+    irRenderView();
+    document.querySelector(`.md-col-filtro[data-campo="${campo}"]`)?.focus();
+  }, 220);
 }
 function mdExportarAuditoria(){
   const plano = mdPlanoCorrecaoRestricao();
