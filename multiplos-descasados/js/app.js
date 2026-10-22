@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v11';
+const MD_APP_VERSION = 'v12';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -22,7 +22,9 @@ const MD = {
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
   // Filtro por coluna da Auditoria de Restrição — chave => texto digitado.
-  filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:''},
+  filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:'', x2:''},
+  // Filtro por coluna das tabelas de Configurações: dimensão => texto digitado.
+  filtrosConfiguracoes:{clal:'', x1:''},
   pivotExpandido:new Set(),
   tela:'descasados',
   regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas] — valendo de verdade (salvo)
@@ -1006,6 +1008,7 @@ function mdRenderAuditoria(){
     <td class="md-left mono">${irEsc(l.local)}</td>
     <td class="md-left mono">${irEsc(l.clal)}</td>
     <td class="md-left mono">${irEsc(l.x1)}</td>
+    <td class="md-left mono">${irEsc(l.x2)}</td>
     <td class="md-cel-erro">${irEsc(mdCodRestricao(l.de)+' '+l.de)}</td>
     <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
     <td>${irFmtInt(l.quantidade)}</td>
@@ -1029,12 +1032,12 @@ function mdRenderAuditoria(){
         <thead>
           <tr>
             <th class="md-left">Item</th><th class="md-left">Descrição</th><th class="md-left">Local</th>
-            <th class="md-left">Classe</th><th class="md-left">X1</th>
+            <th class="md-left">Classe</th><th class="md-left">X1</th><th class="md-left">X2</th>
             <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th><th class="md-left">Obs</th>
           </tr>
           <tr class="md-filtro-linha">
             ${mdFiltroColunaHtml('componente')}${mdFiltroColunaHtml('nome')}${mdFiltroColunaHtml('local')}
-            ${mdFiltroColunaHtml('clal')}${mdFiltroColunaHtml('x1')}
+            ${mdFiltroColunaHtml('clal')}${mdFiltroColunaHtml('x1')}${mdFiltroColunaHtml('x2')}
             <td></td><td></td><td></td><td></td><td></td>
           </tr>
         </thead>
@@ -1315,12 +1318,17 @@ function mdDescartarRascunho(){
 const MD_RESTRICOES_CONFIG = MD_ORDEM_RESTRICOES.map(sigla=>MD_RESTRICOES.find(r=>r.sigla===sigla));
 function mdRenderConfiguracoes(){
   const secoes = MD_DIMENSOES.map(dim=>{
-    const valores = mdValoresConhecidos(dim.chave);
+    const termoDim = (MD.filtrosConfiguracoes[dim.chave] || '').trim().toLowerCase();
+    let valores = mdValoresConhecidos(dim.chave);
     if(!valores.length) return '';
+    if(termoDim) valores = valores.filter(v=>v.toLowerCase().includes(termoDim));
     const headerCols = MD_RESTRICOES_CONFIG.map(r=>
       `<th title="${irEsc(r.sigla+' — '+r.nome)}">${mdRotuloColunaHtml(r.sigla)}</th>`
     ).join('');
-    const linhas = valores.map(v=>{
+    const filtroCols = MD_RESTRICOES_CONFIG.map(()=>'<td></td>').join('');
+    const linhas = !valores.length
+      ? `<tr><td class="md-left field-hint" colspan="${MD_RESTRICOES_CONFIG.length+1}">Nenhum valor bate com o filtro.</td></tr>`
+      : valores.map(v=>{
       const regra = MD.regrasRascunho[dim.chave][v] || [];
       const cels = MD_RESTRICOES_CONFIG.map(r=>{
         const marcado = regra.includes(r.sigla);
@@ -1332,7 +1340,13 @@ function mdRenderConfiguracoes(){
       <div class="md-head"><h3>Restrições permitidas por ${irEsc(dim.titulo)}</h3></div>
       <div class="md-piv-wrap">
         <table class="md-piv md-config-table">
-          <thead><tr><th class="md-left">${irEsc(dim.titulo)}</th>${headerCols}</tr></thead>
+          <thead>
+            <tr><th class="md-left">${irEsc(dim.titulo)}</th>${headerCols}</tr>
+            <tr class="md-filtro-linha">
+              <td><input type="text" class="md-col-filtro" data-chave-filtro="${dim.chave}" value="${irEsc(MD.filtrosConfiguracoes[dim.chave])}" oninput="mdFiltrarConfiguracao('${dim.chave}', this.value)"></td>
+              ${filtroCols}
+            </tr>
+          </thead>
           <tbody>${linhas}</tbody>
         </table>
       </div>
@@ -1345,6 +1359,14 @@ function mdRenderConfiguracoes(){
   return `<div style="position:sticky; top:0; z-index:5; margin-bottom:14px; text-align:right;">
     <button class="btn btn-primary" onclick="mdSalvarConfiguracao()">Salvar Configuração</button>
   </div>${secoes}`;
+}
+function mdFiltrarConfiguracao(chave, v){
+  MD.filtrosConfiguracoes[chave] = v;
+  clearTimeout(window.__mdFiltroConfigTimer);
+  window.__mdFiltroConfigTimer = setTimeout(()=>{
+    irRenderView();
+    document.querySelector(`.md-col-filtro[data-chave-filtro="${chave}"]`)?.focus();
+  }, 220);
 }
 /* Configuração é só local (IndexedDB do navegador) — troca de pessoa, de
    navegador, ou cache limpo (ver conversa sobre apagar cache) perde tudo e
