@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v6';
+const MD_APP_VERSION = 'v7';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -1410,9 +1410,13 @@ async function mdRecarregar(){
   MD.estruturaMeta = await mdGetEstruturaMeta();
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
+  // Sem NADA salvo neste navegador (primeira vez, ou depois de limpar o
+  // cache/IndexedDB), cai no padrão de fábrica (MD_REGRAS_PADRAO, rules.js) em
+  // vez de começar zerado — uma vez que a pessoa salve algo aqui, o salvo
+  // manda, mesmo que divirja do padrão depois.
   MD.regras = {
-    clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || {},
-    x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {}
+    clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || MD_REGRAS_PADRAO.clal,
+    x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || MD_REGRAS_PADRAO.x1
   };
   MD.regrasRascunho = { clal: {...MD.regras.clal}, x1: {...MD.regras.x1} };
   mdInvalidarCache();
