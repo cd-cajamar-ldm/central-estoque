@@ -1895,8 +1895,13 @@ function irRenderDivergentesPorDiaPanel(ind){
   if(!rows.length) return '';
   const diaLabel = (dia)=> new Date(dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
   const META = ind.meta;
-  const chart = (campoDiv, campoSist, fmt, titulo)=>{
+  // Altura em px (não %) com piso mínimo: quando a divergência é bem menor que o
+  // total do dia (o normal), uma % pura arredondava pra 0-1px e a barra sumia —
+  // ficava parecendo que o dado tinha sumido, não que era só pequeno.
+  const BAR_MAX_PX = 96, BAR_MIN_PX = 4;
+  const chart = (campoDiv, campoSist, fmt, titulo, variant)=>{
     const maxS = Math.max(1, ...rows.map(r=>r[campoSist]||0));
+    const px = (v)=> v>0 ? Math.max(BAR_MIN_PX, Math.round(v/maxS*BAR_MAX_PX)) : 0;
     return `<div class="panel">
       <h3>${titulo}</h3>
       <div class="bi-vbars-scroll">
@@ -1904,16 +1909,16 @@ function irRenderDivergentesPorDiaPanel(ind){
           ${rows.map(r=>{
             const sist = r[campoSist]||0, div = r[campoDiv]||0;
             const acc = sist>0 ? 1-div/sist : 1;
-            return `<div class="bi-vbar-col bi-vbar-col-combo">
+            return `<div class="bi-vbar-col bi-vbar-col-combo combo-${variant}">
               <div class="bi-acc-balloon ${acc>=META?'good':'bad'}">${irFmtPct(acc)}</div>
               <div class="bi-vbar-combo">
                 <div class="bi-vbar-mini">
                   <div class="bi-vbar-val">${fmt(sist)}</div>
-                  <div class="bi-vbar" style="height:${Math.round(sist/maxS*100)}%;"></div>
+                  <div class="bi-vbar" style="height:${px(sist)}px;"></div>
                 </div>
                 <div class="bi-vbar-mini">
                   <div class="bi-vbar-val">${fmt(div)}</div>
-                  <div class="bi-vbar orange" style="height:${Math.round(div/maxS*100)}%;"></div>
+                  <div class="bi-vbar orange" style="height:${px(div)}px;"></div>
                 </div>
               </div>
               <div class="bi-vbar-label">${diaLabel(r.dia)}</div>
@@ -1923,9 +1928,9 @@ function irRenderDivergentesPorDiaPanel(ind){
       </div>
     </div>`;
   };
-  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)')
-    + chart('valor','sistemaValor',irFmtMoney,'Valor Divergente por Dia (abs.)')
-    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia');
+  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)','int')
+    + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente por Dia (abs.)','money')
+    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia','int');
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];

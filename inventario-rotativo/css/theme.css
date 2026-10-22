@@ -420,6 +420,13 @@ button{ font-family:inherit; cursor:pointer; }
    junto com as barras, em vez de ficar "grudada" na largura visível só (o que
    fazia a linha parecer que "parava" no meio dos dias ao rolar). */
 .bi-vbars-scroll{ overflow-x:auto; overflow-y:hidden; padding-bottom:6px; }
+/* Scrollbar nativa (cinza, grossa, com setas) destoava do resto do dash — uma
+   trilha fina e discreta combina mais com o visual dos cards. */
+.bi-vbars-scroll::-webkit-scrollbar{ height:6px; }
+.bi-vbars-scroll::-webkit-scrollbar-track{ background:transparent; }
+.bi-vbars-scroll::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
+.bi-vbars-scroll::-webkit-scrollbar-thumb:hover{ background:var(--ink-soft); }
+.bi-vbars-scroll{ scrollbar-width:thin; }
 .bi-vbars-scroll > .bi-vbars{ width:max-content; min-width:100%; }
 /* flex-grow:1 com flex-shrink:0 e base de 48px: quando os dias cabem numa tela só,
    as colunas esticam pra ocupar o espaço todo (sem sobrar vazio); quando não cabem,
@@ -441,9 +448,16 @@ button{ font-family:inherit; cursor:pointer; }
 .bi-vbar-combo{ display:flex; align-items:flex-end; gap:6px; height:106px; }
 .bi-vbar-mini{ display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
 .bi-vbar-mini .bi-vbar{ width:18px; max-width:none; }
+.bi-vbar-col-combo .bi-vbar-val{ font-size:11.5px; }
 .bi-acc-balloon{ font-size:11px; font-weight:800; padding:2px 9px; border-radius:10px; margin-bottom:8px; white-space:nowrap; }
 .bi-acc-balloon.good{ color:var(--success); background:var(--success-light); }
 .bi-acc-balloon.bad{ color:var(--danger); background:var(--danger-light); }
+/* Antes a coluna seguia min-width:max-content e ficava com uma largura por
+   dia (dependendo do tamanho do número) — grade toda desalinhada/torta. Com
+   largura fixa por tipo de gráfico, todas as colunas do mesmo painel ficam
+   do mesmo tamanho, como num dashboard de verdade. */
+.bi-vbars-scroll .bi-vbar-col-combo.combo-int{ width:60px; min-width:60px; max-width:60px; flex:0 0 60px; }
+.bi-vbars-scroll .bi-vbar-col-combo.combo-money{ width:72px; min-width:72px; max-width:72px; flex:0 0 72px; }
 
 /* Status do Inventário (rosca + estatísticas) */
 .status-donut-row{ display:flex; align-items:center; gap:28px; flex-wrap:wrap; }
