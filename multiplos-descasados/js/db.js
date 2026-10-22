@@ -2,14 +2,14 @@
    Múltiplos Descasados — Camada IndexedDB
    100% client-side. Nenhum servidor, nenhuma API.
    ============================================================
-   Banco PRÓPRIO (não é o do Inventário). O Inventário guarda a 390 inteira,
-   endereço por endereço, porque precisa dela pro ciclo; aqui só interessam os
-   itens que a ZBIQ0051 declara como componente de múltiplo — cerca de mil de
-   trinta e poucos mil. Guardar o resto seria carregar o navegador com dado que
-   este módulo nunca lê.
+   Banco PRÓPRIO (não é o do Inventário). O Inventário guarda a 390 inteira
+   pro ciclo dele; aqui guarda a 390 inteira também — Ajustes de Restrição e
+   Auditoria de Restrição precisam de toda peça do CD, não só componente de
+   múltiplo (só o pareamento de múltiplos usa a ZBIQ0051 pra filtrar, em
+   tempo de cálculo, não na hora de guardar).
    ============================================================ */
 const MD_DB_NAME = 'multiplos_descasados_v1';
-const MD_DB_VERSION = 3;
+const MD_DB_VERSION = 4;
 
 const MD_STORES = {
   // Estrutura do múltiplo (ZBIQ0051): uma linha por COMPONENTE, apontando pro
@@ -17,17 +17,12 @@ const MD_STORES = {
   // pai — é assim que a extração vem, e é o que permite descobrir o pai a partir
   // do item que apareceu no estoque.
   estrutura: 'estrutura',
-  // Saldo do componente (QRY0390), já agregado por ITEM, com a lista de
-  // endereços junto. Só dos itens que estão na estrutura.
+  // Saldo de TODO item com estoque na QRY0390 (componente de múltiplo ou não),
+  // já agregado por ITEM, com a lista de endereços junto.
   saldo: 'saldo',
   // Preço de custo por item (SIGEQ278), opcional — usado quando a 390 vem com
   // VALOR_UNITARIO zerado, que é o caso dos múltiplos hoje.
   preco: 'preco',
-  // Saldo de TODO item com estoque na QRY0390, componente de múltiplo ou não —
-  // agregado por item+local+restrição (sem lote, sem detalhe de refs). Existe só
-  // pra Auditoria de Restrição enxergar item fora de múltiplo com restrição
-  // errada, que o store `saldo` (filtrado pela estrutura) nunca vê.
-  auditoria: 'auditoria',
   config: 'config'
 };
 
@@ -72,11 +67,13 @@ function mdOpenDBNaVersao(versao){
       if(!db.objectStoreNames.contains(MD_STORES.preco)){
         db.createObjectStore(MD_STORES.preco, {keyPath:'item'});
       }
-      if(!db.objectStoreNames.contains(MD_STORES.auditoria)){
-        db.createObjectStore(MD_STORES.auditoria, {keyPath:'chave'});
-      }
       if(!db.objectStoreNames.contains(MD_STORES.config)){
         db.createObjectStore(MD_STORES.config, {keyPath:'key'});
+      }
+      // v4: Auditoria de Restrição virou uma visão do próprio `saldo` (que agora
+      // guarda todo item, não só componente) — o store separado ficou órfão.
+      if(e.oldVersion >= 3 && e.oldVersion < 4 && db.objectStoreNames.contains('auditoria')){
+        db.deleteObjectStore('auditoria');
       }
     };
     req.onsuccess = ()=>resolve(req.result);
@@ -133,7 +130,7 @@ async function mdSalvarEstrutura(linhas, meta){
 async function mdGetEstrutura(){ return mdGetAll(MD_STORES.estrutura); }
 async function mdGetEstruturaMeta(){ return mdGetConfig('estrutura-meta'); }
 
-/* ---------- Saldo dos componentes (QRY0390) ---------- */
+/* ---------- Saldo de todo item do CD (QRY0390) ---------- */
 async function mdSalvarSaldo(linhas, meta){
   await mdSubstituirTudo(MD_STORES.saldo, linhas);
   await mdSetConfig('saldo-meta', meta);
@@ -148,14 +145,6 @@ async function mdSalvarPrecos(linhas, meta){
 }
 async function mdGetPrecos(){ return mdGetAll(MD_STORES.preco); }
 async function mdGetPrecoMeta(){ return mdGetConfig('preco-meta'); }
-
-/* ---------- Auditoria de restrição (QRY0390 inteira, não só a estrutura) ---------- */
-async function mdSalvarAuditoria(linhas, meta){
-  await mdSubstituirTudo(MD_STORES.auditoria, linhas);
-  await mdSetConfig('auditoria-meta', meta);
-}
-async function mdGetAuditoria(){ return mdGetAll(MD_STORES.auditoria); }
-async function mdGetAuditoriaMeta(){ return mdGetConfig('auditoria-meta'); }
 
 /* ---------- Config chave/valor ---------- */
 async function mdSetConfig(key, valor){

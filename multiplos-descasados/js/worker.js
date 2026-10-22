@@ -141,11 +141,14 @@ async function runPipeline051({buf051}){
   post('done051', {componentes: linhas.length, pais: pais.size, duplicatas, semPai, compartilhados});
 }
 
-/* ---------- QRY0390 — SALDO DOS COMPONENTES ----------
-   Guarda só os itens que a estrutura conhece, com os endereços junto: é o que a
-   tela precisa pra dizer ONDE está a peça descasada. O ITEM_PAI da 390 é
-   ignorado de propósito — hoje ele repete o próprio item em toda linha, e
-   confiar nele levaria a um módulo vazio sem nenhum aviso. */
+/* ---------- QRY0390 — SALDO DE TODO ITEM DO CD ----------
+   Guarda TODO item com saldo, componente de múltiplo ou não: Ajustes de
+   Restrição e Auditoria de Restrição precisam de qualquer peça do CD, não só
+   do que está na ZBIQ0051 — a estrutura só importa pra quem faz o pareamento
+   de múltiplos (mdPais em app.js), que busca o componente por código e ignora
+   o resto sozinho. O ITEM_PAI da 390 é ignorado de propósito — hoje ele repete
+   o próprio item em toda linha, e confiar nele levaria a um módulo vazio sem
+   nenhum aviso. */
 async function runPipeline390({buf390}){
   post('progress', {stage:'Conferindo a estrutura salva...', pct:3});
   const estrutura = await mdGetEstrutura();
@@ -161,13 +164,9 @@ async function runPipeline390({buf390}){
   const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_390);
   validateColumns(r, ['item','local','quantidade'], 'QRY0390');
 
-  post('progress', {stage:'Cruzando com os componentes...', pct:35});
+  post('progress', {stage:'Agregando por item...', pct:35});
   const porItem = new Map();
-  // Auditoria: agrega TODO item com saldo na 390 (múltiplo ou não), por
-  // item+local+restrição, sem lote/refs — só o suficiente pra apontar endereço e
-  // quantidade errada na aba Auditoria de Restrição. O `porItem` acima continua
-  // só com componente de múltiplo (é o que o resto do módulo usa pra parear).
-  const porAuditoria = new Map();
+  const componentesComSaldo = new Set();
   let atualizadoEm = '', linhasUsadas = 0;
   for(const row of rows){
     const item = mdNormItemKey(getVal(row, r.item));
@@ -178,29 +177,9 @@ async function runPipeline390({buf390}){
     const qtde = parseNumber(getVal(row, r.quantidade));
     const disp = r.qtdeDisp ? parseNumber(getVal(row, r.qtdeDisp)) : qtde;
     const rom = r.qtdeRom ? parseNumber(getVal(row, r.qtdeRom)) : 0;
-    const chaveAud = item + '|' + local + '|' + restricao;
-    let aud = porAuditoria.get(chaveAud);
-    if(!aud){
-      aud = {
-        chave: chaveAud, item, local, restricao,
-        nome: String(getVal(row, r.descricao) ?? '').trim(),
-        ean: String(getVal(row, r.ean) ?? '').trim(),
-        valorUnitario: parseNumber(getVal(row, r.valorUnitario)),
-        desc: String(getVal(row, r.descLocal) ?? '').trim(),
-        predio: String(getVal(row, r.predio) ?? '').trim(),
-        x1: String(getVal(row, r.x1) ?? '').trim(),
-        x2: String(getVal(row, r.x2) ?? '').trim(),
-        clal: String(getVal(row, r.classeLocal) ?? '').trim(),
-        qtde: 0, qtdeDisp: 0, qtdeRom: 0
-      };
-      porAuditoria.set(chaveAud, aud);
-    }
-    aud.qtde += qtde;
-    aud.qtdeDisp += disp;
-    aud.qtdeRom += rom;
 
-    if(!componentes.has(item)) continue;
     linhasUsadas++;
+    if(componentes.has(item)) componentesComSaldo.add(item);
     if(!atualizadoEm){
       const at = getVal(row, r.atualizadoEm);
       if(at) atualizadoEm = (at instanceof Date) ? at.toISOString() : String(at);
@@ -279,22 +258,17 @@ async function runPipeline390({buf390}){
     delete it.porLocal;
   }
 
-  post('progress', {stage:'Gravando saldos...', pct:75});
+  post('progress', {stage:'Gravando saldos...', pct:85});
   const linhas = Array.from(porItem.values());
-  const semSaldo = componentes.size - linhas.length;
+  // "Sem saldo" conta só componente de múltiplo (é o único universo conhecido
+  // de antemão, pela ZBIQ0051) — não existe "total de itens esperados" pra
+  // comparar quando o saldo cobre o CD inteiro.
+  const semSaldo = componentes.size - componentesComSaldo.size;
   await mdSalvarSaldo(linhas, {
     importadoEm: new Date().toISOString(),
     atualizadoEm,
     linhas: rows.length, linhasUsadas,
     itens: linhas.length, componentesEstrutura: componentes.size, semSaldo
-  });
-
-  post('progress', {stage:'Gravando auditoria de restrição...', pct:90});
-  const linhasAuditoria = Array.from(porAuditoria.values());
-  await mdSalvarAuditoria(linhasAuditoria, {
-    importadoEm: new Date().toISOString(),
-    atualizadoEm,
-    linhas: rows.length, enderecos: linhasAuditoria.length
   });
   post('done390', {itens: linhas.length, linhas: rows.length, linhasUsadas, semSaldo});
 }
