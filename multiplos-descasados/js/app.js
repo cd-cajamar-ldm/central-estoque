@@ -16,8 +16,8 @@
    ============================================================ */
 const MD_APP_VERSION = 'v2';
 const MD = {
-  estrutura:null, saldos:null, precos:null, auditoria:null,
-  estruturaMeta:null, saldoMeta:null, precoMeta:null, auditoriaMeta:null,
+  estrutura:null, saldos:null, precos:null,
+  estruturaMeta:null, saldoMeta:null, precoMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
@@ -643,7 +643,7 @@ function mdPlanoCorrecaoRestricao(){
           localColetor: mdLocalColetor(loc.local),
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
-          componente: s.item, pai: (paisPorComponente.get(s.item) || []).join('/'),
+          componente: s.item, nome: s.nome, pai: (paisPorComponente.get(s.item) || []).join('/'),
           ean: s.ean, quantidade,
           preco, valor: quantidade * preco,
           totalComponente: s[campo]
@@ -932,60 +932,27 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
 /* ============================================================
    TELA — AUDITORIA DE RESTRIÇÃO
    ============================================================
-   Mesma régua de Configurações (classe/X1), mas aplicada a TODO item com
-   saldo na QRY0390 — não só componente de múltiplo. Existe porque um item
-   fora de múltiplo com restrição errada nunca aparece em Ajustes de
-   Restrição, que só enxerga o que a estrutura (ZBIQ0051) conhece. */
-function mdTemDadosAuditoria(){ return !!(MD.auditoria && MD.auditoria.length); }
-
-function mdPlanoAuditoria(){
-  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
-  const out = [];
-  for(const row of (MD.auditoria||[])){
-    const regra = mdRegraViolada(row);
-    if(!regra) continue;
-    // Mesmo critério de mdPlanoCorrecaoRestricao: 86 nunca é destino aqui, e
-    // mais de uma restrição permitida sem WN não dá pra escolher sem chute.
-    const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
-      : (regra.length===1 && regra[0] !== MD_SIGLA_BLOQUEIO ? regra[0] : null);
-    if(!destino) continue;
-    const quantidade = Math.max(0, (row[campo] || 0) - (row.qtdeRom || 0));
-    if(!quantidade) continue;
-    out.push({
-      de: row.restricao, para: destino,
-      codDe: mdCodRestricao(row.restricao), codPara: mdCodRestricao(destino),
-      localColetor: mdLocalColetor(row.local),
-      local: row.local, endereco: row.desc, predio: row.predio,
-      clal: row.clal, x1: row.x1, x2: row.x2,
-      item: row.item, nome: row.nome, ean: row.ean, quantidade,
-      preco: row.valorUnitario || 0, valor: quantidade * (row.valorUnitario || 0),
-      totalComponente: row.qtde
-    });
-  }
-  return out;
-}
+   Mesmo cálculo de Ajustes de Restrição (mdPlanoCorrecaoRestricao, já olhando
+   pra toda peça do CD) — só muda a apresentação: ali é pivô por Classe/X1 com
+   checkbox de seleção, aqui é lista linha a linha (item+endereço), mais fácil
+   de buscar e conferir um caso específico sem abrir a matriz inteira. */
 const MD_LIMITE_AUDITORIA = 300;
 function mdRenderAuditoria(){
-  if(!mdTemDadosAuditoria()){
+  if(!mdTemDados()){
     return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 para auditar a restrição de todos os itens.', "irSwitchTab('importacao')", 'Ir para a importação');
   }
-  let plano = mdPlanoAuditoria();
+  let plano = mdPlanoCorrecaoRestricao();
   const termo = (MD.buscaAuditoria || '').trim().toLowerCase();
   if(termo) plano = plano.filter(l =>
-    l.item.toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo) ||
+    l.componente.toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo) ||
     (l.local||'').toLowerCase().includes(termo) || (l.clal||'').toLowerCase().includes(termo) ||
     (l.x1||'').toLowerCase().includes(termo));
   plano.sort((a,b)=>b.valor - a.valor);
 
-  const semBloqueio = plano.filter(l=>l.de !== MD_SIGLA_BLOQUEIO);
-  const resumo = {
-    itens: new Set(semBloqueio.map(l=>l.item)).size,
-    pecas: semBloqueio.reduce((a,l)=>a+l.quantidade, 0),
-    valor: semBloqueio.reduce((a,l)=>a+l.valor, 0)
-  };
+  const resumo = mdResumoCorrecao();
 
   const linhas = plano.slice(0, MD_LIMITE_AUDITORIA).map(l=>`<tr>
-    <td class="md-left mono">${irEsc(l.item)}</td>
+    <td class="md-left mono">${irEsc(l.componente)}</td>
     <td class="md-left">${irEsc(l.nome)}</td>
     <td class="md-left mono">${irEsc(l.local)}</td>
     <td class="md-left mono">${irEsc(l.clal)}</td>
@@ -1002,7 +969,7 @@ function mdRenderAuditoria(){
       <button class="btn btn-primary" onclick="mdExportarAuditoria()">Baixar relatório</button>
     </div>
     <p class="field-hint" style="margin-bottom:12px;">
-      Todo item com saldo na QRY0390, componente de múltiplo ou não, com restrição fora da regra configurada em Configurações.
+      Toda peça do CD com restrição fora da regra configurada em Configurações — mesmo cálculo de Ajustes de Restrição, em lista por item e endereço.
     </p>
     ${mdKpisCorrecao(resumo)}
     ${mdAvisoSemRegra()}
@@ -1031,7 +998,7 @@ function mdBuscarAuditoria(v){
   window.__mdBuscaAuditoriaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBuscaAuditoria')?.focus(); }, 220);
 }
 function mdExportarAuditoria(){
-  const plano = mdPlanoAuditoria();
+  const plano = mdPlanoCorrecaoRestricao();
   mdGerarXlsxAjuste([
     {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
     {titulo:'Para outras restrições', linhas: plano.filter(l=>l.para!==MD_SIGLA_VENDAVEL)}
@@ -1093,7 +1060,7 @@ function mdProcessar(id){
         irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.'
           +(msg.compartilhados ? ' · '+irFmtInt(msg.compartilhados)+' componentes usados em mais de um múltiplo' : ''));
       } else if(msg.type === 'done390'){
-        irShowToast(irFmtInt(msg.itens)+' componentes com saldo'+(msg.semSaldo ? ' · '+irFmtInt(msg.semSaldo)+' sem saldo' : '')+'.');
+        irShowToast(irFmtInt(msg.itens)+' itens com saldo no CD'+(msg.semSaldo ? ' · '+irFmtInt(msg.semSaldo)+' componentes de múltiplo sem saldo' : '')+'.');
       } else if(msg.type === 'done278'){
         irShowToast(irFmtInt(msg.pais)+' pais de múltiplo com preço.');
       }
@@ -1124,8 +1091,8 @@ function mdEstadoBase(id){
   if(id==='390'){
     const m = MD.saldoMeta;
     if(!m) return 'nunca importada';
-    const partes = [irFmtInt(m.itens)+' componentes com saldo'];
-    if(m.semSaldo) partes.push(irFmtInt(m.semSaldo)+' sem saldo');
+    const partes = [irFmtInt(m.itens)+' itens com saldo no CD'];
+    if(m.semSaldo) partes.push(irFmtInt(m.semSaldo)+' componentes de múltiplo sem saldo');
     if(m.atualizadoEm) partes.push('estoque de '+irFmtDate(m.atualizadoEm));
     partes.push('lida '+irFmtDataHora(m.importadoEm));
     return partes.join(' · ');
@@ -1164,8 +1131,9 @@ function mdRenderImportacao(){
   return `<div class="panel">
     <div class="ofe-head"><h3>Bases do módulo</h3></div>
     <p class="field-hint" style="margin-bottom:12px;">
-      A ZBIQ0051 vem primeiro e define o universo: item que não está nela não é múltiplo.
-      A QRY0390 traz o saldo, e só dos componentes dessa estrutura é guardado algo.
+      A ZBIQ0051 vem primeiro e define o universo de múltiplos: item que não está nela não entra no pareamento.
+      A QRY0390 traz o saldo de todo item do CD — componente de múltiplo ou não — usado tanto em Descasados
+      (só os componentes) quanto em Ajustes/Auditoria de Restrição (tudo).
       A SIGEQ278 é opcional e serve para valorar — hoje a 390 vem com VALOR_UNITARIO zerado nos componentes,
       e o preço do conjunto está no item pai, que não tem estoque próprio.
     </p>
@@ -1271,8 +1239,8 @@ function mdRenderConfiguracoes(){
    ============================================================ */
 const MD_TELAS = {
   descasados:['Múltiplos Descasados','Componente sem par no estoque: dimensão, onde está e quanto vale.'],
-  ajustes:['Ajustes de Restrição','O que bloquear em 86 e o que devolver para venda, linha a linha.'],
-  auditoria:['Auditoria de Restrição','Restrição fora da regra em qualquer item com saldo, múltiplo ou não.'],
+  ajustes:['Ajustes de Restrição','Toda peça do CD com restrição fora da regra, por Classe e X1.'],
+  auditoria:['Auditoria de Restrição','A mesma correção de Ajustes de Restrição, em lista por item e endereço.'],
   indicadores:['Indicadores','Panorama dos múltiplos descasados pra mostrar ao setor.'],
   configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
   importacao:['Importação','ZBIQ0051, QRY0390 e SIGEQ278 — as bases do módulo.']
@@ -1315,11 +1283,9 @@ async function mdRecarregar(){
   MD.estrutura = await mdGetEstrutura();
   MD.saldos = await mdGetSaldo();
   MD.precos = await mdGetPrecos();
-  MD.auditoria = await mdGetAuditoria();
   MD.estruturaMeta = await mdGetEstruturaMeta();
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
-  MD.auditoriaMeta = await mdGetAuditoriaMeta();
   MD.regras = {
     clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || {},
     x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {}
