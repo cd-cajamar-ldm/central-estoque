@@ -1360,6 +1360,17 @@ table.trans-table td.trans-atraso{ color:var(--orange); font-weight:800; }
 .trans-nome:hover{ border-color:var(--line); }
 .trans-nome:focus{ border-color:var(--orange); background:var(--surface); outline:none; }
 
+/* Tabela de "Não classificado": mesmo tratamento visual das tabelas por setor
+   (trans-table), que até aqui ficava sem regra própria e caía no table{} cru. */
+table.conc-table{ width:100%; border-collapse:collapse; font-size:14.5px; }
+table.conc-table th.num{ text-align:right; }
+table.conc-table td{ padding:6px 7px; border-bottom:1px solid var(--line); }
+table.conc-table tbody tr:nth-child(even){ background:var(--surface2); }
+table.conc-table tbody tr:hover{ background:var(--orange-light); }
+table.conc-table td.mono{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+table.conc-table td:first-child{ font-weight:800; font-variant-numeric:tabular-nums; }
+:root[data-theme="dark"] table.conc-table thead th{ color:#fff; }
+
 
 /* ---------- PASTA CONECTADA (aba Importação) ---------- */
 .pasta-panel .field-hint{ margin-bottom:10px; }

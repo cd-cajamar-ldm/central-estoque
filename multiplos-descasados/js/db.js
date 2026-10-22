@@ -9,7 +9,7 @@
    este módulo nunca lê.
    ============================================================ */
 const MD_DB_NAME = 'multiplos_descasados_v1';
-const MD_DB_VERSION = 1;
+const MD_DB_VERSION = 3;
 
 const MD_STORES = {
   // Estrutura do múltiplo (ZBIQ0051): uma linha por COMPONENTE, apontando pro
@@ -23,6 +23,11 @@ const MD_STORES = {
   // Preço de custo por item (SIGEQ278), opcional — usado quando a 390 vem com
   // VALOR_UNITARIO zerado, que é o caso dos múltiplos hoje.
   preco: 'preco',
+  // Saldo de TODO item com estoque na QRY0390, componente de múltiplo ou não —
+  // agregado por item+local+restrição (sem lote, sem detalhe de refs). Existe só
+  // pra Auditoria de Restrição enxergar item fora de múltiplo com restrição
+  // errada, que o store `saldo` (filtrado pela estrutura) nunca vê.
+  auditoria: 'auditoria',
   config: 'config'
 };
 
@@ -47,15 +52,28 @@ function mdOpenDBNaVersao(versao){
     const req = indexedDB.open(MD_DB_NAME, versao);
     req.onupgradeneeded = (e)=>{
       const db = e.target.result;
+      // v2: a chave da estrutura era só o componente — um componente que é
+      // parte de mais de um múltiplo (ex.: uma base usada em dois modelos)
+      // perdia a segunda ligação em silêncio, o segundo put() sobrescrevia o
+      // primeiro. Recria o store com chave componente+pai; dado antigo salvo
+      // sob o bug não tem valor pra manter — some com o store e volta vazio,
+      // pedindo reimportar a ZBIQ0051.
+      if(e.oldVersion < 2 && db.objectStoreNames.contains(MD_STORES.estrutura)){
+        db.deleteObjectStore(MD_STORES.estrutura);
+      }
       if(!db.objectStoreNames.contains(MD_STORES.estrutura)){
-        const s = db.createObjectStore(MD_STORES.estrutura, {keyPath:'componente'});
+        const s = db.createObjectStore(MD_STORES.estrutura, {keyPath:'chave'});
         s.createIndex('pai', 'pai', {unique:false});
+        s.createIndex('componente', 'componente', {unique:false});
       }
       if(!db.objectStoreNames.contains(MD_STORES.saldo)){
         db.createObjectStore(MD_STORES.saldo, {keyPath:'item'});
       }
       if(!db.objectStoreNames.contains(MD_STORES.preco)){
         db.createObjectStore(MD_STORES.preco, {keyPath:'item'});
+      }
+      if(!db.objectStoreNames.contains(MD_STORES.auditoria)){
+        db.createObjectStore(MD_STORES.auditoria, {keyPath:'chave'});
       }
       if(!db.objectStoreNames.contains(MD_STORES.config)){
         db.createObjectStore(MD_STORES.config, {keyPath:'key'});
@@ -106,7 +124,10 @@ async function mdGetAll(storeKey){
 
 /* ---------- Estrutura (ZBIQ0051) ---------- */
 async function mdSalvarEstrutura(linhas, meta){
-  await mdSubstituirTudo(MD_STORES.estrutura, linhas);
+  // chave do registro é componente+pai (ver onupgradeneeded) — um componente
+  // pode estar em mais de um múltiplo, então só ele não serve de chave única.
+  const comChave = linhas.map(l=>({...l, chave: l.componente+'|'+l.pai}));
+  await mdSubstituirTudo(MD_STORES.estrutura, comChave);
   await mdSetConfig('estrutura-meta', meta);
 }
 async function mdGetEstrutura(){ return mdGetAll(MD_STORES.estrutura); }
@@ -127,6 +148,14 @@ async function mdSalvarPrecos(linhas, meta){
 }
 async function mdGetPrecos(){ return mdGetAll(MD_STORES.preco); }
 async function mdGetPrecoMeta(){ return mdGetConfig('preco-meta'); }
+
+/* ---------- Auditoria de restrição (QRY0390 inteira, não só a estrutura) ---------- */
+async function mdSalvarAuditoria(linhas, meta){
+  await mdSubstituirTudo(MD_STORES.auditoria, linhas);
+  await mdSetConfig('auditoria-meta', meta);
+}
+async function mdGetAuditoria(){ return mdGetAll(MD_STORES.auditoria); }
+async function mdGetAuditoriaMeta(){ return mdGetConfig('auditoria-meta'); }
 
 /* ---------- Config chave/valor ---------- */
 async function mdSetConfig(key, valor){

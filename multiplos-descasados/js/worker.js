@@ -60,7 +60,8 @@ function post(type, payload){ self.postMessage({type, ...payload}); }
    nomes evita que o módulo quebre se ela voltar ao formato antigo. */
 const ALIAS_390 = {
   item: ['ID_ITEM_FILHO','Item'], itemPai: ['ITEM_PAI'],
-  descricao: ['NOME_ITEM_FILHO','NOME_ITEM_PAI','Descrição','Descricao'],
+  descricao: ['NOME_ITEM_FILHO','Descrição','Descricao'],
+  descricaoPai: ['NOME_ITEM_PAI'],
   local: ['ID_LOCAL','Local'], descLocal: ['DESC_LOCAL'],
   quantidade: ['QTDE','Quantidade'], qtdeDisp: ['QTDE_DISP'], qtdeRom: ['QTDE_ROM'],
   valoriza: ['VALORIZA'], valorUnitario: ['VALOR_UNITARIO'],
@@ -101,18 +102,26 @@ async function runPipeline051({buf051}){
   validateColumns(r, ['itemPai','itemComponente'], 'ZBIQ0051');
 
   post('progress', {stage:'Montando a estrutura dos múltiplos...', pct:45});
-  // A chave é o componente: a extração traz cada componente uma vez só, ligado
-  // a um pai. Se um dia vier repetido, a última linha vence — e o número de
-  // duplicatas volta pra tela pra ninguém descobrir isso por acaso.
-  const porComponente = new Map();
-  let duplicatas = 0, semPai = 0;
+  // A chave é componente+pai, não só o componente: um componente pode ser
+  // parte de mais de um múltiplo (ex.: uma base usada em dois modelos de
+  // elevador diferentes). Chave só por componente apagava essa segunda
+  // ligação em silêncio — a última linha "vencia" e o componente sumia do
+  // múltiplo anterior sem nenhum aviso, descasando a conta de bloquear/
+  // liberar daquele pai. "Duplicata" agora é só a mesma linha (componente
+  // + pai) repetida de verdade; componente em mais de um pai conta à parte.
+  const porChave = new Map();
+  const componentesVistos = new Set();
+  let duplicatas = 0, semPai = 0, compartilhados = 0;
   for(const row of rows){
     const componente = mdNormItemKey(getVal(row, r.itemComponente));
     const pai = mdNormItemKey(getVal(row, r.itemPai));
     if(!componente || !pai){ semPai++; continue; }
-    if(porComponente.has(componente)) duplicatas++;
+    const chave = componente + '|' + pai;
+    if(porChave.has(chave)) duplicatas++;
+    else if(componentesVistos.has(componente)) compartilhados++;
+    componentesVistos.add(componente);
     const qtde = parseNumber(getVal(row, r.qtde));
-    porComponente.set(componente, {
+    porChave.set(chave, {
       componente, pai,
       qtde: qtde > 0 ? qtde : 1,
       inInterface: String(getVal(row, r.inInterface) ?? '').trim().toUpperCase(),
@@ -120,16 +129,16 @@ async function runPipeline051({buf051}){
       datahora: String(getVal(row, r.datahora) ?? '').trim()
     });
   }
-  const linhas = Array.from(porComponente.values());
+  const linhas = Array.from(porChave.values());
   const pais = new Set(linhas.map(l=>l.pai));
 
   post('progress', {stage:'Gravando...', pct:80});
   await mdSalvarEstrutura(linhas, {
     importadoEm: new Date().toISOString(),
     linhas: rows.length, componentes: linhas.length, pais: pais.size,
-    duplicatas, semPai
+    duplicatas, semPai, compartilhados
   });
-  post('done051', {componentes: linhas.length, pais: pais.size, duplicatas, semPai});
+  post('done051', {componentes: linhas.length, pais: pais.size, duplicatas, semPai, compartilhados});
 }
 
 /* ---------- QRY0390 — SALDO DOS COMPONENTES ----------
@@ -154,10 +163,43 @@ async function runPipeline390({buf390}){
 
   post('progress', {stage:'Cruzando com os componentes...', pct:35});
   const porItem = new Map();
+  // Auditoria: agrega TODO item com saldo na 390 (múltiplo ou não), por
+  // item+local+restrição, sem lote/refs — só o suficiente pra apontar endereço e
+  // quantidade errada na aba Auditoria de Restrição. O `porItem` acima continua
+  // só com componente de múltiplo (é o que o resto do módulo usa pra parear).
+  const porAuditoria = new Map();
   let atualizadoEm = '', linhasUsadas = 0;
   for(const row of rows){
     const item = mdNormItemKey(getVal(row, r.item));
-    if(!item || !componentes.has(item)) continue;
+    if(!item) continue;
+
+    const local = String(getVal(row, r.local) ?? '').trim();
+    const restricao = String(getVal(row, r.restricao) ?? '').trim().toUpperCase();
+    const qtde = parseNumber(getVal(row, r.quantidade));
+    const disp = r.qtdeDisp ? parseNumber(getVal(row, r.qtdeDisp)) : qtde;
+    const rom = r.qtdeRom ? parseNumber(getVal(row, r.qtdeRom)) : 0;
+    const chaveAud = item + '|' + local + '|' + restricao;
+    let aud = porAuditoria.get(chaveAud);
+    if(!aud){
+      aud = {
+        chave: chaveAud, item, local, restricao,
+        nome: String(getVal(row, r.descricao) ?? '').trim(),
+        ean: String(getVal(row, r.ean) ?? '').trim(),
+        valorUnitario: parseNumber(getVal(row, r.valorUnitario)),
+        desc: String(getVal(row, r.descLocal) ?? '').trim(),
+        predio: String(getVal(row, r.predio) ?? '').trim(),
+        x1: String(getVal(row, r.x1) ?? '').trim(),
+        x2: String(getVal(row, r.x2) ?? '').trim(),
+        clal: String(getVal(row, r.classeLocal) ?? '').trim(),
+        qtde: 0, qtdeDisp: 0, qtdeRom: 0
+      };
+      porAuditoria.set(chaveAud, aud);
+    }
+    aud.qtde += qtde;
+    aud.qtdeDisp += disp;
+    aud.qtdeRom += rom;
+
+    if(!componentes.has(item)) continue;
     linhasUsadas++;
     if(!atualizadoEm){
       const at = getVal(row, r.atualizadoEm);
@@ -168,6 +210,11 @@ async function runPipeline390({buf390}){
       it = {
         item,
         nome: String(getVal(row, r.descricao) ?? '').trim(),
+        // Nome do ITEM PAI (o múltiplo), não do componente — a 390 traz os
+        // dois nomes, um por coluna. Sem isso, a tela de Descasados mostrava
+        // o nome do componente marcado VALORIZA na linha do pai, que não é o
+        // nome certo quando o pai tem nome próprio na 390.
+        nomePai: String(getVal(row, r.descricaoPai) ?? '').trim(),
         ean: String(getVal(row, r.ean) ?? '').trim(),
         valorUnitario: parseNumber(getVal(row, r.valorUnitario)),
         // VALORIZA diz se o item carrega valor. Componente marcado como não
@@ -197,18 +244,12 @@ async function runPipeline390({buf390}){
       };
       porItem.set(item, it);
     }
-    const qtde = parseNumber(getVal(row, r.quantidade));
-    // QTDE_DISP pode não vir na extração antiga; sem ela, o disponível é a
-    // própria quantidade, senão a visão "só disponível" zeraria o módulo.
-    const disp = r.qtdeDisp ? parseNumber(getVal(row, r.qtdeDisp)) : qtde;
-    const restricao = String(getVal(row, r.restricao) ?? '').trim().toUpperCase();
     it.qtde += qtde;
     it.qtdeDisp += disp;
     const acc = it.porRestricao[restricao] || (it.porRestricao[restricao] = {qtde:0, qtdeDisp:0});
     acc.qtde += qtde;
     acc.qtdeDisp += disp;
     if(!it.valorUnitario) it.valorUnitario = parseNumber(getVal(row, r.valorUnitario));
-    const local = String(getVal(row, r.local) ?? '').trim();
     const chave = local + '|' + restricao;
     let lugar = it.porLocal.get(chave);
     if(!lugar){
@@ -220,14 +261,15 @@ async function runPipeline390({buf390}){
         predio: String(getVal(row, r.predio) ?? '').trim(),
         clal: String(getVal(row, r.classeLocal) ?? '').trim(),
         restricao,
-        qtde: 0, qtdeDisp: 0, lotes: 0, refs: []
+        qtde: 0, qtdeDisp: 0, qtdeRom: 0, lotes: 0, refs: []
       };
       it.porLocal.set(chave, lugar);
     }
     lugar.qtde += qtde;
     lugar.qtdeDisp += disp;
+    lugar.qtdeRom += rom;
     lugar.lotes++;
-    lugar.refs.push({qtde, qtdeDisp: disp});
+    lugar.refs.push({qtde, qtdeDisp: disp, qtdeRom: rom});
   }
   for(const it of porItem.values()){
     // Map não sobrevive à gravação estruturada do IndexedDB do jeito que a tela
@@ -237,7 +279,7 @@ async function runPipeline390({buf390}){
     delete it.porLocal;
   }
 
-  post('progress', {stage:'Gravando saldos...', pct:80});
+  post('progress', {stage:'Gravando saldos...', pct:75});
   const linhas = Array.from(porItem.values());
   const semSaldo = componentes.size - linhas.length;
   await mdSalvarSaldo(linhas, {
@@ -245,6 +287,14 @@ async function runPipeline390({buf390}){
     atualizadoEm,
     linhas: rows.length, linhasUsadas,
     itens: linhas.length, componentesEstrutura: componentes.size, semSaldo
+  });
+
+  post('progress', {stage:'Gravando auditoria de restrição...', pct:90});
+  const linhasAuditoria = Array.from(porAuditoria.values());
+  await mdSalvarAuditoria(linhasAuditoria, {
+    importadoEm: new Date().toISOString(),
+    atualizadoEm,
+    linhas: rows.length, enderecos: linhasAuditoria.length
   });
   post('done390', {itens: linhas.length, linhas: rows.length, linhasUsadas, semSaldo});
 }

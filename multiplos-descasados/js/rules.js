@@ -35,29 +35,35 @@
 /* Legenda de restrições do WMS. O coletor pede o CÓDIGO (0, 86), a 390 traz a
    SIGLA (WN, AI) — o módulo precisa das duas pontas: a sigla pra ler a planilha
    e o código pra escrever o relatório que vai ser digitado. */
+/* "curto" é a palavra que aparece em cima do código, na matriz de
+   Configurações e no pivô — só pra dar norte rápido sem precisar passar o
+   mouse no tooltip pra ler o nome inteiro. */
 const MD_RESTRICOES = [
-  {cod:'0',  sigla:'WN', nome:'Estoque vendável'},
-  {cod:'10', sigla:'WA', nome:'Estoque reversa'},
-  {cod:'15', sigla:'WQ', nome:'Sem condições de venda (quebra)'},
-  {cod:'20', sigla:'RT', nome:'Em conferência do recebimento'},
-  {cod:'25', sigla:'WE', nome:'Amostra / correção de cadastro / assistência técnica'},
-  {cod:'35', sigla:'WV', nome:'Fora do prazo de validade'},
-  {cod:'40', sigla:'WL', nome:'Estoque físico não localizado'},
-  {cod:'50', sigla:'WT', nome:'Análise de item'},
-  {cod:'55', sigla:'WR', nome:'Reparo interno'},
-  {cod:'60', sigla:'AT', nome:'Múltiplos incompletos da reversa (componentes)'},
-  {cod:'61', sigla:'SS', nome:'Componentes de peças da marca própria'},
-  {cod:'62', sigla:'DT', nome:'Restrição de triagem'},
-  {cod:'65', sigla:'WD', nome:'Devolução de obsoletos ou acordo comercial'},
-  {cod:'75', sigla:'WS', nome:'Leilão'},
-  {cod:'86', sigla:'AI', nome:'Múltiplos incompletos dentro do estoque'}
+  {cod:'0',  sigla:'WN', nome:'Estoque vendável', curto:'Vendável'},
+  {cod:'10', sigla:'WA', nome:'Estoque reversa', curto:'Reversa'},
+  {cod:'15', sigla:'WQ', nome:'Sem condições de venda (quebra)', curto:'Quebra'},
+  {cod:'20', sigla:'RT', nome:'Em conferência do recebimento', curto:'Conferência'},
+  {cod:'25', sigla:'WE', nome:'Amostra / correção de cadastro / assistência técnica', curto:'Amostra'},
+  {cod:'34', sigla:'LT', nome:'Litígio', curto:'Litígio'},
+  {cod:'35', sigla:'WV', nome:'Fora do prazo de validade', curto:'Validade'},
+  {cod:'40', sigla:'WL', nome:'Estoque físico não localizado', curto:'Não localizado'},
+  {cod:'50', sigla:'WT', nome:'Análise de item', curto:'Análise'},
+  {cod:'55', sigla:'WR', nome:'Reparo interno', curto:'Reparo'},
+  {cod:'60', sigla:'AT', nome:'Múltiplos incompletos da reversa (componentes)', curto:'Múlt. reversa'},
+  {cod:'61', sigla:'SS', nome:'Componentes de peças da marca própria', curto:'Marca própria'},
+  {cod:'62', sigla:'DT', nome:'Restrição de triagem', curto:'Triagem'},
+  {cod:'65', sigla:'WD', nome:'Devolução de obsoletos ou acordo comercial', curto:'Obsoleto'},
+  {cod:'75', sigla:'WS', nome:'Leilão', curto:'Leilão'},
+  {cod:'86', sigla:'AI', nome:'Múltiplos incompletos dentro do estoque', curto:'Incompleto'}
 ];
 const MD_SIGLA_VENDAVEL = 'WN';   // código 0
 const MD_SIGLA_BLOQUEIO = 'AI';   // código 86
 const MD_COD_POR_SIGLA = MD_RESTRICOES.reduce((m,r)=>{ m[r.sigla] = r.cod; return m; }, {});
 const MD_NOME_POR_SIGLA = MD_RESTRICOES.reduce((m,r)=>{ m[r.sigla] = r.nome; return m; }, {});
+const MD_CURTO_POR_SIGLA = MD_RESTRICOES.reduce((m,r)=>{ m[r.sigla] = r.curto; return m; }, {});
 function mdCodRestricao(sigla){ return MD_COD_POR_SIGLA[sigla] ?? ''; }
 function mdNomeRestricao(sigla){ return MD_NOME_POR_SIGLA[sigla] || sigla || '—'; }
+function mdRotuloCurto(sigla){ return MD_CURTO_POR_SIGLA[sigla] || sigla || '—'; }
 /* Ordem das colunas de restrição na tela: primeiro as duas que mandam no
    módulo (vendável e bloqueio), depois as outras na ordem da legenda. */
 const MD_ORDEM_RESTRICOES = [MD_SIGLA_VENDAVEL, MD_SIGLA_BLOQUEIO]
@@ -114,8 +120,11 @@ function mdSaldoRestricao(saldo, sigla, campo){
    estrutura: linhas da 051 {componente, pai, qtde, inInterface}
    saldos:    Map item -> {porRestricao, locais, valorUnitario, nome, ...}
    precos:    Map item -> preço de custo (SIGEQ278), pode vir vazio
-   base:      'qtde' (tudo que existe) ou 'qtdeDisp' (só o disponível) */
-function mdCalcularPais(estrutura, saldos, precos, base){
+   base:      'qtde' (tudo que existe) ou 'qtdeDisp' (só o disponível)
+   restricaoPermitida: função opcional (endereço)->bool, a mesma regra de
+   classe/X1 da aba Ajustes de Restrição (ver mdRestricaoPermitida em app.js).
+   Sem ela, todo WN/86 do dado conta pro pareamento, como sempre foi. */
+function mdCalcularPais(estrutura, saldos, precos, base, restricaoPermitida){
   const campo = base === 'qtdeDisp' ? 'qtdeDisp' : 'qtde';
   const porPai = new Map();
   for(const linha of estrutura){
@@ -125,14 +134,28 @@ function mdCalcularPais(estrutura, saldos, precos, base){
 
   const pais = [];
   for(const [pai, comps] of porPai){
-    const precoPai = precos.get(pai) || 0;
+    const infoPai = precos.get(pai) || {};
+    const precoPai = infoPai.preco || 0;
     let temSaldo = false;
     const linhas = comps.map(c=>{
       const s = saldos.get(c.componente) || null;
       const total = s ? (s[campo] || 0) : 0;
       if(total > 0) temSaldo = true;
-      const wn = mdSaldoRestricao(s, MD_SIGLA_VENDAVEL, campo);
-      const bloq = mdSaldoRestricao(s, MD_SIGLA_BLOQUEIO, campo);
+      let wn = mdSaldoRestricao(s, MD_SIGLA_VENDAVEL, campo);
+      let bloq = mdSaldoRestricao(s, MD_SIGLA_BLOQUEIO, campo);
+      // Endereço em WN ou 86 mas fora da regra de classe/X1 (ex.: reversa
+      // cadastrada como WN) não é vendável nem múltiplo incompleto de
+      // verdade ali — é saldo mal classificado no WMS. Desconta do WN/86
+      // que entra no pareamento; some em "outras" como qualquer restrição
+      // que não participa, sem mudar o total nem a coluna exibida na tela.
+      if(restricaoPermitida && s && s.locais){
+        for(const loc of s.locais){
+          const v = loc[campo] || 0;
+          if(!v || restricaoPermitida(loc)) continue;
+          if(loc.restricao === MD_SIGLA_VENDAVEL) wn -= v;
+          else if(loc.restricao === MD_SIGLA_BLOQUEIO) bloq -= v;
+        }
+      }
       const porRestricao = {};
       if(s && s.porRestricao){
         for(const sigla in s.porRestricao){
@@ -143,7 +166,9 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       return {
         componente: c.componente,
         nome: (s && s.nome) || '',
+        nomePai: (s && s.nomePai) || '',
         ean: (s && s.ean) || '',
+        log: (s && s.log) || '',
         inInterface: c.inInterface,
         qtdePorMultiplo: c.qtde > 0 ? c.qtde : 1,
         wn, bloqueado: bloq,
@@ -187,10 +212,12 @@ function mdCalcularPais(estrutura, saldos, precos, base){
       }
     }
 
-    // Componente sem nenhuma peça vendável é o que trava o conjunto: enquanto
-    // ele não chegar, nenhuma peça dos outros vira múltiplo. A ação aí é
-    // diferente — é ir atrás da peça que falta, não bloquear.
-    const faltantes = linhas.filter(l=>l.wn === 0 && l.bloqueado === 0).length;
+    // "Falta componente" é o item cadastrado na estrutura que não tem NENHUM
+    // saldo no CD, em restrição nenhuma — não ter WN nem 86 não quer dizer que
+    // a peça não existe, pode estar em outra restrição (DT, WA...) e ainda
+    // assim travar o conjunto, mas isso não é "faltando", é descasado em
+    // outro lugar. Só conta quem realmente não tem peça física nenhuma.
+    const faltantes = linhas.filter(l=>l.total === 0).length;
 
     // Valor do múltiplo montado: preço do pai quando a 278 foi importada, senão
     // a soma do que os componentes carregam na própria 390.
@@ -198,7 +225,18 @@ function mdCalcularPais(estrutura, saldos, precos, base){
 
     pais.push({
       pai,
-      nome: (linhas.find(l=>l.inInterface==='S' && l.nome) || linhas.find(l=>l.nome) || {}).nome || '',
+      // Nome do PAI, não do componente. Ordem de confiança:
+      // 1) SIGEQ278, pelo código do PRÓPRIO pai — é a fonte mais confiável que
+      //    existe, porque não depende de nenhum componente carregar o nome
+      //    certo. 2) NOME_ITEM_PAI da 390, só quando difere do nome do próprio
+      //    componente que carregou o valor (na prática a coluna às vezes vem
+      //    preenchida igual ao NOME_ITEM_FILHO daquela linha, o que não é o
+      //    nome do pai — nesse caso ela não serve). 3) Sem nenhuma das duas,
+      //    cai pro nome do componente que carrega o valor, pior que o nome
+      //    certo mas melhor que ficar em branco.
+      nome: infoPai.nome
+        || (linhas.find(l=>l.nomePai && l.nomePai !== l.nome) || {}).nomePai
+        || (linhas.find(l=>l.inInterface==='S' && l.nome) || linhas.find(l=>l.nome) || {}).nome || '',
       componentes: linhas.sort((a,b)=>(b.bloquear + b.liberar) - (a.bloquear + a.liberar) || a.componente.localeCompare(b.componente)),
       nComponentes: linhas.length,
       completos, completosPotencial,
@@ -263,16 +301,26 @@ function mdResumo(pais){
    executável num passo só.
 
    Os lotes são consumidos do maior saldo pro menor: menos linhas pra
-   digitar, e a sobra costuma estar concentrada num lote só. */
-function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
+   digitar, e a sobra costuma estar concentrada num lote só.
+
+   restricaoPermitida (opcional): mesma regra de classe/X1 de Configurações
+   usada antes de parear (mdPais). Endereço de reversa com WN fora da regra
+   não conta como vendável de verdade — não pode virar origem de um bloquear
+   (0→86) nem de um liberar (86→0) só porque a coluna diz WN/86. Quem precisa
+   de ajuste é sempre o endereço "certo" (ex.: o do CD), nunca a reversa. */
+function mdAlocarPorEndereco(locais, sigla, quantidade, campo, restricaoPermitida){
   const disponiveis = [];
   for(const l of (locais || [])){
     if(String(l.restricao || '').toUpperCase() !== sigla) continue;
+    if(restricaoPermitida && !restricaoPermitida(l)) continue;
     // refs é o normal (um lote por linha da 390); sem ele (dado antigo em
     // cache), cai pro total do endereço — pior que o ideal, mas não quebra.
     const refs = (l.refs && l.refs.length) ? l.refs : [{qtde: l.qtde, qtdeDisp: l.qtdeDisp}];
     for(const ref of refs){
-      const saldo = ref[campo] || 0;
+      // Quantidade romaneada (QTDE_ROM) já está separada pra um pedido — não
+      // entra na conta do que dá pra mover. Sobrando parte não-romaneada no
+      // mesmo lote, essa parte continua concorrendo normalmente.
+      const saldo = Math.max(0, (ref[campo] || 0) - (ref.qtdeRom || 0));
       if(saldo > 0) disponiveis.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: saldo});
     }
   }
@@ -294,8 +342,11 @@ function mdAlocarPorEndereco(locais, sigla, quantidade, campo){
 }
 
 /* Uma linha por endereço e sentido — é exatamente o que será digitado.
-   base: 'qtde' ou 'qtdeDisp', o mesmo corte usado no cálculo. */
-function mdPlanoAjuste(pais, base){
+   base: 'qtde' ou 'qtdeDisp', o mesmo corte usado no cálculo.
+   restricaoPermitida: mesma regra passada pra mdCalcularPais — sem ela aqui,
+   o bloquear/liberar já calculado sem a reversa contar como WN/86 de verdade
+   ainda poderia escolher a própria reversa como endereço de execução. */
+function mdPlanoAjuste(pais, base, restricaoPermitida){
   const campo = base === 'qtdeDisp' ? 'qtdeDisp' : 'qtde';
   const out = [];
   for(const p of pais){
@@ -304,7 +355,7 @@ function mdPlanoAjuste(pais, base){
       if(c.bloquear > 0) acoes.push({sentido:'bloquear', de: MD_SIGLA_VENDAVEL, para: MD_SIGLA_BLOQUEIO, qtd: c.bloquear});
       if(c.liberar > 0) acoes.push({sentido:'liberar', de: MD_SIGLA_BLOQUEIO, para: MD_SIGLA_VENDAVEL, qtd: c.liberar});
       for(const a of acoes){
-        for(const alvo of mdAlocarPorEndereco(c.locais, a.de, a.qtd, campo)){
+        for(const alvo of mdAlocarPorEndereco(c.locais, a.de, a.qtd, campo, restricaoPermitida)){
           out.push({
             sentido: a.sentido,
             de: a.de, para: a.para,
@@ -319,7 +370,8 @@ function mdPlanoAjuste(pais, base){
             qtdePorMultiplo: c.qtdePorMultiplo,
             wn: c.wn, bloqueado: c.bloqueado, alvoWn: c.alvoWn,
             completos: p.completos, completosPotencial: p.completosPotencial,
-            preco: c.preco, valor: alvo.quantidade * c.preco
+            preco: c.preco, valor: alvo.quantidade * c.preco,
+            totalComponente: c.total
           });
         }
       }

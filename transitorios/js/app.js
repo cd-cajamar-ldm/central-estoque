@@ -420,6 +420,11 @@ function irTransIdade(locais){
         const f = irTransFaixa(dia, hoje);
         r[f] += pd[dia]; v[f] += (pv[dia]||0); comData += pd[dia];
       }
+    }else{
+      // Endereço que a QRY0160 nunca viu (só está na 390) não tem data nenhuma —
+      // mesmo critério do dia vazio: cai no D+7, não some da conta.
+      const f = 'D+'+IR_TRANS_FAIXA_MAX;
+      r[f] += l.qtd||0; v[f] += l.valor||0;
     }
   }
   return {faixas:r, valores:v, comData};
@@ -729,12 +734,12 @@ function irRenderTransitorios(){
     ${naoClass ? `<div class="panel"><div class="ofe-head">
       <h3>Não classificado</h3>
       <span class="field-hint">${irFmtMoney(naoClass.valor)} · ${irFmtInt(naoClass.locais.length)} endereços · ${irFmtInt(naoClass.prefixos.size)} transitórios. ${
-        // A classe local não vem na QRY0160: ela é lida da QRY0390 e casada pelo
-        // endereço. Endereço que a 390 não trouxe fica sem classe e cai aqui — a
-        // causa mais comum é 390 desatualizada, não cadastro errado no WMS. Sem
-        // dizer isso, o usuário vai procurar no lugar errado.
-        m.fonte==='160' && m.semClasse
-          ? 'A classe local vem da QRY0390, não da QRY0160: '+irFmtInt(m.semClasse)+' endereço(s) da 160 não foram encontrados na 390 importada. Reimportar a QRY0390 atualizada costuma resolver.'
+        // A classe local vem da QRY0390, casada por endereço. Endereço que tem data
+        // de movimento (logo, a 160 já viu) mas não tem classe é sinal de endereço
+        // que a 390 ainda não trouxe — reimportar ela de novo costuma resolver. Sem
+        // dizer isso, o usuário vai procurar cadastro errado no WMS em vez disso.
+        m.semBase390
+          ? 'A classe local vem da QRY0390: '+irFmtInt(m.semBase390)+' endereço(s) com data de movimento (QRY0160) não foram encontrados na 390 importada. Reimportar a QRY0390 atualizada costuma resolver.'
           : 'Cadastre a classe local (TSF, C.E, INB, OUT, TRP, REV) no WMS e eles entram sozinhos; até lá, dá pra apontar o setor aqui.'
       }</span>
     </div>${irTransTabelaPrefixos(naoClass)}</div>` : ''}

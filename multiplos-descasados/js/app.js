@@ -16,11 +16,12 @@
    ============================================================ */
 const MD_APP_VERSION = 'v2';
 const MD = {
-  estrutura:null, saldos:null, precos:null,
-  estruturaMeta:null, saldoMeta:null, precoMeta:null,
+  estrutura:null, saldos:null, precos:null, auditoria:null,
+  estruturaMeta:null, saldoMeta:null, precoMeta:null, auditoriaMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
+  buscaAuditoria:'',
   pivotExpandido:new Set(),
   tela:'descasados',
   regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas]
@@ -48,7 +49,12 @@ const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
    depois. */
 const MD_DIMENSOES = [
   {chave:'clal', titulo:'Classe', valor:o=>o.clal || '—'},
-  {chave:'x1', titulo:'X1/X2', valor:o=>[o.x1, o.x2].filter(Boolean).join(' ') || '—'}
+  // Só o PREFIXO do X1: na extração real o campo X1 já vem como "BLC 001",
+  // "BLM 011" etc. (não é X1="BLC" + X2="001" separados) — usar o campo
+  // inteiro continuava dando uma linha por sub-endereço. A primeira palavra
+  // é o bloco de verdade (BLC, BLM, BIN...), que é o nível que importa pra
+  // essa régua.
+  {chave:'x1', titulo:'X1', valor:o=>(o.x1 || '').trim().split(/\s+/)[0] || '—'}
 ];
 const MD_DIM_POR_CHAVE = {};
 MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
@@ -124,8 +130,15 @@ function mdPais(){
   if(MD._cache && MD._cacheBase === MD.base) return MD._cache;
   if(!MD.estrutura || !MD.saldos) return [];
   const saldos = new Map(MD.saldos.map(s=>[s.item, s]));
-  const precos = new Map((MD.precos||[]).map(p=>[p.item, p.preco]));
-  MD._cache = mdCalcularPais(MD.estrutura, saldos, precos, MD.base);
+  // Mapa completo (preço E nome), não só o preço — a SIGEQ278 traz o nome do
+  // PRÓPRIO item pai, a fonte mais confiável que existe pra esse nome: é
+  // keyed pelo código do pai direto, sem depender de a 390 repetir um nome de
+  // componente na coluna NOME_ITEM_PAI (nem sempre vem preenchida).
+  const precos = new Map((MD.precos||[]).map(p=>[p.item, p]));
+  // mdRestricaoPermitida aplica a regra de classe/X1 (Configurações) ANTES de
+  // parear: WN ou 86 num endereço fora da regra (ex.: reversa cadastrada como
+  // WN) não conta como vendável/múltiplo incompleto de verdade.
+  MD._cache = mdCalcularPais(MD.estrutura, saldos, precos, MD.base, mdRestricaoPermitida);
   MD._cacheBase = MD.base;
   return MD._cache;
 }
@@ -143,8 +156,10 @@ function mdPaisFiltrados(){
       p.componentes.some(c=>c.componente.includes(termo) || (c.nome||'').toLowerCase().includes(termo))
     );
   }
-  const acoes = p=>p.bloquearPecas + p.liberarPecas;
-  return lista.slice().sort((a,b)=>b.sobraValor - a.sobraValor || acoes(b) - acoes(a));
+  // Item pai com menos peça no total é quem corre mais risco de cancelamento
+  // se for romaneado sem ter como atender o pedido — aparece primeiro, tanto
+  // aqui na tela quanto na planilha exportada (mdGerarXlsxAjuste).
+  return lista.slice().sort((a,b)=>a.pecasTotal - b.pecasTotal || b.sobraValor - a.sobraValor);
 }
 
 /* ============================================================
@@ -159,13 +174,59 @@ function mdBuscar(v){
   clearTimeout(window.__mdBuscaTimer);
   window.__mdBuscaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBusca')?.focus(); }, 220);
 }
-function mdKpis(resumo){
+/* LOG (LOG_ITEM da 390) é a linha de produto/responsável do item — diferente
+   da classe física do endereço (CLAL/X1/X2). Agrupa o valor bloqueado
+   (mesma sobra vendável do KPI "Valor descasado") por essa linha pra apontar
+   qual LOG concentra mais descasamento, não só o total geral. */
+/* Agrupa os componentes com sobra bloqueada (mesmo critério do KPI "Valor
+   descasado") por uma chave qualquer — usado tanto pelo "LOG mais divergente"
+   dos KPIs quanto pelos rankings da aba Indicadores. Ordenado do maior valor
+   pro menor. */
+function mdAgruparComponentesBloqueados(pais, chaveFn){
+  const porChave = new Map();
+  for(const p of pais){
+    for(const c of p.componentes){
+      if(!(c.bloquear > 0)) continue;
+      const chave = chaveFn(c) || '—';
+      if(!porChave.has(chave)) porChave.set(chave, {chave, valor:0, pecas:0, pais:new Set()});
+      const acc = porChave.get(chave);
+      acc.valor += c.valorBloquear || 0;
+      acc.pecas += c.bloquear;
+      acc.pais.add(p.pai);
+    }
+  }
+  return Array.from(porChave.values())
+    .map(a=>({chave:a.chave, valor:a.valor, pecas:a.pecas, nPais:a.pais.size}))
+    .sort((a,b)=>b.valor - a.valor);
+}
+/* Não existe campo de fornecedor em nenhuma base importada (ZBIQ0051,
+   QRY0390, SIGEQ278) — a última palavra do nome do componente é o jeito que
+   tem hoje de aproximar isso, já que no cadastro ela costuma ser a marca/
+   fabricante (ex. "...DOBRAVEL EQUIPAMENTOS", "...8T 26PC 4003-P MARCON"). */
+function mdUltimaPalavra(nome){
+  if(!nome) return '';
+  const palavras = nome.trim().split(/\s+/);
+  return palavras[palavras.length - 1] || '';
+}
+function mdRankingPorLog(pais){ return mdAgruparComponentesBloqueados(pais, c=>c.log || '(sem LOG)'); }
+function mdRankingPorFornecedor(pais){ return mdAgruparComponentesBloqueados(pais, c=>mdUltimaPalavra(c.nome) || '(sem nome)'); }
+function mdLogMaisDivergente(pais){
+  const topo = mdRankingPorLog(pais)[0];
+  return topo ? {log: topo.chave, valor: topo.valor, pecas: topo.pecas, nPais: topo.nPais} : null;
+}
+function mdKpis(resumo, pais){
+  const divergente = mdLogMaisDivergente(pais || []);
+  const cardLog = divergente
+    ? `<div class="kpi-card bad"><div class="num">${irEsc(divergente.log)}</div>
+        <div class="label">LOG mais divergente — ${irFmtMoney(divergente.valor)} em ${irFmtInt(divergente.nPais)} ${divergente.nPais===1?'múltiplo':'múltiplos'}</div></div>`
+    : `<div class="kpi-card good"><div class="num">—</div><div class="label">LOG mais divergente — nenhum descasado agora</div></div>`;
   return `<div class="kpi-grid">
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.paisDescasados)}</div><div class="label">Múltiplos a ajustar</div></div>
     <div class="kpi-card bad"><div class="num">${irFmtInt(resumo.bloquearPecas)}</div><div class="label">Peças a bloquear (0 → 86)</div></div>
     <div class="kpi-card good"><div class="num">${irFmtInt(resumo.liberarPecas)}</div><div class="label">Peças a liberar (86 → 0)</div></div>
     <div class="kpi-card bad"><div class="num num-money">${irFmtMoney(resumo.sobraValor)}</div><div class="label">Valor descasado</div></div>
     <div class="kpi-card good"><div class="num num-money">${irFmtMoney(resumo.liberarValor)}</div><div class="label">Valor a liberar</div></div>
+    ${cardLog}
   </div>`;
 }
 
@@ -181,6 +242,13 @@ function mdBarraFiltros(){
       </div>
     </div>
   </div>`;
+}
+
+/* Cabeçalho de coluna de restrição, nos dois tamanhos: uma palavra curta em
+   cima (pra não precisar do tooltip só pra saber o que é) e o código do WMS
+   embaixo, que é o que se digita no coletor. */
+function mdRotuloColunaHtml(sigla){
+  return `<span class="md-col-rotulo">${irEsc(mdRotuloCurto(sigla))}</span><span class="md-col-codigo">${irEsc(mdCodRestricao(sigla))}</span>`;
 }
 
 /* Colunas de restrição da tela: as que realmente aparecem no estoque destes
@@ -266,11 +334,14 @@ function mdSetaOrdem(chave, col){
 
 /* Nome comprido não cabe numa linha compacta: mostra o início e o fim, que é
    o trecho que costuma diferenciar um item do outro (cor, medida, modelo). */
-function mdTruncarNome(nome, max){
-  if(!nome || nome.length <= max) return nome || '';
-  const inicio = nome.slice(0, Math.ceil(max*0.65));
-  const fim = nome.slice(-Math.floor(max*0.28));
-  return inicio.trim() + '…' + fim.trim();
+/* Só a primeira e a última palavra da descrição — o meio (tamanho, cor,
+   variação...) não ajuda a identificar o item na lista e só empurrava o fim
+   do nome (geralmente a marca ou o diferencial) pra fora da linha. */
+function mdTruncarNome(nome){
+  if(!nome) return '';
+  const palavras = nome.trim().split(/\s+/);
+  if(palavras.length <= 2) return nome.trim();
+  return palavras[0] + ' … ' + palavras[palavras.length - 1];
 }
 
 /* Soma por restrição no nível do pai: cada componente já traz o próprio total
@@ -320,10 +391,10 @@ function mdRenderPivot(){
     const idPai = 'p-'+p.pai;
     const paiAberto = MD.pivotExpandido.has(idPai);
     const alerta = p.faltantes > 0
-      ? `<span class="md-tag md-tag-bad">${p.faltantes} sem peça</span>`
+      ? `<span class="md-tag md-tag-falta">${p.faltantes} falta componente${p.faltantes>1?'s':''}</span>`
       : (p.completos === 0 ? `<span class="md-tag md-tag-bad">0 vendáveis</span>` : '');
     linhas += `<tr class="md-piv-pai">
-      <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome,46))} ${alerta}</td>
+      <td class="md-left"><span class="md-piv-nome"><button class="md-piv-toggle" onclick="mdPivToggle('${idPai}')">${paiAberto?'−':'+'}</button><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome))}</span>${alerta}</td>
       ${mdPivColunas(mdPaiTotaisPorSigla(p, restricoes), restricoes, p.pecasTotal)}
     </tr>`;
     if(!paiAberto) continue;
@@ -332,7 +403,7 @@ function mdRenderPivot(){
       const compAberto = MD.pivotExpandido.has(idComp);
       const tagValor = c.inInterface==='S' ? ' <span class="md-tag md-tag-info" title="Carrega o valor do múltiplo (in_interface = S)">valor</span>' : '';
       linhas += `<tr class="md-piv-comp">
-        <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idComp}')">${compAberto?'−':'+'}</button><span class="mono">${irEsc(c.componente)}</span> ${irEsc(mdTruncarNome(c.nome,46))}${tagValor}</td>
+        <td class="md-left"><button class="md-piv-toggle" onclick="mdPivToggle('${idComp}')">${compAberto?'−':'+'}</button><span class="mono">${irEsc(c.componente)}</span> ${irEsc(mdTruncarNome(c.nome))}${tagValor}</td>
         ${mdPivColunas(c.porRestricao, restricoes, c.total)}
       </tr>`;
       if(!compAberto) continue;
@@ -349,8 +420,7 @@ function mdRenderPivot(){
 
   const headerCols = restricoes.map(s=>{
     const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-    return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
-      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${irEsc(mdCodRestricao(s))}${mdSetaOrdem(chave, s)}</th>`;
+    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${mdRotuloColunaHtml(s)}</th>`;
   }).join('');
 
   return `<div class="panel">
@@ -383,7 +453,82 @@ function mdRenderDescasados(){
       : 'A estrutura já está aqui. Falta a QRY0390 com o saldo dos componentes.';
     return irEmptyState('Sem bases importadas', falta, "irSwitchTab('importacao')", 'Ir para a importação');
   }
-  return mdKpis(mdResumo(mdPais())) + mdBarraFiltros() + mdRenderPivot();
+  const pais = mdPais();
+  return mdKpis(mdResumo(pais), pais) + mdBarraFiltros() + mdRenderPivot();
+}
+
+/* ============================================================
+   TELA — INDICADORES
+   ============================================================
+   Painel só de leitura, pra mostrar ao setor como estão os múltiplos
+   descasados agora — mesmos números da aba Descasados, organizados por LOG,
+   por fornecedor aproximado (sem campo próprio nas bases, usa a última
+   palavra do nome) e pelos itens pai mais críticos. Nada clicável, nada de
+   filtro — é retrato, não ferramenta de trabalho. */
+function mdRenderRanking(titulo, labelColuna, ranking, limite){
+  const linhas = (ranking || []).slice(0, limite || 10);
+  if(!linhas.length){
+    return `<div class="panel"><h3>${irEsc(titulo)}</h3><p class="field-hint">Nenhum descasamento no momento.</p></div>`;
+  }
+  const corpo = linhas.map((l,i)=>`<tr>
+    <td class="md-left">${i+1}</td>
+    <td class="md-left">${irEsc(l.chave)}</td>
+    <td>${irFmtInt(l.pecas)}</td>
+    <td>${irFmtInt(l.nPais)}</td>
+    <td>${irFmtMoney(l.valor)}</td>
+  </tr>`).join('');
+  return `<div class="panel">
+    <h3>${irEsc(titulo)}</h3>
+    <div class="md-piv-wrap">
+      <table class="md-piv">
+        <thead><tr>
+          <th class="md-left">#</th>
+          <th class="md-left">${irEsc(labelColuna)}</th>
+          <th>Peças a bloquear</th>
+          <th>Múltiplos</th>
+          <th>Valor descasado</th>
+        </tr></thead>
+        <tbody>${corpo}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+function mdRenderTopPais(pais, limite){
+  const lista = pais.filter(p=>p.sobraValor > 0).sort((a,b)=>b.sobraValor - a.sobraValor).slice(0, limite || 10);
+  if(!lista.length){
+    return `<div class="panel"><h3>Itens pai mais críticos</h3><p class="field-hint">Nenhum múltiplo descasado no momento.</p></div>`;
+  }
+  const corpo = lista.map((p,i)=>`<tr>
+    <td class="md-left">${i+1}</td>
+    <td class="md-left"><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome))}</td>
+    <td>${irFmtInt(p.bloquearPecas)}</td>
+    <td>${irFmtMoney(p.sobraValor)}</td>
+  </tr>`).join('');
+  return `<div class="panel">
+    <h3>Itens pai mais críticos</h3>
+    <div class="md-piv-wrap">
+      <table class="md-piv">
+        <thead><tr>
+          <th class="md-left">#</th>
+          <th class="md-left">Item pai</th>
+          <th>Peças a bloquear</th>
+          <th>Valor descasado</th>
+        </tr></thead>
+        <tbody>${corpo}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+function mdRenderIndicadores(){
+  if(!mdTemDados()){
+    return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 pra ver os indicadores.', "irSwitchTab('importacao')", 'Ir para a importação');
+  }
+  const pais = mdPais();
+  return mdKpis(mdResumo(pais), pais)
+    + `<p class="field-hint" style="margin:14px 0;">Panorama pra mostrar ao setor como estão os múltiplos descasados agora.</p>`
+    + mdRenderRanking('Por LOG', 'LOG', mdRankingPorLog(pais))
+    + mdRenderRanking('Por fornecedor (aproximado pela última palavra do nome)', 'Fornecedor', mdRankingPorFornecedor(pais))
+    + mdRenderTopPais(pais);
 }
 
 /* ============================================================
@@ -400,7 +545,7 @@ function mdRenderDescasados(){
    estoque bom voltando pra venda. */
 function mdPlano(){
   if(MD._plano && MD._planoBase === MD.base) return MD._plano;
-  MD._plano = mdPlanoAjuste(mdPais(), MD.base);
+  MD._plano = mdPlanoAjuste(mdPais(), MD.base, mdRestricaoPermitida);
   MD._planoBase = MD.base;
   return MD._plano;
 }
@@ -439,6 +584,21 @@ function mdRestricaoPermitidaEm(chave, valor, sigla){
   return !regra || regra.includes(sigla);
 }
 
+/* Restrição de um endereço batendo com a regra configurada pra classe/X1+X2
+   dele — a mesma checagem usada pra corrigir (abaixo) e pra decidir, antes de
+   parear (mdPais em mdPais/mdCalcularPais), se um WN ou 86 mal classificado
+   (ex.: endereço de reversa cadastrado como WN) deve ou não contar como
+   vendável/múltiplo incompleto de verdade. Sem regra pra nenhuma dimensão do
+   endereço, não dá pra dizer se está errado — conta como permitida. */
+function mdRegraViolada(loc){
+  for(const dim of MD_DIMENSOES){
+    const r = mdRegraDe(dim.chave, dim.valor(loc));
+    if(r && !r.includes(loc.restricao)) return r;
+  }
+  return null;
+}
+function mdRestricaoPermitida(loc){ return mdRegraViolada(loc) === null; }
+
 /* Plano de correção de restrição (aba Ajustes de Restrição) — não confundir
    com o plano de pareamento de múltiplos descasados (aba Descasados, outra
    lógica, outro botão). Aqui o problema é a REGRA configurada em
@@ -452,22 +612,30 @@ function mdRestricaoPermitidaEm(chave, valor, sigla){
    nada é corrigido (mesmo critério da validação da matriz). */
 function mdPlanoCorrecaoRestricao(){
   const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+  // Um componente pode estar em mais de um múltiplo (ver PR #373) — junta
+  // todos os pais pra não perder referência nenhuma na planilha exportada.
+  const paisPorComponente = new Map();
+  for(const e of (MD.estrutura||[])){
+    if(!paisPorComponente.has(e.componente)) paisPorComponente.set(e.componente, []);
+    paisPorComponente.get(e.componente).push(e.pai);
+  }
   const out = [];
   for(const s of (MD.saldos||[])){
     for(const loc of (s.locais||[])){
-      let regra = null;
-      for(const dim of MD_DIMENSOES){
-        const r = mdRegraDe(dim.chave, dim.valor(loc));
-        if(r && !r.includes(loc.restricao)){ regra = r; break; }
-      }
+      const regra = mdRegraViolada(loc);
       if(!regra) continue;
+      // 86 nunca é destino de correção, nem como única restrição permitida
+      // cadastrada por engano — quem decide o que vai pra 86 é sempre o
+      // pareamento da aba Descasados, nunca esta correção de restrição.
       const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
-        : (regra.length===1 ? regra[0] : null);
+        : (regra.length===1 && regra[0] !== MD_SIGLA_BLOQUEIO ? regra[0] : null);
       if(!destino) continue;
       const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
       const preco = s.valorUnitario || 0;
       for(const ref of refs){
-        const quantidade = ref[campo] || 0;
+        // Quantidade romaneada (QTDE_ROM) já está separada pra um pedido —
+        // abate do que dá pra corrigir, igual ao plano de pareamento.
+        const quantidade = Math.max(0, (ref[campo] || 0) - (ref.qtdeRom || 0));
         if(!quantidade) continue;
         out.push({
           de: loc.restricao, para: destino,
@@ -475,8 +643,10 @@ function mdPlanoCorrecaoRestricao(){
           localColetor: mdLocalColetor(loc.local),
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
-          componente: s.item, ean: s.ean, quantidade,
-          preco, valor: quantidade * preco
+          componente: s.item, pai: (paisPorComponente.get(s.item) || []).join('/'),
+          ean: s.ean, quantidade,
+          preco, valor: quantidade * preco,
+          totalComponente: s[campo]
         });
       }
     }
@@ -571,7 +741,7 @@ function mdRenderMatrizPor(chave){
   const headerCols = restricoes.map(s=>{
     const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
     return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
-      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${irEsc(mdCodRestricao(s))}${mdSetaOrdem(chave, s)}</th>`;
+      title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${mdRotuloColunaHtml(s)}${mdSetaOrdem(chave, s)}</th>`;
   }).join('');
 
   // Com o filtro de restrições ligado, a soma das colunas na tela não fecha
@@ -662,50 +832,210 @@ function mdRenderAjustes(){
 }
 
 /* Descasados: respeita a busca, o base (total/disponível) e o filtro
-   Equalizado da tela — exporta só o que está sendo mostrado ali. */
+   Equalizado da tela — exporta só o que está sendo mostrado ali. Duas abas,
+   pelo sentido do movimento: bloquear (0 → 86) e liberar (86 → 0) nunca se
+   misturam na digitação do coletor, então não fazia sentido numa lista só. */
 function mdExportarAjustePivot(){
-  mdGerarCsvAjuste(mdPlanoAjuste(mdPaisFiltrados(), MD.base));
+  const plano = mdPlanoAjuste(mdPaisFiltrados(), MD.base, mdRestricaoPermitida);
+  mdGerarXlsxAjuste([
+    {titulo:'Bloquear (0 para 86)', linhas: plano.filter(l=>l.sentido==='bloquear')},
+    {titulo:'Liberar (86 para 0)', linhas: plano.filter(l=>l.sentido==='liberar')}
+  ]);
 }
 /* Ajustes de Restrição: corrige as células fora da regra (não é o plano de
    pareamento da aba Descasados — ver mdPlanoCorrecaoRestricao), respeitando
-   classe e X1/X2 marcados nas duas matrizes. */
+   classe e X1/X2 marcados nas duas matrizes. Separado por destino pelo mesmo
+   motivo do pivô: quase tudo vai pra 0 (WN), mas a rara linha com um destino
+   diferente (só uma restrição cadastrada, sem WN) não deve se misturar. */
 function mdExportarAjusteClasses(){
-  mdGerarCsvAjuste(mdPlanoCorrecaoRestricao().filter(l=>
+  const plano = mdPlanoCorrecaoRestricao().filter(l=>
     MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
-  ));
+  );
+  mdGerarXlsxAjuste([
+    {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
+    {titulo:'Para outras restrições', linhas: plano.filter(l=>l.para!==MD_SIGLA_VENDAVEL)}
+  ]);
 }
 
-/* Só o que vai pro coletor: local, item, restrição de/para, quantidade,
-   endereço (pra achar a peça) e o alerta de estoque duplo. O resto (pai,
-   descrição, saldo, preço...) é conferência que já está na tela — não
-   precisa duplicar na planilha. */
-function mdGerarCsvAjuste(lista){
-  if(!lista.length){ irShowToast('Não há ajuste para exportar.'); return; }
-  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço'];
-  const cel = v=>{
-    const s = String(v ?? '');
-    return /[;"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
-  };
-  // Local (coletor) e EAN são só dígitos compridos (10 e 13 casas) — sem
-  // forçar texto o Excel "adivinha" que é número e mostra em notação
-  // científica (5E+09, 7,89862E+12), cortando dígitos de verdade. A aspa
-  // simples na frente força texto e some da visualização — mesmo truque de
-  // qualquer exportador de CSV com código/EAN comprido.
-  const celTexto = v=>{ const s = String(v ?? ''); return s ? cel("'"+s) : ''; };
-  const linhas = lista.map(l=>[
-    celTexto(l.localColetor), celTexto(l.ean), cel(l.codDe), cel(l.codPara), cel(irFmtInt(l.quantidade)), cel(l.endereco)
-  ].join(';'));
-  // BOM na frente: sem ele o Excel em pt-BR abre o arquivo como Latin-1 e come
-  // todos os acentos das descrições.
-  const csv = '﻿' + [cab.map(cel).join(';'), ...linhas].join('\r\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+/* Só o que vai pro coletor: local, item, restrição de/para, quantidade e
+   endereço (pra achar a peça). O resto (pai, descrição, saldo, preço...) é
+   conferência que já está na tela — não precisa duplicar na planilha.
+
+   .xlsx de verdade (não CSV): é o único jeito de ter mais de uma aba e de
+   marcar Local/EAN como NÚMERO com formato "sem decimal" ao mesmo tempo —
+   um CSV não carrega esse tipo de informação por célula. CSV também foi o
+   que obrigava forçar texto com aspa simples na frente pra fugir da notação
+   científica do Excel (5E+09, 7,89862E+12), e a aspa acabava colando junto
+   quando alguém copiava o valor pro coletor, que não entende e barra com
+   "FORMATO INVÁLIDO". Número de verdade, com formato de inteiro, resolve as
+   duas coisas de uma vez: sem notação científica e sem símbolo estranho.
+
+   xlsx-js-style (carregada só no index.html, não no worker) em vez da xlsx
+   comum: a versão livre do SheetJS não grava estilo nenhum no arquivo — cor
+   de cabeçalho, zebra etc. saem sempre em branco. */
+function mdGerarXlsxAjuste(blocos, prefixoArquivo){
+  const COR_LARANJA = 'FE5000', COR_AZUL = '001A72', COR_BRANCO = 'FFFFFF', COR_ZEBRA = 'FFF4EE';
+  // Item pai (o código do múltiplo, não do componente) entra só como
+  // referência pra achar o item certo em caso de EAN duplicado entre SKUs
+  // diferentes — não é campo que se cola no coletor, por isso fica no fim,
+  // fora da sequência Local/EAN/Orig/Dest/Qtde que é exatamente a ordem dos
+  // campos na tela.
+  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Item pai'];
+  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço e Item pai
+
+  function construirAba(linhas){
+    const dados = linhas.map(l=>[
+      Number(l.localColetor) || 0, Number(l.ean) || 0, Number(l.codDe) || 0,
+      Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '', String(l.pai || '')
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([cab, ...dados]);
+    cab.forEach((_, c)=>{
+      const cel = ws[XLSX.utils.encode_cell({r:0, c})];
+      if(cel) cel.s = {
+        fill: {fgColor:{rgb:COR_LARANJA}},
+        font: {bold:true, color:{rgb:COR_BRANCO}},
+        alignment: {horizontal:'center', vertical:'center'},
+        border: {bottom:{style:'thin', color:{rgb:COR_AZUL}}}
+      };
+    });
+    dados.forEach((_, ri)=>{
+      const zebra = ri % 2 === 1;
+      for(let c=0; c<cab.length; c++){
+        const cel = ws[XLSX.utils.encode_cell({r:ri+1, c})];
+        if(!cel) continue;
+        cel.s = {alignment:{vertical:'center'}, ...(zebra ? {fill:{fgColor:{rgb:COR_ZEBRA}}} : {})};
+        if(colNumerica.has(c)) cel.z = '0';
+      }
+    });
+    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28},{wch:12}];
+    return ws;
+  }
+
+  // Item com menos saldo total é o que corre mais risco de cancelamento se
+  // for romaneado sem ter peça pra atender o pedido — sai primeiro na
+  // planilha pra ser resolvido antes. Critério por item (WN+86+outras), não
+  // pela quantidade da própria linha: duas linhas do mesmo item comprado
+  // ficam juntas, ordenadas pelo item, não espalhadas pela tabela.
+  const comLinhas = blocos
+    .map(b=>({...b, linhas: b.linhas.slice().sort((a,c)=>(a.totalComponente ?? 0) - (c.totalComponente ?? 0))}))
+    .filter(b=>b.linhas.length);
+  if(!comLinhas.length){ irShowToast('Não há ajuste para exportar.'); return; }
+  const wb = XLSX.utils.book_new();
+  for(const bloco of comLinhas) XLSX.utils.book_append_sheet(wb, construirAba(bloco.linhas), bloco.titulo);
+
   const hoje = new Date().toISOString().slice(0,10);
-  a.href = url; a.download = `ajuste-restricao-multiplos-${hoje}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
-  irShowToast(irFmtInt(lista.length)+' linhas exportadas.');
+  XLSX.writeFile(wb, `${prefixoArquivo || 'ajuste-restricao-multiplos'}-${hoje}.xlsx`);
+  const total = comLinhas.reduce((a,b)=>a+b.linhas.length, 0);
+  irShowToast(irFmtInt(total)+' linhas exportadas.');
+}
+
+/* ============================================================
+   TELA — AUDITORIA DE RESTRIÇÃO
+   ============================================================
+   Mesma régua de Configurações (classe/X1), mas aplicada a TODO item com
+   saldo na QRY0390 — não só componente de múltiplo. Existe porque um item
+   fora de múltiplo com restrição errada nunca aparece em Ajustes de
+   Restrição, que só enxerga o que a estrutura (ZBIQ0051) conhece. */
+function mdTemDadosAuditoria(){ return !!(MD.auditoria && MD.auditoria.length); }
+
+function mdPlanoAuditoria(){
+  const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
+  const out = [];
+  for(const row of (MD.auditoria||[])){
+    const regra = mdRegraViolada(row);
+    if(!regra) continue;
+    // Mesmo critério de mdPlanoCorrecaoRestricao: 86 nunca é destino aqui, e
+    // mais de uma restrição permitida sem WN não dá pra escolher sem chute.
+    const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
+      : (regra.length===1 && regra[0] !== MD_SIGLA_BLOQUEIO ? regra[0] : null);
+    if(!destino) continue;
+    const quantidade = Math.max(0, (row[campo] || 0) - (row.qtdeRom || 0));
+    if(!quantidade) continue;
+    out.push({
+      de: row.restricao, para: destino,
+      codDe: mdCodRestricao(row.restricao), codPara: mdCodRestricao(destino),
+      localColetor: mdLocalColetor(row.local),
+      local: row.local, endereco: row.desc, predio: row.predio,
+      clal: row.clal, x1: row.x1, x2: row.x2,
+      item: row.item, nome: row.nome, ean: row.ean, quantidade,
+      preco: row.valorUnitario || 0, valor: quantidade * (row.valorUnitario || 0),
+      totalComponente: row.qtde
+    });
+  }
+  return out;
+}
+const MD_LIMITE_AUDITORIA = 300;
+function mdRenderAuditoria(){
+  if(!mdTemDadosAuditoria()){
+    return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 para auditar a restrição de todos os itens.', "irSwitchTab('importacao')", 'Ir para a importação');
+  }
+  let plano = mdPlanoAuditoria();
+  const termo = (MD.buscaAuditoria || '').trim().toLowerCase();
+  if(termo) plano = plano.filter(l =>
+    l.item.toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo) ||
+    (l.local||'').toLowerCase().includes(termo) || (l.clal||'').toLowerCase().includes(termo) ||
+    (l.x1||'').toLowerCase().includes(termo));
+  plano.sort((a,b)=>b.valor - a.valor);
+
+  const semBloqueio = plano.filter(l=>l.de !== MD_SIGLA_BLOQUEIO);
+  const resumo = {
+    itens: new Set(semBloqueio.map(l=>l.item)).size,
+    pecas: semBloqueio.reduce((a,l)=>a+l.quantidade, 0),
+    valor: semBloqueio.reduce((a,l)=>a+l.valor, 0)
+  };
+
+  const linhas = plano.slice(0, MD_LIMITE_AUDITORIA).map(l=>`<tr>
+    <td class="md-left mono">${irEsc(l.item)}</td>
+    <td class="md-left">${irEsc(l.nome)}</td>
+    <td class="md-left mono">${irEsc(l.local)}</td>
+    <td class="md-left mono">${irEsc(l.clal)}</td>
+    <td class="md-left mono">${irEsc(l.x1)}</td>
+    <td class="md-cel-erro">${irEsc(mdCodRestricao(l.de)+' '+l.de)}</td>
+    <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
+    <td>${irFmtInt(l.quantidade)}</td>
+    <td class="num-money">${irFmtMoney(l.valor)}</td>
+  </tr>`).join('');
+
+  return `<div class="panel">
+    <div class="md-head">
+      <h3>Auditoria de Restrição</h3>
+      <button class="btn btn-primary" onclick="mdExportarAuditoria()">Baixar relatório</button>
+    </div>
+    <p class="field-hint" style="margin-bottom:12px;">
+      Todo item com saldo na QRY0390, componente de múltiplo ou não, com restrição fora da regra configurada em Configurações.
+    </p>
+    ${mdKpisCorrecao(resumo)}
+    ${mdAvisoSemRegra()}
+    <div class="md-filtros">
+      <input id="mdBuscaAuditoria" class="md-busca" type="search" placeholder="Buscar item, local, classe ou X1..."
+             value="${irEsc(MD.buscaAuditoria)}" oninput="mdBuscarAuditoria(this.value)">
+    </div>
+    ${!plano.length ? '<p class="field-hint">Nenhuma restrição fora da regra encontrada.</p>' : `
+    <div class="md-piv-wrap">
+      <table class="md-piv">
+        <thead><tr>
+          <th class="md-left">Item</th><th class="md-left">Descrição</th><th class="md-left">Local</th>
+          <th class="md-left">Classe</th><th class="md-left">X1</th>
+          <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    ${plano.length > MD_LIMITE_AUDITORIA ? `<p class="field-hint" style="margin-top:8px;">Mostrando as ${irFmtInt(MD_LIMITE_AUDITORIA)} maiores por valor, de ${irFmtInt(plano.length)} linhas. Baixe o relatório pra ver tudo.</p>` : ''}
+    `}
+  </div>`;
+}
+function mdBuscarAuditoria(v){
+  MD.buscaAuditoria = v;
+  clearTimeout(window.__mdBuscaAuditoriaTimer);
+  window.__mdBuscaAuditoriaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBuscaAuditoria')?.focus(); }, 220);
+}
+function mdExportarAuditoria(){
+  const plano = mdPlanoAuditoria();
+  mdGerarXlsxAjuste([
+    {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
+    {titulo:'Para outras restrições', linhas: plano.filter(l=>l.para!==MD_SIGLA_VENDAVEL)}
+  ], 'auditoria-restricao');
 }
 
 /* ============================================================
@@ -760,7 +1090,8 @@ function mdProcessar(id){
       mdSetArquivo(id, null);
       await mdRecarregar();
       if(msg.type === 'done051'){
-        irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.');
+        irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.'
+          +(msg.compartilhados ? ' · '+irFmtInt(msg.compartilhados)+' componentes usados em mais de um múltiplo' : ''));
       } else if(msg.type === 'done390'){
         irShowToast(irFmtInt(msg.itens)+' componentes com saldo'+(msg.semSaldo ? ' · '+irFmtInt(msg.semSaldo)+' sem saldo' : '')+'.');
       } else if(msg.type === 'done278'){
@@ -786,7 +1117,9 @@ function mdProcessar(id){
 function mdEstadoBase(id){
   if(id==='051'){
     const m = MD.estruturaMeta;
-    return m ? irFmtInt(m.pais)+' múltiplos · '+irFmtInt(m.componentes)+' componentes · '+irFmtDate(m.importadoEm) : 'nunca importada';
+    if(!m) return 'nunca importada';
+    return irFmtInt(m.pais)+' múltiplos · '+irFmtInt(m.componentes)+' componentes · '+irFmtDate(m.importadoEm)
+      +(m.compartilhados ? ' · '+irFmtInt(m.compartilhados)+' componentes em mais de um múltiplo' : '');
   }
   if(id==='390'){
     const m = MD.saldoMeta;
@@ -860,20 +1193,56 @@ function mdSetRegra(chave, valor, sigla, permitido){
   if(permitido) atual.add(sigla); else atual.delete(sigla);
   MD.regras[chave][valor] = Array.from(atual);
   mdSetConfig(MD_CONFIG_KEY_POR_DIM[chave], MD.regras[chave]);
+  // O pareamento de Descasados agora também depende da regra (ver mdPais) —
+  // sem isso a tela ficava com o cálculo antigo até trocar de base ou aba.
+  mdInvalidarCache();
   irRenderView();
+  // irRenderView troca o innerHTML da tabela inteira e derruba o foco — sem
+  // devolver pro mesmo checkbox, marcar várias casas em sequência com teclado
+  // (seta + espaço) perderia a posição a cada tecla.
+  for(const cb of document.querySelectorAll('input[type="checkbox"][data-chave]')){
+    if(cb.dataset.chave === chave && cb.dataset.valor === valor && cb.dataset.sigla === sigla){ cb.focus(); break; }
+  }
 }
+/* Navegação por seta na matriz de Configurações — marcar casa a casa com o
+   mouse é lento numa tabela com dezenas de X1/X2. Espaço já marca/desmarca
+   sozinho (comportamento nativo do checkbox); só falta mover o foco. */
+function mdConfigNav(e, el){
+  const tecla = e.key;
+  if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(tecla)) return;
+  e.preventDefault();
+  const td = el.closest('td');
+  const tr = td.closest('tr');
+  if(tecla === 'ArrowLeft' || tecla === 'ArrowRight'){
+    const dir = tecla === 'ArrowRight' ? 1 : -1;
+    let alvo = td;
+    do { alvo = dir > 0 ? alvo.nextElementSibling : alvo.previousElementSibling; }
+    while(alvo && !alvo.querySelector('input[type="checkbox"]'));
+    if(alvo) alvo.querySelector('input[type="checkbox"]').focus();
+    return;
+  }
+  const colIdx = Array.from(tr.children).indexOf(td);
+  const alvoTr = tecla === 'ArrowDown' ? tr.nextElementSibling : tr.previousElementSibling;
+  const alvoTd = alvoTr && alvoTr.children[colIdx];
+  const cb = alvoTd && alvoTd.querySelector('input[type="checkbox"]');
+  if(cb) cb.focus();
+}
+/* 0 (WN) e 86 (AI) são as duas restrições que todo mundo mexe o tempo
+   inteiro — ficam lado a lado, igual já é no pivô (MD_ORDEM_RESTRICOES),
+   em vez do 86 isolado lá no fim da tabela depois de mais 13 colunas. */
+const MD_RESTRICOES_CONFIG = MD_ORDEM_RESTRICOES.map(sigla=>MD_RESTRICOES.find(r=>r.sigla===sigla));
 function mdRenderConfiguracoes(){
   const secoes = MD_DIMENSOES.map(dim=>{
     const valores = mdValoresConhecidos(dim.chave);
     if(!valores.length) return '';
-    const headerCols = MD_RESTRICOES.map(r=>
-      `<th title="${irEsc(r.sigla+' — '+r.nome)}">${irEsc(r.cod)}</th>`
+    const headerCols = MD_RESTRICOES_CONFIG.map(r=>
+      `<th title="${irEsc(r.sigla+' — '+r.nome)}">${mdRotuloColunaHtml(r.sigla)}</th>`
     ).join('');
     const linhas = valores.map(v=>{
       const regra = MD.regras[dim.chave][v] || [];
-      const cels = MD_RESTRICOES.map(r=>{
+      const cels = MD_RESTRICOES_CONFIG.map(r=>{
         const marcado = regra.includes(r.sigla);
-        return `<td><input type="checkbox" ${marcado?'checked':''} onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)"></td>`;
+        return `<td><input type="checkbox" ${marcado?'checked':''} data-chave="${irEsc(dim.chave)}" data-valor="${irEsc(v)}" data-sigla="${r.sigla}" onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)" onkeydown="mdConfigNav(event, this)"></td>`;
       }).join('');
       return `<tr><td class="md-left mono">${irEsc(v)}</td>${cels}</tr>`;
     }).join('');
@@ -903,6 +1272,8 @@ function mdRenderConfiguracoes(){
 const MD_TELAS = {
   descasados:['Múltiplos Descasados','Componente sem par no estoque: dimensão, onde está e quanto vale.'],
   ajustes:['Ajustes de Restrição','O que bloquear em 86 e o que devolver para venda, linha a linha.'],
+  auditoria:['Auditoria de Restrição','Restrição fora da regra em qualquer item com saldo, múltiplo ou não.'],
+  indicadores:['Indicadores','Panorama dos múltiplos descasados pra mostrar ao setor.'],
   configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
   importacao:['Importação','ZBIQ0051, QRY0390 e SIGEQ278 — as bases do módulo.']
 };
@@ -924,6 +1295,8 @@ function irRenderView(){
   }
   raiz.innerHTML = MD.tela==='importacao'    ? mdRenderImportacao()
                  : MD.tela==='ajustes'       ? mdRenderAjustes()
+                 : MD.tela==='auditoria'     ? mdRenderAuditoria()
+                 : MD.tela==='indicadores'   ? mdRenderIndicadores()
                  : MD.tela==='configuracoes' ? mdRenderConfiguracoes()
                  : mdRenderDescasados();
   if(mesmaTela) raiz.querySelectorAll('.md-piv-wrap').forEach((el, i)=>{ if(scrolls[i]) el.scrollTop = scrolls[i]; });
@@ -942,9 +1315,11 @@ async function mdRecarregar(){
   MD.estrutura = await mdGetEstrutura();
   MD.saldos = await mdGetSaldo();
   MD.precos = await mdGetPrecos();
+  MD.auditoria = await mdGetAuditoria();
   MD.estruturaMeta = await mdGetEstruturaMeta();
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
+  MD.auditoriaMeta = await mdGetAuditoriaMeta();
   MD.regras = {
     clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || {},
     x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || {}
