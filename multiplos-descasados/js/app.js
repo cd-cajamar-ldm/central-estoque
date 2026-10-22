@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v9';
+const MD_APP_VERSION = 'v10';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -258,13 +258,26 @@ function mdRotuloColunaHtml(sigla){
   return `<span class="md-col-rotulo">${irEsc(mdRotuloCurto(sigla))}</span><span class="md-col-codigo">${irEsc(mdCodRestricao(sigla))}</span>`;
 }
 
-/* Colunas de restrição da tela: as que realmente aparecem no estoque destes
-   componentes, na ordem da legenda. Restrição sem nenhuma peça não vira coluna
-   vazia — a tabela já é larga. */
+/* Colunas de restrição do PIVÔ de múltiplos (Descasados): as que realmente
+   aparecem no estoque dos COMPONENTES de múltiplo, na ordem da legenda.
+   Restrição sem nenhuma peça não vira coluna vazia — a tabela já é larga. */
 function mdRestricoesPresentes(){
   const pais = mdPais();
   const vistas = new Set();
   for(const p of pais) for(const c of p.componentes) for(const s in c.porRestricao) vistas.add(s);
+  const ordenadas = MD_ORDEM_RESTRICOES.filter(s=>vistas.has(s));
+  for(const s of vistas) if(!ordenadas.includes(s)) ordenadas.push(s);
+  return ordenadas;
+}
+/* Mesma ideia, mas pra Ajustes de Restrição — que olha toda peça do CD
+   (MD.saldos inteiro, não só componente de múltiplo via mdPais). Sem isso o
+   cabeçalho da matriz ficava raso demais: só mostrava as restrições que
+   algum componente de múltiplo usa, escondendo coluna de uma restrição que só
+   aparece em item comum (ex.: Amostra, Insumos), mesmo com peça de verdade
+   somada escondida ali dentro do Total Geral. */
+function mdRestricoesPresentesCD(){
+  const vistas = new Set();
+  for(const s of (MD.saldos||[])) for(const loc of (s.locais||[])) if(loc.restricao) vistas.add(loc.restricao);
   const ordenadas = MD_ORDEM_RESTRICOES.filter(s=>vistas.has(s));
   for(const s of vistas) if(!ordenadas.includes(s)) ordenadas.push(s);
   return ordenadas;
@@ -276,7 +289,7 @@ function mdRestricoesPresentes(){
    interessam naquele momento, porque com 10 colunas a tabela rola na
    horizontal e o que importa sai da tela. */
 function mdRestricoesVisiveis(){
-  const presentes = mdRestricoesPresentes();
+  const presentes = mdRestricoesPresentesCD();
   if(MD.restricoesSel === null) return presentes;
   const visiveis = presentes.filter(s=>MD.restricoesSel.has(s));
   // Desmarcar tudo deixaria a matriz sem nenhuma coluna de número: sem isso a
@@ -284,7 +297,7 @@ function mdRestricoesVisiveis(){
   return visiveis.length ? visiveis : presentes;
 }
 function mdToggleRestricaoCol(sigla){
-  if(MD.restricoesSel === null) MD.restricoesSel = new Set(mdRestricoesPresentes());
+  if(MD.restricoesSel === null) MD.restricoesSel = new Set(mdRestricoesPresentesCD());
   if(MD.restricoesSel.has(sigla)) MD.restricoesSel.delete(sigla); else MD.restricoesSel.add(sigla);
   irRenderView();
 }
@@ -296,7 +309,7 @@ function mdToggleListaRestricoes(){ MD.restricoesAberto = !MD.restricoesAberto; 
    código, a sigla e o nome da legenda — o mesmo vocabulário do coletor, pra
    quem lembra do número e não da sigla (e vice-versa). */
 function mdRenderFiltroRestricoes(){
-  const presentes = mdRestricoesPresentes();
+  const presentes = mdRestricoesPresentesCD();
   if(!presentes.length) return '';
   const sel = MD.restricoesSel;
   const marcadas = sel === null ? presentes.length : presentes.filter(s=>sel.has(s)).length;
@@ -769,7 +782,7 @@ function mdRenderMatrizPor(chave){
 
   // Com o filtro de restrições ligado, a soma das colunas na tela não fecha
   // com o Total Geral (que continua sendo o de todas) — o cabeçalho avisa.
-  const filtrando = restricoes.length < mdRestricoesPresentes().length;
+  const filtrando = restricoes.length < mdRestricoesPresentesCD().length;
   const totalPorRestricao = {};
   for(const s of restricoes) totalPorRestricao[s] = 0;
   let totalGeral = 0, comErro = 0;
