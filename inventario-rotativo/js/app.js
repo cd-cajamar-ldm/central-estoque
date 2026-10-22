@@ -1929,10 +1929,15 @@ function irRenderDivergentesPorDiaPanel(ind){
       svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:var(--orange)">${fmt(div)}</text>`;
       svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:var(--ink-soft)">${diaLabel(r.dia)}</text>`;
     });
+    // preserveAspectRatio="none" + width:100% (com min-width no tamanho natural):
+    // quando os dias cabem na largura do painel, o gráfico estica pra ocupar
+    // o espaço todo em vez de sobrar vazio à direita; quando não cabem, a
+    // largura natural vira o piso e o excesso rola (preserveAspectRatio:none
+    // só estica o desenho, nunca encolhe as fatias abaixo do piso).
     return `<div class="panel">
       <h3>${titulo}</h3>
       <div class="bi-vbars-scroll">
-        <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${svg}</svg>
+        <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;min-width:${W}px;height:${H}px;display:block;">${svg}</svg>
       </div>
     </div>`;
   };
