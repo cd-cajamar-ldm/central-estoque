@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v7';
+const MD_APP_VERSION = 'v8';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
@@ -1307,22 +1307,8 @@ function mdRenderConfiguracoes(){
   if(!secoes){
     return irEmptyState('Sem valores ainda', 'Importe a QRY0390 para ver as classes de local (CLAL, X1, X2) dos componentes de múltiplo.', "irSwitchTab('importacao')", 'Ir para a importação');
   }
-  const alterado = mdRascunhoAlterado();
-  return `<div class="panel md-head" style="position:sticky; top:0; z-index:5; margin-bottom:14px;">
-    <div>
-      <strong>${alterado ? 'Há marcações não salvas' : 'Nada pendente de salvar'}</strong>
-      <p class="field-hint" style="margin:4px 0 0;">
-        Marcar/desmarcar aqui não muda nada ainda — só depois de clicar em "Salvar Configuração"
-        o pareamento de múltiplos e os Ajustes/Auditoria de Restrição passam a usar a regra nova.
-      </p>
-    </div>
-    <div class="md-chips">
-      ${alterado ? `<button class="btn-link" onclick="mdDescartarRascunho()">Descartar alterações</button>` : ''}
-      <button class="btn btn-primary" onclick="mdSalvarConfiguracao()" ${alterado ? '' : 'disabled'}>Salvar Configuração</button>
-      <button class="chip" onclick="mdExportarConfiguracao()">Exportar configuração</button>
-      <button class="chip" onclick="document.getElementById('mdImportarConfigInput').click()">Importar configuração</button>
-      <input type="file" id="mdImportarConfigInput" accept=".json" style="display:none" onchange="mdImportarConfiguracao(this.files[0]); this.value='';">
-    </div>
+  return `<div style="position:sticky; top:0; z-index:5; margin-bottom:14px; text-align:right;">
+    <button class="btn btn-primary" onclick="mdSalvarConfiguracao()">Salvar Configuração</button>
   </div>${secoes}`;
 }
 /* Configuração é só local (IndexedDB do navegador) — troca de pessoa, de
