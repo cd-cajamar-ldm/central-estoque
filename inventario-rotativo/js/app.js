@@ -1912,9 +1912,24 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
   }
   const n = rowsVisiveis.length;
   const W = padL + padR + slot*n;
-  const maxS = Math.max(1, ...rowsVisiveis.map(r=>r[campoSist]||0));
+  // Teto da escala: o maior valor sozinho pode ser um dia bem fora da curva
+  // (ex.: lote grande importado de uma vez), e usar ele como teto "esmaga"
+  // visualmente todos os outros dias contra o chão do gráfico. Com dados
+  // suficientes (4+ dias), o teto vira 3x a mediana quando o maior valor
+  // passa bem disso; o(s) dia(s) acima do teto ganham uma barra "cortada"
+  // (marca de corte no topo), mas o rótulo sempre mostra o número real.
+  const sistVals = rowsVisiveis.map(r=>r[campoSist]||0);
+  const trueMax = Math.max(1, ...sistVals);
+  let maxS = trueMax;
+  if(sistVals.length>=4){
+    const sorted = sistVals.slice().sort((a,b)=>a-b);
+    const mid = Math.floor(sorted.length/2);
+    const mediana = sorted.length%2 ? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
+    if(mediana>0 && trueMax > mediana*3) maxS = mediana*3;
+  }
   const barW = slot*0.3, gap = slot*0.08;
   const base = padT + plotH;
+  const corteMark = (xCentro)=> `<path d="M ${(xCentro-7).toFixed(1)} ${(padT+5).toFixed(1)} l 5 -6 l 4 6 l 5 -6" style="stroke:${cores.axis};stroke-width:1.4;fill:none;opacity:.6"/>`;
   let svg = '';
   for(let i=0;i<n;i++){
     const x = padL + i*slot + 3;
@@ -1924,14 +1939,16 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
     const sist = r[campoSist]||0, div = r[campoDiv]||0;
     const acc = sist>0 ? 1-div/sist : 1;
     const cx = padL + i*slot + slot/2;
-    const hS = sist>0 ? Math.max(3, Math.round(sist/maxS*plotH)) : 0;
-    const hD = div>0 ? Math.max(3, Math.round(div/maxS*plotH)) : 0;
+    const hS = sist>0 ? Math.max(3, Math.round(Math.min(sist,maxS)/maxS*plotH)) : 0;
+    const hD = div>0 ? Math.max(3, Math.round(Math.min(div,maxS)/maxS*plotH)) : 0;
     const xS = cx - barW - gap/2, xD = cx + gap/2;
     const good = acc>=meta;
     svg += `<rect x="${cx-27}" y="${padT-44}" width="54" height="19" rx="9.5" style="fill:${good?cores.goodBg:cores.badBg}"/>`;
     svg += `<text x="${cx}" y="${padT-30}" text-anchor="middle" font-size="11" font-weight="800" style="fill:${good?cores.good:cores.bad}">${irFmtPct(acc)}</text>`;
     svg += `<rect x="${xS}" y="${base-hS}" width="${barW}" height="${hS}" rx="3" style="fill:${cores.sist}"/>`;
     svg += `<rect x="${xD}" y="${base-hD}" width="${barW}" height="${hD}" rx="3" style="fill:${cores.div}"/>`;
+    if(sist>maxS) svg += corteMark(xS+barW/2);
+    if(div>maxS) svg += corteMark(xD+barW/2);
     svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${cores.sist}">${fmt(sist)}</text>`;
     svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${cores.div}">${fmt(div)}</text>`;
     svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:${cores.axis}">${diaLabel(r.dia)}</text>`;
@@ -3101,6 +3118,17 @@ const IR_PASTA_CICLO_BASES = [
 ];
 function irPastaChaveArq(file){ return file.name+'|'+file.size+'|'+file.lastModified; }
 function irPastaCicloChave(g){ return g.numero+'/'+g.ano; }
+// "Ciclo 3 - 2026", "Ciclo 3/2026", "ciclo 03 — 2026" — pega o segmento da
+// pasta que tem "Ciclo N" seguido de um ano de 4 dígitos perto, não importa
+// o separador entre eles. null quando a pasta não segue esse padrão (arquivo
+// solto na raiz, por exemplo) — aí quem decide é a detecção por conteúdo.
+function irPastaCicloFromPath(caminho){
+  const m = String(caminho||'').match(/ciclo\s*0*(\d{1,2})[^0-9]{0,6}(20\d{2})/i);
+  if(!m) return null;
+  const numero = parseInt(m[1],10), ano = parseInt(m[2],10);
+  if(numero<1 || numero>4) return null;
+  return {numero, ano};
+}
 // Lê UMA 843 e devolve o ciclo dela. O resultado fica em cache pela assinatura do
 // arquivo: reler dez planilhas grandes a cada abertura do dash é caro e inútil.
 function irPastaDetectar843(file){
@@ -3162,12 +3190,20 @@ async function irPastaMapearCiclos(){
       if(det && !det.erro && !det.fimTrimestre) det = null;
       if(!det){ det = await irPastaDetectar843(arq.file); cache[chave] = det; mudouCache = true; }
       if(det.erro || !det.numero || !det.ano) continue;
+      // A pasta (quando organizada como "Ciclo N - AAAA") é mais confiável que o
+      // chute por data/observação do conteúdo do arquivo: uma contagem que avança
+      // pros primeiros dias do trimestre seguinte faz a mediana das datas cair no
+      // trimestre errado, e aí o ciclo é confundido com o próximo (os dois viram
+      // um só, um "roubando" a planilha 843 do outro).
+      const daPasta = irPastaCicloFromPath(arq.pasta);
+      const numero = daPasta ? daPasta.numero : det.numero;
+      const ano = daPasta ? daPasta.ano : det.ano;
       const termino = irTerminoDoCiclo(det);
-      const k = det.numero+'/'+det.ano;
+      const k = numero+'/'+ano;
       let g = grupos.get(k);
       if(!g){
-        g = {numero:det.numero, ano:det.ano, dataAbertura:det.dataAbertura,
-             dataPrevistaTermino:termino, origem:det.origem,
+        g = {numero, ano, dataAbertura:det.dataAbertura,
+             dataPrevistaTermino:termino, origem: daPasta ? 'pasta' : det.origem,
              pastas:new Set(), arquivos:{'843':[]}};
         grupos.set(k, g);
       }
