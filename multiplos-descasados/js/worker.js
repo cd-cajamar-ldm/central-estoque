@@ -60,14 +60,20 @@ function post(type, payload){ self.postMessage({type, ...payload}); }
    nomes evita que o módulo quebre se ela voltar ao formato antigo. */
 const ALIAS_390 = {
   item: ['ID_ITEM_FILHO','Item'], itemPai: ['ITEM_PAI'],
-  // 'Descrição2' entra ANTES de 'Descrição' de propósito: numa variante da
-  // extração (saída do fluxo Snowflake com o item pela ótica do local) a
-  // coluna 'Descrição' vem com o ENDEREÇO, não o nome do item — o nome certo
-  // fica em 'Descrição2'. mdNormKey tira os underscores, então 'Descrição2' e
-  // 'Descrição_2' normalizam igual; a ordem das COLUNAS no arquivo é quem
-  // desempata (a de nome de item vem primeiro nessa variante). Nos formatos
-  // de sempre, sem 'Descrição2' nenhuma, cai em 'Descrição' como já era.
-  descricao: ['NOME_ITEM_FILHO','Descrição2','Descrição','Descricao'],
+  // A extração de verdade (direto do WMS, sem Snowflake — a que todo mundo
+  // sem acesso ao fluxo vai usar) repete "Descrição" três vezes no cabeçalho
+  // (nome do item, rótulo da Classe Local, endereço). O SheetJS desambigua
+  // sozinho ao ler, numerando as repetições em ORDEM: a 1ª fica "Descrição"
+  // (sempre o nome do item, confirmado na extração real), a 2ª vira
+  // "Descrição_1", a 3ª "Descrição_2" — por isso NÃO adicionar um apelido pra
+  // essas repetições: "Descrição" pura já é a certa, e um apelido tipo
+  // "Descrição2"/"Descrição_2" (testado e revertido) acaba batendo com a
+  // repetição errada (o endereço) por causa dessa numeração. Só uma variante
+  // à parte (saída específica do Snowflake, fora de uso) chega com as 3
+  // repetições já pré-nomeadas pelo próprio export, fora dessa ordem — como
+  // ela não está em produção, não vale o risco de tentar acertar as duas ao
+  // mesmo tempo.
+  descricao: ['NOME_ITEM_FILHO','Descrição','Descricao'],
   descricaoPai: ['NOME_ITEM_PAI'],
   local: ['ID_LOCAL','Local'], descLocal: ['DESC_LOCAL'],
   quantidade: ['QTDE','Quantidade'], qtdeDisp: ['QTDE_DISP'],
