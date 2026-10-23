@@ -3524,6 +3524,7 @@ function irRenderNet410Resultado(d){
       </table></div>
     </div>
     ${irRenderNet410PorObsMesTable(d)}
+    ${irRenderNet410PorObsMesTodosTable(d)}
     <h3 style="margin:20px 0 -6px;">Itens que mais impactam no ano — ${d.ano}</h3>
     <div class="bi-grid-2">
       ${irRenderNet410ItensPanel(d.topItensPositivos, false, 'Soma do valor no ano ('+d.ano+'), só motivos considerados pro NET.')}
@@ -3571,6 +3572,48 @@ function irRenderNet410PorObsMesTable(d){
           <td class="mono" style="color:var(--danger);">${totalSaida?irFmtMoney(totalSaida):'—'}</td>
           <td class="mono" style="color:var(--success);">${totalEntrada?irFmtMoney(totalEntrada):'—'}</td>
           <td class="mono" style="color:${totalNet>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalNet)}</td>
+        </tr></tfoot>
+      </table></div>
+    </div>`;
+}
+/* Mesmo mês da tabela acima, mas SEM excluir nada — nem os motivos fora da
+   ordem fixa (IR_NET410_ORDEM_OBS), nem os marcados "Considerar NET = NÃO".
+   É pra achar a causa de um NET esquisito no mês: a tabela oficial já corta
+   o que não entra no número, e às vezes é justamente o que foi cortado que
+   explica o total. Maior impacto (|Total Geral|) primeiro. */
+function irRenderNet410PorObsMesTodosTable(d){
+  const mes = IR.net410MesSel;
+  const mObj = (d.porMes||[]).find(m=>m.mes===mes);
+  const legendaViva = IR.net410Legenda||[];
+  const linhas = (mObj && mObj.porObs || []).slice().sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral));
+  const totalSaida = linhas.reduce((s,o)=>s+(o.saida||0),0);
+  const totalEntrada = linhas.reduce((s,o)=>s+(o.entrada||0),0);
+  const totalGeral = linhas.reduce((s,o)=>s+(o.totalGeral||0),0);
+  const mesLabel = mObj ? (IR_MES_NOMES[parseInt(mes.slice(5,7),10)-1]+'/'+mes.slice(0,4)) : '—';
+  return `
+    <div class="panel">
+      <h3>NET por Observação (R$) — todos os motivos, sem exclusão — ${irEsc(mesLabel)}</h3>
+      <p class="panel-sub">Igual à tabela acima, mas lista toda observação que apareceu no mês, inclusive as que a legenda marca como "Considerar NET = NÃO" e as fora da ordem fixa. Ordenado pelo maior impacto absoluto primeiro.</p>
+      <div class="table-wrap"><table class="table-wide">
+        <thead><tr><th>Obs</th><th>Legenda</th><th>Considerar NET?</th><th>Saída</th><th>Entrada</th><th>Total Geral</th></tr></thead>
+        <tbody>${linhas.length ? linhas.map(o=>{
+          const legendaEntry = legendaViva.find(l=>l.id===o.id);
+          const considerarNet = legendaEntry ? legendaEntry.considerarNet!==false : true;
+          const legendaTexto = (legendaEntry && legendaEntry.legenda) || o.legenda || '';
+          return `<tr>
+          <td class="mono">${irEsc(o.id)}</td>
+          <td>${irEsc(legendaTexto)||'—'}</td>
+          <td><span class="tag ${considerarNet?'tag-good':'tag-muted'}">${considerarNet?'SIM':'NÃO'}</span></td>
+          <td class="mono" style="color:var(--danger);">${o.saida?irFmtMoney(o.saida):'—'}</td>
+          <td class="mono" style="color:var(--success);">${o.entrada?irFmtMoney(o.entrada):'—'}</td>
+          <td class="mono" style="font-weight:700;">${irFmtMoney(o.totalGeral)}</td>
+        </tr>`;
+        }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);">Sem movimentos no mês selecionado</td></tr>'}</tbody>
+        <tfoot><tr style="font-weight:700;">
+          <td colspan="3">Total Geral (todos os motivos)</td>
+          <td class="mono" style="color:var(--danger);">${totalSaida?irFmtMoney(totalSaida):'—'}</td>
+          <td class="mono" style="color:var(--success);">${totalEntrada?irFmtMoney(totalEntrada):'—'}</td>
+          <td class="mono" style="color:${totalGeral>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalGeral)}</td>
         </tr></tfoot>
       </table></div>
     </div>`;
