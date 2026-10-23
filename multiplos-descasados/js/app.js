@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v16';
+const MD_APP_VERSION = 'v17';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -179,19 +179,29 @@ function mdTemDados(){ return !!(MD.estrutura && MD.estrutura.length && MD.saldo
 
 function mdSetBase(base){ MD.base = base; mdInvalidarCache(); irRenderView(); }
 function mdSetEqualizado(v){ MD.equalizado = v; irRenderView(); }
+/* Restaura foco E cursor no fim depois de um re-render que recria o campo do
+   zero. `.focus()` sozinho não basta: o navegador manda o cursor pro INÍCIO
+   do valor num input recém-criado, não pro fim — se a pessoa continuar
+   digitando antes do próximo re-render, a letra entra no começo, não no
+   final, e o texto sai embaralhado (ex.: digitar "GAI" rápido vira "IGA"). */
+function mdFocarFim(el){
+  if(!el) return;
+  el.focus();
+  const fim = el.value.length;
+  el.setSelectionRange(fim, fim);
+}
 function mdBuscar(v){
   MD.busca = v;
   clearTimeout(window.__mdBuscaTimer);
-  window.__mdBuscaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBusca')?.focus(); }, 220);
+  window.__mdBuscaTimer = setTimeout(()=>{ irRenderView(); mdFocarFim(document.getElementById('mdBusca')); }, 220);
 }
 /* LOG (LOG_ITEM da 390) é a linha de produto/responsável do item — diferente
    da classe física do endereço (CLAL/X1/X2). Agrupa o valor bloqueado
    (mesma sobra vendável do KPI "Valor descasado") por essa linha pra apontar
    qual LOG concentra mais descasamento, não só o total geral. */
 /* Agrupa os componentes com sobra bloqueada (mesmo critério do KPI "Valor
-   descasado") por uma chave qualquer — usado tanto pelo "LOG mais divergente"
-   dos KPIs quanto pelos rankings da aba Indicadores. Ordenado do maior valor
-   pro menor. */
+   descasado") por uma chave qualquer — usado pelo "LOG mais divergente" dos
+   KPIs. Ordenado do maior valor pro menor. */
 function mdAgruparComponentesBloqueados(pais, chaveFn){
   const porChave = new Map();
   for(const p of pais){
@@ -209,17 +219,7 @@ function mdAgruparComponentesBloqueados(pais, chaveFn){
     .map(a=>({chave:a.chave, valor:a.valor, pecas:a.pecas, nPais:a.pais.size}))
     .sort((a,b)=>b.valor - a.valor);
 }
-/* Não existe campo de fornecedor em nenhuma base importada (ZBIQ0051,
-   QRY0390, SIGEQ278) — a última palavra do nome do componente é o jeito que
-   tem hoje de aproximar isso, já que no cadastro ela costuma ser a marca/
-   fabricante (ex. "...DOBRAVEL EQUIPAMENTOS", "...8T 26PC 4003-P MARCON"). */
-function mdUltimaPalavra(nome){
-  if(!nome) return '';
-  const palavras = nome.trim().split(/\s+/);
-  return palavras[palavras.length - 1] || '';
-}
 function mdRankingPorLog(pais){ return mdAgruparComponentesBloqueados(pais, c=>c.log || '(sem LOG)'); }
-function mdRankingPorFornecedor(pais){ return mdAgruparComponentesBloqueados(pais, c=>mdUltimaPalavra(c.nome) || '(sem nome)'); }
 function mdLogMaisDivergente(pais){
   const topo = mdRankingPorLog(pais)[0];
   return topo ? {log: topo.chave, valor: topo.valor, pecas: topo.pecas, nPais: topo.nPais} : null;
@@ -478,80 +478,6 @@ function mdRenderDescasados(){
   }
   const pais = mdPais();
   return mdKpis(mdResumo(pais), pais) + mdBarraFiltros() + mdRenderPivot();
-}
-
-/* ============================================================
-   TELA — INDICADORES
-   ============================================================
-   Painel só de leitura, pra mostrar ao setor como estão os múltiplos
-   descasados agora — mesmos números da aba Descasados, organizados por LOG,
-   por fornecedor aproximado (sem campo próprio nas bases, usa a última
-   palavra do nome) e pelos itens pai mais críticos. Nada clicável, nada de
-   filtro — é retrato, não ferramenta de trabalho. */
-function mdRenderRanking(titulo, labelColuna, ranking, limite){
-  const linhas = (ranking || []).slice(0, limite || 10);
-  if(!linhas.length){
-    return `<div class="panel"><h3>${irEsc(titulo)}</h3><p class="field-hint">Nenhum descasamento no momento.</p></div>`;
-  }
-  const corpo = linhas.map((l,i)=>`<tr>
-    <td class="md-left">${i+1}</td>
-    <td class="md-left">${irEsc(l.chave)}</td>
-    <td>${irFmtInt(l.pecas)}</td>
-    <td>${irFmtInt(l.nPais)}</td>
-    <td>${irFmtMoney(l.valor)}</td>
-  </tr>`).join('');
-  return `<div class="panel">
-    <h3>${irEsc(titulo)}</h3>
-    <div class="md-piv-wrap">
-      <table class="md-piv">
-        <thead><tr>
-          <th class="md-left">#</th>
-          <th class="md-left">${irEsc(labelColuna)}</th>
-          <th>Peças a bloquear</th>
-          <th>Múltiplos</th>
-          <th>Valor descasado</th>
-        </tr></thead>
-        <tbody>${corpo}</tbody>
-      </table>
-    </div>
-  </div>`;
-}
-function mdRenderTopPais(pais, limite){
-  const lista = pais.filter(p=>p.sobraValor > 0).sort((a,b)=>b.sobraValor - a.sobraValor).slice(0, limite || 10);
-  if(!lista.length){
-    return `<div class="panel"><h3>Itens pai mais críticos</h3><p class="field-hint">Nenhum múltiplo descasado no momento.</p></div>`;
-  }
-  const corpo = lista.map((p,i)=>`<tr>
-    <td class="md-left">${i+1}</td>
-    <td class="md-left"><span class="mono">${irEsc(p.pai)}</span> ${irEsc(mdTruncarNome(p.nome))}</td>
-    <td>${irFmtInt(p.bloquearPecas)}</td>
-    <td>${irFmtMoney(p.sobraValor)}</td>
-  </tr>`).join('');
-  return `<div class="panel">
-    <h3>Itens pai mais críticos</h3>
-    <div class="md-piv-wrap">
-      <table class="md-piv">
-        <thead><tr>
-          <th class="md-left">#</th>
-          <th class="md-left">Item pai</th>
-          <th>Peças a bloquear</th>
-          <th>Valor descasado</th>
-        </tr></thead>
-        <tbody>${corpo}</tbody>
-      </table>
-    </div>
-  </div>`;
-}
-function mdRenderIndicadores(){
-  if(!mdTemDados()){
-    return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 pra ver os indicadores.', "irSwitchTab('importacao')", 'Ir para a importação');
-  }
-  const pais = mdPais();
-  return mdKpis(mdResumo(pais), pais)
-    + `<p class="field-hint" style="margin:14px 0;">Panorama pra mostrar ao setor como estão os múltiplos descasados agora.</p>`
-    + mdRenderRanking('Por LOG', 'LOG', mdRankingPorLog(pais))
-    + mdRenderRanking('Por fornecedor (aproximado pela última palavra do nome)', 'Fornecedor', mdRankingPorFornecedor(pais))
-    + mdRenderTopPais(pais);
 }
 
 /* ============================================================
@@ -943,13 +869,20 @@ function mdExportarAjusteClasses(){
    conferência que já está na tela — não precisa duplicar na planilha.
 
    .xlsx de verdade (não CSV): é o único jeito de ter mais de uma aba e de
-   marcar Local/EAN como NÚMERO com formato "sem decimal" ao mesmo tempo —
-   um CSV não carrega esse tipo de informação por célula. CSV também foi o
-   que obrigava forçar texto com aspa simples na frente pra fugir da notação
+   marcar Local como NÚMERO com formato "sem decimal" ao mesmo tempo — um CSV
+   não carrega esse tipo de informação por célula. CSV também foi o que
+   obrigava forçar texto com aspa simples na frente pra fugir da notação
    científica do Excel (5E+09, 7,89862E+12), e a aspa acabava colando junto
    quando alguém copiava o valor pro coletor, que não entende e barra com
    "FORMATO INVÁLIDO". Número de verdade, com formato de inteiro, resolve as
    duas coisas de uma vez: sem notação científica e sem símbolo estranho.
+
+   EAN é a exceção: fica como TEXTO, não número. Um EAN de 12 dígitos some com
+   o zero à esquerda se virar célula numérica (normalizarEan no worker.js já
+   repõe o zero no dado, mas de nada adianta se a célula de saída volta a
+   descartar — número não guarda zero à esquerda). Célula de texto num .xlsx de
+   verdade não sofre o problema de notação científica do CSV, então não precisa
+   da aspa/apelo de número aqui.
 
    xlsx-js-style (carregada só no index.html, não no worker) em vez da xlsx
    comum: a versão livre do SheetJS não grava estilo nenhum no arquivo — cor
@@ -962,11 +895,11 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
   // fora da sequência Local/EAN/Orig/Dest/Qtde que é exatamente a ordem dos
   // campos na tela.
   const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Obs','Item pai'];
-  const colNumerica = new Set([0,1,2,3,4]); // tudo menos Endereço, Obs e Item pai
+  const colNumerica = new Set([0,2,3,4]); // Local/Orig/Dest/Qtde — EAN é texto (ver acima), Endereço/Obs/Item pai também
 
   function construirAba(linhas){
     const dados = linhas.map(l=>[
-      Number(l.localColetor) || 0, Number(l.ean) || 0, Number(l.codDe) || 0,
+      Number(l.localColetor) || 0, String(l.ean || ''), Number(l.codDe) || 0,
       Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '',
       mdAvisosLinha(l).join(' · '), String(l.pai || '')
     ]);
@@ -1109,7 +1042,7 @@ function mdFiltrarAuditoria(campo, v){
   clearTimeout(window.__mdFiltroAuditoriaTimer);
   window.__mdFiltroAuditoriaTimer = setTimeout(()=>{
     irRenderView();
-    document.querySelector(`.md-col-filtro[data-campo="${campo}"]`)?.focus();
+    mdFocarFim(document.querySelector(`.md-col-filtro[data-campo="${campo}"]`));
   }, 220);
 }
 function mdExportarAuditoria(){
@@ -1426,7 +1359,7 @@ function mdFiltrarConfiguracao(chave, v){
   clearTimeout(window.__mdFiltroConfigTimer);
   window.__mdFiltroConfigTimer = setTimeout(()=>{
     irRenderView();
-    document.querySelector(`.md-col-filtro[data-chave-filtro="${chave}"]`)?.focus();
+    mdFocarFim(document.querySelector(`.md-col-filtro[data-chave-filtro="${chave}"]`));
   }, 220);
 }
 /* Configuração é só local (IndexedDB do navegador) — troca de pessoa, de
@@ -1469,7 +1402,6 @@ const MD_TELAS = {
   descasados:['Múltiplos Descasados','Componente sem par no estoque: dimensão, onde está e quanto vale.'],
   ajustes:['Ajustes de Restrição','Toda peça do CD com restrição fora da regra, por Classe e X1.'],
   auditoria:['Auditoria de Restrição','A mesma correção de Ajustes de Restrição, em lista por item e endereço.'],
-  indicadores:['Indicadores','Panorama dos múltiplos descasados pra mostrar ao setor.'],
   configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
   importacao:['Importação','ZBIQ0051, QRY0390, SIGEQ278 e QRY0160 — as bases do módulo.']
 };
@@ -1492,7 +1424,6 @@ function irRenderView(){
   raiz.innerHTML = MD.tela==='importacao'    ? mdRenderImportacao()
                  : MD.tela==='ajustes'       ? mdRenderAjustes()
                  : MD.tela==='auditoria'     ? mdRenderAuditoria()
-                 : MD.tela==='indicadores'   ? mdRenderIndicadores()
                  : MD.tela==='configuracoes' ? mdRenderConfiguracoes()
                  : mdRenderDescasados();
   if(mesmaTela) raiz.querySelectorAll('.md-piv-wrap').forEach((el, i)=>{ if(scrolls[i]) el.scrollTop = scrolls[i]; });
