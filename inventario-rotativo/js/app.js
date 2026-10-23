@@ -1327,7 +1327,7 @@ function irRenderPorRuaPanel(ind){
       </div>
       ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
-    <div class="table-wrap"><table>
+    <div class="table-wrap"><table class="tbl-sticky-head">
       <thead><tr>
         <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
         <th>Rua</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
@@ -1900,7 +1900,12 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
   opts = opts||{};
   const slot = opts.slot || 76;
   const meta = opts.meta!=null ? opts.meta : 0.97;
-  const cores = opts.colors || {sist:'var(--blue)', div:'var(--orange)', good:'var(--success)', goodBg:'var(--success-light)', bad:'var(--danger)', badBg:'var(--danger-light)', line:'var(--line)', axis:'var(--ink-soft)'};
+  const cores = opts.colors || {sist:'var(--blue)', sistGradBottom:'color-mix(in srgb, var(--blue) 15%, white)', div:'var(--orange)', good:'var(--success)', goodBg:'var(--success-light)', bad:'var(--danger)', badBg:'var(--danger-light)', line:'var(--line)', axis:'var(--ink-soft)'};
+  // Gradiente na barra sistêmica (azul escuro em cima, esmaece quase até o
+  // branco embaixo) — pedido do usuário, opção 3 do mockup. Id com sufixo
+  // aleatório porque há vários <svg> na mesma página (um por gráfico) e um
+  // <linearGradient> com o mesmo id em dois deles faz um pisar no do outro.
+  const gradId = 'irDivGrad'+Math.random().toString(36).slice(2,9);
   const diaLabel = (dia)=> new Date(dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
   const H = 236, padT = 54, padB = 28, padL = 4, padR = 10;
   const plotH = H - padT - padB;
@@ -1930,7 +1935,10 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
   const barW = slot*0.3, gap = slot*0.08;
   const base = padT + plotH;
   const corteMark = (xCentro)=> `<path d="M ${(xCentro-7).toFixed(1)} ${(padT+5).toFixed(1)} l 5 -6 l 4 6 l 5 -6" style="stroke:${cores.axis};stroke-width:1.4;fill:none;opacity:.6"/>`;
-  let svg = '';
+  let svg = `<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" style="stop-color:${cores.sist}"/>
+    <stop offset="100%" style="stop-color:${cores.sistGradBottom||cores.sist}"/>
+  </linearGradient></defs>`;
   for(let i=0;i<n;i++){
     const x = padL + i*slot + 3;
     svg += `<rect x="${x}" y="${padT-22}" width="${slot-6}" height="${base-(padT-22)}" rx="8" style="fill:none;stroke:${cores.line};stroke-width:1"/>`;
@@ -1945,7 +1953,7 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
     const good = acc>=meta;
     svg += `<rect x="${cx-27}" y="${padT-44}" width="54" height="19" rx="9.5" style="fill:${good?cores.goodBg:cores.badBg}"/>`;
     svg += `<text x="${cx}" y="${padT-30}" text-anchor="middle" font-size="11" font-weight="800" style="fill:${good?cores.good:cores.bad}">${irFmtPct(acc)}</text>`;
-    svg += `<rect x="${xS}" y="${base-hS}" width="${barW}" height="${hS}" rx="3" style="fill:${cores.sist}"/>`;
+    svg += `<rect x="${xS}" y="${base-hS}" width="${barW}" height="${hS}" rx="3" fill="url(#${gradId})"/>`;
     svg += `<rect x="${xD}" y="${base-hD}" width="${barW}" height="${hD}" rx="3" style="fill:${cores.div}"/>`;
     if(sist>maxS) svg += corteMark(xS+barW/2);
     if(div>maxS) svg += corteMark(xD+barW/2);
@@ -2387,9 +2395,10 @@ function irGerarRelatorioEmail(){
       </div>`;
       const rpComboNota = (omitidos, total)=> omitidos>0 ? `<div style="font-size:11px;color:#6B7280;margin-bottom:6px;">Mostrando os últimos ${total-omitidos} de ${total} dias</div>` : '';
       // Largura por dia igual nos 3 (ver mesmo ajuste no Dashboard).
-      const pecas = irBuildDivergentesComboSvg(ind.divergentesPorDia,'pecas','sistema',irFmtInt,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, sist:'#001A72', div:'#FA4616'}});
-      const valor = irBuildDivergentesComboSvg(ind.divergentesPorDia,'valor','sistemaValor',irFmtMoneyCompact,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, sist:'#001A72', div:'#FA4616'}});
-      const locais = irBuildDivergentesComboSvg(ind.divergentesPorDia,'locais','locaisTotal',irFmtInt,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, sist:'#001A72', div:'#FA4616'}});
+      const rpSistCores = {sist:'#001A72', sistGradBottom:'#C9D3EC', div:'#FA4616'};
+      const pecas = irBuildDivergentesComboSvg(ind.divergentesPorDia,'pecas','sistema',irFmtInt,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, ...rpSistCores}});
+      const valor = irBuildDivergentesComboSvg(ind.divergentesPorDia,'valor','sistemaValor',irFmtMoneyCompact,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, ...rpSistCores}});
+      const locais = irBuildDivergentesComboSvg(ind.divergentesPorDia,'locais','locaisTotal',irFmtInt,{slot:104, meta:ind.meta, fixedW:800, colors:{...rpComboCores, ...rpSistCores}});
       return `${sectionTitle('⚠️','Peças Divergentes por Dia (abs.)','soma da diferença absoluta, por dia de fechamento do local')}
     <div class="rp-panel rp-panel-pad">
       ${rpComboNota(pecas.omitidos, pecas.total)}${rpComboLegend('#001A72','#FA4616')}${pecas.svgHtml}
