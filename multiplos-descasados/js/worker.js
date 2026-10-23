@@ -60,14 +60,23 @@ function post(type, payload){ self.postMessage({type, ...payload}); }
    nomes evita que o módulo quebre se ela voltar ao formato antigo. */
 const ALIAS_390 = {
   item: ['ID_ITEM_FILHO','Item'], itemPai: ['ITEM_PAI'],
-  descricao: ['NOME_ITEM_FILHO','Descrição','Descricao'],
+  // 'Descrição2' entra ANTES de 'Descrição' de propósito: numa variante da
+  // extração (saída do fluxo Snowflake com o item pela ótica do local) a
+  // coluna 'Descrição' vem com o ENDEREÇO, não o nome do item — o nome certo
+  // fica em 'Descrição2'. mdNormKey tira os underscores, então 'Descrição2' e
+  // 'Descrição_2' normalizam igual; a ordem das COLUNAS no arquivo é quem
+  // desempata (a de nome de item vem primeiro nessa variante). Nos formatos
+  // de sempre, sem 'Descrição2' nenhuma, cai em 'Descrição' como já era.
+  descricao: ['NOME_ITEM_FILHO','Descrição2','Descrição','Descricao'],
   descricaoPai: ['NOME_ITEM_PAI'],
   local: ['ID_LOCAL','Local'], descLocal: ['DESC_LOCAL'],
-  quantidade: ['QTDE','Quantidade'], qtdeDisp: ['QTDE_DISP'], qtdeRom: ['QTDE_ROM'],
+  quantidade: ['QTDE','Quantidade'], qtdeDisp: ['QTDE_DISP'],
+  qtdeRom: ['QTDE_ROM','Quantidade Romaneada'],
   valoriza: ['VALORIZA'], valorUnitario: ['VALOR_UNITARIO'],
   classeSku: ['CURVA_ABC','Classe Sku'], ean: ['EAN','Ean'],
   restricao: ['RETRICAO','RESTRICAO','Restrição'],
-  log: ['LOG_ITEM'], x1: ['X1'], x2: ['X2'], predio: ['PREDIO'], classeLocal: ['CLAL'],
+  log: ['LOG_ITEM'], x1: ['X1'], x2: ['X2'], predio: ['PREDIO'],
+  classeLocal: ['CLAL','Classe Local'],
   setor: ['NM_SETOR'], familia: ['NM_FAMILIA'], marca: ['NM_MARCA'],
   departamento: ['NM_DEPARTAMENTO'],
   atualizadoEm: ['ULTIMA_ATUALIZACAO']
