@@ -14,10 +14,10 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v12';
+const MD_APP_VERSION = 'v13';
 const MD = {
-  estrutura:null, saldos:null, precos:null,
-  estruturaMeta:null, saldoMeta:null, precoMeta:null,
+  estrutura:null, saldos:null, precos:null, estoques:null,
+  estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
@@ -39,11 +39,11 @@ const MD = {
   // Ordenação de cada matriz: por total (padrão), pela descrição da dimensão,
   // ou por uma coluna de restrição. asc/desc alterna no mesmo cabeçalho.
   ordemMatriz:{clal:{col:'total', dir:'desc'}, x1:{col:'total', dir:'desc'}},
-  f051:null, f390:null, f278:null,
-  proc:{'051':false,'390':false,'278':false},
-  progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0}},
+  f051:null, f390:null, f278:null, f0160:null,
+  proc:{'051':false,'390':false,'278':false,'0160':false},
+  progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0},'0160':{stage:'',pct:0}},
   initErro:null,
-  _cache:null, _cacheBase:null, _plano:null, _planoBase:null
+  _cache:null, _cacheBase:null, _plano:null, _planoBase:null, _estoquesMapa:null
 };
 
 const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
@@ -152,7 +152,7 @@ function mdPais(){
   MD._cacheBase = MD.base;
   return MD._cache;
 }
-function mdInvalidarCache(){ MD._cache = null; MD._cacheBase = null; MD._plano = null; MD._planoBase = null; }
+function mdInvalidarCache(){ MD._cache = null; MD._cacheBase = null; MD._plano = null; MD._planoBase = null; MD._estoquesMapa = null; }
 
 function mdPaisFiltrados(){
   const termo = MD.busca.trim().toLowerCase();
@@ -630,6 +630,22 @@ function mdRegraViolada(loc){
 }
 function mdRestricaoPermitida(loc){ return mdRegraViolada(loc) === null; }
 
+/* Contagem real de "Num. Estoque" por item+local+restrição, vinda da QRY0160
+   (opcional). Sem ela importada, cada item+local+restrição fica sem resposta
+   (null) e quem chama cai de volta no sinal mais fraco da própria 390
+   (loc.lotes) — ver mdPlanoCorrecaoRestricao. */
+function mdEstoquesMapa(){
+  if(MD._estoquesMapa) return MD._estoquesMapa;
+  const mapa = new Map();
+  for(const e of (MD.estoques||[])) mapa.set(e.chave, e.estoques);
+  MD._estoquesMapa = mapa;
+  return mapa;
+}
+function mdEstoqueCount(item, local, restricao){
+  const v = mdEstoquesMapa().get(item + '|' + local + '|' + restricao);
+  return v === undefined ? null : v;
+}
+
 /* Plano de correção de restrição (aba Ajustes de Restrição) — não confundir
    com o plano de pareamento de múltiplos descasados (aba Descasados, outra
    lógica, outro botão). Aqui o problema é a REGRA configurada em
@@ -663,14 +679,22 @@ function mdPlanoCorrecaoRestricao(){
       if(!destino) continue;
       const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
       const preco = s.valorUnitario || 0;
-      // Mesmo item+local+restrição em mais de um lote (duas "entradas de
-      // estoque" separadas, mesma linha podendo até repetir a quantidade) trava
-      // a 10.MOVI Alt.Restrição Local (altera tudo do local de uma vez, sem
-      // conseguir escolher qual estoque) com erro — tem que ir por
-      // Alt.Restrição Estoque (Shift+F6), igual já é feito pra 86. Não vale pra
-      // linha que SAI de 86: essa já é sempre por quantidade específica, nunca
-      // em massa por local, então o erro nunca aparece ali.
-      const quebrado = loc.lotes > 1 && loc.restricao !== MD_SIGLA_BLOQUEIO;
+      // Mesmo item+local+restrição em 2+ registros físicos de estoque trava a
+      // 10.MOVI Alt.Restrição Local (altera tudo do local de uma vez, sem
+      // conseguir escolher qual estoque) com erro "IMPOSSÍVEL FUNDIR" — tem que
+      // ir por Alt.Restrição Estoque (Shift+F6), igual já é feito pra 86. Não
+      // vale pra linha que SAI de 86: essa já é sempre por quantidade
+      // específica, nunca em massa por local, então o erro nunca aparece ali.
+      //
+      // A QRY0390 (loc.lotes) NÃO é um sinal confiável disso: ela já chega com
+      // a quantidade somada por linha, então item com 3 estoques de 1 peça cada
+      // aparece como 1 lote só — loc.lotes não distingue "1 estoque com 3
+      // peças" de "3 estoques com 1 peça". A QRY0160 (opcional, diária) traz um
+      // registro por "Num. Estoque" físico, contagem de verdade; sem ela
+      // importada, cai de volta no sinal fraco da 390 (melhor que nada, mas só
+      // pega quando a 390 por acaso ainda mostra linhas separadas).
+      const estoquesReais = mdEstoqueCount(s.item, loc.local, loc.restricao);
+      const quebrado = (estoquesReais !== null ? estoquesReais > 1 : loc.lotes > 1) && loc.restricao !== MD_SIGLA_BLOQUEIO;
       for(const ref of refs){
         // Quantidade romaneada (QTDE_ROM) já está separada pra um pedido —
         // abate do que dá pra corrigir, igual ao plano de pareamento.
@@ -683,7 +707,7 @@ function mdPlanoCorrecaoRestricao(){
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
           componente: s.item, nome: s.nome, pai: (paisPorComponente.get(s.item) || []).join('/'),
-          ean: s.ean, quantidade, quebrado,
+          ean: s.ean, quantidade, quebrado, estoquesReais,
           preco, valor: quantidade * preco,
           totalComponente: s[campo]
         });
@@ -926,7 +950,7 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
     const dados = linhas.map(l=>[
       Number(l.localColetor) || 0, Number(l.ean) || 0, Number(l.codDe) || 0,
       Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '',
-      l.quebrado ? 'Alt.Restrição Estoque (Shift+F6) — 2 estoques' : '', String(l.pai || '')
+      l.quebrado ? `Alt.Restrição Estoque (Shift+F6) — ${l.estoquesReais || 2} estoques` : '', String(l.pai || '')
     ]);
     const ws = XLSX.utils.aoa_to_sheet([cab, ...dados]);
     cab.forEach((_, c)=>{
@@ -1013,7 +1037,7 @@ function mdRenderAuditoria(){
     <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
     <td>${irFmtInt(l.quantidade)}</td>
     <td class="num-money">${irFmtMoney(l.valor)}</td>
-    <td class="md-left">${l.quebrado ? '<span class="md-badge-aviso" title="2+ estoques no mesmo item/local/restrição — não dá pra fazer em massa, use Alt.Restrição Estoque (Shift+F6)">Shift+F6 (2 estoques)</span>' : ''}</td>
+    <td class="md-left">${l.quebrado ? `<span class="md-badge-aviso" title="2+ estoques no mesmo item/local/restrição — não dá pra fazer em massa, use Alt.Restrição Estoque (Shift+F6)">Shift+F6 (${l.estoquesReais || 2} estoques)</span>` : ''}</td>
   </tr>`).join('');
 
   return `<div class="panel">
@@ -1082,11 +1106,13 @@ const MD_BASES = [
   {id:'390', icone:'📦', titulo:'QRY0390', sub:'Saldo por endereço', botao:'Processar saldo',
    obrigatoria:true, msg:'process390', buf:'buf390'},
   {id:'278', icone:'💰', titulo:'SIGEQ278', sub:'Preço de custo (opcional)', botao:'Processar preços',
-   obrigatoria:false, msg:'process278', buf:'buf278'}
+   obrigatoria:false, msg:'process278', buf:'buf278'},
+  {id:'0160', icone:'🔢', titulo:'QRY0160', sub:'Estoque por restrição (opcional, 1x/dia)', botao:'Processar estoques',
+   obrigatoria:false, msg:'process0160', buf:'buf0160'}
 ];
-function mdArquivo(id){ return id==='051' ? MD.f051 : id==='390' ? MD.f390 : MD.f278; }
+function mdArquivo(id){ return id==='051' ? MD.f051 : id==='390' ? MD.f390 : id==='278' ? MD.f278 : MD.f0160; }
 function mdSetArquivo(id, f){
-  if(id==='051') MD.f051 = f; else if(id==='390') MD.f390 = f; else MD.f278 = f;
+  if(id==='051') MD.f051 = f; else if(id==='390') MD.f390 = f; else if(id==='278') MD.f278 = f; else MD.f0160 = f;
   irRenderView();
 }
 function mdOnFile(id, f){ if(f) mdSetArquivo(id, f); }
@@ -1131,6 +1157,8 @@ function mdProcessar(id){
         irShowToast(irFmtInt(msg.itens)+' itens com saldo no CD'+(msg.semSaldo ? ' · '+irFmtInt(msg.semSaldo)+' componentes de múltiplo sem saldo' : '')+'.');
       } else if(msg.type === 'done278'){
         irShowToast(irFmtInt(msg.pais)+' pais de múltiplo com preço.');
+      } else if(msg.type === 'done0160'){
+        irShowToast(irFmtInt(msg.combinacoes)+' combinações item/local/restrição'+(msg.quebrados ? ' · '+irFmtInt(msg.quebrados)+' com 2+ estoques' : '')+'.');
       }
       irRenderView();
     };
@@ -1165,8 +1193,14 @@ function mdEstadoBase(id){
     partes.push('lida '+irFmtDataHora(m.importadoEm));
     return partes.join(' · ');
   }
-  const m = MD.precoMeta;
-  return m ? irFmtInt(m.pais)+' pais com preço · '+irFmtDate(m.importadoEm) : 'nunca importada';
+  if(id==='278'){
+    const m = MD.precoMeta;
+    return m ? irFmtInt(m.pais)+' pais com preço · '+irFmtDate(m.importadoEm) : 'nunca importada';
+  }
+  const m = MD.estoquesMeta;
+  if(!m) return 'nunca importada';
+  return irFmtInt(m.combinacoes)+' combinações item/local/restrição'
+    +(m.quebrados ? ' · '+irFmtInt(m.quebrados)+' com 2+ estoques' : '')+' · lida '+irFmtDataHora(m.importadoEm);
 }
 
 /* Restrição no estoque real que não está na legenda (MD_RESTRICOES) — sem
@@ -1223,7 +1257,7 @@ function mdRenderImportacao(){
           <button class="btn-link" onclick="mdRemoveFile('${b.id}')">Remover</button>
         </div>`
       : `<div class="av-acoes"><button class="btn btn-secondary" onclick="document.getElementById('${inputId}').click()">Selecionar</button></div>`}
-      ${b.id!=='051' && !temEstrutura ? `<p class="av-aviso">Importe a ZBIQ0051 antes: é ela que define quem é múltiplo.</p>` : ''}
+      ${b.id!=='051' && b.id!=='0160' && !temEstrutura ? `<p class="av-aviso">Importe a ZBIQ0051 antes: é ela que define quem é múltiplo.</p>` : ''}
     </div>`;
   };
   return `<div class="panel">
@@ -1234,6 +1268,8 @@ function mdRenderImportacao(){
       (só os componentes) quanto em Ajustes/Auditoria de Restrição (tudo).
       A SIGEQ278 é opcional e serve para valorar — hoje a 390 vem com VALOR_UNITARIO zerado nos componentes,
       e o preço do conjunto está no item pai, que não tem estoque próprio.
+      A QRY0160 é opcional e confirma quando um item/local realmente tem 2+ estoques separados (a 390 soma a
+      quantidade e esconde isso) — sem ela, o aviso "Shift+F6" usa um sinal mais fraco, que só pega às vezes.
     </p>
     <div class="av-grid">${MD_BASES.map(cartao).join('')}</div>
   </div>
@@ -1410,7 +1446,7 @@ const MD_TELAS = {
   auditoria:['Auditoria de Restrição','A mesma correção de Ajustes de Restrição, em lista por item e endereço.'],
   indicadores:['Indicadores','Panorama dos múltiplos descasados pra mostrar ao setor.'],
   configuracoes:['Configurações','Restrições permitidas por classe local — a régua do que está errado.'],
-  importacao:['Importação','ZBIQ0051, QRY0390 e SIGEQ278 — as bases do módulo.']
+  importacao:['Importação','ZBIQ0051, QRY0390, SIGEQ278 e QRY0160 — as bases do módulo.']
 };
 let irUltimaTelaRenderizada = null;
 function irRenderView(){
@@ -1450,9 +1486,11 @@ async function mdRecarregar(){
   MD.estrutura = await mdGetEstrutura();
   MD.saldos = await mdGetSaldo();
   MD.precos = await mdGetPrecos();
+  MD.estoques = await mdGetEstoques();
   MD.estruturaMeta = await mdGetEstruturaMeta();
   MD.saldoMeta = await mdGetSaldoMeta();
   MD.precoMeta = await mdGetPrecoMeta();
+  MD.estoquesMeta = await mdGetEstoqueMeta();
   // Sem NADA salvo neste navegador (primeira vez, ou depois de limpar o
   // cache/IndexedDB), cai no padrão de fábrica (MD_REGRAS_PADRAO, rules.js) em
   // vez de começar zerado — uma vez que a pessoa salve algo aqui, o salvo
