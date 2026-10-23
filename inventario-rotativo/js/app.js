@@ -1533,79 +1533,49 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
 function irBuildAcuraciaCiclosSvg(rows, opts){
   opts = opts||{};
   const meta = opts.meta!=null ? opts.meta : 0.97;
-  const cores = {pecas:'#FA4616', locais:'#001A72', valor:'#1D1F2A', vazio:'#D8DCE3', axis:'#6B7280', label:'#1D1F2A', meta:'#6B7280'};
+  const cores = {pecas:'#FA4616', locais:'#001A72', valor:'#1D1F2A', vazio:'#D8DCE3', axis:'#6B7280', label:'#1D1F2A', line:'#E4E7EE', meta:'#6B7280'};
   // Largura do desenho por parâmetro: o mesmo gráfico aparece num painel de meia
   // largura, e escalar 800px pra dentro de ~560 encolhia o rótulo junto (13px
   // viravam 9). Desenhar já no tamanho de destino mantém o texto legível.
   const W = opts.W||800, H = opts.H||260;
-  // padT abre a faixa do rótulo da meta: com 30 ele ainda encostava no valor de
-  // uma barra perto de 100%, que é desenhado logo abaixo do topo da área útil.
-  const padL = 14, padR = 14, padT = 46, padB = 32;
+  // padT abre a faixa do rótulo da meta: com menos, ele encostava no valor de
+  // uma barra perto de 100%, desenhado logo abaixo do topo da área útil.
+  const padL = 10, padR = 10, padT = 46, padB = 32;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const n = Math.max(1, rows.length);
-  const grupoW = plotW/n;
-  const barW = Math.min(26, grupoW*0.15);
-  /* O espaço entre as barras acompanha a largura delas: afinar a coluna aproxima
-     os centros, e o rótulo ("100.0%", ~40px) é mais largo que a barra — com o
-     vão fixo os percentuais de duas barras vizinhas se encostavam. O vão é o que
-     sobra do grupo depois das três barras, limitado pra não espalhar demais. */
-  const gap = Math.max(8, Math.min(22, (grupoW*0.72 - 3*barW)/2));
-  const metaY = padT + plotH*(1-meta);
-  let bars = '', labels = '', xLabels = '';
-  // Altura mínima entre dois rótulos do mesmo grupo: com valores próximos (ex.: 92,4%
-  // e 94,0%) as barras ficam quase na mesma altura e o texto ("13px", ~40px de
-  // largura) de uma série encosta no da vizinha — mesmo as barras sendo bem
-  // separadas horizontalmente, o rótulo centralizado em cada uma é mais largo que o
-  // vão entre elas. Processa da barra mais BAIXA pra mais ALTA (mais baixa fica no
-  // lugar natural, rente ao próprio topo) e empurra o rótulo de cada barra mais alta
-  // pra CIMA quando encostaria no de baixo — nunca pra baixo, senão o texto cai em
-  // cima da barra vizinha (e com a cor escura do rótulo em cima da barra "Valor",
-  // também escura, o texto some).
-  const MIN_GAP_LABEL = 13;
-  const LABEL_Y_MIN = 14; // nunca sobe mais que isso, pra não invadir o texto da Meta
+  const slot = plotW/n;
+  const barW = Math.min(30, slot*0.16);
+  // O vão entre as 3 barras acompanha a largura do cartão: afinar aproxima os
+  // centros das barras, e o rótulo ("100.0%") é mais largo que elas — com vão
+  // fixo os percentuais de barras vizinhas se encostavam.
+  const gap = Math.max(8, Math.min(22, (slot*0.74 - 3*barW)/2));
+  // Um cartão com borda própria por ciclo — mesmo padrão dos gráficos
+  // "Divergentes por Dia" do Dashboard: deixa nítido onde um ciclo termina e o
+  // outro começa, em vez de só um grupo de barras soltas lado a lado.
+  let cards = '', bars = '', labels = '', xLabels = '';
   rows.forEach((r,i)=>{
-    const cx = padL + (i+0.5)*grupoW;
+    const cardX = padL+i*slot+3;
+    cards += `<rect x="${cardX.toFixed(1)}" y="${(padT-18).toFixed(1)}" width="${(slot-6).toFixed(1)}" height="${(H-padB-(padT-18)).toFixed(1)}" rx="8" style="fill:none;stroke:${cores.line};stroke-width:1"/>`;
+    const cx = padL + (i+0.5)*slot;
     const series = [{v:r.pecas, cor:cores.pecas}, {v:r.locais, cor:cores.locais}, {v:r.valor, cor:cores.valor}];
     const totalW = series.length*barW + (series.length-1)*gap;
     let bx = cx - totalW/2;
-    const geoms = series.map(s=>{
+    series.forEach(s=>{
       const tem = s.v!==null && s.v!==undefined;
       const bh = tem ? Math.max(0,Math.min(1,s.v))*plotH : plotH*0.015;
       const by = padT+plotH-bh;
-      const g = {...s, tem, bh, by, bx, labelX:bx+barW/2};
+      bars += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${tem?s.cor:cores.vazio}" rx="3"/>`;
+      if(tem){
+        labels += `<text x="${(bx+barW/2).toFixed(1)}" y="${(by-7).toFixed(1)}" font-size="11.5" text-anchor="middle" fill="${s.cor}" font-weight="800">${(s.v*100).toFixed(1)}%</text>`;
+      }
       bx += barW+gap;
-      return g;
-    });
-    geoms.forEach(g=>{
-      bars += `<rect x="${g.bx.toFixed(1)}" y="${g.by.toFixed(1)}" width="${barW.toFixed(1)}" height="${g.bh.toFixed(1)}" fill="${g.tem?g.cor:cores.vazio}" rx="3"/>`;
-    });
-    // Ordena da barra mais baixa (maior "by") pra mais alta, empurrando cada
-    // rótulo seguinte pra cima do anterior quando precisar.
-    const comRotulo = geoms.filter(g=>g.tem).sort((a,b)=>b.by-a.by);
-    let yAnterior = null;
-    comRotulo.forEach(g=>{
-      let y = g.by-7;
-      if(yAnterior!==null) y = Math.min(y, yAnterior-MIN_GAP_LABEL);
-      y = Math.max(y, LABEL_Y_MIN);
-      yAnterior = y;
-      const texto = (g.v*100).toFixed(1)+'%';
-      // Halo branco atrás do texto: uma barra com valor perto da meta (ex.: 91,4% x
-      // 97%) deixa o rótulo quase em cima da linha tracejada, e o traço aparecia
-      // cortando por dentro das letras ("91.4%" com hífen no meio). O halo garante
-      // o rótulo legível em cima de qualquer coisa atrás dele — linha, barra ou
-      // outro rótulo — sem precisar prever cada combinação de valores.
-      const haloW = texto.length*7.6+6;
-      labels += `<rect x="${(g.labelX-haloW/2).toFixed(1)}" y="${(y-11).toFixed(1)}" width="${haloW.toFixed(1)}" height="15" fill="#fff"/>`;
-      labels += `<text x="${g.labelX.toFixed(1)}" y="${y.toFixed(1)}" font-size="13" text-anchor="middle" fill="${cores.label}" font-weight="800">${texto}</text>`;
     });
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="14" text-anchor="middle" fill="${cores.axis}" font-weight="800">${irEsc(r.label)}</text>`;
   });
-  /* O rótulo da meta sai de cima da linha e vai pra faixa livre acima do gráfico:
-     na linha ele ficava na mesma altura do valor da barra mais à direita (uma
-     acurácia de 96% encosta na meta de 97%) e os dois textos se tocavam. */
-  const metaLine = `<line x1="${padL}" y1="${metaY.toFixed(1)}" x2="${W-padR}" y2="${metaY.toFixed(1)}" stroke="${cores.meta}" stroke-width="1.5" stroke-dasharray="5 4"/>
-    <text x="${W-padR}" y="${(padT-28).toFixed(1)}" font-size="13" text-anchor="end" fill="${cores.meta}" font-weight="700">- - Meta ${(meta*100).toFixed(0)}%</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto;">${metaLine}${bars}${labels}${xLabels}</svg>`;
+  const metaY = padT + plotH*(1-meta);
+  const metaLine = `<line x1="${padL}" y1="${metaY.toFixed(1)}" x2="${W-padR}" y2="${metaY.toFixed(1)}" stroke="${cores.meta}" stroke-width="1.5" stroke-dasharray="5 4" opacity=".6"/>
+    <text x="${padL}" y="${(padT-28).toFixed(1)}" font-size="13" text-anchor="start" fill="${cores.meta}" font-weight="700">- - Meta ${(meta*100).toFixed(0)}%</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto;">${metaLine}${cards}${bars}${labels}${xLabels}</svg>`;
 }
 function irRenderComparativoCiclosPanel(){
   // Só os ciclos do ano em curso. Misturar 2025 com 2026 numa barra ao lado da
