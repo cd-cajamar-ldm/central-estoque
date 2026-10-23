@@ -85,7 +85,13 @@ const ALIAS_390 = {
   classeLocal: ['CLAL','Classe Local'],
   setor: ['NM_SETOR'], familia: ['NM_FAMILIA'], marca: ['NM_MARCA'],
   departamento: ['NM_DEPARTAMENTO'],
-  atualizadoEm: ['ULTIMA_ATUALIZACAO']
+  atualizadoEm: ['ULTIMA_ATUALIZACAO'],
+  // Local em inventário trava a Alt.Restrição no coletor (erro na tela, não dá
+  // pra alterar restrição ali até o inventário terminar) — vem pronta na
+  // extração direta do WMS, sem precisar de Snowflake. Opcional por natureza:
+  // se a coluna não existir (extração mais antiga, outro formato), o campo
+  // fica vazio e simplesmente não aparece aviso nenhum.
+  inventario: ['Inventário','Inventario']
 };
 const ALIAS_051 = {
   itemPai: ['item_vol_multiplo'], itemComponente: ['item_componente'],
@@ -187,7 +193,7 @@ async function runPipeline390({buf390}){
   post('progress', {stage:'Agregando por item...', pct:35});
   const porItem = new Map();
   const componentesComSaldo = new Set();
-  let atualizadoEm = '', linhasUsadas = 0;
+  let atualizadoEm = '', linhasUsadas = 0, localEmInventario = 0;
   for(const row of rows){
     const item = mdNormItemKey(getVal(row, r.item));
     if(!item) continue;
@@ -260,8 +266,13 @@ async function runPipeline390({buf390}){
         predio: String(getVal(row, r.predio) ?? '').trim(),
         clal: String(getVal(row, r.classeLocal) ?? '').trim(),
         restricao,
+        // Situação do inventário é do ENDEREÇO, não da linha — lida uma vez
+        // (na criação do local) e vale pra todo o grupo. mdNormKey compara sem
+        // se importar com acento/maiúscula ("Em inventário", "EM INVENTARIO"...).
+        emInventario: r.inventario ? mdNormKey(getVal(row, r.inventario)) === 'EMINVENTARIO' : false,
         qtde: 0, qtdeDisp: 0, qtdeRom: 0, lotes: 0, refs: []
       };
+      if(lugar.emInventario) localEmInventario++;
       it.porLocal.set(chave, lugar);
     }
     lugar.qtde += qtde;
@@ -288,9 +299,10 @@ async function runPipeline390({buf390}){
     importadoEm: new Date().toISOString(),
     atualizadoEm,
     linhas: rows.length, linhasUsadas,
-    itens: linhas.length, componentesEstrutura: componentes.size, semSaldo
+    itens: linhas.length, componentesEstrutura: componentes.size, semSaldo,
+    localEmInventario
   });
-  post('done390', {itens: linhas.length, linhas: rows.length, linhasUsadas, semSaldo});
+  post('done390', {itens: linhas.length, linhas: rows.length, linhasUsadas, semSaldo, localEmInventario});
 }
 
 /* ---------- SIGEQ278 — PREÇO DE CUSTO (opcional) ----------

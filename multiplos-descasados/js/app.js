@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v15';
+const MD_APP_VERSION = 'v16';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -630,6 +630,20 @@ function mdRegraViolada(loc){
 }
 function mdRestricaoPermitida(loc){ return mdRegraViolada(loc) === null; }
 
+/* Avisos operacionais de uma linha do plano de correção — nunca mudam o que
+   corrigir (de/para/quantidade), só avisam de um obstáculo na hora de
+   executar no coletor. Uma linha pode ter os dois ao mesmo tempo (endereço
+   com 2+ estoques E em inventário), por isso é lista, não campo único. */
+function mdAvisosLinha(l){
+  const avisos = [];
+  if(l.quebrado) avisos.push(`Alt.Restrição Estoque (Shift+F6) — ${l.estoquesReais || 2} estoques`);
+  // Aviso, não bloqueio: a situação pode ter mudado entre a importação e a
+  // execução (a 390 pode já estar levemente desatualizada) — a pessoa
+  // confirma no coletor na hora, só avisada com antecedência.
+  if(l.emInventario) avisos.push('Em inventário — confirme antes de corrigir');
+  return avisos;
+}
+
 /* Contagem real de "Num. Estoque" por item+local+restrição, vinda da QRY0160
    (opcional). Sem ela importada, cada item+local+restrição fica sem resposta
    (null) e quem chama cai de volta no sinal mais fraco da própria 390
@@ -708,6 +722,10 @@ function mdPlanoCorrecaoRestricao(){
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
           componente: s.item, nome: s.nome, pai: (paisPorComponente.get(s.item) || []).join('/'),
           ean: s.ean, quantidade, quebrado, estoquesReais,
+          // Aviso, não bloqueio: a situação do inventário pode mudar entre a
+          // importação e a hora de executar — a pessoa confirma na hora, só
+          // avisada. Fica de fora do cálculo de quebrado/destino de propósito.
+          emInventario: !!loc.emInventario,
           preco, valor: quantidade * preco,
           totalComponente: s[campo]
         });
@@ -950,7 +968,7 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
     const dados = linhas.map(l=>[
       Number(l.localColetor) || 0, Number(l.ean) || 0, Number(l.codDe) || 0,
       Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '',
-      l.quebrado ? `Alt.Restrição Estoque (Shift+F6) — ${l.estoquesReais || 2} estoques` : '', String(l.pai || '')
+      mdAvisosLinha(l).join(' · '), String(l.pai || '')
     ]);
     const ws = XLSX.utils.aoa_to_sheet([cab, ...dados]);
     cab.forEach((_, c)=>{
@@ -975,17 +993,19 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
     return ws;
   }
 
-  // Linha marcada `quebrado` trava a Alt.Restrição Local em massa — fica por
-  // último na aba pra fazer as em massa primeiro, sem interrupção, e deixar
-  // só as de Alt.Restrição Estoque (Shift+F6) pro final. Dentro de cada grupo,
-  // item com menos saldo total é o que corre mais risco de cancelamento se for
-  // romaneado sem ter peça pra atender o pedido — sai primeiro, pra ser
-  // resolvido antes. Critério por item (WN+86+outras), não pela quantidade da
-  // própria linha: duas linhas do mesmo item comprado ficam juntas, ordenadas
-  // pelo item, não espalhadas pela tabela.
+  // Linha com algum aviso (quebrado ou em inventário) trava a execução em
+  // massa ou precisa de confirmação antes — fica por último na aba pra fazer
+  // as diretas primeiro, sem interrupção, e deixar as que pedem atenção pro
+  // final. Dentro de cada grupo, item com menos saldo total é o que corre
+  // mais risco de cancelamento se for romaneado sem ter peça pra atender o
+  // pedido — sai primeiro, pra ser resolvido antes. Critério por item
+  // (WN+86+outras), não pela quantidade da própria linha: duas linhas do
+  // mesmo item comprado ficam juntas, ordenadas pelo item, não espalhadas
+  // pela tabela.
+  const temAviso = l => (l.quebrado || l.emInventario) ? 1 : 0;
   const comLinhas = blocos
     .map(b=>({...b, linhas: b.linhas.slice().sort((a,c)=>
-      (a.quebrado?1:0) - (c.quebrado?1:0) || (a.totalComponente ?? 0) - (c.totalComponente ?? 0))}))
+      temAviso(a) - temAviso(c) || (a.totalComponente ?? 0) - (c.totalComponente ?? 0))}))
     .filter(b=>b.linhas.length);
   if(!comLinhas.length){ irShowToast('Não há ajuste para exportar.'); return; }
   const wb = XLSX.utils.book_new();
@@ -1019,10 +1039,10 @@ function mdRenderAuditoria(){
     if(!termo) continue;
     plano = plano.filter(l => (l[campo] || '').toLowerCase().includes(termo));
   }
-  // Quebrado (2+ estoques no mesmo item+local+restrição) trava a Alt.Restrição
-  // Local em massa — fica por último, igual na planilha exportada, pra fazer
-  // as em massa primeiro e deixar só as de Shift+F6 pro final.
-  plano.sort((a,b)=>(a.quebrado?1:0) - (b.quebrado?1:0) || b.valor - a.valor);
+  // Linha com aviso (quebrado ou em inventário) fica por último, igual na
+  // planilha exportada, pra fazer as diretas primeiro e deixar as que pedem
+  // atenção pro final.
+  plano.sort((a,b)=>((a.quebrado||a.emInventario)?1:0) - ((b.quebrado||b.emInventario)?1:0) || b.valor - a.valor);
 
   const resumo = mdResumoCorrecao();
 
@@ -1037,7 +1057,10 @@ function mdRenderAuditoria(){
     <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
     <td>${irFmtInt(l.quantidade)}</td>
     <td class="num-money">${irFmtMoney(l.valor)}</td>
-    <td class="md-left">${l.quebrado ? `<span class="md-badge-aviso" title="2+ estoques no mesmo item/local/restrição — não dá pra fazer em massa, use Alt.Restrição Estoque (Shift+F6)">Shift+F6 (${l.estoquesReais || 2} estoques)</span>` : ''}</td>
+    <td class="md-left">${[
+      l.quebrado ? `<span class="md-badge-aviso" title="2+ estoques no mesmo item/local/restrição — não dá pra fazer em massa, use Alt.Restrição Estoque (Shift+F6)">Shift+F6 (${l.estoquesReais || 2} estoques)</span>` : '',
+      l.emInventario ? `<span class="md-badge-aviso" title="Local em inventário na última importação da QRY0390 — pode já ter terminado, confirme no coletor antes de corrigir">Em inventário</span>` : ''
+    ].filter(Boolean).join(' ')}</td>
   </tr>`).join('');
 
   return `<div class="panel">
@@ -1154,7 +1177,8 @@ function mdProcessar(id){
         irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.'
           +(msg.compartilhados ? ' · '+irFmtInt(msg.compartilhados)+' componentes usados em mais de um múltiplo' : ''));
       } else if(msg.type === 'done390'){
-        irShowToast(irFmtInt(msg.itens)+' itens com saldo no CD'+(msg.semSaldo ? ' · '+irFmtInt(msg.semSaldo)+' componentes de múltiplo sem saldo' : '')+'.');
+        irShowToast(irFmtInt(msg.itens)+' itens com saldo no CD'+(msg.semSaldo ? ' · '+irFmtInt(msg.semSaldo)+' componentes de múltiplo sem saldo' : '')
+          +(msg.localEmInventario ? ' · '+irFmtInt(msg.localEmInventario)+' endereços em inventário' : '')+'.');
       } else if(msg.type === 'done278'){
         irShowToast(irFmtInt(msg.pais)+' pais de múltiplo com preço.');
       } else if(msg.type === 'done0160'){
@@ -1189,6 +1213,7 @@ function mdEstadoBase(id){
     if(!m) return 'nunca importada';
     const partes = [irFmtInt(m.itens)+' itens com saldo no CD'];
     if(m.semSaldo) partes.push(irFmtInt(m.semSaldo)+' componentes de múltiplo sem saldo');
+    if(m.localEmInventario) partes.push(irFmtInt(m.localEmInventario)+' endereços em inventário');
     if(m.atualizadoEm) partes.push('estoque de '+irFmtDate(m.atualizadoEm));
     partes.push('lida '+irFmtDataHora(m.importadoEm));
     return partes.join(' · ');
