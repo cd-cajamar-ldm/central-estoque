@@ -60,14 +60,20 @@ function post(type, payload){ self.postMessage({type, ...payload}); }
    nomes evita que o módulo quebre se ela voltar ao formato antigo. */
 const ALIAS_390 = {
   item: ['ID_ITEM_FILHO','Item'], itemPai: ['ITEM_PAI'],
-  // 'Descrição2' entra ANTES de 'Descrição' de propósito: numa variante da
-  // extração (saída do fluxo Snowflake com o item pela ótica do local) a
-  // coluna 'Descrição' vem com o ENDEREÇO, não o nome do item — o nome certo
-  // fica em 'Descrição2'. mdNormKey tira os underscores, então 'Descrição2' e
-  // 'Descrição_2' normalizam igual; a ordem das COLUNAS no arquivo é quem
-  // desempata (a de nome de item vem primeiro nessa variante). Nos formatos
-  // de sempre, sem 'Descrição2' nenhuma, cai em 'Descrição' como já era.
-  descricao: ['NOME_ITEM_FILHO','Descrição2','Descrição','Descricao'],
+  // A extração de verdade (direto do WMS, sem Snowflake — a que todo mundo
+  // sem acesso ao fluxo vai usar) repete "Descrição" três vezes no cabeçalho
+  // (nome do item, rótulo da Classe Local, endereço). O SheetJS desambigua
+  // sozinho ao ler, numerando as repetições em ORDEM: a 1ª fica "Descrição"
+  // (sempre o nome do item, confirmado na extração real), a 2ª vira
+  // "Descrição_1", a 3ª "Descrição_2" — por isso NÃO adicionar um apelido pra
+  // essas repetições: "Descrição" pura já é a certa, e um apelido tipo
+  // "Descrição2"/"Descrição_2" (testado e revertido) acaba batendo com a
+  // repetição errada (o endereço) por causa dessa numeração. Só uma variante
+  // à parte (saída específica do Snowflake, fora de uso) chega com as 3
+  // repetições já pré-nomeadas pelo próprio export, fora dessa ordem — como
+  // ela não está em produção, não vale o risco de tentar acertar as duas ao
+  // mesmo tempo.
+  descricao: ['NOME_ITEM_FILHO','Descrição','Descricao'],
   descricaoPai: ['NOME_ITEM_PAI'],
   local: ['ID_LOCAL','Local'], descLocal: ['DESC_LOCAL'],
   quantidade: ['QTDE','Quantidade'], qtdeDisp: ['QTDE_DISP'],
@@ -79,7 +85,13 @@ const ALIAS_390 = {
   classeLocal: ['CLAL','Classe Local'],
   setor: ['NM_SETOR'], familia: ['NM_FAMILIA'], marca: ['NM_MARCA'],
   departamento: ['NM_DEPARTAMENTO'],
-  atualizadoEm: ['ULTIMA_ATUALIZACAO']
+  atualizadoEm: ['ULTIMA_ATUALIZACAO'],
+  // Local em inventário trava a Alt.Restrição no coletor (erro na tela, não dá
+  // pra alterar restrição ali até o inventário terminar) — vem pronta na
+  // extração direta do WMS, sem precisar de Snowflake. Opcional por natureza:
+  // se a coluna não existir (extração mais antiga, outro formato), o campo
+  // fica vazio e simplesmente não aparece aviso nenhum.
+  inventario: ['Inventário','Inventario']
 };
 const ALIAS_051 = {
   itemPai: ['item_vol_multiplo'], itemComponente: ['item_componente'],
@@ -181,7 +193,7 @@ async function runPipeline390({buf390}){
   post('progress', {stage:'Agregando por item...', pct:35});
   const porItem = new Map();
   const componentesComSaldo = new Set();
-  let atualizadoEm = '', linhasUsadas = 0;
+  let atualizadoEm = '', linhasUsadas = 0, localEmInventario = 0;
   for(const row of rows){
     const item = mdNormItemKey(getVal(row, r.item));
     if(!item) continue;
@@ -254,8 +266,13 @@ async function runPipeline390({buf390}){
         predio: String(getVal(row, r.predio) ?? '').trim(),
         clal: String(getVal(row, r.classeLocal) ?? '').trim(),
         restricao,
+        // Situação do inventário é do ENDEREÇO, não da linha — lida uma vez
+        // (na criação do local) e vale pra todo o grupo. mdNormKey compara sem
+        // se importar com acento/maiúscula ("Em inventário", "EM INVENTARIO"...).
+        emInventario: r.inventario ? mdNormKey(getVal(row, r.inventario)) === 'EMINVENTARIO' : false,
         qtde: 0, qtdeDisp: 0, qtdeRom: 0, lotes: 0, refs: []
       };
+      if(lugar.emInventario) localEmInventario++;
       it.porLocal.set(chave, lugar);
     }
     lugar.qtde += qtde;
@@ -282,9 +299,10 @@ async function runPipeline390({buf390}){
     importadoEm: new Date().toISOString(),
     atualizadoEm,
     linhas: rows.length, linhasUsadas,
-    itens: linhas.length, componentesEstrutura: componentes.size, semSaldo
+    itens: linhas.length, componentesEstrutura: componentes.size, semSaldo,
+    localEmInventario
   });
-  post('done390', {itens: linhas.length, linhas: rows.length, linhasUsadas, semSaldo});
+  post('done390', {itens: linhas.length, linhas: rows.length, linhasUsadas, semSaldo, localEmInventario});
 }
 
 /* ---------- SIGEQ278 — PREÇO DE CUSTO (opcional) ----------
