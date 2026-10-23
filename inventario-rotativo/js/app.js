@@ -963,7 +963,7 @@ const IR_INDICADORES_VERSION = 30; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v231';
+const IR_APP_VERSION = 'v232';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -3690,6 +3690,7 @@ function irRenderGestaoCiclo(){
       ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyInt, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:1200, H:260})}
     </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
     ${irRenderNet410PorObsMesTable(d)}
+    ${irRenderNet410PorObsMesTodosTable(d)}
     <h3 style="margin:20px 0 -6px;">Itens que mais impactam o NET — ${irEsc(mesLabel)}</h3>
     <div class="bi-grid-2">
       ${irRenderNet410ItensPanel(topPos, false, 'Os 10 itens que mais aumentaram o NET em '+mesLabel+', só motivos considerados pro NET.')}
