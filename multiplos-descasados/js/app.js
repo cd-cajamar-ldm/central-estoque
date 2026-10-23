@@ -14,14 +14,17 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v9';
+const MD_APP_VERSION = 'v12';
 const MD = {
   estrutura:null, saldos:null, precos:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
-  buscaAuditoria:'',
+  // Filtro por coluna da Auditoria de Restrição — chave => texto digitado.
+  filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:'', x2:''},
+  // Filtro por coluna das tabelas de Configurações: dimensão => texto digitado.
+  filtrosConfiguracoes:{clal:'', x1:''},
   pivotExpandido:new Set(),
   tela:'descasados',
   regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas] — valendo de verdade (salvo)
@@ -258,13 +261,26 @@ function mdRotuloColunaHtml(sigla){
   return `<span class="md-col-rotulo">${irEsc(mdRotuloCurto(sigla))}</span><span class="md-col-codigo">${irEsc(mdCodRestricao(sigla))}</span>`;
 }
 
-/* Colunas de restrição da tela: as que realmente aparecem no estoque destes
-   componentes, na ordem da legenda. Restrição sem nenhuma peça não vira coluna
-   vazia — a tabela já é larga. */
+/* Colunas de restrição do PIVÔ de múltiplos (Descasados): as que realmente
+   aparecem no estoque dos COMPONENTES de múltiplo, na ordem da legenda.
+   Restrição sem nenhuma peça não vira coluna vazia — a tabela já é larga. */
 function mdRestricoesPresentes(){
   const pais = mdPais();
   const vistas = new Set();
   for(const p of pais) for(const c of p.componentes) for(const s in c.porRestricao) vistas.add(s);
+  const ordenadas = MD_ORDEM_RESTRICOES.filter(s=>vistas.has(s));
+  for(const s of vistas) if(!ordenadas.includes(s)) ordenadas.push(s);
+  return ordenadas;
+}
+/* Mesma ideia, mas pra Ajustes de Restrição — que olha toda peça do CD
+   (MD.saldos inteiro, não só componente de múltiplo via mdPais). Sem isso o
+   cabeçalho da matriz ficava raso demais: só mostrava as restrições que
+   algum componente de múltiplo usa, escondendo coluna de uma restrição que só
+   aparece em item comum (ex.: Amostra, Insumos), mesmo com peça de verdade
+   somada escondida ali dentro do Total Geral. */
+function mdRestricoesPresentesCD(){
+  const vistas = new Set();
+  for(const s of (MD.saldos||[])) for(const loc of (s.locais||[])) if(loc.restricao) vistas.add(loc.restricao);
   const ordenadas = MD_ORDEM_RESTRICOES.filter(s=>vistas.has(s));
   for(const s of vistas) if(!ordenadas.includes(s)) ordenadas.push(s);
   return ordenadas;
@@ -276,7 +292,7 @@ function mdRestricoesPresentes(){
    interessam naquele momento, porque com 10 colunas a tabela rola na
    horizontal e o que importa sai da tela. */
 function mdRestricoesVisiveis(){
-  const presentes = mdRestricoesPresentes();
+  const presentes = mdRestricoesPresentesCD();
   if(MD.restricoesSel === null) return presentes;
   const visiveis = presentes.filter(s=>MD.restricoesSel.has(s));
   // Desmarcar tudo deixaria a matriz sem nenhuma coluna de número: sem isso a
@@ -284,7 +300,7 @@ function mdRestricoesVisiveis(){
   return visiveis.length ? visiveis : presentes;
 }
 function mdToggleRestricaoCol(sigla){
-  if(MD.restricoesSel === null) MD.restricoesSel = new Set(mdRestricoesPresentes());
+  if(MD.restricoesSel === null) MD.restricoesSel = new Set(mdRestricoesPresentesCD());
   if(MD.restricoesSel.has(sigla)) MD.restricoesSel.delete(sigla); else MD.restricoesSel.add(sigla);
   irRenderView();
 }
@@ -296,7 +312,7 @@ function mdToggleListaRestricoes(){ MD.restricoesAberto = !MD.restricoesAberto; 
    código, a sigla e o nome da legenda — o mesmo vocabulário do coletor, pra
    quem lembra do número e não da sigla (e vice-versa). */
 function mdRenderFiltroRestricoes(){
-  const presentes = mdRestricoesPresentes();
+  const presentes = mdRestricoesPresentesCD();
   if(!presentes.length) return '';
   const sel = MD.restricoesSel;
   const marcadas = sel === null ? presentes.length : presentes.filter(s=>sel.has(s)).length;
@@ -769,7 +785,7 @@ function mdRenderMatrizPor(chave){
 
   // Com o filtro de restrições ligado, a soma das colunas na tela não fecha
   // com o Total Geral (que continua sendo o de todas) — o cabeçalho avisa.
-  const filtrando = restricoes.length < mdRestricoesPresentes().length;
+  const filtrando = restricoes.length < mdRestricoesPresentesCD().length;
   const totalPorRestricao = {};
   for(const s of restricoes) totalPorRestricao[s] = 0;
   let totalGeral = 0, comErro = 0;
@@ -970,11 +986,15 @@ function mdRenderAuditoria(){
     return irEmptyState('Sem bases importadas', 'Importe a ZBIQ0051 e a QRY0390 para auditar a restrição de todos os itens.', "irSwitchTab('importacao')", 'Ir para a importação');
   }
   let plano = mdPlanoCorrecaoRestricao();
-  const termo = (MD.buscaAuditoria || '').trim().toLowerCase();
-  if(termo) plano = plano.filter(l =>
-    l.componente.toLowerCase().includes(termo) || (l.nome||'').toLowerCase().includes(termo) ||
-    (l.local||'').toLowerCase().includes(termo) || (l.clal||'').toLowerCase().includes(termo) ||
-    (l.x1||'').toLowerCase().includes(termo));
+  // Um filtro por coluna (Item/Descrição/Local/Classe/X1), todos precisam bater
+  // ao mesmo tempo — é assim que se estreita rápido numa tabela de milhares de
+  // linhas: filtra a classe, depois refina pelo X1, sem perder o que já achou.
+  const filtros = MD.filtrosAuditoria;
+  for(const campo in filtros){
+    const termo = (filtros[campo] || '').trim().toLowerCase();
+    if(!termo) continue;
+    plano = plano.filter(l => (l[campo] || '').toLowerCase().includes(termo));
+  }
   // Quebrado (2+ estoques no mesmo item+local+restrição) trava a Alt.Restrição
   // Local em massa — fica por último, igual na planilha exportada, pra fazer
   // as em massa primeiro e deixar só as de Shift+F6 pro final.
@@ -988,6 +1008,7 @@ function mdRenderAuditoria(){
     <td class="md-left mono">${irEsc(l.local)}</td>
     <td class="md-left mono">${irEsc(l.clal)}</td>
     <td class="md-left mono">${irEsc(l.x1)}</td>
+    <td class="md-left mono">${irEsc(l.x2)}</td>
     <td class="md-cel-erro">${irEsc(mdCodRestricao(l.de)+' '+l.de)}</td>
     <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
     <td>${irFmtInt(l.quantidade)}</td>
@@ -1005,29 +1026,44 @@ function mdRenderAuditoria(){
     </p>
     ${mdKpisCorrecao(resumo)}
     ${mdAvisoSemRegra()}
-    <div class="md-filtros">
-      <input id="mdBuscaAuditoria" class="md-busca" type="search" placeholder="Buscar item, local, classe ou X1..."
-             value="${irEsc(MD.buscaAuditoria)}" oninput="mdBuscarAuditoria(this.value)">
-    </div>
-    ${!plano.length ? '<p class="field-hint">Nenhuma restrição fora da regra encontrada.</p>' : `
+    ${!plano.length && !mdFiltroAuditoriaAtivo() ? '<p class="field-hint">Nenhuma restrição fora da regra encontrada.</p>' : `
     <div class="md-piv-wrap">
       <table class="md-piv">
-        <thead><tr>
-          <th class="md-left">Item</th><th class="md-left">Descrição</th><th class="md-left">Local</th>
-          <th class="md-left">Classe</th><th class="md-left">X1</th>
-          <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th><th class="md-left">Obs</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th class="md-left">Item</th><th class="md-left">Descrição</th><th class="md-left">Local</th>
+            <th class="md-left">Classe</th><th class="md-left">X1</th><th class="md-left">X2</th>
+            <th>Restrição atual</th><th>Sugestão</th><th>Quantidade</th><th>Valor</th><th class="md-left">Obs</th>
+          </tr>
+          <tr class="md-filtro-linha">
+            ${mdFiltroColunaHtml('componente')}${mdFiltroColunaHtml('nome')}${mdFiltroColunaHtml('local')}
+            ${mdFiltroColunaHtml('clal')}${mdFiltroColunaHtml('x1')}${mdFiltroColunaHtml('x2')}
+            <td></td><td></td><td></td><td></td><td></td>
+          </tr>
+        </thead>
         <tbody>${linhas}</tbody>
       </table>
     </div>
+    ${!plano.length ? '<p class="field-hint" style="margin-top:8px;">Nenhuma linha bate com os filtros.</p>' : ''}
     ${plano.length > MD_LIMITE_AUDITORIA ? `<p class="field-hint" style="margin-top:8px;">Mostrando as ${irFmtInt(MD_LIMITE_AUDITORIA)} maiores por valor, de ${irFmtInt(plano.length)} linhas. Baixe o relatório pra ver tudo.</p>` : ''}
     `}
   </div>`;
 }
-function mdBuscarAuditoria(v){
-  MD.buscaAuditoria = v;
-  clearTimeout(window.__mdBuscaAuditoriaTimer);
-  window.__mdBuscaAuditoriaTimer = setTimeout(()=>{ irRenderView(); document.getElementById('mdBuscaAuditoria')?.focus(); }, 220);
+function mdFiltroAuditoriaAtivo(){
+  return Object.values(MD.filtrosAuditoria).some(v=>(v||'').trim());
+}
+/* Input de filtro embaixo do título da coluna, sem rótulo dentro da célula —
+   a coluna já diz o que é, o campo só precisa existir ali pra filtrar. */
+function mdFiltroColunaHtml(campo){
+  return `<td><input type="text" class="md-col-filtro" data-campo="${campo}" value="${irEsc(MD.filtrosAuditoria[campo])}" oninput="mdFiltrarAuditoria('${campo}', this.value)"></td>`;
+}
+function mdFiltrarAuditoria(campo, v){
+  MD.filtrosAuditoria[campo] = v;
+  clearTimeout(window.__mdFiltroAuditoriaTimer);
+  window.__mdFiltroAuditoriaTimer = setTimeout(()=>{
+    irRenderView();
+    document.querySelector(`.md-col-filtro[data-campo="${campo}"]`)?.focus();
+  }, 220);
 }
 function mdExportarAuditoria(){
   const plano = mdPlanoCorrecaoRestricao();
@@ -1282,12 +1318,17 @@ function mdDescartarRascunho(){
 const MD_RESTRICOES_CONFIG = MD_ORDEM_RESTRICOES.map(sigla=>MD_RESTRICOES.find(r=>r.sigla===sigla));
 function mdRenderConfiguracoes(){
   const secoes = MD_DIMENSOES.map(dim=>{
-    const valores = mdValoresConhecidos(dim.chave);
+    const termoDim = (MD.filtrosConfiguracoes[dim.chave] || '').trim().toLowerCase();
+    let valores = mdValoresConhecidos(dim.chave);
     if(!valores.length) return '';
+    if(termoDim) valores = valores.filter(v=>v.toLowerCase().includes(termoDim));
     const headerCols = MD_RESTRICOES_CONFIG.map(r=>
       `<th title="${irEsc(r.sigla+' — '+r.nome)}">${mdRotuloColunaHtml(r.sigla)}</th>`
     ).join('');
-    const linhas = valores.map(v=>{
+    const filtroCols = MD_RESTRICOES_CONFIG.map(()=>'<td></td>').join('');
+    const linhas = !valores.length
+      ? `<tr><td class="md-left field-hint" colspan="${MD_RESTRICOES_CONFIG.length+1}">Nenhum valor bate com o filtro.</td></tr>`
+      : valores.map(v=>{
       const regra = MD.regrasRascunho[dim.chave][v] || [];
       const cels = MD_RESTRICOES_CONFIG.map(r=>{
         const marcado = regra.includes(r.sigla);
@@ -1299,7 +1340,13 @@ function mdRenderConfiguracoes(){
       <div class="md-head"><h3>Restrições permitidas por ${irEsc(dim.titulo)}</h3></div>
       <div class="md-piv-wrap">
         <table class="md-piv md-config-table">
-          <thead><tr><th class="md-left">${irEsc(dim.titulo)}</th>${headerCols}</tr></thead>
+          <thead>
+            <tr><th class="md-left">${irEsc(dim.titulo)}</th>${headerCols}</tr>
+            <tr class="md-filtro-linha">
+              <td><input type="text" class="md-col-filtro" data-chave-filtro="${dim.chave}" value="${irEsc(MD.filtrosConfiguracoes[dim.chave])}" oninput="mdFiltrarConfiguracao('${dim.chave}', this.value)"></td>
+              ${filtroCols}
+            </tr>
+          </thead>
           <tbody>${linhas}</tbody>
         </table>
       </div>
@@ -1312,6 +1359,14 @@ function mdRenderConfiguracoes(){
   return `<div style="position:sticky; top:0; z-index:5; margin-bottom:14px; text-align:right;">
     <button class="btn btn-primary" onclick="mdSalvarConfiguracao()">Salvar Configuração</button>
   </div>${secoes}`;
+}
+function mdFiltrarConfiguracao(chave, v){
+  MD.filtrosConfiguracoes[chave] = v;
+  clearTimeout(window.__mdFiltroConfigTimer);
+  window.__mdFiltroConfigTimer = setTimeout(()=>{
+    irRenderView();
+    document.querySelector(`.md-col-filtro[data-chave-filtro="${chave}"]`)?.focus();
+  }, 220);
 }
 /* Configuração é só local (IndexedDB do navegador) — troca de pessoa, de
    navegador, ou cache limpo (ver conversa sobre apagar cache) perde tudo e
