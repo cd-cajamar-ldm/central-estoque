@@ -55,7 +55,12 @@ const MD_RESTRICOES = [
   {cod:'62', sigla:'DT', nome:'Restrição de triagem', curto:'Triagem'},
   {cod:'65', sigla:'WD', nome:'Devolução de obsoletos ou acordo comercial', curto:'Obsoleto'},
   {cod:'75', sigla:'WS', nome:'Leilão', curto:'Leilão'},
-  {cod:'86', sigla:'AI', nome:'Múltiplos incompletos dentro do estoque', curto:'Incompleto'}
+  // Finalidade ainda não confirmada com o usuário — só código/sigla reais,
+  // vistos na extração. Cadastradas pra não aparecerem como "restrição
+  // desconhecida"; atualizar nome/curto quando o significado for confirmado.
+  {cod:'80', sigla:'DE', nome:'(finalidade a confirmar)', curto:'DE'},
+  {cod:'86', sigla:'AI', nome:'Múltiplos incompletos dentro do estoque', curto:'Incompleto'},
+  {cod:'90', sigla:'TE', nome:'(finalidade a confirmar)', curto:'TE'}
 ];
 const MD_SIGLA_VENDAVEL = 'WN';   // código 0
 const MD_SIGLA_BLOQUEIO = 'AI';   // código 86
