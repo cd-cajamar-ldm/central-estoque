@@ -1530,10 +1530,31 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
 /* Gráfico de barras agrupadas (3 séries por ciclo: Peças/Locais/Valor) — "Comparativo
    de Acurácias entre Ciclos" do Dashboard. Ciclo sem indicadores ainda (não processado)
    entra com barras cinza vazias, só pra manter o eixo com todos os ciclos cadastrados. */
+// Clareia um hex misturando com branco na proporção p (0-1) — usado pro ponto
+// do meio do gradiente das barras (cor sólida nas pontas, clareia no meio).
+function irMixHexBranco(hex, p){
+  const n = parseInt(hex.slice(1),16);
+  let r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+  r = Math.round(r+(255-r)*p); g = Math.round(g+(255-g)*p); b = Math.round(b+(255-b)*p);
+  return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
 function irBuildAcuraciaCiclosSvg(rows, opts){
   opts = opts||{};
   const meta = opts.meta!=null ? opts.meta : 0.97;
   const cores = {pecas:'#FA4616', locais:'#001A72', valor:'#1D1F2A', vazio:'#D8DCE3', axis:'#6B7280', label:'#1D1F2A', line:'#E4E7EE', meta:'#6B7280'};
+  // Gradiente sutil: cor sólida nas pontas da barra, clareia um pouco no meio
+  // (efeito "brilho") — opção 5 do mockup aprovado pelo usuário. Ids com
+  // sufixo aleatório porque esse gráfico aparece 2x na mesma página (Dashboard
+  // + painel de Acurácia do Ano) e um <linearGradient> com o mesmo id nos
+  // dois faz um pisar no do outro.
+  const gradSufixo = Math.random().toString(36).slice(2,9);
+  const gradDefs = ['pecas','locais','valor'].map(k=>
+    `<linearGradient id="acgrad_${k}_${gradSufixo}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${cores[k]}"/>
+      <stop offset="50%" stop-color="${irMixHexBranco(cores[k], 0.28)}"/>
+      <stop offset="100%" stop-color="${cores[k]}"/>
+    </linearGradient>`
+  ).join('');
   // Largura do desenho por parâmetro: o mesmo gráfico aparece num painel de meia
   // largura, e escalar 800px pra dentro de ~560 encolhia o rótulo junto (13px
   // viravam 9). Desenhar já no tamanho de destino mantém o texto legível.
@@ -1557,14 +1578,14 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
     const cardX = padL+i*slot+3;
     cards += `<rect x="${cardX.toFixed(1)}" y="${(padT-18).toFixed(1)}" width="${(slot-6).toFixed(1)}" height="${(H-padB-(padT-18)).toFixed(1)}" rx="8" style="fill:none;stroke:${cores.line};stroke-width:1"/>`;
     const cx = padL + (i+0.5)*slot;
-    const series = [{v:r.pecas, cor:cores.pecas}, {v:r.locais, cor:cores.locais}, {v:r.valor, cor:cores.valor}];
+    const series = [{v:r.pecas, cor:cores.pecas, k:'pecas'}, {v:r.locais, cor:cores.locais, k:'locais'}, {v:r.valor, cor:cores.valor, k:'valor'}];
     const totalW = series.length*barW + (series.length-1)*gap;
     let bx = cx - totalW/2;
     series.forEach(s=>{
       const tem = s.v!==null && s.v!==undefined;
       const bh = tem ? Math.max(0,Math.min(1,s.v))*plotH : plotH*0.015;
       const by = padT+plotH-bh;
-      bars += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${tem?s.cor:cores.vazio}" rx="3"/>`;
+      bars += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${tem?`url(#acgrad_${s.k}_${gradSufixo})`:cores.vazio}" rx="3"/>`;
       if(tem){
         labels += `<text x="${(bx+barW/2).toFixed(1)}" y="${(by-7).toFixed(1)}" font-size="11.5" text-anchor="middle" fill="${s.cor}" font-weight="800">${(s.v*100).toFixed(1)}%</text>`;
       }
@@ -1575,7 +1596,7 @@ function irBuildAcuraciaCiclosSvg(rows, opts){
   const metaY = padT + plotH*(1-meta);
   const metaLine = `<line x1="${padL}" y1="${metaY.toFixed(1)}" x2="${W-padR}" y2="${metaY.toFixed(1)}" stroke="${cores.meta}" stroke-width="1.5" stroke-dasharray="5 4" opacity=".6"/>
     <text x="${padL}" y="${(padT-28).toFixed(1)}" font-size="13" text-anchor="start" fill="${cores.meta}" font-weight="700">- - Meta ${(meta*100).toFixed(0)}%</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto;">${metaLine}${cards}${bars}${labels}${xLabels}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto;"><defs>${gradDefs}</defs>${metaLine}${cards}${bars}${labels}${xLabels}</svg>`;
 }
 function irRenderComparativoCiclosPanel(){
   // Só os ciclos do ano em curso. Misturar 2025 com 2026 numa barra ao lado da
