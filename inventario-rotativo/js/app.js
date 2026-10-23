@@ -3199,12 +3199,16 @@ async function irPastaMapearCiclos(){
       if(det && !det.erro && !det.fimTrimestre) det = null;
       if(!det){ det = await irPastaDetectar843(arq.file); cache[chave] = det; mudouCache = true; }
       if(det.erro || !det.numero || !det.ano) continue;
-      // A pasta (quando organizada como "Ciclo N - AAAA") é mais confiável que o
-      // chute por data/observação do conteúdo do arquivo: uma contagem que avança
-      // pros primeiros dias do trimestre seguinte faz a mediana das datas cair no
-      // trimestre errado, e aí o ciclo é confundido com o próximo (os dois viram
-      // um só, um "roubando" a planilha 843 do outro).
-      const daPasta = irPastaCicloFromPath(arq.pasta);
+      // A pasta (quando organizada como "Ciclo N - AAAA") só decide quando o
+      // CONTEÚDO não tem um voto claro (origem 'trimestre' — nenhuma Obs
+      // Inventário bateu com "N CICLO", só o chute pela data). Uma contagem
+      // que avança pros primeiros dias do trimestre seguinte caindo nesse
+      // chute é o caso que a pasta resolve. Mas se o conteúdo TEM uma
+      // observação explícita (origem 'obs'), ela é a fonte mais confiável que
+      // existe — é o que o WMS gravou — e vale mais que o nome da pasta: um
+      // arquivo pode ter sido salvo na pasta errada (caso real: 843 de
+      // verdade do Ciclo 4, mas salva dentro de "Ciclo 3 - AAAA" por engano).
+      const daPasta = det.origem!=='obs' ? irPastaCicloFromPath(arq.pasta) : null;
       const numero = daPasta ? daPasta.numero : det.numero;
       const ano = daPasta ? daPasta.ano : det.ano;
       const termino = irTerminoDoCiclo(det);
