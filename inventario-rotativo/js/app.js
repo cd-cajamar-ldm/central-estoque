@@ -1327,7 +1327,7 @@ function irRenderPorRuaPanel(ind){
       </div>
       ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
-    <div class="table-wrap"><table class="tbl-sticky-head">
+    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="tbl-sticky-head">
       <thead><tr>
         <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
         <th>Rua</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
@@ -1364,7 +1364,7 @@ function irRenderPorRuaPanel(ind){
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.pecasDivergentes,0))}</td>
         <td colspan="3"></td>
       </tr></tfoot>
-    </table></div>
+    </table></div></div>
     ${(()=>{ // Mesmo caso da tabela por log: "(sem rua)" sai da lista mas conta no KPI.
       const sr = (ind.porRua||[]).find(r=>r.chave==='(sem rua)');
       if(!sr || (!(sr.pecasContadas||0) && !(sr.pecasDivergentes||0))) return '';
