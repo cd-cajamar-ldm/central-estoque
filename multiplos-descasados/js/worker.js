@@ -30,6 +30,15 @@ function parseNumber(v){
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 }
+/* EAN com 12 dígitos (padrão UPC-A, usado em alguns itens junto do EAN-13)
+   perde o zero à esquerda quando a planilha guarda a coluna como número, não
+   texto — "042526912283" vira 42526912283, e sobra com 11 dígitos. Repõe o
+   zero só nesse caso específico; 13 dígitos (EAN-13, a maioria) e qualquer
+   outro tamanho ficam como estão, sem suposição. */
+function normalizarEan(v){
+  const s = String(v ?? '').trim();
+  return (/^\d{11}$/.test(s)) ? '0'+s : s;
+}
 function buildAliasResolver(headers, aliasMap){
   const resolved = {};
   const normHeaders = headers.map(h=>({raw:h, norm: mdNormKey(h)}));
@@ -65,17 +74,17 @@ const ALIAS_390 = {
   // (nome do item, rótulo da Classe Local, endereço). O SheetJS desambigua
   // sozinho ao ler, numerando as repetições em ORDEM: a 1ª fica "Descrição"
   // (sempre o nome do item, confirmado na extração real), a 2ª vira
-  // "Descrição_1", a 3ª "Descrição_2" — por isso NÃO adicionar um apelido pra
-  // essas repetições: "Descrição" pura já é a certa, e um apelido tipo
-  // "Descrição2"/"Descrição_2" (testado e revertido) acaba batendo com a
-  // repetição errada (o endereço) por causa dessa numeração. Só uma variante
-  // à parte (saída específica do Snowflake, fora de uso) chega com as 3
-  // repetições já pré-nomeadas pelo próprio export, fora dessa ordem — como
-  // ela não está em produção, não vale o risco de tentar acertar as duas ao
-  // mesmo tempo.
+  // "Descrição_1" (rótulo da Classe Local, não usado), a 3ª "Descrição_2"
+  // (o ENDEREÇO — é o que preenche a coluna Endereço na planilha exportada;
+  // sem o apelido ela saía em branco). NÃO dar apelido "Descrição2"/
+  // "Descrição_1" pro nome do item (já tentado e revertido): bate com a
+  // repetição errada por causa dessa numeração. Só uma variante à parte
+  // (saída específica do Snowflake, fora de uso) chega com as 3 repetições já
+  // pré-nomeadas pelo próprio export, fora dessa ordem — como ela não está em
+  // produção, não vale o risco de tentar acertar as duas ao mesmo tempo.
   descricao: ['NOME_ITEM_FILHO','Descrição','Descricao'],
   descricaoPai: ['NOME_ITEM_PAI'],
-  local: ['ID_LOCAL','Local'], descLocal: ['DESC_LOCAL'],
+  local: ['ID_LOCAL','Local'], descLocal: ['DESC_LOCAL','Descrição_2'],
   quantidade: ['QTDE','Quantidade'], qtdeDisp: ['QTDE_DISP'],
   qtdeRom: ['QTDE_ROM','Quantidade Romaneada'],
   valoriza: ['VALORIZA'], valorUnitario: ['VALOR_UNITARIO'],
@@ -220,7 +229,7 @@ async function runPipeline390({buf390}){
         // o nome do componente marcado VALORIZA na linha do pai, que não é o
         // nome certo quando o pai tem nome próprio na 390.
         nomePai: String(getVal(row, r.descricaoPai) ?? '').trim(),
-        ean: String(getVal(row, r.ean) ?? '').trim(),
+        ean: normalizarEan(getVal(row, r.ean)),
         valorUnitario: parseNumber(getVal(row, r.valorUnitario)),
         // VALORIZA diz se o item carrega valor. Componente marcado como não
         // valorizado tem preço zero por regra, não por falta de dado — é o que
