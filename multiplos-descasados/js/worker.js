@@ -80,6 +80,10 @@ const ALIAS_278 = {
   item: ['Item'], nomeItem: ['Nome item','Nome Item'],
   precoCusto: ['Preço de custo','Preco de custo'], precoCompra: ['Preço de compra','Preco de compra']
 };
+const ALIAS_0160 = {
+  item: ['Item'], local: ['Local'], restricao: ['Restrição','Restricao'],
+  numEstoque: ['Num. Estoque','Num Estoque','NUM_ESTOQUE']
+};
 
 self.onmessage = async (e)=>{
   const msg = e.data;
@@ -87,6 +91,7 @@ self.onmessage = async (e)=>{
     if(msg.type === 'process051') await runPipeline051(msg);
     else if(msg.type === 'process390') await runPipeline390(msg);
     else if(msg.type === 'process278') await runPipeline278(msg);
+    else if(msg.type === 'process0160') await runPipeline0160(msg);
   }catch(err){
     post('erro', {origem: msg.type, message: err.message || String(err)});
   }
@@ -312,4 +317,45 @@ async function runPipeline278({buf278}){
     linhas: rows.length, pais: linhas.length, paisEstrutura: pais.size
   });
   post('done278', {pais: linhas.length, semPreco: pais.size - linhas.length});
+}
+
+/* ---------- QRY0160 — ESTOQUE POR RESTRIÇÃO (opcional) ----------
+   A QRY0390 soma a quantidade por item+local+restrição numa linha só, sem
+   dizer se veio de 1 ou mais registros físicos de "Estoque" — é o que faz o
+   coletor recusar a Alt.Restrição Local em massa com "IMPOSSÍVEL FUNDIR"
+   quando há 2+. A QRY0160 traz um Num. Estoque por registro físico; contando
+   quantos distintos caem no mesmo item+local+restrição dá o sinal de verdade.
+   Atualiza uma vez por dia (a 390 atualiza a cada 10min): o número de estoques
+   separados de um item/local não muda rápido o bastante pra isso importar. */
+async function runPipeline0160({buf0160}){
+  post('progress', {stage:'Lendo QRY0160...', pct:10});
+  const wb = XLSX.read(buf0160, {type:'array', cellDates:true});
+  const rows = sheetToRows(wb);
+  if(!rows.length) throw new Error('QRY0160: planilha vazia.');
+  const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_0160);
+  validateColumns(r, ['item','local','restricao','numEstoque'], 'QRY0160');
+
+  post('progress', {stage:'Contando estoques por item/local/restrição...', pct:50});
+  const porChave = new Map();
+  for(const row of rows){
+    const item = mdNormItemKey(getVal(row, r.item));
+    if(!item) continue;
+    const local = String(getVal(row, r.local) ?? '').trim();
+    const restricao = String(getVal(row, r.restricao) ?? '').trim().toUpperCase();
+    const numEstoque = String(getVal(row, r.numEstoque) ?? '').trim();
+    if(!numEstoque) continue;
+    const chave = item + '|' + local + '|' + restricao;
+    let g = porChave.get(chave);
+    if(!g){ g = {chave, item, local, restricao, nums: new Set()}; porChave.set(chave, g); }
+    g.nums.add(numEstoque);
+  }
+  const linhas = Array.from(porChave.values()).map(g=>({chave: g.chave, item: g.item, local: g.local, restricao: g.restricao, estoques: g.nums.size}));
+  const quebrados = linhas.filter(l=>l.estoques > 1).length;
+
+  post('progress', {stage:'Gravando...', pct:85});
+  await mdSalvarEstoques(linhas, {
+    importadoEm: new Date().toISOString(),
+    linhas: rows.length, combinacoes: linhas.length, quebrados
+  });
+  post('done0160', {combinacoes: linhas.length, quebrados});
 }

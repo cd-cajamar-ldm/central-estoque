@@ -9,7 +9,7 @@
    tempo de cálculo, não na hora de guardar).
    ============================================================ */
 const MD_DB_NAME = 'multiplos_descasados_v1';
-const MD_DB_VERSION = 4;
+const MD_DB_VERSION = 5;
 
 const MD_STORES = {
   // Estrutura do múltiplo (ZBIQ0051): uma linha por COMPONENTE, apontando pro
@@ -23,6 +23,12 @@ const MD_STORES = {
   // Preço de custo por item (SIGEQ278), opcional — usado quando a 390 vem com
   // VALOR_UNITARIO zerado, que é o caso dos múltiplos hoje.
   preco: 'preco',
+  // Contagem de "Num. Estoque" distintos por item+local+restrição (QRY0160),
+  // opcional — a 390 soma a quantidade e esconde quantos registros físicos de
+  // estoque existem ali; a 0160 traz um por registro, então dá pra contar de
+  // verdade. Atualiza uma vez por dia (a 390 atualiza a cada 10min), mas é
+  // suficiente: o número de estoques separados de um item/local não muda tão rápido.
+  estoques: 'estoques',
   config: 'config'
 };
 
@@ -74,6 +80,9 @@ function mdOpenDBNaVersao(versao){
       // guarda todo item, não só componente) — o store separado ficou órfão.
       if(e.oldVersion >= 3 && e.oldVersion < 4 && db.objectStoreNames.contains('auditoria')){
         db.deleteObjectStore('auditoria');
+      }
+      if(!db.objectStoreNames.contains(MD_STORES.estoques)){
+        db.createObjectStore(MD_STORES.estoques, {keyPath:'chave'});
       }
     };
     req.onsuccess = ()=>resolve(req.result);
@@ -145,6 +154,14 @@ async function mdSalvarPrecos(linhas, meta){
 }
 async function mdGetPrecos(){ return mdGetAll(MD_STORES.preco); }
 async function mdGetPrecoMeta(){ return mdGetConfig('preco-meta'); }
+
+/* ---------- Contagem de estoques por item+local+restrição (QRY0160, opcional) ---------- */
+async function mdSalvarEstoques(linhas, meta){
+  await mdSubstituirTudo(MD_STORES.estoques, linhas);
+  await mdSetConfig('estoques-meta', meta);
+}
+async function mdGetEstoques(){ return mdGetAll(MD_STORES.estoques); }
+async function mdGetEstoqueMeta(){ return mdGetConfig('estoques-meta'); }
 
 /* ---------- Config chave/valor ---------- */
 async function mdSetConfig(key, valor){
