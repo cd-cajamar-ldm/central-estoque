@@ -14,15 +14,16 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v20';
+const MD_APP_VERSION = 'v23';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
-  // Filtro por coluna da Auditoria de Restrição — chave => texto digitado.
-  filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:'', x2:''},
+  // Filtro por coluna da Auditoria de Restrição — chave => texto digitado
+  // (ou sigla escolhida, no caso de "de", que é lista suspensa, não texto).
+  filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:'', x2:'', de:''},
   // Filtro por coluna das tabelas de Configurações: dimensão => texto digitado.
   filtrosConfiguracoes:{clal:'', x1:'', x1x2:''},
   pivotExpandido:new Set(),
@@ -39,6 +40,11 @@ const MD = {
   // Ordenação de cada matriz: por total (padrão), pela descrição da dimensão,
   // ou por uma coluna de restrição. asc/desc alterna no mesmo cabeçalho.
   ordemMatriz:{clal:{col:'total', dir:'desc'}, x1:{col:'total', dir:'desc'}, x1x2:{col:'total', dir:'desc'}},
+  // Qual dimensão a tabela única de Ajustes de Restrição mostra como linha —
+  // trocável pelo seletor ao lado do título. X1 é o padrão (endereço físico,
+  // mais usado no dia a dia); o vermelho/verde não muda com a escolha, é
+  // sempre a cascata completa (mdRegraViolada), só a granularidade da linha.
+  ajusteMatrizDim:'x1',
   f051:null, f390:null, f278:null, f0160:null,
   proc:{'051':false,'390':false,'278':false,'0160':false},
   progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0},'0160':{stage:'',pct:0}},
@@ -54,8 +60,10 @@ const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
    dimensão pra não perder a regra de uma quando outra for adicionada depois.
 
    ORDEM IMPORTA: é a ordem de prioridade em mdRegraViolada (mais específica
-   primeiro) e a ordem das tabelas em Configurações/Ajustes de Restrição.
-   X1+X2 vem antes de X1 porque alguns blocos têm sub-endereços com regra
+   primeiro) e a ordem das tabelas em Configurações (a tabela única de
+   Ajustes de Restrição usa a dimensão escolhida em MD.ajusteMatrizDim, numa
+   ordem própria de uso no dia a dia — ver mdRenderAjustes). X1+X2 vem antes
+   de X1 porque alguns blocos têm sub-endereços com regra
    própria, diferente do bloco em geral (ex.: CAN sozinho é restrição 50, mas
    CAN PAR é 0; COF sozinho é 0, mas COF MZS é 45) — sem essa camada, X1
    sozinho não consegue diferenciar. Sem regra configurada pra um X1+X2
@@ -188,6 +196,7 @@ function mdPaisFiltrados(){
 function mdTemDados(){ return !!(MD.estrutura && MD.estrutura.length && MD.saldos && MD.saldos.length); }
 
 function mdSetBase(base){ MD.base = base; mdInvalidarCache(); irRenderView(); }
+function mdSetAjusteMatrizDim(chave){ MD.ajusteMatrizDim = MD_DIM_POR_CHAVE[chave] ? chave : 'x1'; irRenderView(); }
 function mdSetEqualizado(v){ MD.equalizado = v; irRenderView(); }
 /* Restaura foco E cursor no fim depois de um re-render que recria o campo do
    zero. `.focus()` sozinho não basta: o navegador manda o cursor pro INÍCIO
@@ -197,8 +206,13 @@ function mdSetEqualizado(v){ MD.equalizado = v; irRenderView(); }
 function mdFocarFim(el){
   if(!el) return;
   el.focus();
-  const fim = el.value.length;
-  el.setSelectionRange(fim, fim);
+  // <select> não tem setSelectionRange (só input de texto) — o filtro de
+  // Restrição atual na Auditoria é dropdown, não texto; só restaura cursor
+  // quando o campo realmente suporta.
+  if(typeof el.setSelectionRange === 'function'){
+    const fim = el.value.length;
+    el.setSelectionRange(fim, fim);
+  }
 }
 // `elId` é de qual input restaurar o foco depois do re-render — tem mais de
 // um campo ligado a MD.busca na tela (o de cima e o embutido no cabeçalho da
@@ -642,7 +656,16 @@ function mdPlanoCorrecaoRestricao(){
       // pareamento da aba Descasados, nunca esta correção de restrição.
       const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
         : (regra.length===1 && regra[0] !== MD_SIGLA_BLOQUEIO ? regra[0] : null);
-      if(!destino) continue;
+      // Sem destino único (2+ restrições permitidas, nenhuma WN) a linha
+      // ENTRA mesmo assim — sem isso ela conta como erro na matriz de Ajustes
+      // (mdRegraViolada sozinho) mas sumia daqui e do export sem explicação
+      // nenhuma, quem olhasse a Auditoria achava que não tinha nada errado
+      // ali. Fica marcada `ambiguo`, sem `para`/`codPara` (não dá pra montar
+      // uma linha de coletor com dois destinos possíveis) — mdExportarAjuste*
+      // filtra essas antes de gerar a planilha; a Auditoria mostra as opções
+      // na Sugestão pra pessoa decidir à mão e ajustar a regra se for o caso.
+      const ambiguo = !destino;
+      const opcoes = ambiguo ? regra.join(' ou ') : '';
       const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
       const preco = s.valorUnitario || 0;
       // Mesmo item+local+restrição em 2+ registros físicos de estoque trava a
@@ -668,7 +691,8 @@ function mdPlanoCorrecaoRestricao(){
         if(!quantidade) continue;
         out.push({
           de: loc.restricao, para: destino,
-          codDe: mdCodRestricao(loc.restricao), codPara: mdCodRestricao(destino),
+          codDe: mdCodRestricao(loc.restricao), codPara: destino ? mdCodRestricao(destino) : '',
+          ambiguo, opcoes,
           localColetor: mdLocalColetor(loc.local),
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
@@ -861,13 +885,25 @@ function mdRenderAjustes(){
   // CONFIGURAÇÃO (onde cada regra é editada), não de leitura — repetir a
   // mesma matriz três vezes aqui só pra mostrar a mesma peça de estoque sob
   // três recortes diferentes não ajudava a achar erro nenhum, e nenhuma das
-  // três (nem X1+X2) mostrava vermelho de verdade: cada uma só validava a
-  // própria regra, isolada (ver mdMatrizPor). Com a cascata completa entrando
-  // no cálculo de erro, a tabela por X1+X2 (mais específica, detecta exceção
-  // de sub-endereço) já cobre os três níveis — é só ela que fica, com o
-  // título "X1" por ser a dimensão física que a operação usa no dia a dia.
-  const matriz = mdRenderMatrizPor('x1x2');
-  const blocosMatriz = `<div class="md-head" style="margin-top:18px;"><h3>Restrição por X1</h3></div>${matriz.html}`;
+  // três mostrava vermelho de verdade antes: cada uma só validava a própria
+  // regra, isolada. Com a cascata completa entrando no cálculo de erro
+  // (mdMatrizPor), o vermelho/verde já é o mesmo não importa qual dimensão
+  // está sendo exibida como linha — por isso dá pra trocar livremente pelo
+  // seletor, sem perder a precisão de nenhuma delas. X1 é o padrão (a
+  // dimensão física que a operação usa no dia a dia); X1+X2 soma detalhe de
+  // sub-endereço quando precisar, Classe agrupa por categoria do item.
+  const dimMatrizAtual = MD_DIM_POR_CHAVE[MD.ajusteMatrizDim] || MD_DIM_POR_CHAVE.x1;
+  const matriz = mdRenderMatrizPor(dimMatrizAtual.chave);
+  // Ordem do seletor é a de uso no dia a dia (X1 primeiro), não a ordem de
+  // prioridade da cascata (MD_DIMENSOES, mais específica primeiro) — são
+  // propósitos diferentes.
+  const seletorDim = `<select class="md-select" onchange="mdSetAjusteMatrizDim(this.value)">
+    ${['x1','x1x2','clal'].map(chave=>{
+      const d = MD_DIM_POR_CHAVE[chave];
+      return `<option value="${chave}" ${chave===dimMatrizAtual.chave?'selected':''}>${irEsc(d.titulo)}</option>`;
+    }).join('')}
+  </select>`;
+  const blocosMatriz = `<div class="md-head" style="margin-top:18px;"><h3>Restrição por ${irEsc(dimMatrizAtual.titulo)}</h3>${seletorDim}</div>${matriz.html}`;
 
   return `<div class="panel">
     <div class="md-head">
@@ -904,8 +940,12 @@ function mdExportarAjustePivot(){
    motivo do pivô: quase tudo vai pra 0 (WN), mas a rara linha com um destino
    diferente (só uma restrição cadastrada, sem WN) não deve se misturar. */
 function mdExportarAjusteClasses(){
+  // `ambiguo` fica de fora do export de propósito: o coletor precisa de um
+  // destino só, e essa linha tem 2+ opções sem como escolher sozinha (ver
+  // mdPlanoCorrecaoRestricao) — aparece na Auditoria pra decisão manual, não
+  // na planilha que vai ser digitada.
   const plano = mdPlanoCorrecaoRestricao().filter(l=>
-    MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
+    !l.ambiguo && MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
   );
   mdGerarXlsxAjuste([
     {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
@@ -913,9 +953,11 @@ function mdExportarAjusteClasses(){
   ]);
 }
 
-/* Só o que vai pro coletor: local, item, restrição de/para, quantidade e
-   endereço (pra achar a peça). O resto (pai, descrição, saldo, preço...) é
-   conferência que já está na tela — não precisa duplicar na planilha.
+/* O que vai pro coletor (local, EAN, restrição de/para, quantidade, endereço)
+   mais a Descrição do item — essa sozinha não se digita em lugar nenhum, mas
+   quem está com a planilha impressa/exportada na mão precisa reconhecer a
+   peça sem voltar pra tela. O resto (pai, saldo, preço...) é conferência que
+   já está na tela — não precisa duplicar na planilha.
 
    .xlsx de verdade (não CSV): é o único jeito de ter mais de uma aba e de
    marcar Local como NÚMERO com formato "sem decimal" ao mesmo tempo — um CSV
@@ -943,12 +985,16 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
   // diferentes — não é campo que se cola no coletor, por isso fica no fim,
   // fora da sequência Local/EAN/Orig/Dest/Qtde que é exatamente a ordem dos
   // campos na tela.
-  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Obs','Item pai'];
-  const colNumerica = new Set([0,2,3,4]); // Local/Orig/Dest/Qtde — EAN é texto (ver acima), Endereço/Obs/Item pai também
+  // Descrição entra pra quem está lendo a planilha impressa/exportada
+  // identificar a peça sem precisar voltar pra tela — nome inteiro pode ser
+  // comprido (é a mesma truncagem do pivô de Descasados: primeira palavra
+  // … última palavra) pra não estourar a largura da coluna.
+  const cab = ['Local (coletor)','EAN','Descrição','Orig','Dest','Qtde','Endereço','Obs','Item pai'];
+  const colNumerica = new Set([0,3,4,5]); // Local/Orig/Dest/Qtde — o resto é texto (EAN, ver acima, inclusive)
 
   function construirAba(linhas){
     const dados = linhas.map(l=>[
-      Number(l.localColetor) || 0, String(l.ean || ''), Number(l.codDe) || 0,
+      Number(l.localColetor) || 0, String(l.ean || ''), mdTruncarNome(l.nome), Number(l.codDe) || 0,
       Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '',
       mdAvisosLinha(l).join(' · '), String(l.pai || '')
     ]);
@@ -971,7 +1017,7 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
         if(colNumerica.has(c)) cel.z = '0';
       }
     });
-    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28},{wch:34},{wch:12}];
+    ws['!cols'] = [{wch:14},{wch:16},{wch:26},{wch:7},{wch:7},{wch:8},{wch:28},{wch:34},{wch:12}];
     return ws;
   }
 
@@ -1036,7 +1082,9 @@ function mdRenderAuditoria(){
     <td class="md-left mono">${irEsc(l.x1)}</td>
     <td class="md-left mono">${irEsc(l.x2)}</td>
     <td class="md-cel-erro">${irEsc(mdCodRestricao(l.de)+' '+l.de)}</td>
-    <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
+    <td class="${l.ambiguo ? '' : 'md-col-wn'}">${l.ambiguo
+      ? `<span title="2+ restrições permitidas pra esse valor, nenhuma única certa — ajuste a regra em Configurações pra sobrar só uma, ou decida à mão">Revisar (${irEsc(l.opcoes)})</span>`
+      : irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
     <td>${irFmtInt(l.quantidade)}</td>
     <td class="num-money">${irFmtMoney(l.valor)}</td>
     <td class="md-left">${[
@@ -1067,7 +1115,7 @@ function mdRenderAuditoria(){
           <tr class="md-filtro-linha">
             ${mdFiltroColunaHtml('componente')}${mdFiltroColunaHtml('nome')}${mdFiltroColunaHtml('local')}
             ${mdFiltroColunaHtml('clal')}${mdFiltroColunaHtml('x1')}${mdFiltroColunaHtml('x2')}
-            <td></td><td></td><td></td><td></td><td></td>
+            <td>${mdFiltroRestricaoAtualHtml()}</td><td></td><td></td><td></td><td></td>
           </tr>
         </thead>
         <tbody>${linhas}</tbody>
@@ -1086,6 +1134,19 @@ function mdFiltroAuditoriaAtivo(){
 function mdFiltroColunaHtml(campo){
   return `<td><input type="text" class="md-col-filtro" data-campo="${campo}" value="${irEsc(MD.filtrosAuditoria[campo])}" oninput="mdFiltrarAuditoria('${campo}', this.value)"></td>`;
 }
+/* Lista suspensa em vez de texto livre pra "Restrição atual" — o que se
+   filtra é sempre um dos códigos cadastrados (MD_RESTRICOES), nunca um texto
+   solto; dropdown pelo NÚMERO evita digitar a sigla errada ou não lembrar
+   qual código é qual. Ordenada pelo código, igual a legenda. */
+function mdFiltroRestricaoAtualHtml(){
+  const opcoes = MD_RESTRICOES.map(r=>
+    `<option value="${r.sigla}" ${MD.filtrosAuditoria.de===r.sigla?'selected':''}>${irEsc(r.cod+' — '+r.sigla+' — '+r.nome)}</option>`
+  ).join('');
+  return `<select class="md-select md-col-filtro" data-campo="de" onchange="mdFiltrarAuditoria('de', this.value)">
+    <option value="" ${MD.filtrosAuditoria.de?'':'selected'}>Todas</option>
+    ${opcoes}
+  </select>`;
+}
 function mdFiltrarAuditoria(campo, v){
   MD.filtrosAuditoria[campo] = v;
   clearTimeout(window.__mdFiltroAuditoriaTimer);
@@ -1095,7 +1156,9 @@ function mdFiltrarAuditoria(campo, v){
   }, 220);
 }
 function mdExportarAuditoria(){
-  const plano = mdPlanoCorrecaoRestricao();
+  // `ambiguo` fica de fora, mesmo motivo do export de Ajustes: sem destino
+  // único não dá pra montar uma linha de coletor.
+  const plano = mdPlanoCorrecaoRestricao().filter(l=>!l.ambiguo);
   mdGerarXlsxAjuste([
     {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
     {titulo:'Para outras restrições', linhas: plano.filter(l=>l.para!==MD_SIGLA_VENDAVEL)}
