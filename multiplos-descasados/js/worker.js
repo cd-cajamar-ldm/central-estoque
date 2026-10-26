@@ -325,6 +325,12 @@ async function runPipeline278({buf278}){
     throw new Error('importe a ZBIQ0051 antes — sem ela não há pai de múltiplo pra valorar.');
   }
   const pais = new Set(estrutura.map(l=>l.pai));
+  // Componente também entra na busca — não só pra preço (que segue valendo só
+  // pro pai, mesma regra de sempre), mas pro NOME: um componente sem nenhum
+  // saldo na 390 (a fonte de nome de sempre) não tem endereço nenhum pra tirar
+  // o nome, mas ainda está cadastrado na 278 — é catálogo, não depende de ter
+  // estoque. Sem isso, item sem saldo ficava sem nome nenhum na tela.
+  const componentes = new Set(estrutura.map(l=>l.componente));
 
   post('progress', {stage:'Lendo SIGEQ278...', pct:20});
   const wb = XLSX.read(buf278, {type:'array', cellDates:true});
@@ -340,10 +346,13 @@ async function runPipeline278({buf278}){
   const porItem = new Map();
   for(const row of rows){
     const item = mdNormItemKey(getVal(row, r.item));
-    if(!item || !pais.has(item)) continue;
+    if(!item || (!pais.has(item) && !componentes.has(item))) continue;
     const preco = parseNumber(getVal(row, r.precoCusto)) || parseNumber(getVal(row, r.precoCompra));
-    if(!preco) continue;
-    porItem.set(item, {item, preco, nome: String(getVal(row, r.nomeItem) ?? '').trim()});
+    const nome = String(getVal(row, r.nomeItem) ?? '').trim();
+    // Preço continua só valendo pro pai (regra de negócio inalterada); um
+    // componente comum passa por aqui só pra render nome, preço 0 mesmo.
+    if(!preco && !nome) continue;
+    porItem.set(item, {item, preco, nome});
   }
 
   post('progress', {stage:'Gravando preços...', pct:85});

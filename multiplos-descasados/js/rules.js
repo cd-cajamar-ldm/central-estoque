@@ -271,7 +271,10 @@ function mdCalcularPais(estrutura, saldos, precos, base, restricaoPermitida){
       }
       return {
         componente: c.componente,
-        nome: (s && s.nome) || '',
+        // Nome vem da 390 (saldo) quando o componente tem ficha; sem saldo
+        // nenhum (0 em todo lugar), cai pro nome da SIGEQ278 — catálogo, não
+        // depende do item ter estoque em algum endereço pra existir.
+        nome: (s && s.nome) || (precos.get(c.componente) || {}).nome || '',
         nomePai: (s && s.nomePai) || '',
         ean: (s && s.ean) || '',
         log: (s && s.log) || '',
