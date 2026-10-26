@@ -1516,21 +1516,30 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
   const n = rows.length;
   const maxAbs = Math.max(1, ...rows.map(r=>Math.abs(r[campo])));
   const baseY = padT + plotH/2;
-  const barW = Math.min(56, plotW/n*0.62);
+  const slot = plotW/n;
+  const barW = Math.min(56, slot*0.62);
+  // Rótulo encolhe quando a coluna aperta (ex.: gráfico em meia largura, lado a
+  // lado com outro painel) — sem isso, valores de colunas vizinhas invadiam um
+  // o espaço do outro e ficavam ilegíveis sobrepostos.
+  const fonteRotulo = slot<60 ? 10.5 : (slot<90 ? 12 : 13);
   let bars = '', labels = '', xLabels = '';
   const baseLine = `<line x1="${padL}" y1="${baseY.toFixed(1)}" x2="${W-padR}" y2="${baseY.toFixed(1)}" stroke="${corAxis}" stroke-width="1"/>`;
   rows.forEach((r,i)=>{
-    const cx = padL + (i+0.5)*(plotW/n);
+    const cx = padL + (i+0.5)*slot;
     const v = r[campo];
     const bh = Math.abs(v)/maxAbs*(plotH/2-8);
     const cor = v>=0 ? corPos : corNeg;
     const by = v>=0 ? baseY-bh : baseY;
     bars += `<rect x="${(cx-barW/2).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${cor}" rx="2"/>`;
     const labelY = v>=0 ? by-6 : by+bh+14;
-    labels += `<text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="13" text-anchor="middle" fill="${corLabel}" font-weight="700">${fmt(v)}</text>`;
+    labels += `<text x="${cx.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="${fonteRotulo}" text-anchor="middle" fill="${corLabel}" font-weight="700">${fmt(v)}</text>`;
     xLabels += `<text x="${cx.toFixed(1)}" y="${H-10}" font-size="12.5" text-anchor="middle" fill="${corAxis}" font-weight="600">${irEsc(xLabel(r))}</text>`;
   });
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${baseLine}${bars}${labels}${xLabels}</svg>`;
+  // Sem height fixo: só viewBox+width:100% (mesmo padrão dos outros gráficos SVG
+  // do app) deixa a altura seguir a proporção certa — um height em pixel fixo
+  // junto de width:100% forçava letterbox (sobrava vão em branco nas laterais)
+  // sempre que o container real não tivesse exatamente a proporção W:H.
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;">${baseLine}${bars}${labels}${xLabels}</svg>`;
 }
 /* Gráfico de barras agrupadas (3 séries por ciclo: Peças/Locais/Valor) — "Comparativo
    de Acurácias entre Ciclos" do Dashboard. Ciclo sem indicadores ainda (não processado)
@@ -3735,7 +3744,7 @@ function irRenderGestaoCiclo(){
       ${netMensalRows.length ? `<div class="panel">
         <h3>NET Mensal em Colunas — ${d.ano}</h3>
         <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
-        ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyInt, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:620, H:260})}
+        ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:620, H:260})}
       </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
       ${irRenderNet410PorObsMesTable(d)}
     </div>
