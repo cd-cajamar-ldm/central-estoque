@@ -14,15 +14,16 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v22';
+const MD_APP_VERSION = 'v23';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
   base:'qtde',          // 'qtde' = tudo que existe | 'qtdeDisp' = só o disponível
   equalizado:'nao',     // 'sim' (já casado) | 'nao' (precisa de ajuste)
   busca:'',
-  // Filtro por coluna da Auditoria de Restrição — chave => texto digitado.
-  filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:'', x2:''},
+  // Filtro por coluna da Auditoria de Restrição — chave => texto digitado
+  // (ou sigla escolhida, no caso de "de", que é lista suspensa, não texto).
+  filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:'', x2:'', de:''},
   // Filtro por coluna das tabelas de Configurações: dimensão => texto digitado.
   filtrosConfiguracoes:{clal:'', x1:'', x1x2:''},
   pivotExpandido:new Set(),
@@ -205,8 +206,13 @@ function mdSetEqualizado(v){ MD.equalizado = v; irRenderView(); }
 function mdFocarFim(el){
   if(!el) return;
   el.focus();
-  const fim = el.value.length;
-  el.setSelectionRange(fim, fim);
+  // <select> não tem setSelectionRange (só input de texto) — o filtro de
+  // Restrição atual na Auditoria é dropdown, não texto; só restaura cursor
+  // quando o campo realmente suporta.
+  if(typeof el.setSelectionRange === 'function'){
+    const fim = el.value.length;
+    el.setSelectionRange(fim, fim);
+  }
 }
 // `elId` é de qual input restaurar o foco depois do re-render — tem mais de
 // um campo ligado a MD.busca na tela (o de cima e o embutido no cabeçalho da
@@ -1109,7 +1115,7 @@ function mdRenderAuditoria(){
           <tr class="md-filtro-linha">
             ${mdFiltroColunaHtml('componente')}${mdFiltroColunaHtml('nome')}${mdFiltroColunaHtml('local')}
             ${mdFiltroColunaHtml('clal')}${mdFiltroColunaHtml('x1')}${mdFiltroColunaHtml('x2')}
-            <td></td><td></td><td></td><td></td><td></td>
+            <td>${mdFiltroRestricaoAtualHtml()}</td><td></td><td></td><td></td><td></td>
           </tr>
         </thead>
         <tbody>${linhas}</tbody>
@@ -1127,6 +1133,19 @@ function mdFiltroAuditoriaAtivo(){
    a coluna já diz o que é, o campo só precisa existir ali pra filtrar. */
 function mdFiltroColunaHtml(campo){
   return `<td><input type="text" class="md-col-filtro" data-campo="${campo}" value="${irEsc(MD.filtrosAuditoria[campo])}" oninput="mdFiltrarAuditoria('${campo}', this.value)"></td>`;
+}
+/* Lista suspensa em vez de texto livre pra "Restrição atual" — o que se
+   filtra é sempre um dos códigos cadastrados (MD_RESTRICOES), nunca um texto
+   solto; dropdown pelo NÚMERO evita digitar a sigla errada ou não lembrar
+   qual código é qual. Ordenada pelo código, igual a legenda. */
+function mdFiltroRestricaoAtualHtml(){
+  const opcoes = MD_RESTRICOES.map(r=>
+    `<option value="${r.sigla}" ${MD.filtrosAuditoria.de===r.sigla?'selected':''}>${irEsc(r.cod+' — '+r.sigla+' — '+r.nome)}</option>`
+  ).join('');
+  return `<select class="md-select md-col-filtro" data-campo="de" onchange="mdFiltrarAuditoria('de', this.value)">
+    <option value="" ${MD.filtrosAuditoria.de?'':'selected'}>Todas</option>
+    ${opcoes}
+  </select>`;
 }
 function mdFiltrarAuditoria(campo, v){
   MD.filtrosAuditoria[campo] = v;
