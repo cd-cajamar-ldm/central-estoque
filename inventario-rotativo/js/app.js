@@ -65,6 +65,11 @@ const IR = {
   // Perdas e Ganhos (QRY410) — independente do ciclo, por ano.
   net410Anos:[], net410AnoSel:null, net410MesSel:null, net410Data:null, net410File:null,
   net410Processing:false, net410Progress:{stage:'', pct:0},
+  // Filtros e ordenação da tabela de detalhe (visão linha a linha da 410, só
+  // Lógica 301/302) — independentes do Mês/Ano do resto da aba, pra dar liberdade
+  // de olhar o trimestre ou o ano inteiro sem mexer nos gráficos acima.
+  net410DetFiltro:{mes:'todos', trimestre:'todos', logica:'todas', obsPrefixo:'todos', depto:'todos'},
+  net410DetSort:{col:'dtMov', dir:'desc'},
   divNetMesSel:null, // mês selecionado no painel "Por que o NET está distorcido?" (aba Divergências)
   divNetDiaSel:null, // dia selecionado (opcional) no mesmo painel — "" ou null = mês inteiro
   comparativoCiclos:null, // [{ciclo, ind}] de todos os ciclos já processados, pro gráfico do Dashboard
@@ -963,7 +968,7 @@ const IR_INDICADORES_VERSION = 30; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v232';
+const IR_APP_VERSION = 'v233';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -3524,7 +3529,6 @@ function irRenderNet410Resultado(d){
       </table></div>
     </div>
     ${irRenderNet410PorObsMesTable(d)}
-    ${irRenderNet410PorObsMesTodosTable(d)}
     <h3 style="margin:20px 0 -6px;">Itens que mais impactam no ano — ${d.ano}</h3>
     <div class="bi-grid-2">
       ${irRenderNet410ItensPanel(d.topItensPositivos, false, 'Soma do valor no ano ('+d.ano+'), só motivos considerados pro NET.')}
@@ -3576,45 +3580,88 @@ function irRenderNet410PorObsMesTable(d){
       </table></div>
     </div>`;
 }
-/* Mesmo mês da tabela acima, mas SEM excluir nada — nem os motivos fora da
-   ordem fixa (IR_NET410_ORDEM_OBS), nem os marcados "Considerar NET = NÃO".
-   É pra achar a causa de um NET esquisito no mês: a tabela oficial já corta
-   o que não entra no número, e às vezes é justamente o que foi cortado que
-   explica o total. Maior impacto (|Total Geral|) primeiro. */
-function irRenderNet410PorObsMesTodosTable(d){
-  const mes = IR.net410MesSel;
-  const mObj = (d.porMes||[]).find(m=>m.mes===mes);
-  const legendaViva = IR.net410Legenda||[];
-  const linhas = (mObj && mObj.porObs || []).slice().sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral));
-  const totalSaida = linhas.reduce((s,o)=>s+(o.saida||0),0);
-  const totalEntrada = linhas.reduce((s,o)=>s+(o.entrada||0),0);
-  const totalGeral = linhas.reduce((s,o)=>s+(o.totalGeral||0),0);
-  const mesLabel = mObj ? (IR_MES_NOMES[parseInt(mes.slice(5,7),10)-1]+'/'+mes.slice(0,4)) : '—';
+/* ============================================================
+   NET — Detalhe por Lógica (301/302)
+   Visão linha a linha da própria QRY410 (não agregada), restrita às Lógicas
+   301/302 — pra investigar um lançamento específico sem abrir a planilha.
+   Filtros e ordenação são próprios dessa tabela (não mexem no Mês/Ano do
+   resto da aba). Alimentada por g.linhasLogica no worker.js.
+   ============================================================ */
+const IR_NET410_DET_COLS = [
+  {key:'item', lbl:'Item'}, {key:'nome', lbl:'Nome'},
+  {key:'idDepto', lbl:'Id Depto'}, {key:'depto', lbl:'Nome Depto'},
+  {key:'dtMov', lbl:'Dt.Mov.', tipo:'data'}, {key:'logica', lbl:'Lógica'},
+  {key:'qtd', lbl:'Quantidade', tipo:'num'}, {key:'valor', lbl:'Vl.Mov.', tipo:'money'},
+  {key:'numDoc', lbl:'Num Doc'}, {key:'observacao', lbl:'Observação'},
+  {key:'obsWms', lbl:'Observação WMS'}, {key:'usuario', lbl:'Usuário'},
+  {key:'dataHora', lbl:'Data/Hora', tipo:'data'},
+  {key:'netAnoValor', lbl:'Net Ano Valor', tipo:'money'}, {key:'netAnoPecas', lbl:'Net Ano Peças', tipo:'num'},
+  {key:'mes', lbl:'Mês', tipo:'mes'},
+  {key:'netMesValor', lbl:'Net Mês Valor', tipo:'money'}, {key:'netMesPecas', lbl:'Net Mês Peças', tipo:'num'}
+];
+function irNet410DetSetFiltro(key, val){ IR.net410DetFiltro[key] = val; irRenderView(); }
+function irNet410DetSort(col){
+  const s = IR.net410DetSort || {col:'dtMov', dir:'desc'};
+  IR.net410DetSort = (s.col===col) ? {col, dir: s.dir==='desc'?'asc':'desc'} : {col, dir:'desc'};
+  irRenderView();
+}
+function irNet410DetTrimestre(mes){ return Math.ceil(parseInt(mes.slice(5,7),10)/3); }
+function irNet410DetMesLabel(mes){ return IR_MES_NOMES_ABREV[parseInt(mes.slice(5,7),10)-1]+'/'+mes.slice(0,4); }
+function irRenderNet410DetalheLogicaPanel(d){
+  const todas = (d && d.linhasLogica) || [];
+  const f = IR.net410DetFiltro;
+  // Opções dos filtros — só os valores que de fato aparecem nos dados, pra não
+  // oferecer opção que sempre vai dar lista vazia.
+  const mesesDisp = Array.from(new Set(todas.map(l=>l.mes))).sort();
+  const deptosDisp = Array.from(new Set(todas.map(l=>l.depto).filter(Boolean))).sort();
+  const prefixosDisp = Array.from(new Set(todas.map(l=>(l.obsWms||l.observacao||'').slice(0,3).toUpperCase()).filter(Boolean))).sort();
+  const linhas = todas.filter(l=>{
+    if(f.mes!=='todos' && l.mes!==f.mes) return false;
+    if(f.trimestre!=='todos' && irNet410DetTrimestre(l.mes)!==parseInt(f.trimestre,10)) return false;
+    if(f.logica!=='todas' && l.logica!==f.logica) return false;
+    if(f.obsPrefixo!=='todos' && (l.obsWms||l.observacao||'').slice(0,3).toUpperCase()!==f.obsPrefixo) return false;
+    if(f.depto!=='todos' && l.depto!==f.depto) return false;
+    return true;
+  });
+  const s = IR.net410DetSort || {col:'dtMov', dir:'desc'};
+  const dir = s.dir==='desc' ? -1 : 1;
+  const colSort = IR_NET410_DET_COLS.find(c=>c.key===s.col) || {};
+  const ordenadas = linhas.slice().sort((a,b)=>{
+    const va = a[s.col], vb = b[s.col];
+    if(colSort.tipo==='num' || colSort.tipo==='money') return dir*((va||0)-(vb||0));
+    return dir*String(va||'').localeCompare(String(vb||''));
+  });
+  const seta = k => s.col===k ? (s.dir==='desc'?' ▼':' ▲') : '';
+  const fmtCel = (l, c) => {
+    const v = l[c.key];
+    if(c.tipo==='money') return `<td class="mono" style="color:${v>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(v)}</td>`;
+    if(c.tipo==='num') return `<td class="mono">${irFmtInt(v)}</td>`;
+    if(c.tipo==='data') return `<td class="mono">${v ? irEsc(v.replace('T',' ')) : '—'}</td>`;
+    if(c.tipo==='mes') return `<td class="mono">${irEsc(irNet410DetMesLabel(v))}</td>`;
+    return `<td>${irEsc(v)||'—'}</td>`;
+  };
+  const selectFiltro = (key, label, opcoes) => `<div>
+    <label>${label}</label>
+    <select onchange="irNet410DetSetFiltro('${key}', this.value)">
+      <option value="todos" ${f[key]==='todos'?'selected':''}>Todos</option>
+      ${opcoes.map(o=>`<option value="${irEsc(o.v)}" ${f[key]===o.v?'selected':''}>${irEsc(o.lbl)}</option>`).join('')}
+    </select>
+  </div>`;
   return `
     <div class="panel">
-      <h3>NET por Observação (R$) — todos os motivos, sem exclusão — ${irEsc(mesLabel)}</h3>
-      <p class="panel-sub">Igual à tabela acima, mas lista toda observação que apareceu no mês, inclusive as que a legenda marca como "Considerar NET = NÃO" e as fora da ordem fixa. Ordenado pelo maior impacto absoluto primeiro.</p>
+      <h3>NET — Detalhe por Lógica (301/302)</h3>
+      <p class="panel-sub">Linha a linha da própria 410 (não agregada), só Lógicas 301 e 302. Net Ano/Mês é o saldo do item no período, somando todos os motivos considerados pro NET — não só esta linha. Clique no título da coluna pra ordenar.</p>
+      <div class="net-det-filtros" style="margin-bottom:12px;">
+        ${selectFiltro('mes', 'Mês', mesesDisp.map(m=>({v:m, lbl:irNet410DetMesLabel(m)})))}
+        ${selectFiltro('trimestre', 'Trimestre', [1,2,3,4].map(t=>({v:String(t), lbl:t+'º Trimestre'})))}
+        ${selectFiltro('logica', 'Lógica', ['301','302'].map(l=>({v:l, lbl:l})))}
+        ${selectFiltro('obsPrefixo', 'Prefixo da Obs', prefixosDisp.map(p=>({v:p, lbl:p})))}
+        ${selectFiltro('depto', 'Depto', deptosDisp.map(dp=>({v:dp, lbl:dp})))}
+      </div>
+      <p class="field-hint" style="margin-bottom:8px;">${irFmtInt(ordenadas.length)} linha(s) de ${irFmtInt(todas.length)} no ano.</p>
       <div class="table-wrap"><table class="table-wide">
-        <thead><tr><th>Obs</th><th>Legenda</th><th>Considerar NET?</th><th>Saída</th><th>Entrada</th><th>Total Geral</th></tr></thead>
-        <tbody>${linhas.length ? linhas.map(o=>{
-          const legendaEntry = legendaViva.find(l=>l.id===o.id);
-          const considerarNet = legendaEntry ? legendaEntry.considerarNet!==false : true;
-          const legendaTexto = (legendaEntry && legendaEntry.legenda) || o.legenda || '';
-          return `<tr>
-          <td class="mono">${irEsc(o.id)}</td>
-          <td>${irEsc(legendaTexto)||'—'}</td>
-          <td><span class="tag ${considerarNet?'tag-good':'tag-muted'}">${considerarNet?'SIM':'NÃO'}</span></td>
-          <td class="mono" style="color:var(--danger);">${o.saida?irFmtMoney(o.saida):'—'}</td>
-          <td class="mono" style="color:var(--success);">${o.entrada?irFmtMoney(o.entrada):'—'}</td>
-          <td class="mono" style="font-weight:700;">${irFmtMoney(o.totalGeral)}</td>
-        </tr>`;
-        }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--ink-soft);">Sem movimentos no mês selecionado</td></tr>'}</tbody>
-        <tfoot><tr style="font-weight:700;">
-          <td colspan="3">Total Geral (todos os motivos)</td>
-          <td class="mono" style="color:var(--danger);">${totalSaida?irFmtMoney(totalSaida):'—'}</td>
-          <td class="mono" style="color:var(--success);">${totalEntrada?irFmtMoney(totalEntrada):'—'}</td>
-          <td class="mono" style="color:${totalGeral>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalGeral)}</td>
-        </tr></tfoot>
+        <thead><tr>${IR_NET410_DET_COLS.map(c=>`<th onclick="irNet410DetSort('${c.key}')" style="cursor:pointer;white-space:nowrap;">${irEsc(c.lbl)}${seta(c.key)}</th>`).join('')}</tr></thead>
+        <tbody>${ordenadas.length ? ordenadas.map(l=>`<tr>${IR_NET410_DET_COLS.map(c=>fmtCel(l,c)).join('')}</tr>`).join('') : `<tr><td colspan="${IR_NET410_DET_COLS.length}" style="text-align:center;color:var(--ink-soft);">Sem linhas com esse filtro</td></tr>`}</tbody>
       </table></div>
     </div>`;
 }
@@ -3684,13 +3731,15 @@ function irRenderGestaoCiclo(){
   const topPos = ((mObj && mObj.topItensPositivos) || []).slice(0, 10);
   const topNeg = ((mObj && mObj.topItensNegativos) || []).slice(0, 10);
   return `
-    ${netMensalRows.length ? `<div class="panel">
-      <h3>NET Mensal em Colunas — ${d.ano}</h3>
-      <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
-      ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyInt, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:1200, H:260})}
-    </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
-    ${irRenderNet410PorObsMesTable(d)}
-    ${irRenderNet410PorObsMesTodosTable(d)}
+    <div class="bi-grid-2">
+      ${netMensalRows.length ? `<div class="panel">
+        <h3>NET Mensal em Colunas — ${d.ano}</h3>
+        <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
+        ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyInt, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:620, H:260})}
+      </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
+      ${irRenderNet410PorObsMesTable(d)}
+    </div>
+    ${irRenderNet410DetalheLogicaPanel(d)}
     <h3 style="margin:20px 0 -6px;">Itens que mais impactam o NET — ${irEsc(mesLabel)}</h3>
     <div class="bi-grid-2">
       ${irRenderNet410ItensPanel(topPos, false, 'Os 10 itens que mais aumentaram o NET em '+mesLabel+', só motivos considerados pro NET.')}

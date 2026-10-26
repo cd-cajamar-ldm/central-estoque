@@ -204,6 +204,10 @@ const ALIAS_410 = {
   quantidade: ['Quantidade'], sentido: ['Sentido'], vlMov: ['Vl.Mov.','Vl Mov'],
   idDeposito: ['Id Deposito','Id Depósito'], obsWms: ['Observacao WMS','Observação WMS'],
   depto: ['Nome Depto','Nome Departamento','Departamento'],
+  // Lógica (301/302) e Id Depto — só usados pela tabela de detalhe "NET por
+  // Lógica 301/302" (visão linha a linha da própria 410). Opcionais: se a
+  // planilha não trouxer essas colunas, a tabela simplesmente fica vazia.
+  logica: ['Logica','Lógica'], idDepto: ['Id Depto','Id Departamento'],
   /* A planilha tem DUAS colunas de observação. A WMS é a que traz o código do motivo
      (AIR, ADE, AIN...), e é por ela que a legenda classifica. Mas parte dos
      lançamentos vem com a WMS vazia e o motivo escrito só nesta outra — por exemplo
@@ -1689,7 +1693,13 @@ async function runPipeline410({buf410}){
       // Depto (coluna "Nome Depto" da QRY410) — só conta movimento de motivo
       // considerado pro NET, mesmo critério da quebra por Obs mês a mês.
       porDepto:new Map(), porDeptoMes:new Map(),
-      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0
+      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0,
+      // Linhas cruas da própria 410, só Lógica 301/302 — alimenta a tabela de
+      // detalhe da aba NET (visão linha a linha, não agregada). Os totais de
+      // Net Ano/Mês de cada linha só ficam prontos depois do laço principal
+      // (porItem/porItemMes só fecham quando todas as linhas já passaram),
+      // por isso aqui só guarda os dados crus e anota os dois Nets depois.
+      linhasLogica:[]
     });
     return porAno.get(ano);
   }
@@ -1793,6 +1803,28 @@ async function runPipeline410({buf410}){
     if(sinal<0) goMes.saida += valor;
     else if(sinal>0) goMes.entrada += valor;
 
+    // Linha a linha da 410, só Lógica 301/302 — independe de Considerar NET (é
+    // uma visão crua, não um agregado). Os campos Net Ano/Mês ficam de fora
+    // aqui e são preenchidos depois, quando porItem/porItemMes já tiverem
+    // somado todas as linhas do ano.
+    const logicaVal = String(getVal(row, r410.logica)||'').trim();
+    if(logicaVal==='301' || logicaVal==='302'){
+      g.linhasLogica.push({
+        item: String(getVal(row, r410.item)||'').trim(),
+        nome: String(getVal(row, r410.nomeItem)||'').trim(),
+        idDepto: String(getVal(row, r410.idDepto)||'').trim(),
+        depto: String(getVal(row, r410.depto)||'').trim(),
+        dtMov: isoDateTime(dt),
+        mes, logica: logicaVal,
+        qtd, valor,
+        numDoc: String(getVal(row, r410.numDoc)||'').trim(),
+        observacao: String(getVal(row, r410.observacao)||'').trim(),
+        obsWms: String(getVal(row, r410.obsWms)||'').trim(),
+        usuario: String(getVal(row, r410.usuario)||'').trim(),
+        dataHora: isoDateTime(parseDateVal(getVal(row, r410.dataHora)))
+      });
+    }
+
     if(!cls.considerarNet) continue; // resto (mês/dia, item, depto) só conta com motivos válidos pro NET
 
     // Quebra por Departamento (ano e mês) — mesma regra da quebra por Obs: só
@@ -1856,9 +1888,22 @@ async function runPipeline410({buf410}){
     const topItensNegativos = itens.filter(i=>i.saldoValor<0).sort((a,b)=>a.saldoValor-b.saldoValor).slice(0,20);
     const totalGanhos = porMes.reduce((s,m)=>s+m.ganhos,0);
     const totalPerdas = porMes.reduce((s,m)=>s+m.perdas,0);
+    // Net Ano/Mês de cada linha de detalhe (301/302) — só dá pra calcular aqui,
+    // depois que porItem/porItemMes já somaram TODAS as linhas do ano (inclusive
+    // as de outras Lógicas/motivos do mesmo item).
+    const linhasLogica = g.linhasLogica.map(l=>{
+      const itemAno = g.porItem.get(l.item) || {saldoValor:0, saldoQtd:0};
+      const itemMesMapa = g.porItemMes.get(l.mes);
+      const itemMes = itemMesMapa && itemMesMapa.get(l.item);
+      return {
+        ...l,
+        netAnoValor: itemAno.saldoValor||0, netAnoPecas: itemAno.saldoQtd||0,
+        netMesValor: itemMes ? itemMes.saldoValor : 0, netMesPecas: itemMes ? itemMes.saldoQtd : 0
+      };
+    });
     resumos[ano] = {
       ano, totalLinhas:g.totalLinhas, linhasExcluidasDeposito21:g.linhasExcluidasDeposito21,
-      porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos,
+      porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica,
       totalGanhos, totalPerdas, totalNet: totalGanhos+totalPerdas, totalNetAbs: Math.abs(totalGanhos+totalPerdas)
     };
   }
