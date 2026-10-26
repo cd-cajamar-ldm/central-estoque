@@ -3668,10 +3668,10 @@ function irRenderNet410DetalheLogicaPanel(d){
         ${selectFiltro('depto', 'Depto', deptosDisp.map(dp=>({v:dp, lbl:dp})))}
       </div>
       <p class="field-hint" style="margin-bottom:8px;">${irFmtInt(ordenadas.length)} linha(s) de ${irFmtInt(todas.length)} no ano.</p>
-      <div class="table-wrap"><table class="table-wide">
+      <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-wide table-dense tbl-sticky-head">
         <thead><tr>${IR_NET410_DET_COLS.map(c=>`<th onclick="irNet410DetSort('${c.key}')" style="cursor:pointer;white-space:nowrap;">${irEsc(c.lbl)}${seta(c.key)}</th>`).join('')}</tr></thead>
         <tbody>${ordenadas.length ? ordenadas.map(l=>`<tr>${IR_NET410_DET_COLS.map(c=>fmtCel(l,c)).join('')}</tr>`).join('') : `<tr><td colspan="${IR_NET410_DET_COLS.length}" style="text-align:center;color:var(--ink-soft);">Sem linhas com esse filtro</td></tr>`}</tbody>
-      </table></div>
+      </table></div></div>
     </div>`;
 }
 function irRenderNet410ItensPanel(items, negativos, subtitulo){
