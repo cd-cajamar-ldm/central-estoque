@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v24';
+const MD_APP_VERSION = 'v26';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -35,6 +35,14 @@ const MD = {
   // pessoa clica em "Salvar Configuração" — clique errado no meio de uma
   // conferência não pode mudar o resultado sozinho.
   regrasRascunho:{clal:{}, x1:{}, x1x2:{}},
+  // Endereços de doca/expedição (X1, ex.: DS, GAI) — a restrição ali nem dá
+  // pra alterar no WMS, e estoque WN parado lá já significa conjunto coletado
+  // pra um pedido. Conta normal no total vendável (não é saldo mal
+  // classificado, ver mdRegraViolada/restricaoPermitida), só não entra como
+  // candidato ao sugerir ONDE executar um bloqueio (0→86) — ver mdEnderecoDoca
+  // e mdAlocarPorEndereco (rules.js). valor X1 -> true/false, mesmo esquema de
+  // rascunho/salvar das demais configurações.
+  docaX1:{}, docaX1Rascunho:{},
   selecionadas:{clal:null, x1:null, x1x2:null}, // dimensão -> null (todas) | Set() (só as marcadas)
   restricoesSel:null,             // null = todas as colunas | Set() = só estas siglas
   restricoesAberto:false,         // lista de restrições aberta ou recolhida
@@ -88,6 +96,7 @@ const MD_DIMENSOES = [
 const MD_DIM_POR_CHAVE = {};
 MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
 const MD_CONFIG_KEY_POR_DIM = {clal:'regras-classe', x1:'regras-x1', x1x2:'regras-x1x2'};
+const MD_CONFIG_KEY_DOCA_X1 = 'regras-x1-doca';
 
 function irEsc(v){ if(v===undefined||v===null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function irFmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
@@ -546,9 +555,17 @@ function mdRenderDescasados(){
    estoque bom voltando pra venda. */
 function mdPlano(){
   if(MD._plano && MD._planoBase === MD.base) return MD._plano;
-  MD._plano = mdPlanoAjuste(mdPais(), MD.base, mdRestricaoPermitida);
+  MD._plano = mdPlanoAjuste(mdPais(), MD.base, mdRestricaoPermitida, mdEnderecoDoca);
   MD._planoBase = MD.base;
   return MD._plano;
+}
+/* Endereço de doca/expedição (X1 cadastrado em Configurações) — ver
+   MD.docaX1 e mdAlocarPorEndereco (rules.js). Só filtra ONDE sugerir um
+   bloqueio, nunca o total WN que entra no pareamento (mdCalcularPais usa
+   só mdRestricaoPermitida pra isso). */
+function mdEnderecoDoca(loc){
+  const x1 = (loc.x1 || '').trim().split(/\s+/)[0] || '';
+  return !!(MD.docaX1 && MD.docaX1[x1]);
 }
 /* Matriz por dimensão de local (classe/X1/X1+X2) × restrição, no mesmo
    espírito da matriz que o usuário usa no PuTTY (linhas = valor da dimensão,
@@ -1401,6 +1418,15 @@ function mdSetRegra(chave, valor, sigla, permitido){
     if(cb.dataset.chave === chave && cb.dataset.valor === valor && cb.dataset.sigla === sigla){ cb.focus(); break; }
   }
 }
+/* Mesmo esquema de rascunho do mdSetRegra, só que pro checkbox único de
+   "doca/expedição" (coluna extra na tabela de X1, ver mdRenderConfiguracoes). */
+function mdSetDocaX1(valor, marcado){
+  MD.docaX1Rascunho[valor] = marcado;
+  irRenderView();
+  for(const cb of document.querySelectorAll('input[type="checkbox"][data-doca-x1]')){
+    if(cb.dataset.valor === valor){ cb.focus(); break; }
+  }
+}
 /* Navegação por seta na matriz de Configurações — marcar casa a casa com o
    mouse é lento numa tabela com dezenas de X1/X2. Espaço já marca/desmarca
    sozinho (comportamento nativo do checkbox); só falta mover o foco. */
@@ -1425,13 +1451,16 @@ function mdConfigNav(e, el){
   if(cb) cb.focus();
 }
 function mdRascunhoAlterado(){
-  return JSON.stringify(MD.regrasRascunho) !== JSON.stringify(MD.regras);
+  return JSON.stringify(MD.regrasRascunho) !== JSON.stringify(MD.regras)
+    || JSON.stringify(MD.docaX1Rascunho) !== JSON.stringify(MD.docaX1);
 }
 function mdSalvarConfiguracao(){
   MD_DIMENSOES.forEach(dim=>{
     MD.regras[dim.chave] = {...MD.regrasRascunho[dim.chave]};
     mdSetConfig(MD_CONFIG_KEY_POR_DIM[dim.chave], MD.regras[dim.chave]);
   });
+  MD.docaX1 = {...MD.docaX1Rascunho};
+  mdSetConfig(MD_CONFIG_KEY_DOCA_X1, MD.docaX1);
   // Só agora o pareamento de Descasados e Ajustes/Auditoria de Restrição
   // passam a enxergar a mudança (ver mdPais/mdPlanoCorrecaoRestricao).
   mdInvalidarCache();
@@ -1441,6 +1470,7 @@ function mdSalvarConfiguracao(){
 function mdDescartarRascunho(){
   MD.regrasRascunho = {};
   MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = {...MD.regras[dim.chave]}; });
+  MD.docaX1Rascunho = {...MD.docaX1};
   irRenderView();
   irShowToast('Alterações descartadas.');
 }
@@ -1454,18 +1484,26 @@ function mdRenderConfiguracoes(){
     let valores = mdValoresConhecidos(dim.chave);
     if(!valores.length) return '';
     if(termoDim) valores = valores.filter(v=>v.toLowerCase().includes(termoDim));
+    // Coluna extra só na tabela de X1: endereço de doca/expedição (DS, GAI...)
+    // — restrição ali nem dá pra alterar no WMS, não entra como candidato ao
+    // sugerir bloqueio (0→86) na aba Descasados. Não é mais uma restrição
+    // permitida/proibida (por isso fica fora de MD_RESTRICOES_CONFIG), por
+    // isso tem título e estilo próprios pra não parecer parte da mesma régua.
+    const temColunaDoca = dim.chave === 'x1';
     const headerCols = MD_RESTRICOES_CONFIG.map(r=>
       `<th title="${irEsc(r.sigla+' — '+r.nome)}">${mdRotuloColunaHtml(r.sigla)}</th>`
-    ).join('');
-    const filtroCols = MD_RESTRICOES_CONFIG.map(()=>'<td></td>').join('');
+    ).join('') + (temColunaDoca ? `<th class="md-col-doca" title="Endereço de doca/expedição (ex.: DS, GAI) — restrição não dá pra alterar no WMS; não sugerir bloqueio (0→86) nesses endereços">Doca (não bloquear)</th>` : '');
+    const filtroCols = MD_RESTRICOES_CONFIG.map(()=>'<td></td>').join('') + (temColunaDoca ? '<td></td>' : '');
     const linhas = !valores.length
-      ? `<tr><td class="md-left field-hint" colspan="${MD_RESTRICOES_CONFIG.length+1}">Nenhum valor bate com o filtro.</td></tr>`
+      ? `<tr><td class="md-left field-hint" colspan="${MD_RESTRICOES_CONFIG.length+1+(temColunaDoca?1:0)}">Nenhum valor bate com o filtro.</td></tr>`
       : valores.map(v=>{
       const regra = MD.regrasRascunho[dim.chave][v] || [];
       const cels = MD_RESTRICOES_CONFIG.map(r=>{
         const marcado = regra.includes(r.sigla);
         return `<td><input type="checkbox" ${marcado?'checked':''} data-chave="${irEsc(dim.chave)}" data-valor="${irEsc(v)}" data-sigla="${r.sigla}" onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)" onkeydown="mdConfigNav(event, this)"></td>`;
-      }).join('');
+      }).join('') + (temColunaDoca
+        ? `<td class="md-col-doca"><input type="checkbox" ${MD.docaX1Rascunho[v]?'checked':''} data-doca-x1 data-valor="${irEsc(v)}" onchange="mdSetDocaX1('${irEsc(v)}', this.checked)"></td>`
+        : '');
       return `<tr><td class="md-left mono">${irEsc(v)}</td>${cels}</tr>`;
     }).join('');
     return `<div class="panel">
@@ -1507,6 +1545,7 @@ function mdFiltrarConfiguracao(chave, v){
 function mdExportarConfiguracao(){
   const dados = { versao: 1 };
   MD_DIMENSOES.forEach(dim=>{ dados[dim.chave] = MD.regras[dim.chave]; });
+  dados.doca = MD.docaX1;
   const payload = JSON.stringify(dados, null, 2);
   const blob = new Blob([payload], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -1533,6 +1572,9 @@ function mdImportarConfiguracao(file){
     // {} (vazio), não falta a função nem quebra o import.
     MD.regrasRascunho = {};
     MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = dados[dim.chave] || {}; });
+    // Arquivo exportado antes da coluna de doca existir não tem essa chave —
+    // cai em {} (vazio), não falta a função nem quebra o import.
+    MD.docaX1Rascunho = dados.doca || {};
     irRenderView();
     irShowToast('Configuração importada — clique em "Salvar Configuração" pra valer.');
   }).catch(()=>irShowToast('Erro ao ler o arquivo.', true));
@@ -1602,6 +1644,10 @@ async function mdRecarregar(){
   }
   MD.regrasRascunho = {};
   MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = {...MD.regras[dim.chave]}; });
+  // Sem padrão de fábrica pra doca (cada CD tem endereços de expedição
+  // diferentes) — sem nada salvo ainda, começa vazio (nenhum X1 marcado).
+  MD.docaX1 = (await mdGetConfig(MD_CONFIG_KEY_DOCA_X1)) || {};
+  MD.docaX1Rascunho = {...MD.docaX1};
   mdInvalidarCache();
 }
 async function irInit(){
