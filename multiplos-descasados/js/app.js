@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v18';
+const MD_APP_VERSION = 'v19';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -24,21 +24,21 @@ const MD = {
   // Filtro por coluna da Auditoria de Restrição — chave => texto digitado.
   filtrosAuditoria:{componente:'', nome:'', local:'', clal:'', x1:'', x2:''},
   // Filtro por coluna das tabelas de Configurações: dimensão => texto digitado.
-  filtrosConfiguracoes:{clal:'', x1:''},
+  filtrosConfiguracoes:{clal:'', x1:'', x1x2:''},
   pivotExpandido:new Set(),
   tela:'descasados',
-  regras:{clal:{}, x1:{}},        // dimensão -> valor -> [siglas de restrição permitidas] — valendo de verdade (salvo)
+  regras:{clal:{}, x1:{}, x1x2:{}},        // dimensão -> valor -> [siglas de restrição permitidas] — valendo de verdade (salvo)
   // Rascunho da tela de Configurações: o que está marcado na hora só entra em
   // MD.regras (e passa a valer no pareamento/Ajustes/Auditoria) quando a
   // pessoa clica em "Salvar Configuração" — clique errado no meio de uma
   // conferência não pode mudar o resultado sozinho.
-  regrasRascunho:{clal:{}, x1:{}},
-  selecionadas:{clal:null, x1:null}, // dimensão -> null (todas) | Set() (só as marcadas)
+  regrasRascunho:{clal:{}, x1:{}, x1x2:{}},
+  selecionadas:{clal:null, x1:null, x1x2:null}, // dimensão -> null (todas) | Set() (só as marcadas)
   restricoesSel:null,             // null = todas as colunas | Set() = só estas siglas
   restricoesAberto:false,         // lista de restrições aberta ou recolhida
   // Ordenação de cada matriz: por total (padrão), pela descrição da dimensão,
   // ou por uma coluna de restrição. asc/desc alterna no mesmo cabeçalho.
-  ordemMatriz:{clal:{col:'total', dir:'desc'}, x1:{col:'total', dir:'desc'}},
+  ordemMatriz:{clal:{col:'total', dir:'desc'}, x1:{col:'total', dir:'desc'}, x1x2:{col:'total', dir:'desc'}},
   f051:null, f390:null, f278:null, f0160:null,
   proc:{'051':false,'390':false,'278':false,'0160':false},
   progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0},'0160':{stage:'',pct:0}},
@@ -48,27 +48,37 @@ const MD = {
 
 const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
 
-/* As duas dimensões de local usadas nas matrizes de Ajustes e Configurações —
-   mesma lógica pras duas, só troca o valor do endereço que a QRY0390 traz.
-   X1 (setor) e X2 (rua) andam juntos num endereço físico — "PP 001" é um
-   setor só, não dois — por isso viram uma dimensão combinada só, em vez de
-   duas matrizes separadas. Chave de config própria por dimensão pra não
-   perder a regra de classe (CLAL) já salva quando X1/X2 foram adicionados
-   depois. */
-/* Ordem das tabelas em Configurações e Ajustes de Restrição — X1 primeiro
-   (endereço físico, mais usado no dia a dia), Classe depois. */
+/* Dimensões de local usadas nas matrizes de Ajustes/Configurações e na
+   checagem de regra (mdRegraViolada) — mesma lógica pras três, só troca o
+   valor do endereço que a QRY0390 traz. Chave de config própria por
+   dimensão pra não perder a regra de uma quando outra for adicionada depois.
+
+   ORDEM IMPORTA: é a ordem de prioridade em mdRegraViolada (mais específica
+   primeiro) e a ordem das tabelas em Configurações/Ajustes de Restrição.
+   X1+X2 vem antes de X1 porque alguns blocos têm sub-endereços com regra
+   própria, diferente do bloco em geral (ex.: CAN sozinho é restrição 50, mas
+   CAN PAR é 0; COF sozinho é 0, mas COF MZS é 45) — sem essa camada, X1
+   sozinho não consegue diferenciar. Sem regra configurada pra um X1+X2
+   específico, cai pra X1 sozinho, e sem regra lá, pra Classe — a mesma
+   cascata de antes, só com mais um degrau na frente. */
 const MD_DIMENSOES = [
-  // Só o PREFIXO do X1: na extração real o campo X1 já vem como "BLC 001",
+  // Só o PREFIXO do X1/X2: na extração real o campo X1 já vem como "BLC 001",
   // "BLM 011" etc. (não é X1="BLC" + X2="001" separados) — usar o campo
   // inteiro continuava dando uma linha por sub-endereço. A primeira palavra
   // é o bloco de verdade (BLC, BLM, BIN...), que é o nível que importa pra
-  // essa régua.
+  // essa régua. Sem X2 (ou igual ao X1), o valor cai no mesmo texto do X1
+  // sozinho — não cria uma linha nova à toa, só não ajuda a diferenciar.
+  {chave:'x1x2', titulo:'X1 + X2', valor:o=>{
+    const x1 = (o.x1 || '').trim().split(/\s+/)[0] || '';
+    const x2 = (o.x2 || '').trim().split(/\s+/)[0] || '';
+    return (x1 || x2) ? (x2 ? x1+' '+x2 : x1) : '—';
+  }},
   {chave:'x1', titulo:'X1', valor:o=>(o.x1 || '').trim().split(/\s+/)[0] || '—'},
   {chave:'clal', titulo:'Classe', valor:o=>o.clal || '—'}
 ];
 const MD_DIM_POR_CHAVE = {};
 MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
-const MD_CONFIG_KEY_POR_DIM = {clal:'regras-classe', x1:'regras-x1'};
+const MD_CONFIG_KEY_POR_DIM = {clal:'regras-classe', x1:'regras-x1', x1x2:'regras-x1x2'};
 
 function irEsc(v){ if(v===undefined||v===null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function irFmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
@@ -533,21 +543,27 @@ function mdRestricaoPermitidaEm(chave, valor, sigla){
   return !regra || regra.includes(sigla);
 }
 
-/* Restrição de um endereço batendo com a regra configurada pra classe/X1 dele
-   — a mesma checagem usada pra corrigir (abaixo) e pra decidir, antes de
-   parear (mdPais em mdPais/mdCalcularPais), se um WN ou 86 mal classificado
-   (ex.: endereço de reversa cadastrado como WN) deve ou não contar como
-   vendável/múltiplo incompleto de verdade.
+/* Restrição de um endereço batendo com a regra configurada pra classe/X1/
+   X1+X2 dele — a mesma checagem usada pra corrigir (abaixo) e pra decidir,
+   antes de parear (mdPais em mdPais/mdCalcularPais), se um WN ou 86 mal
+   classificado (ex.: endereço de reversa cadastrado como WN) deve ou não
+   contar como vendável/múltiplo incompleto de verdade.
 
-   X1 manda primeiro, por ser mais específico que a classe (o endereço físico
-   importa mais que a categoria geral do item); a classe só é olhada quando o
-   X1 não resolve — sem regra pra ele, ou com regra que não inclui a
-   restrição atual. Se a classe permitir ali, vale a classe (ex.: X1=GAI só
-   permite WN, mas a classe CARGA permite Reversa — um item CARGA num
-   endereço GAI em Reversa está certo, não é descasamento de verdade). Sem
-   regra pra nenhuma das duas, não dá pra dizer se está errado — conta como
-   permitida. */
+   X1+X2 é EXCLUSIVA quando configurada pro valor exato do endereço — não
+   "mais um voto" junto de X1: é o ponto inteiro de existir (ex.: CAN sozinho
+   permite só WT, mas CAN PAR permite WN — se X1 pudesse validar por conta
+   própria, a regra de CAN PAR nunca pegaria nada, porque CAN já "resolveria"
+   sozinho). Só cai pra X1/Classe quando NÃO existe regra de X1+X2 pra aquele
+   valor específico.
+
+   X1 e Classe continuam com a relação de sempre: qualquer um dos dois
+   permitindo já resolve (ex.: X1=GAI só permite WN, mas a classe CARGA
+   permite Reversa — um item CARGA num endereço GAI em Reversa está certo).
+   Sem regra em nenhuma das duas, não dá pra dizer se está errado — conta
+   como permitida. */
 function mdRegraViolada(loc){
+  const regraX1X2 = mdRegraDe('x1x2', MD_DIM_POR_CHAVE.x1x2.valor(loc));
+  if(regraX1X2) return regraX1X2.includes(loc.restricao) ? null : regraX1X2;
   const regraX1 = mdRegraDe('x1', MD_DIM_POR_CHAVE.x1.valor(loc));
   const regraClasse = mdRegraDe('clal', MD_DIM_POR_CHAVE.clal.valor(loc));
   if(regraX1 && regraX1.includes(loc.restricao)) return null;
@@ -1292,9 +1308,10 @@ function mdRascunhoAlterado(){
   return JSON.stringify(MD.regrasRascunho) !== JSON.stringify(MD.regras);
 }
 function mdSalvarConfiguracao(){
-  MD.regras = { clal: {...MD.regrasRascunho.clal}, x1: {...MD.regrasRascunho.x1} };
-  mdSetConfig(MD_CONFIG_KEY_POR_DIM.clal, MD.regras.clal);
-  mdSetConfig(MD_CONFIG_KEY_POR_DIM.x1, MD.regras.x1);
+  MD_DIMENSOES.forEach(dim=>{
+    MD.regras[dim.chave] = {...MD.regrasRascunho[dim.chave]};
+    mdSetConfig(MD_CONFIG_KEY_POR_DIM[dim.chave], MD.regras[dim.chave]);
+  });
   // Só agora o pareamento de Descasados e Ajustes/Auditoria de Restrição
   // passam a enxergar a mudança (ver mdPais/mdPlanoCorrecaoRestricao).
   mdInvalidarCache();
@@ -1302,7 +1319,8 @@ function mdSalvarConfiguracao(){
   irShowToast('Configuração salva.');
 }
 function mdDescartarRascunho(){
-  MD.regrasRascunho = { clal: {...MD.regras.clal}, x1: {...MD.regras.x1} };
+  MD.regrasRascunho = {};
+  MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = {...MD.regras[dim.chave]}; });
   irRenderView();
   irShowToast('Alterações descartadas.');
 }
@@ -1367,7 +1385,9 @@ function mdFiltrarConfiguracao(chave, v){
    obriga a remarcar do zero. Exportar/importar um arquivinho com as regras
    resolve isso sem precisar construir nada no servidor (não tem servidor). */
 function mdExportarConfiguracao(){
-  const payload = JSON.stringify({ versao: 1, clal: MD.regras.clal, x1: MD.regras.x1 }, null, 2);
+  const dados = { versao: 1 };
+  MD_DIMENSOES.forEach(dim=>{ dados[dim.chave] = MD.regras[dim.chave]; });
+  const payload = JSON.stringify(dados, null, 2);
   const blob = new Blob([payload], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1383,13 +1403,16 @@ function mdImportarConfiguracao(file){
     let dados;
     try{ dados = JSON.parse(texto); }
     catch(e){ irShowToast('Arquivo inválido: não é um JSON de configuração.', true); return; }
-    if(!dados || typeof dados !== 'object' || (!dados.clal && !dados.x1)){
-      irShowToast('Arquivo inválido: não tem regras de classe nem de X1.', true);
+    if(!dados || typeof dados !== 'object' || !MD_DIMENSOES.some(dim=>dados[dim.chave])){
+      irShowToast('Arquivo inválido: não tem regras de nenhuma dimensão conhecida.', true);
       return;
     }
     // Cai no rascunho, igual uma marcação manual — só "Salvar Configuração"
     // promove pra valer de verdade (ver mdSetRegra/mdSalvarConfiguracao).
-    MD.regrasRascunho = { clal: dados.clal || {}, x1: dados.x1 || {} };
+    // Arquivo exportado antes do X1+X2 existir não tem essa chave — cai em
+    // {} (vazio), não falta a função nem quebra o import.
+    MD.regrasRascunho = {};
+    MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = dados[dim.chave] || {}; });
     irRenderView();
     irShowToast('Configuração importada — clique em "Salvar Configuração" pra valer.');
   }).catch(()=>irShowToast('Erro ao ler o arquivo.', true));
@@ -1450,12 +1473,15 @@ async function mdRecarregar(){
   // Sem NADA salvo neste navegador (primeira vez, ou depois de limpar o
   // cache/IndexedDB), cai no padrão de fábrica (MD_REGRAS_PADRAO, rules.js) em
   // vez de começar zerado — uma vez que a pessoa salve algo aqui, o salvo
-  // manda, mesmo que divirja do padrão depois.
-  MD.regras = {
-    clal: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.clal)) || MD_REGRAS_PADRAO.clal,
-    x1: (await mdGetConfig(MD_CONFIG_KEY_POR_DIM.x1)) || MD_REGRAS_PADRAO.x1
-  };
-  MD.regrasRascunho = { clal: {...MD.regras.clal}, x1: {...MD.regras.x1} };
+  // manda, mesmo que divirja do padrão depois. Dimensão sem padrão cadastrado
+  // (ex.: X1+X2, mais nova que o MD_REGRAS_PADRAO atual) cai em {} — ninguém
+  // marcou nada ainda, não valida nada até a pessoa configurar.
+  MD.regras = {};
+  for(const dim of MD_DIMENSOES){
+    MD.regras[dim.chave] = (await mdGetConfig(MD_CONFIG_KEY_POR_DIM[dim.chave])) || MD_REGRAS_PADRAO[dim.chave] || {};
+  }
+  MD.regrasRascunho = {};
+  MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = {...MD.regras[dim.chave]}; });
   mdInvalidarCache();
 }
 async function irInit(){
