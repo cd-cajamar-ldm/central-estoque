@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v20';
+const MD_APP_VERSION = 'v21';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -39,6 +39,11 @@ const MD = {
   // Ordenação de cada matriz: por total (padrão), pela descrição da dimensão,
   // ou por uma coluna de restrição. asc/desc alterna no mesmo cabeçalho.
   ordemMatriz:{clal:{col:'total', dir:'desc'}, x1:{col:'total', dir:'desc'}, x1x2:{col:'total', dir:'desc'}},
+  // Qual dimensão a tabela única de Ajustes de Restrição mostra como linha —
+  // trocável pelo seletor ao lado do título. X1 é o padrão (endereço físico,
+  // mais usado no dia a dia); o vermelho/verde não muda com a escolha, é
+  // sempre a cascata completa (mdRegraViolada), só a granularidade da linha.
+  ajusteMatrizDim:'x1',
   f051:null, f390:null, f278:null, f0160:null,
   proc:{'051':false,'390':false,'278':false,'0160':false},
   progresso:{'051':{stage:'',pct:0},'390':{stage:'',pct:0},'278':{stage:'',pct:0},'0160':{stage:'',pct:0}},
@@ -54,8 +59,10 @@ const MD_ZOOM_MIN = 70, MD_ZOOM_MAX = 150, MD_ZOOM_STEP = 10;
    dimensão pra não perder a regra de uma quando outra for adicionada depois.
 
    ORDEM IMPORTA: é a ordem de prioridade em mdRegraViolada (mais específica
-   primeiro) e a ordem das tabelas em Configurações/Ajustes de Restrição.
-   X1+X2 vem antes de X1 porque alguns blocos têm sub-endereços com regra
+   primeiro) e a ordem das tabelas em Configurações (a tabela única de
+   Ajustes de Restrição usa a dimensão escolhida em MD.ajusteMatrizDim, numa
+   ordem própria de uso no dia a dia — ver mdRenderAjustes). X1+X2 vem antes
+   de X1 porque alguns blocos têm sub-endereços com regra
    própria, diferente do bloco em geral (ex.: CAN sozinho é restrição 50, mas
    CAN PAR é 0; COF sozinho é 0, mas COF MZS é 45) — sem essa camada, X1
    sozinho não consegue diferenciar. Sem regra configurada pra um X1+X2
@@ -188,6 +195,7 @@ function mdPaisFiltrados(){
 function mdTemDados(){ return !!(MD.estrutura && MD.estrutura.length && MD.saldos && MD.saldos.length); }
 
 function mdSetBase(base){ MD.base = base; mdInvalidarCache(); irRenderView(); }
+function mdSetAjusteMatrizDim(chave){ MD.ajusteMatrizDim = MD_DIM_POR_CHAVE[chave] ? chave : 'x1'; irRenderView(); }
 function mdSetEqualizado(v){ MD.equalizado = v; irRenderView(); }
 /* Restaura foco E cursor no fim depois de um re-render que recria o campo do
    zero. `.focus()` sozinho não basta: o navegador manda o cursor pro INÍCIO
@@ -861,13 +869,25 @@ function mdRenderAjustes(){
   // CONFIGURAÇÃO (onde cada regra é editada), não de leitura — repetir a
   // mesma matriz três vezes aqui só pra mostrar a mesma peça de estoque sob
   // três recortes diferentes não ajudava a achar erro nenhum, e nenhuma das
-  // três (nem X1+X2) mostrava vermelho de verdade: cada uma só validava a
-  // própria regra, isolada (ver mdMatrizPor). Com a cascata completa entrando
-  // no cálculo de erro, a tabela por X1+X2 (mais específica, detecta exceção
-  // de sub-endereço) já cobre os três níveis — é só ela que fica, com o
-  // título "X1" por ser a dimensão física que a operação usa no dia a dia.
-  const matriz = mdRenderMatrizPor('x1x2');
-  const blocosMatriz = `<div class="md-head" style="margin-top:18px;"><h3>Restrição por X1</h3></div>${matriz.html}`;
+  // três mostrava vermelho de verdade antes: cada uma só validava a própria
+  // regra, isolada. Com a cascata completa entrando no cálculo de erro
+  // (mdMatrizPor), o vermelho/verde já é o mesmo não importa qual dimensão
+  // está sendo exibida como linha — por isso dá pra trocar livremente pelo
+  // seletor, sem perder a precisão de nenhuma delas. X1 é o padrão (a
+  // dimensão física que a operação usa no dia a dia); X1+X2 soma detalhe de
+  // sub-endereço quando precisar, Classe agrupa por categoria do item.
+  const dimMatrizAtual = MD_DIM_POR_CHAVE[MD.ajusteMatrizDim] || MD_DIM_POR_CHAVE.x1;
+  const matriz = mdRenderMatrizPor(dimMatrizAtual.chave);
+  // Ordem do seletor é a de uso no dia a dia (X1 primeiro), não a ordem de
+  // prioridade da cascata (MD_DIMENSOES, mais específica primeiro) — são
+  // propósitos diferentes.
+  const seletorDim = `<select class="md-select" onchange="mdSetAjusteMatrizDim(this.value)">
+    ${['x1','x1x2','clal'].map(chave=>{
+      const d = MD_DIM_POR_CHAVE[chave];
+      return `<option value="${chave}" ${chave===dimMatrizAtual.chave?'selected':''}>${irEsc(d.titulo)}</option>`;
+    }).join('')}
+  </select>`;
+  const blocosMatriz = `<div class="md-head" style="margin-top:18px;"><h3>Restrição por ${irEsc(dimMatrizAtual.titulo)}</h3>${seletorDim}</div>${matriz.html}`;
 
   return `<div class="panel">
     <div class="md-head">

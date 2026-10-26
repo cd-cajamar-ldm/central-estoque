@@ -13,6 +13,14 @@
 .md-busca:focus{ outline:none; border-color:var(--orange); }
 .md-chips{ display:flex; gap:6px; flex-wrap:wrap; }
 
+/* Seletor de dimensão da tabela única de Ajustes de Restrição (X1 / X1+X2 /
+   Classe) — mesmo visual do md-busca, só que é select, não texto livre. */
+.md-select{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:7px 10px; font-size:12.5px; color:var(--ink); font-family:inherit;
+}
+.md-select:focus{ outline:none; border-color:var(--orange); }
+
 /* Linha de filtro por coluna (Auditoria de Restrição): um input embaixo de
    cada título — a coluna já diz o que é, sem precisar de rótulo dentro da
    célula. Fundo neutro (não laranja) pra não competir com o cabeçalho. */
