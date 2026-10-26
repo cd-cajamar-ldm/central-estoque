@@ -68,7 +68,10 @@ const IR = {
   // Filtros e ordenação da tabela de detalhe (visão linha a linha da 410, só
   // Lógica 301/302) — independentes do Mês/Ano do resto da aba, pra dar liberdade
   // de olhar o trimestre ou o ano inteiro sem mexer nos gráficos acima.
-  net410DetFiltro:{mes:'todos', trimestre:'todos', logica:'todas', obsPrefixo:'todos', depto:'todos'},
+  // mes começa null (ainda sem padrão escolhido) — a primeira renderização
+  // seta pro mês mais recente com dado, pra não abrir já desenhando o ano
+  // inteiro de uma vez (muita linha deixa a rolagem pesada).
+  net410DetFiltro:{mes:null, trimestre:'todos', logica:'todas', obsPrefixo:'todos', depto:'todos'},
   net410DetSort:{col:'dtMov', dir:'desc'},
   divNetMesSel:null, // mês selecionado no painel "Por que o NET está distorcido?" (aba Divergências)
   divNetDiaSel:null, // dia selecionado (opcional) no mesmo painel — "" ou null = mês inteiro
@@ -3624,6 +3627,7 @@ function irRenderNet410DetalheLogicaPanel(d){
   const mesesDisp = Array.from(new Set(todas.map(l=>l.mes))).sort();
   const deptosDisp = Array.from(new Set(todas.map(l=>l.depto).filter(Boolean))).sort();
   const prefixosDisp = Array.from(new Set(todas.map(l=>(l.obsWms||l.observacao||'').slice(0,3).toUpperCase()).filter(Boolean))).sort();
+  if(f.mes==null) f.mes = mesesDisp.length ? mesesDisp[mesesDisp.length-1] : 'todos';
   const linhas = todas.filter(l=>{
     if(f.mes!=='todos' && l.mes!==f.mes) return false;
     if(f.trimestre!=='todos' && irNet410DetTrimestre(l.mes)!==parseInt(f.trimestre,10)) return false;
@@ -3635,11 +3639,17 @@ function irRenderNet410DetalheLogicaPanel(d){
   const s = IR.net410DetSort || {col:'dtMov', dir:'desc'};
   const dir = s.dir==='desc' ? -1 : 1;
   const colSort = IR_NET410_DET_COLS.find(c=>c.key===s.col) || {};
-  const ordenadas = linhas.slice().sort((a,b)=>{
+  const ordenadasTodas = linhas.slice().sort((a,b)=>{
     const va = a[s.col], vb = b[s.col];
     if(colSort.tipo==='num' || colSort.tipo==='money') return dir*((va||0)-(vb||0));
     return dir*String(va||'').localeCompare(String(vb||''));
   });
+  // Teto de segurança: muita linha de uma vez (ex.: filtro "Todos" no Mês, ano
+  // inteiro) deixava a rolagem pesada. Mostra as primeiras 1.000 (já no critério
+  // de ordenação escolhido) e avisa pra estreitar o filtro em vez de travar o
+  // navegador tentando desenhar tudo de uma vez.
+  const LIMITE_LINHAS = 1000;
+  const ordenadas = ordenadasTodas.slice(0, LIMITE_LINHAS);
   const seta = k => s.col===k ? (s.dir==='desc'?' ▼':' ▲') : '';
   const fmtCel = (l, c) => {
     const v = l[c.key];
@@ -3667,7 +3677,9 @@ function irRenderNet410DetalheLogicaPanel(d){
         ${selectFiltro('obsPrefixo', 'Prefixo da Obs', prefixosDisp.map(p=>({v:p, lbl:p})))}
         ${selectFiltro('depto', 'Depto', deptosDisp.map(dp=>({v:dp, lbl:dp})))}
       </div>
-      <p class="field-hint" style="margin-bottom:8px;">${irFmtInt(ordenadas.length)} linha(s) de ${irFmtInt(todas.length)} no ano.</p>
+      <p class="field-hint" style="margin-bottom:8px;">${ordenadasTodas.length>LIMITE_LINHAS
+        ? `Mostrando as primeiras ${irFmtInt(LIMITE_LINHAS)} de ${irFmtInt(ordenadasTodas.length)} linha(s), ordenado por ${irEsc((IR_NET410_DET_COLS.find(c=>c.key===s.col)||{}).lbl||'')} — estreite o filtro pra ver o restante.`
+        : `${irFmtInt(ordenadasTodas.length)} linha(s) de ${irFmtInt(todas.length)} no ano.`}</p>
       <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-wide table-dense tbl-sticky-head">
         <thead><tr>${IR_NET410_DET_COLS.map(c=>`<th onclick="irNet410DetSort('${c.key}')" style="cursor:pointer;white-space:nowrap;">${irEsc(c.lbl)}${seta(c.key)}</th>`).join('')}</tr></thead>
         <tbody>${ordenadas.length ? ordenadas.map(l=>`<tr>${IR_NET410_DET_COLS.map(c=>fmtCel(l,c)).join('')}</tr>`).join('') : `<tr><td colspan="${IR_NET410_DET_COLS.length}" style="text-align:center;color:var(--ink-soft);">Sem linhas com esse filtro</td></tr>`}</tbody>
