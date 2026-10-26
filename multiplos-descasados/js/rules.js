@@ -417,11 +417,17 @@ function mdResumo(pais){
    não conta como vendável de verdade — não pode virar origem de um bloquear
    (0→86) nem de um liberar (86→0) só porque a coluna diz WN/86. Quem precisa
    de ajuste é sempre o endereço "certo" (ex.: o do CD), nunca a reversa. */
-function mdAlocarPorEndereco(locais, sigla, quantidade, campo, restricaoPermitida){
+function mdAlocarPorEndereco(locais, sigla, quantidade, campo, restricaoPermitida, naoBloquear){
   const disponiveis = [];
   for(const l of (locais || [])){
     if(String(l.restricao || '').toUpperCase() !== sigla) continue;
     if(restricaoPermitida && !restricaoPermitida(l)) continue;
+    // Endereço de doca/expedição (ex.: DS, GAI): a restrição ali nem dá pra
+    // alterar no WMS, e estar lá já significa que o conjunto foi coletado pra
+    // um pedido — não é sobra livre, não entra como candidato a bloquear
+    // (0→86). Só vale pro sentido bloquear (sigla=WN); liberar (sigla=86)
+    // nunca passa por aqui porque doca não costuma ter saldo em 86.
+    if(sigla === MD_SIGLA_VENDAVEL && naoBloquear && naoBloquear(l)) continue;
     // refs é o normal (um lote por linha da 390); sem ele (dado antigo em
     // cache), cai pro total do endereço — pior que o ideal, mas não quebra.
     const refs = (l.refs && l.refs.length) ? l.refs : [{qtde: l.qtde, qtdeDisp: l.qtdeDisp}];
@@ -455,7 +461,7 @@ function mdAlocarPorEndereco(locais, sigla, quantidade, campo, restricaoPermitid
    restricaoPermitida: mesma regra passada pra mdCalcularPais — sem ela aqui,
    o bloquear/liberar já calculado sem a reversa contar como WN/86 de verdade
    ainda poderia escolher a própria reversa como endereço de execução. */
-function mdPlanoAjuste(pais, base, restricaoPermitida){
+function mdPlanoAjuste(pais, base, restricaoPermitida, naoBloquear){
   const campo = base === 'qtdeDisp' ? 'qtdeDisp' : 'qtde';
   const out = [];
   for(const p of pais){
@@ -464,7 +470,7 @@ function mdPlanoAjuste(pais, base, restricaoPermitida){
       if(c.bloquear > 0) acoes.push({sentido:'bloquear', de: MD_SIGLA_VENDAVEL, para: MD_SIGLA_BLOQUEIO, qtd: c.bloquear});
       if(c.liberar > 0) acoes.push({sentido:'liberar', de: MD_SIGLA_BLOQUEIO, para: MD_SIGLA_VENDAVEL, qtd: c.liberar});
       for(const a of acoes){
-        for(const alvo of mdAlocarPorEndereco(c.locais, a.de, a.qtd, campo, restricaoPermitida)){
+        for(const alvo of mdAlocarPorEndereco(c.locais, a.de, a.qtd, campo, restricaoPermitida, naoBloquear)){
           out.push({
             sentido: a.sentido,
             de: a.de, para: a.para,

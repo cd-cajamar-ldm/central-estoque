@@ -4,7 +4,7 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'multiplos-descasados-v25';
+const CACHE_VERSION = 'multiplos-descasados-v26';
 const PRECACHE_URLS = [
   './',
   './index.html',
