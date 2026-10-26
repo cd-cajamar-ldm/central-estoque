@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v19';
+const MD_APP_VERSION = 'v20';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -200,10 +200,14 @@ function mdFocarFim(el){
   const fim = el.value.length;
   el.setSelectionRange(fim, fim);
 }
-function mdBuscar(v){
+// `elId` é de qual input restaurar o foco depois do re-render — tem mais de
+// um campo ligado a MD.busca na tela (o de cima e o embutido no cabeçalho da
+// matriz em Ajustes de Restrição); sem isso, digitar no segundo devolvia o
+// foco pro primeiro.
+function mdBuscar(v, elId){
   MD.busca = v;
   clearTimeout(window.__mdBuscaTimer);
-  window.__mdBuscaTimer = setTimeout(()=>{ irRenderView(); mdFocarFim(document.getElementById('mdBusca')); }, 220);
+  window.__mdBuscaTimer = setTimeout(()=>{ irRenderView(); mdFocarFim(document.getElementById(elId || 'mdBusca')); }, 220);
 }
 /* LOG (LOG_ITEM da 390) é a linha de produto/responsável do item — diferente
    da classe física do endereço (CLAL/X1/X2). Agrupa o valor bloqueado
@@ -508,13 +512,25 @@ function mdPlano(){
   MD._planoBase = MD.base;
   return MD._plano;
 }
-/* Matriz por dimensão de local (classe/X1/X2) × restrição, no mesmo espírito
-   da matriz que o usuário usa no PuTTY (linhas = valor da dimensão, colunas =
-   restrição, valor = quantidade) — só que aqui é o recorte deste módulo: só
-   os componentes de múltiplo, não o estoque vendável inteiro. A tabela linha
-   a linha (endereço por endereço, pronta pra colar no coletor) fica só na
-   planilha exportada — aqui é só a visão gerencial. As duas dimensões
-   compartilham a mesma lógica, só troca o valor do endereço. */
+/* Matriz por dimensão de local (classe/X1/X1+X2) × restrição, no mesmo
+   espírito da matriz que o usuário usa no PuTTY (linhas = valor da dimensão,
+   colunas = restrição, valor = quantidade). A tabela linha a linha (endereço
+   por endereço, pronta pra colar no coletor) fica só na planilha exportada —
+   aqui é só a visão gerencial.
+
+   `erro` é calculado pela CASCATA completa (mdRegraViolada: X1+X2 exclusivo
+   quando configurado, senão X1 ou Classe) — não só a regra da própria
+   dimensão sendo exibida. Antes da X1+X2 existir, "erro" e "regra da
+   dimensão" eram a mesma coisa; agora não são mais: uma célula de X1+X2 sem
+   regra própria pra aquele valor específico ainda deve aparecer vermelha se
+   a regra de X1 (ou Classe) considerar aquela restrição errada ali — é
+   exatamente o que a Auditoria/relatório de ajuste já fazem, e a matriz
+   precisa concordar com eles.
+
+   `qtd` e `erro` ficam em sub-objetos separados (não misturados nas mesmas
+   chaves) pra não quebrar a soma de totais, que soma TODAS as chaves do
+   bucket às cegas — um "erro:{...}" misturado ali entraria na soma como
+   NaN. */
 function mdMatrizPor(chave){
   const dim = MD_DIM_POR_CHAVE[chave];
   const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
@@ -524,9 +540,10 @@ function mdMatrizPor(chave){
       const v = loc[campo] || 0;
       if(!v) continue;
       const valor = dim.valor(loc);
-      if(!porValor.has(valor)) porValor.set(valor, {});
+      if(!porValor.has(valor)) porValor.set(valor, {qtd:{}, erro:{}});
       const bucket = porValor.get(valor);
-      bucket[loc.restricao] = (bucket[loc.restricao] || 0) + v;
+      bucket.qtd[loc.restricao] = (bucket.qtd[loc.restricao] || 0) + v;
+      if(mdRegraViolada(loc)) bucket.erro[loc.restricao] = true;
     }
   }
   return porValor;
@@ -536,13 +553,6 @@ function mdRegraDe(chave, valor){
   const regra = MD.regras[chave] && MD.regras[chave][valor];
   return (regra && regra.length) ? regra : null;
 }
-/* Restrição fora da regra configurada em Configurações. Sem regra salva pra
-   esse valor, não dá pra dizer se está certo ou errado — não valida. */
-function mdRestricaoPermitidaEm(chave, valor, sigla){
-  const regra = mdRegraDe(chave, valor);
-  return !regra || regra.includes(sigla);
-}
-
 /* Restrição de um endereço batendo com a regra configurada pra classe/X1/
    X1+X2 dele — a mesma checagem usada pra corrigir (abaixo) e pra decidir,
    antes de parear (mdPais em mdPais/mdCalcularPais), se um WN ou 86 mal
@@ -736,7 +746,7 @@ function mdRenderMatrizPor(chave){
   const dim = MD_DIM_POR_CHAVE[chave];
   const porValor = mdMatrizPor(chave);
   const restricoes = mdRestricoesVisiveis();
-  const totalDe = v => Object.values(porValor.get(v)).reduce((a,x)=>a+x, 0);
+  const totalDe = v => Object.values(porValor.get(v).qtd).reduce((a,x)=>a+x, 0);
   const termo = MD.busca.trim().toLowerCase();
   let valores = Array.from(porValor.keys());
   if(termo) valores = valores.filter(v=>v.toLowerCase().includes(termo));
@@ -751,14 +761,23 @@ function mdRenderMatrizPor(chave){
     MD.ordemMatriz[chave] = ordem;
   }
   const sinal = ordem.dir === 'asc' ? 1 : -1;
-  const valorDe = v => ordem.col === 'total' ? totalDe(v) : ((porValor.get(v) || {})[ordem.col] || 0);
+  const valorDe = v => ordem.col === 'total' ? totalDe(v) : (porValor.get(v).qtd[ordem.col] || 0);
   valores.sort((a,b)=>{
     if(ordem.col === 'valor') return sinal * a.localeCompare(b, 'pt-BR');
     return sinal * (valorDe(a) - valorDe(b)) || a.localeCompare(b, 'pt-BR');
   });
 
+  // Filtro embutido no próprio cabeçalho da tabela (igual Auditoria/
+  // Configurações) — mesmo texto do campo de busca do topo da tela
+  // (MD.busca), só que ali do lado, mais fácil de achar.
+  const filtroColHtml = `<input type="text" class="md-col-filtro" id="mdBuscaMatriz-${chave}"
+    value="${irEsc(MD.busca)}" oninput="mdBuscar(this.value, 'mdBuscaMatriz-${chave}')">`;
+
   if(!valores.length){
-    return { html: `<p class="field-hint">Nenhum valor de ${dim.titulo.toLowerCase()} bate com o filtro atual.</p>`, comErro: 0 };
+    return { html: `<div class="md-piv-wrap"><table class="md-piv"><thead><tr>
+        <th class="md-piv-check"></th><th class="md-left">${irEsc(dim.titulo)}</th>
+      </tr><tr class="md-filtro-linha"><td></td><td>${filtroColHtml}</td></tr></thead></table></div>
+      <p class="field-hint">Nenhum valor de ${dim.titulo.toLowerCase()} bate com o filtro atual.</p>`, comErro: 0 };
   }
 
   const headerCols = restricoes.map(s=>{
@@ -766,6 +785,7 @@ function mdRenderMatrizPor(chave){
     return `<th class="${cls} md-th-ord" onclick="mdOrdenarMatriz('${chave}','${s}')"
       title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s)+' · clique para ordenar')}">${mdRotuloColunaHtml(s)}${mdSetaOrdem(chave, s)}</th>`;
   }).join('');
+  const filtroColsVazias = restricoes.map(()=>'<td></td>').join('');
 
   // Com o filtro de restrições ligado, a soma das colunas na tela não fecha
   // com o Total Geral (que continua sendo o de todas) — o cabeçalho avisa.
@@ -779,12 +799,15 @@ function mdRenderMatrizPor(chave){
     const bucket = porValor.get(v);
     let temErro = false;
     const cels = restricoes.map(s=>{
-      const qtd = bucket[s] || 0;
+      const qtd = bucket.qtd[s] || 0;
       totalPorRestricao[s] += qtd;
-      const erro = qtd > 0 && !mdRestricaoPermitidaEm(chave, v, s);
+      // Erro vem pronto do mdMatrizPor — já é o resultado da cascata completa
+      // (X1+X2 exclusivo quando configurado, senão X1 ou Classe), não só a
+      // regra da própria dimensão sendo exibida. Concorda com a Auditoria.
+      const erro = qtd > 0 && !!bucket.erro[s];
       if(erro) temErro = true;
       const cls = erro ? 'md-cel-erro' : (s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : ''));
-      const titulo = erro ? ` title="${irEsc('Restrição '+mdCodRestricao(s)+' ('+s+') não está nas restrições permitidas de '+v+' — configure em Configurações')}"` : '';
+      const titulo = erro ? ` title="${irEsc('Restrição '+mdCodRestricao(s)+' ('+s+') não permitida em '+v+' pela regra configurada (X1+X2, X1 ou Classe) — veja Configurações')}"` : '';
       return `<td class="${cls}"${titulo}>${qtd ? irFmtInt(qtd) : ''}</td>`;
     }).join('');
     if(temErro) comErro++;
@@ -809,14 +832,19 @@ function mdRenderMatrizPor(chave){
 
   const html = `<div class="md-piv-wrap">
     <table class="md-piv">
-      <thead><tr>
-        <th class="md-piv-check"><input type="checkbox" ${todosMarcados?'checked':''} onchange="mdToggleCabecalhoSelecao('${chave}', this.checked)" title="Marcar/desmarcar todas as linhas"></th>
-        <th class="md-left md-th-ord" onclick="mdOrdenarMatriz('${chave}','valor')"
-            title="Ordenar pela descrição de ${irEsc(dim.titulo)}">${irEsc(dim.titulo)}${mdSetaOrdem(chave, 'valor')}</th>
-        ${headerCols}
-        <th class="md-piv-total md-th-ord" onclick="mdOrdenarMatriz('${chave}','total')"
-            title="${irEsc(filtrando ? 'Soma de TODAS as restrições, inclusive as escondidas pelo filtro — clique para ordenar' : 'Ordenar pelo total')}">${filtrando ? 'Total (todas)' : 'Total Geral'}${mdSetaOrdem(chave, 'total')}</th>
-      </tr></thead>
+      <thead>
+        <tr>
+          <th class="md-piv-check"><input type="checkbox" ${todosMarcados?'checked':''} onchange="mdToggleCabecalhoSelecao('${chave}', this.checked)" title="Marcar/desmarcar todas as linhas"></th>
+          <th class="md-left md-th-ord" onclick="mdOrdenarMatriz('${chave}','valor')"
+              title="Ordenar pela descrição de ${irEsc(dim.titulo)}">${irEsc(dim.titulo)}${mdSetaOrdem(chave, 'valor')}</th>
+          ${headerCols}
+          <th class="md-piv-total md-th-ord" onclick="mdOrdenarMatriz('${chave}','total')"
+              title="${irEsc(filtrando ? 'Soma de TODAS as restrições, inclusive as escondidas pelo filtro — clique para ordenar' : 'Ordenar pelo total')}">${filtrando ? 'Total (todas)' : 'Total Geral'}${mdSetaOrdem(chave, 'total')}</th>
+        </tr>
+        <tr class="md-filtro-linha">
+          <td></td><td>${filtroColHtml}</td>${filtroColsVazias}<td></td>
+        </tr>
+      </thead>
       <tbody>${linhas}${rodape}</tbody>
     </table>
   </div>`;
@@ -829,10 +857,17 @@ function mdRenderAjustes(){
   }
   const chip = (ativo, onclick, texto)=>`<button class="chip ${ativo?'active':''}" onclick="${onclick}">${irEsc(texto)}</button>`;
 
-  const blocosMatriz = MD_DIMENSOES.map(dim=>{
-    const m = mdRenderMatrizPor(dim.chave);
-    return `<div class="md-head" style="margin-top:18px;"><h3>Restrição por ${irEsc(dim.titulo)}</h3></div>${m.html}`;
-  }).join('');
+  // Uma tabela só, não três: Classe e X1 sozinhos viraram tabelas de
+  // CONFIGURAÇÃO (onde cada regra é editada), não de leitura — repetir a
+  // mesma matriz três vezes aqui só pra mostrar a mesma peça de estoque sob
+  // três recortes diferentes não ajudava a achar erro nenhum, e nenhuma das
+  // três (nem X1+X2) mostrava vermelho de verdade: cada uma só validava a
+  // própria regra, isolada (ver mdMatrizPor). Com a cascata completa entrando
+  // no cálculo de erro, a tabela por X1+X2 (mais específica, detecta exceção
+  // de sub-endereço) já cobre os três níveis — é só ela que fica, com o
+  // título "X1" por ser a dimensão física que a operação usa no dia a dia.
+  const matriz = mdRenderMatrizPor('x1x2');
+  const blocosMatriz = `<div class="md-head" style="margin-top:18px;"><h3>Restrição por X1</h3></div>${matriz.html}`;
 
   return `<div class="panel">
     <div class="md-head">
@@ -842,8 +877,6 @@ function mdRenderAjustes(){
     ${mdKpisCorrecao(mdResumoCorrecao())}
     ${mdAvisoSemRegra()}
     <div class="md-filtros">
-      <input id="mdBusca" class="md-busca" type="search" placeholder="Buscar classe, X1 ou X2..."
-             value="${irEsc(MD.busca)}" oninput="mdBuscar(this.value)">
       ${mdRenderFiltroRestricoes()}
       <div class="md-chips">
         ${chip(MD.base==='qtde', "mdSetBase('qtde')", 'Estoque total')}
