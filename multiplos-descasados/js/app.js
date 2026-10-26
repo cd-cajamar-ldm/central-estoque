@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v21';
+const MD_APP_VERSION = 'v22';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -650,7 +650,16 @@ function mdPlanoCorrecaoRestricao(){
       // pareamento da aba Descasados, nunca esta correção de restrição.
       const destino = regra.includes(MD_SIGLA_VENDAVEL) ? MD_SIGLA_VENDAVEL
         : (regra.length===1 && regra[0] !== MD_SIGLA_BLOQUEIO ? regra[0] : null);
-      if(!destino) continue;
+      // Sem destino único (2+ restrições permitidas, nenhuma WN) a linha
+      // ENTRA mesmo assim — sem isso ela conta como erro na matriz de Ajustes
+      // (mdRegraViolada sozinho) mas sumia daqui e do export sem explicação
+      // nenhuma, quem olhasse a Auditoria achava que não tinha nada errado
+      // ali. Fica marcada `ambiguo`, sem `para`/`codPara` (não dá pra montar
+      // uma linha de coletor com dois destinos possíveis) — mdExportarAjuste*
+      // filtra essas antes de gerar a planilha; a Auditoria mostra as opções
+      // na Sugestão pra pessoa decidir à mão e ajustar a regra se for o caso.
+      const ambiguo = !destino;
+      const opcoes = ambiguo ? regra.join(' ou ') : '';
       const refs = (loc.refs && loc.refs.length) ? loc.refs : [{qtde: loc.qtde, qtdeDisp: loc.qtdeDisp}];
       const preco = s.valorUnitario || 0;
       // Mesmo item+local+restrição em 2+ registros físicos de estoque trava a
@@ -676,7 +685,8 @@ function mdPlanoCorrecaoRestricao(){
         if(!quantidade) continue;
         out.push({
           de: loc.restricao, para: destino,
-          codDe: mdCodRestricao(loc.restricao), codPara: mdCodRestricao(destino),
+          codDe: mdCodRestricao(loc.restricao), codPara: destino ? mdCodRestricao(destino) : '',
+          ambiguo, opcoes,
           localColetor: mdLocalColetor(loc.local),
           local: loc.local, endereco: loc.desc, predio: loc.predio,
           clal: loc.clal, x1: loc.x1, x2: loc.x2,
@@ -924,8 +934,12 @@ function mdExportarAjustePivot(){
    motivo do pivô: quase tudo vai pra 0 (WN), mas a rara linha com um destino
    diferente (só uma restrição cadastrada, sem WN) não deve se misturar. */
 function mdExportarAjusteClasses(){
+  // `ambiguo` fica de fora do export de propósito: o coletor precisa de um
+  // destino só, e essa linha tem 2+ opções sem como escolher sozinha (ver
+  // mdPlanoCorrecaoRestricao) — aparece na Auditoria pra decisão manual, não
+  // na planilha que vai ser digitada.
   const plano = mdPlanoCorrecaoRestricao().filter(l=>
-    MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
+    !l.ambiguo && MD_DIMENSOES.every(dim=>mdValorMarcado(dim.chave, dim.valor(l)))
   );
   mdGerarXlsxAjuste([
     {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
@@ -933,9 +947,11 @@ function mdExportarAjusteClasses(){
   ]);
 }
 
-/* Só o que vai pro coletor: local, item, restrição de/para, quantidade e
-   endereço (pra achar a peça). O resto (pai, descrição, saldo, preço...) é
-   conferência que já está na tela — não precisa duplicar na planilha.
+/* O que vai pro coletor (local, EAN, restrição de/para, quantidade, endereço)
+   mais a Descrição do item — essa sozinha não se digita em lugar nenhum, mas
+   quem está com a planilha impressa/exportada na mão precisa reconhecer a
+   peça sem voltar pra tela. O resto (pai, saldo, preço...) é conferência que
+   já está na tela — não precisa duplicar na planilha.
 
    .xlsx de verdade (não CSV): é o único jeito de ter mais de uma aba e de
    marcar Local como NÚMERO com formato "sem decimal" ao mesmo tempo — um CSV
@@ -963,12 +979,16 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
   // diferentes — não é campo que se cola no coletor, por isso fica no fim,
   // fora da sequência Local/EAN/Orig/Dest/Qtde que é exatamente a ordem dos
   // campos na tela.
-  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Obs','Item pai'];
-  const colNumerica = new Set([0,2,3,4]); // Local/Orig/Dest/Qtde — EAN é texto (ver acima), Endereço/Obs/Item pai também
+  // Descrição entra pra quem está lendo a planilha impressa/exportada
+  // identificar a peça sem precisar voltar pra tela — nome inteiro pode ser
+  // comprido (é a mesma truncagem do pivô de Descasados: primeira palavra
+  // … última palavra) pra não estourar a largura da coluna.
+  const cab = ['Local (coletor)','EAN','Descrição','Orig','Dest','Qtde','Endereço','Obs','Item pai'];
+  const colNumerica = new Set([0,3,4,5]); // Local/Orig/Dest/Qtde — o resto é texto (EAN, ver acima, inclusive)
 
   function construirAba(linhas){
     const dados = linhas.map(l=>[
-      Number(l.localColetor) || 0, String(l.ean || ''), Number(l.codDe) || 0,
+      Number(l.localColetor) || 0, String(l.ean || ''), mdTruncarNome(l.nome), Number(l.codDe) || 0,
       Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '',
       mdAvisosLinha(l).join(' · '), String(l.pai || '')
     ]);
@@ -991,7 +1011,7 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
         if(colNumerica.has(c)) cel.z = '0';
       }
     });
-    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28},{wch:34},{wch:12}];
+    ws['!cols'] = [{wch:14},{wch:16},{wch:26},{wch:7},{wch:7},{wch:8},{wch:28},{wch:34},{wch:12}];
     return ws;
   }
 
@@ -1056,7 +1076,9 @@ function mdRenderAuditoria(){
     <td class="md-left mono">${irEsc(l.x1)}</td>
     <td class="md-left mono">${irEsc(l.x2)}</td>
     <td class="md-cel-erro">${irEsc(mdCodRestricao(l.de)+' '+l.de)}</td>
-    <td class="md-col-wn">${irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
+    <td class="${l.ambiguo ? '' : 'md-col-wn'}">${l.ambiguo
+      ? `<span title="2+ restrições permitidas pra esse valor, nenhuma única certa — ajuste a regra em Configurações pra sobrar só uma, ou decida à mão">Revisar (${irEsc(l.opcoes)})</span>`
+      : irEsc(mdCodRestricao(l.para)+' '+l.para)}</td>
     <td>${irFmtInt(l.quantidade)}</td>
     <td class="num-money">${irFmtMoney(l.valor)}</td>
     <td class="md-left">${[
@@ -1115,7 +1137,9 @@ function mdFiltrarAuditoria(campo, v){
   }, 220);
 }
 function mdExportarAuditoria(){
-  const plano = mdPlanoCorrecaoRestricao();
+  // `ambiguo` fica de fora, mesmo motivo do export de Ajustes: sem destino
+  // único não dá pra montar uma linha de coletor.
+  const plano = mdPlanoCorrecaoRestricao().filter(l=>!l.ambiguo);
   mdGerarXlsxAjuste([
     {titulo:'Para 0 (WN)', linhas: plano.filter(l=>l.para===MD_SIGLA_VENDAVEL)},
     {titulo:'Para outras restrições', linhas: plano.filter(l=>l.para!==MD_SIGLA_VENDAVEL)}
