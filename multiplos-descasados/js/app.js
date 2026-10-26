@@ -27,6 +27,7 @@ const MD = {
   // Filtro por coluna das tabelas de Configurações: dimensão => texto digitado.
   filtrosConfiguracoes:{clal:'', x1:'', x1x2:''},
   pivotExpandido:new Set(),
+  pivSort:null, // {col, dir} — clique no título da coluna do Pivô de múltiplos; null = ordem padrão (menos peça primeiro)
   tela:'descasados',
   regras:{clal:{}, x1:{}, x1x2:{}},        // dimensão -> valor -> [siglas de restrição permitidas] — valendo de verdade (salvo)
   // Rascunho da tela de Configurações: o que está marcado na hora só entra em
@@ -289,16 +290,16 @@ function mdRotuloColunaHtml(sigla){
   return `<span class="md-col-rotulo">${irEsc(mdRotuloCurto(sigla))}</span><span class="md-col-codigo">${irEsc(mdCodRestricao(sigla))}</span>`;
 }
 
-/* Colunas de restrição do PIVÔ de múltiplos (Descasados): as que realmente
-   aparecem no estoque dos COMPONENTES de múltiplo, na ordem da legenda.
-   Restrição sem nenhuma peça não vira coluna vazia — a tabela já é larga. */
+/* Colunas de restrição do PIVÔ de múltiplos (Descasados): mesma varredura
+   ampla do mdRestricoesPresentesCD (toda peça do CD, MD.saldos inteiro), não
+   só o que os componentes de múltiplo somam em c.porRestricao. Antes, um
+   componente com saldo real numa restrição rara (ex.: Insumos, Obsoleto) não
+   ganhava coluna — o número existia (entrava no Total Geral) mas ficava sem
+   nenhuma coluna pra aparecer, parecendo saldo zerado/faltando à toa.
+   Restrição sem nenhuma peça em lugar nenhum do CD não vira coluna vazia —
+   a tabela já é larga. */
 function mdRestricoesPresentes(){
-  const pais = mdPais();
-  const vistas = new Set();
-  for(const p of pais) for(const c of p.componentes) for(const s in c.porRestricao) vistas.add(s);
-  const ordenadas = MD_ORDEM_RESTRICOES.filter(s=>vistas.has(s));
-  for(const s of vistas) if(!ordenadas.includes(s)) ordenadas.push(s);
-  return ordenadas;
+  return mdRestricoesPresentesCD();
 }
 /* Mesma ideia, mas pra Ajustes de Restrição — que olha toda peça do CD
    (MD.saldos inteiro, não só componente de múltiplo via mdPais). Sem isso o
@@ -423,6 +424,15 @@ function mdPivExpandirTudo(){
   irRenderView();
 }
 function mdPivRecolherTudo(){ MD.pivotExpandido.clear(); irRenderView(); }
+/* Clique no título da coluna ordena a lista de PAIS (item pai / componente /
+   endereço continua em árvore, igual sempre) — mesmo padrão de clique-pra-
+   ordenar já usado noutras tabelas do app. null = volta pra ordem padrão
+   (menos peça no total primeiro, é quem corre mais risco de cancelamento). */
+function mdPivSort(col){
+  const s = MD.pivSort;
+  MD.pivSort = (s && s.col===col) ? {col, dir: s.dir==='desc'?'asc':'desc'} : {col, dir:'desc'};
+  irRenderView();
+}
 
 /* Pivô item pai → componente → endereço, no estilo tabela dinâmica: uma
    coluna por restrição — o CÓDIGO do WMS, não a sigla, porque é o que se
@@ -437,8 +447,21 @@ function mdRenderPivot(){
   const restricoes = mdRestricoesPresentes();
   const campo = MD.base==='qtdeDisp' ? 'qtdeDisp' : 'qtde';
 
+  let listaOrdenada = lista;
+  if(MD.pivSort){
+    const {col, dir} = MD.pivSort;
+    const sinal = dir==='desc' ? -1 : 1;
+    listaOrdenada = lista.slice().sort((a,b)=>{
+      if(col==='pai') return sinal*a.pai.localeCompare(b.pai);
+      if(col==='total') return sinal*(a.pecasTotal-b.pecasTotal);
+      const va = mdPaiTotaisPorSigla(a,restricoes)[col]||0;
+      const vb = mdPaiTotaisPorSigla(b,restricoes)[col]||0;
+      return sinal*(va-vb);
+    });
+  }
+
   let linhas = '';
-  for(const p of lista){
+  for(const p of listaOrdenada){
     const idPai = 'p-'+p.pai;
     const paiAberto = MD.pivotExpandido.has(idPai);
     const alerta = p.faltantes > 0
@@ -469,9 +492,10 @@ function mdRenderPivot(){
     }
   }
 
+  const seta = col => (MD.pivSort && MD.pivSort.col===col) ? (MD.pivSort.dir==='desc'?' ▼':' ▲') : '';
   const headerCols = restricoes.map(s=>{
     const cls = s===MD_SIGLA_VENDAVEL ? 'md-col-wn' : (s===MD_SIGLA_BLOQUEIO ? 'md-col-86' : '');
-    return `<th class="${cls}" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${mdRotuloColunaHtml(s)}</th>`;
+    return `<th class="${cls}" style="cursor:pointer;" onclick="mdPivSort('${s}')" title="${irEsc(mdCodRestricao(s)+' — '+mdNomeRestricao(s))}">${mdRotuloColunaHtml(s)}${seta(s)}</th>`;
   }).join('');
 
   return `<div class="panel">
@@ -487,9 +511,9 @@ function mdRenderPivot(){
     <div class="md-piv-wrap">
       <table class="md-piv">
         <thead><tr>
-          <th class="md-left">Item pai / Componente / Endereço</th>
+          <th class="md-left" style="cursor:pointer;" onclick="mdPivSort('pai')">Item pai / Componente / Endereço${seta('pai')}</th>
           ${headerCols}
-          <th class="md-piv-total">Total Geral</th>
+          <th class="md-piv-total" style="cursor:pointer;" onclick="mdPivSort('total')">Total Geral${seta('total')}</th>
         </tr></thead>
         <tbody>${linhas}</tbody>
       </table>
