@@ -59,6 +59,11 @@ table.md-piv tr.md-filtro-linha td{ background:var(--surface); padding:4px 6px; 
    destaque, o olho se perde entre DT, WA, RT e as outras que não têm ação. */
 .md-col-wn{ background:rgba(31,138,82,.10); }
 .md-col-86{ background:rgba(250,70,22,.10); }
+/* Doca/expedição (Configurações, tabela X1): não é restrição permitida/
+   proibida, é "não sugerir bloqueio" — cor neutra (azul), separada das cores
+   de restrição, pra não parecer mais uma coluna da mesma régua. */
+.md-col-doca{ background:rgba(0,26,114,.06); border-left:2px solid var(--blue); }
+table.md-piv thead th.md-col-doca{ background:var(--blue); }
 
 /* ---------- PIVÔ (Descasados): item pai → componente → endereço ----------
    Estilo tabela dinâmica, recolhido por padrão — um múltiplo com muitos

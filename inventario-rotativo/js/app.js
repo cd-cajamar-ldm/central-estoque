@@ -6471,13 +6471,14 @@ function irRenderDivTabela(c){
       const locais = irDivLinhasDoAno(i.item);
       html += `<tr class="ofe-detalhe"><td></td><td colspan="9">
         <table class="ofe-sub"><thead><tr>
-          <th>Local</th><th>Descrição do Local</th><th>Dia</th><th>Motivo</th><th>Sistema</th><th>Físico</th><th>Diferença</th><th>Valor</th><th>Preço unit.</th>
+          <th>Local</th><th>Descrição do Local</th><th>Dia</th><th>Inv.</th><th>Motivo</th><th>Sistema</th><th>Físico</th><th>Diferença</th><th>Valor</th><th>Preço unit.</th>
         </tr></thead><tbody>${locais.map(d=>{
           const l = {descricao: irDescLocal(d.local)};
           return `<tr class="${d.foraDoPeriodo?'ofe-fora':''}">
             <td class="mono">${irEsc(d.local)}</td>
             <td>${irEsc(l.descricao||'—')}</td>
             <td class="mono">${irFmtDate(irDivDiaDa(d))}</td>
+            <td class="mono">${irEsc(d.inventario||'')}</td>
             <td class="mono">${irEsc(d.motivo||'')}</td>
             <td class="mono">${irFmtInt(d.qtdeSistema)}</td>
             <td class="mono">${irFmtInt(d.qtdeFisica)}</td>
