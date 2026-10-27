@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v26';
+const MD_APP_VERSION = 'v27';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -35,13 +35,15 @@ const MD = {
   // pessoa clica em "Salvar Configuração" — clique errado no meio de uma
   // conferência não pode mudar o resultado sozinho.
   regrasRascunho:{clal:{}, x1:{}, x1x2:{}},
-  // Endereços de doca/expedição (X1, ex.: DS, GAI) — a restrição ali nem dá
-  // pra alterar no WMS, e estoque WN parado lá já significa conjunto coletado
-  // pra um pedido. Conta normal no total vendável (não é saldo mal
-  // classificado, ver mdRegraViolada/restricaoPermitida), só não entra como
-  // candidato ao sugerir ONDE executar um bloqueio (0→86) — ver mdEnderecoDoca
-  // e mdAlocarPorEndereco (rules.js). valor X1 -> true/false, mesmo esquema de
-  // rascunho/salvar das demais configurações.
+  // Endereços "Não alterar" (X1, ex.: DS, GAI — doca/expedição) — a
+  // restrição ali nem dá pra alterar no WMS, e estoque WN parado lá já
+  // significa conjunto coletado pra um pedido. Conta normal no total
+  // vendável (ver mdRegraViolada/restricaoPermitida, que ignoram esses
+  // endereços de propósito), nunca é sinalizado como errado (Ajustes/
+  // Auditoria) nem vira candidato ao sugerir ONDE executar um bloqueio
+  // (0→86) na aba Descasados — ver mdEnderecoDoca e mdAlocarPorEndereco
+  // (rules.js). valor X1 -> true/false, mesmo esquema de rascunho/salvar
+  // das demais configurações.
   docaX1:{}, docaX1Rascunho:{},
   selecionadas:{clal:null, x1:null, x1x2:null}, // dimensão -> null (todas) | Set() (só as marcadas)
   restricoesSel:null,             // null = todas as colunas | Set() = só estas siglas
@@ -559,10 +561,19 @@ function mdPlano(){
   MD._planoBase = MD.base;
   return MD._plano;
 }
-/* Endereço de doca/expedição (X1 cadastrado em Configurações) — ver
-   MD.docaX1 e mdAlocarPorEndereco (rules.js). Só filtra ONDE sugerir um
-   bloqueio, nunca o total WN que entra no pareamento (mdCalcularPais usa
-   só mdRestricaoPermitida pra isso). */
+/* Endereço marcado "Não alterar" em Configurações (X1 — ex.: DS, GAI,
+   endereços de doca/expedição onde o próprio WMS não deixa mudar a
+   restrição). Usado em dois pontos, ver cada chamador:
+   - mdRegraViolada (abaixo): o endereço nunca é violação de regra, não
+     importa o que Classe/X1/X1+X2 tenham configurado — não tem o que
+     "corrigir" ali mesmo, então nem aparece como errado na matriz de
+     Ajustes nem na Auditoria/export.
+   - mdAlocarPorEndereco (rules.js), via mdPlano: nunca é escolhido como
+     endereço de execução de um bloqueio (0→86) na aba Descasados.
+   Nos dois casos o saldo CONTINUA contando normal no total vendável
+   (mdCalcularPais usa mdRestricaoPermitida, que fica true pra ele) — a
+   peça não some da conta, só não é tratada como errada nem como destino
+   de ajuste. */
 function mdEnderecoDoca(loc){
   const x1 = (loc.x1 || '').trim().split(/\s+/)[0] || '';
   return !!(MD.docaX1 && MD.docaX1[x1]);
@@ -627,6 +638,10 @@ function mdRegraDe(chave, valor){
    Sem regra em nenhuma das duas, não dá pra dizer se está errado — conta
    como permitida. */
 function mdRegraViolada(loc){
+  // Endereço marcado "Não alterar" (ver mdEnderecoDoca) — sai antes de
+  // qualquer regra de Classe/X1/X1+X2, mesmo sem regra nenhuma cadastrada
+  // pra ele ou com uma regra que não cobre a restrição atual.
+  if(mdEnderecoDoca(loc)) return null;
   const regraX1X2 = mdRegraDe('x1x2', MD_DIM_POR_CHAVE.x1x2.valor(loc));
   if(regraX1X2) return regraX1X2.includes(loc.restricao) ? null : regraX1X2;
   const regraX1 = mdRegraDe('x1', MD_DIM_POR_CHAVE.x1.valor(loc));
@@ -1484,15 +1499,17 @@ function mdRenderConfiguracoes(){
     let valores = mdValoresConhecidos(dim.chave);
     if(!valores.length) return '';
     if(termoDim) valores = valores.filter(v=>v.toLowerCase().includes(termoDim));
-    // Coluna extra só na tabela de X1: endereço de doca/expedição (DS, GAI...)
-    // — restrição ali nem dá pra alterar no WMS, não entra como candidato ao
-    // sugerir bloqueio (0→86) na aba Descasados. Não é mais uma restrição
-    // permitida/proibida (por isso fica fora de MD_RESTRICOES_CONFIG), por
-    // isso tem título e estilo próprios pra não parecer parte da mesma régua.
+    // Coluna extra só na tabela de X1: "Não alterar" (DS, GAI...) — endereço
+    // onde a restrição nem dá pra mudar no WMS. Flegado, o local nunca é
+    // sinalizado como errado (Ajustes/Auditoria) nem vira sugestão de troca
+    // de restrição em lugar nenhum (nem correção de restrição, nem bloqueio
+    // na aba Descasados) — ver mdRegraViolada/mdEnderecoDoca. Não é mais uma
+    // restrição permitida/proibida (por isso fica fora de MD_RESTRICOES_CONFIG),
+    // por isso tem título e estilo próprios pra não parecer parte da mesma régua.
     const temColunaDoca = dim.chave === 'x1';
     const headerCols = MD_RESTRICOES_CONFIG.map(r=>
       `<th title="${irEsc(r.sigla+' — '+r.nome)}">${mdRotuloColunaHtml(r.sigla)}</th>`
-    ).join('') + (temColunaDoca ? `<th class="md-col-doca" title="Endereço de doca/expedição (ex.: DS, GAI) — restrição não dá pra alterar no WMS; não sugerir bloqueio (0→86) nesses endereços">Doca (não bloquear)</th>` : '');
+    ).join('') + (temColunaDoca ? `<th class="md-col-doca" title="Endereço onde a restrição não dá pra alterar no WMS (ex.: DS, GAI — doca/expedição): nunca é sinalizado como errado nem vira sugestão de troca de restrição, em Ajustes/Auditoria ou na aba Descasados">Não alterar</th>` : '');
     const filtroCols = MD_RESTRICOES_CONFIG.map(()=>'<td></td>').join('') + (temColunaDoca ? '<td></td>' : '');
     const linhas = !valores.length
       ? `<tr><td class="md-left field-hint" colspan="${MD_RESTRICOES_CONFIG.length+1+(temColunaDoca?1:0)}">Nenhum valor bate com o filtro.</td></tr>`
