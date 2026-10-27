@@ -965,13 +965,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <div class="kpi-block-body">${tilesHtml}</div>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 30; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v233';
+const IR_APP_VERSION = 'v234';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1303,15 +1303,60 @@ function irHeatStyle(val, meta){
   return `background:rgba(${r},${g},${b},.14); color:rgb(${r},${g},${b});`;
 }
 /* ============================================================
-   SETORES (Resumo por Setor + Ruas mais divergentes)
+   SETORES (Resumo por Setor + Resumo por Rua + Ruas mais divergentes)
    ============================================================ */
 function irRenderSetores(){
   const ind = IR.indicadores;
   if(!ind) return irEmptyState('Sem indicadores', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   return `
+    ${irRenderPorSetorPanel(ind)}
     ${irRenderPorRuaPanel(ind)}
     ${irRenderRuasMaisDivergentesPanel(ind)}
   `;
+}
+/* Setor é só o X1 (sem o X2) — visão mais grossa que a de Rua logo abaixo, pra
+   achar rápido qual setor está pior antes de abrir a tabela por rua e achar a
+   rua específica dentro dele. Mesmas colunas da tabela por Rua, sem a coluna
+   de seleção/exportação de pendentes (essa é só por Rua, ver irRenderPorRuaPanel). */
+function irRenderPorSetorPanel(ind){
+  const rows = (ind.porSetor||[]).filter(r=>r.chave!=='(sem setor)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
+  if(!rows.length) return '';
+  const meta = ind.meta;
+  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
+  return `<div class="panel">
+    <h3>Resumo por Setor</h3>
+    <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por setor.</p>
+    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="tbl-sticky-head">
+      <thead><tr>
+        <th>Setor</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
+        <th>Locais Pendentes</th>
+        <th>Peças Contadas</th><th>Peças Divergentes</th>
+        <th>Acurácia Peças</th><th>Posições</th><th>Valores</th>
+      </tr></thead>
+      <tbody>${rowsComPendentes.map(r=>`<tr>
+        <td class="mono">${irEsc(r.chave)}</td>
+        <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
+        <td class="mono">${irFmtInt(r.locaisContados)}</td>
+        <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
+        <td class="mono">${irFmtInt(r.locaisPendentes)}</td>
+        <td class="mono">${irFmtInt(r.pecasContadas)}</td>
+        <td class="mono">${irFmtInt(r.pecasDivergentes)}</td>
+        <td class="mono" style="${irHeatStyle(r.acuraciaPecas, meta)}">${irFmtPct(r.acuraciaPecas)}</td>
+        <td class="mono" style="${irHeatStyle(r.acuraciaPosicoes, meta)}">${irFmtPct(r.acuraciaPosicoes)}</td>
+        <td class="mono" style="${irHeatStyle(r.acuraciaValor, meta)}">${irFmtPct(r.acuraciaValor)}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
+        <td class="mono">TOTAL</td>
+        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
+        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
+        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisDivergentes,0))}</td>
+        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisPendentes,0))}</td>
+        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.pecasContadas,0))}</td>
+        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.pecasDivergentes,0))}</td>
+        <td colspan="3"></td>
+      </tr></tfoot>
+    </table></div></div>
+  </div>`;
 }
 function irRenderPorRuaPanel(ind){
   const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
@@ -1326,7 +1371,7 @@ function irRenderPorRuaPanel(ind){
   const podeExportar = irLocaisPendentesContagem().length > 0;
   const comPendente = rowsComPendentes.filter(r=>r.locaisPendentes>0);
   return `<div class="panel">
-    <h3>Resumo por Setor</h3>
+    <h3>Resumo por Rua</h3>
     <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por rua.</p>
     ${totalPendentes>0 ? `<div class="form-actions pend-acoes" style="margin:0 0 12px;">
         <button class="btn-link" id="irPendBtn" onclick="irExportarLocaisPendentesCsv()">📤 Baixar locais pendentes (${irFmtInt(totalPendentes)})</button>
