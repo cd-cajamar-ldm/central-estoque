@@ -6905,6 +6905,126 @@ function irPendMarcarTodas(marcar){
   if(cab) cab.checked = !!marcar;
   irPendAtualizarBotao();
 }
+/* ============================================================
+   EXPORTAR TUDO — todo ciclo gravado + bases independentes de ciclo,
+   uma aba por tabela, num .xlsx só (aba Configurações).
+   ============================================================ */
+// Achata qualquer linha pra virar coluna de planilha: campo primitivo vai
+// direto, array/objeto (ex.: locais, movimentos, porObs) vira uma coluna de
+// texto (JSON) — garante que NENHUMA estrutura aninhada quebra a exportação,
+// só fica menos legível naquela coluna específica.
+function irAchatarLinhaExport(obj){
+  const out = {};
+  for(const k in obj){
+    const v = obj[k];
+    if(v===null || v===undefined || typeof v==='string' || typeof v==='number' || typeof v==='boolean') out[k]=v;
+    else if(v instanceof Date) out[k]=v.toISOString();
+    else out[k] = JSON.stringify(v);
+  }
+  return out;
+}
+// Uma aba por tabela. Cabeçalho = união de TODAS as chaves vistas em TODAS as
+// linhas (não só a primeira) — schemas de ciclos antigos e novos divergem (o
+// app ganhou campo novo várias vezes nesta planilha), então confiar só na
+// primeira linha deixaria colunas de fora quando o dado existisse só mais
+// adiante na lista. Sem estilo pesado de célula (bordas etc.): com dezenas de
+// milhares de linha (Contagens, de vários ciclos somados), estilizar célula a
+// célula travaria o navegador por minutos — só cabeçalho congelado e largura
+// de coluna, que são O(colunas), não O(linhas × colunas).
+function irAdicionarAbaExport(wb, nomeAba, linhas){
+  const nome = String(nomeAba).replace(/[\\\/\?\*\[\]:]/g,'').slice(0,31) || 'Dados';
+  if(!linhas || !linhas.length){
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['(sem dados)']]), nome);
+    return;
+  }
+  const achatadas = linhas.map(irAchatarLinhaExport);
+  const colunas = new Set();
+  for(const l of achatadas) for(const k in l) colunas.add(k);
+  const cabecalho = Array.from(colunas);
+  const ws = XLSX.utils.json_to_sheet(achatadas, {header: cabecalho});
+  ws['!cols'] = cabecalho.map(h=>({wch: Math.min(40, Math.max(10, h.length+2))}));
+  ws['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
+  XLSX.utils.book_append_sheet(wb, ws, nome);
+}
+async function irExportarTudoXlsx(){
+  if(IR._exportandoTudo) return;
+  if(typeof XLSX==='undefined' || !XLSX.utils){ irShowToast('Biblioteca de planilha não carregou — recarregue a página.', true); return; }
+  IR._exportandoTudo = true;
+  irRenderView();
+  irShowToast('Gerando exportação completa — pode demorar em bases grandes, não feche a aba...');
+  try{
+    const ciclos = (IR.ciclos && IR.ciclos.length) ? IR.ciclos : await irGetAllCiclos();
+    const wb = XLSX.utils.book_new();
+    irAdicionarAbaExport(wb, 'Ciclos', ciclos.map(irAchatarLinhaExport));
+
+    const todasLocais=[], todasContagens=[], todasDivergencias=[];
+    const resumoIndicadores=[], porRua=[], porSetor=[], porLog=[];
+    for(const c of ciclos){
+      const label = irCicloLabel(c);
+      const [locais, contagens, divergencias, ind] = await Promise.all([
+        irGetByCiclo(IR_STORES.locais, c.id),
+        irGetByCiclo(IR_STORES.contagens, c.id),
+        irGetByCiclo(IR_STORES.divergencias, c.id),
+        irGetIndicadores(c.id)
+      ]);
+      for(const l of locais) todasLocais.push({Ciclo:label, ...l});
+      for(const l of contagens) todasContagens.push({Ciclo:label, ...l});
+      for(const l of divergencias) todasDivergencias.push({Ciclo:label, ...l});
+      if(ind){
+        // Campos em array/lista viram abas próprias (achatados); o resto do
+        // objeto (os números soltos: acurácias, totais etc.) vira uma linha só
+        // na aba de resumo.
+        const {porRua:pr, porSetor:ps, porLog:pl, porDia, porDiaRua, divergentesPorDia, porMes,
+          rankingProdutividade, contadosPorDia, topItensPositivos, topItensNegativos, ...resumo} = ind;
+        resumoIndicadores.push({Ciclo:label, ...resumo});
+        for(const r of (pr||[])) porRua.push({Ciclo:label, ...r});
+        for(const r of (ps||[])) porSetor.push({Ciclo:label, ...r});
+        for(const r of (pl||[])) porLog.push({Ciclo:label, ...r});
+      }
+    }
+    irAdicionarAbaExport(wb, 'Base Congelada', todasLocais);
+    irAdicionarAbaExport(wb, 'Contagens', todasContagens);
+    irAdicionarAbaExport(wb, 'Divergencias', todasDivergencias);
+    irAdicionarAbaExport(wb, 'Indicadores - Resumo', resumoIndicadores);
+    irAdicionarAbaExport(wb, 'Indicadores - Por Rua', porRua);
+    irAdicionarAbaExport(wb, 'Indicadores - Por Setor', porSetor);
+    irAdicionarAbaExport(wb, 'Indicadores - Por Log', porLog);
+
+    // NET410 (Perdas e Ganhos no CD) — independente de ciclo, por ano.
+    const anosNet = await irGetAllNet410Anos();
+    const netResumoAnos=[], netPorMes=[], netPorObsMes=[];
+    for(const ano of anosNet){
+      const d = await irGetNet410(ano);
+      if(!d) continue;
+      const {porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica, ...resumo} = d;
+      netResumoAnos.push({Ano:ano, ...resumo});
+      for(const m of (porMes||[])){
+        const {porObs:po, porDepto:pd, ...mresumo} = m;
+        netPorMes.push({Ano:ano, ...mresumo});
+        for(const o of (po||[])) netPorObsMes.push({Ano:ano, Mes:m.mes, ...o});
+      }
+    }
+    irAdicionarAbaExport(wb, 'NET410 - Resumo Anual', netResumoAnos);
+    irAdicionarAbaExport(wb, 'NET410 - Por Mes', netPorMes);
+    irAdicionarAbaExport(wb, 'NET410 - Por Obs-Mes', netPorObsMes);
+    irAdicionarAbaExport(wb, 'NET410 - Legenda', (await irGetNet410LegendaAll()||[]).map(irAchatarLinhaExport));
+
+    // Dicionários/bases independentes de ciclo.
+    irAdicionarAbaExport(wb, 'Estoque Atual (Local)', (await irGetEstoqueLocais()||[]).map(irAchatarLinhaExport));
+    irAdicionarAbaExport(wb, 'Item Info (EAN)', (await irGetItemInfoTodos()||[]).map(irAchatarLinhaExport));
+    irAdicionarAbaExport(wb, 'Local Info', (await irGetLocalInfoTodos()||[]).map(irAchatarLinhaExport));
+
+    const hoje = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, 'inventario_rotativo_export_completo_'+hoje+'.xlsx');
+    irShowToast('Exportação completa gerada.');
+  }catch(err){
+    console.error(err);
+    irShowToast('Erro ao gerar a exportação: '+(err.message||err), true);
+  }finally{
+    IR._exportandoTudo = false;
+    irRenderView();
+  }
+}
 function irExportarLocaisPendentesCsv(rua){
   if(!IR.cicloAtivo){ irShowToast('Nenhum ciclo ativo.', true); return; }
   // Sem argumento, exporta o que estiver marcado na tabela; com argumento, só
@@ -7191,6 +7311,13 @@ function irRenderConfiguracoes(){
     </div>
     <p class="field-hint" id="ir-cfg-soma" style="margin-top:8px;">Soma atual: ${(soma*100).toFixed(0)}%</p>
     <div class="form-actions"><button class="btn btn-primary" onclick="irSalvarPrioridadeConfig()">Salvar pesos</button></div>
+  </div>
+  <div class="panel">
+    <h3>Exportar tudo</h3>
+    <p class="field-hint" style="margin-bottom:12px;">Baixa um .xlsx com todo ciclo já gravado (base congelada, contagens, divergências e indicadores — uma aba por tabela) mais as bases independentes de ciclo (NET/QRY410, estoque atual, EAN/Item Info, Local Info). Em base grande pode demorar um pouco — não feche a aba enquanto gera.</p>
+    <div class="form-actions">
+      <button class="btn btn-primary" ${IR._exportandoTudo?'disabled':''} onclick="irExportarTudoXlsx()">${IR._exportandoTudo?'Gerando...':'📥 Exportar tudo (.xlsx)'}</button>
+    </div>
   </div>
   ${irRenderCiclosConfig()}
   ${irRenderProdMetaConfig()}
