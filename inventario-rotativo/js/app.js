@@ -4809,13 +4809,28 @@ function irProdDiasComContagem(contagens){
   }
   return dias.size;
 }
+// Barra de filtro de data da Produtividade — própria função porque precisa
+// aparecer tanto no caso normal quanto no "sem contagem no período" (senão a
+// pessoa filtra um período vazio e fica sem jeito de ajustar/limpar na tela).
+function irRenderProdFiltroData(){
+  return `<div class="panel dash-filter-bar">
+    <div class="dash-filter-group">
+      <label>Período</label>
+      <input type="date" value="${irEsc(IR.prodFilters.de)}" onchange="irProdSetFilter('de', this.value)">
+      <span class="dash-filter-sep">–</span>
+      <input type="date" value="${irEsc(IR.prodFilters.ate)}" onchange="irProdSetFilter('ate', this.value)">
+      ${(IR.prodFilters.de||IR.prodFilters.ate) ? `<button class="btn-link" onclick="irProdSetFilter('de','');irProdSetFilter('ate','');">Limpar</button>` : ''}
+    </div>
+  </div>`;
+}
 function irRenderProdutividade(){
   const c = IR.cicloAtivo;
   if(!c) return irEmptyState('Sem ciclo ativo', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   const contagens = irProdContagensFiltradas();
   const p = irCalcProdutividade(contagens);
   if(!p.ranking.length){
-    return `<div class="panel"><h3>Produtividade</h3>
+    return `${irRenderProdFiltroData()}
+      <div class="panel"><h3>Produtividade</h3>
       <p class="field-hint">Nenhuma contagem no período selecionado. Ajuste o filtro de data no topo da tela.</p></div>`;
   }
   const dias = irProdDiasComContagem(contagens) || 1;
@@ -4842,6 +4857,12 @@ function irRenderProdutividade(){
   const maxLocais = Math.max(1, ...p.ranking.map(r=>r.locais));
   const pill = (v, f) => v==null ? '<span class="pv-pill">—</span>'
     : `<span class="pv-pill ${irProdFaixa(v,f)}">${irFmtPct(v)}</span>`;
+  // Acertividade é só a taxa de erro ao contrário (1 − erro): a classificação de
+  // cor (ok/médio/ruim) continua vindo do erro bruto — é o mesmo corte, só o
+  // número mostrado na tela é o positivo, melhor pra conversa de feedback com o
+  // colaborador ("96% de acerto" em vez de "4% de erro").
+  const pillAcerto = erro => erro==null ? '<span class="pv-pill">—</span>'
+    : `<span class="pv-pill ${irProdFaixa(erro, IR_PROD_FAIXA_ERRO)}">${irFmtPct(1-erro)}</span>`;
   const linhas = p.ranking.map((r,i)=>{
     const lh = r.horasAtivas>0 ? r.locais/r.horasAtivas : 0;
     return `<tr>
@@ -4851,7 +4872,7 @@ function irRenderProdutividade(){
       <td class="n mono">${r.tempoMedioMin>0?irFmtNum(r.tempoMedioMin,1)+' min':'—'}</td>
       <td class="n mono">${irFmtNum(lh,1)}</td>
       <td class="n">${pill(r.taxaRecontagem, IR_PROD_FAIXA_RECONTAGEM)}</td>
-      <td class="n">${pill(r.taxaErro, IR_PROD_FAIXA_ERRO)}</td>
+      <td class="n">${pillAcerto(r.taxaErro)}</td>
     </tr>`;
   }).join('');
   const somaVisitas = p.ranking.reduce((s,r)=>s+(r.visitas||0),0);
@@ -4864,10 +4885,11 @@ function irRenderProdutividade(){
     <td class="n mono">${irFmtNum(tempoMediano,1)} min</td>
     <td class="n mono">${irFmtNum(locaisHora,1)}</td>
     <td class="n">${pill(somaVisitas?somaRec/somaVisitas:null, IR_PROD_FAIXA_RECONTAGEM)}</td>
-    <td class="n">${pill(somaVisitas?somaErr/somaVisitas:null, IR_PROD_FAIXA_ERRO)}</td>
+    <td class="n">${pillAcerto(somaVisitas?somaErr/somaVisitas:null)}</td>
   </tr>`;
 
   return `
+    ${irRenderProdFiltroData()}
     <div class="panel">
       <div class="ofe-head"><h3>Produtividade</h3>
         <span class="field-hint">${irEsc(irCicloLabel(c))} · ${irEsc(periodo)}</span></div>
@@ -4880,14 +4902,14 @@ function irRenderProdutividade(){
     </div>
     <div class="panel">
       <div class="ofe-head"><h3>Ranking da equipe</h3>
-        <span class="field-hint">Recontagem: verde ≤8% · amarelo ≤15% · vermelho &gt;15% &nbsp;|&nbsp; Erro: verde ≤3% · amarelo ≤7% · vermelho &gt;7%</span></div>
+        <span class="field-hint">Recontagem: verde ≤8% · amarelo ≤15% · vermelho &gt;15% &nbsp;|&nbsp; Acertividade: verde ≥97% · amarelo ≥93% · vermelho &lt;93%</span></div>
       <div class="table-wrap"><table class="pv-tab">
         <thead><tr><th>Colaborador</th><th class="n">Locais contados</th><th class="n">Peças</th>
           <th class="n">Tempo médio</th><th class="n">Locais/h</th>
-          <th class="n">Taxa recontagem</th><th class="n">Taxa de erro</th></tr></thead>
+          <th class="n">Taxa recontagem</th><th class="n">Acertividade</th></tr></thead>
         <tbody>${linhas}${rodape}</tbody>
       </table></div>
-      <p class="field-hint" style="margin-top:10px;">As duas taxas são por visita (local + Nº Inventário). Recontagem = visitas do colaborador em que veio outra rodada depois da dele. Erro = visitas dele que fecharam com divergência.</p>
+      <p class="field-hint" style="margin-top:10px;">As duas taxas são por visita (local + Nº Inventário). Recontagem = visitas do colaborador em que veio outra rodada depois da dele. Acertividade = visitas dele que fecharam sem divergência, sobre o total de visitas.</p>
     </div>
     <div class="panel">
       <div class="ofe-head"><h3>Produção por hora</h3>
