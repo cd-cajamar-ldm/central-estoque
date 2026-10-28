@@ -3740,8 +3740,8 @@ function irRenderNet410ItensPanel(items, negativos, subtitulo){
   return `<div class="panel">
     <h3>${titulo}</h3>
     <p class="panel-sub">${irEsc(subtitulo)}</p>
-    ${items.map(i=>`<div class="bi-hbar-row bi-hbar-row-money">
-      <div class="bi-hbar-label" title="${irEsc(i.nome)}">${irEsc(i.nome||i.item)}</div>
+    ${items.map(i=>`<div class="bi-hbar-row bi-hbar-row-money bi-hbar-row-item">
+      <div class="bi-hbar-label" title="${irEsc(i.item)} — ${irEsc(i.nome)}"><span class="mono bi-hbar-item-cod">${irEsc(i.item)}</span> ${irEsc(i.nome)}</div>
       <div class="bi-hbar-track"><div class="bi-hbar-fill ${cls}" style="width:${Math.round(Math.abs(i.saldoValor)/maxAbs*100)}%;"></div></div>
       <div class="bi-hbar-val">${i.saldoValor>0?'+':''}${irFmtMoney(i.saldoValor)}</div>
     </div>`).join('')}

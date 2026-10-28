@@ -391,6 +391,12 @@ button{ font-family:inherit; cursor:pointer; }
    rótulo "R$ 49.862,55" quebrava linha e sobrepunha a linha de cima. */
 .bi-hbar-row-money{ grid-template-columns:120px 1fr 96px; }
 .bi-hbar-label{ color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* "Itens que mais impactam o NET" (Dashboard/NET) — label leva o código do item
+   antes do nome, então precisa de mais espaço que o padrão de 120px pra não
+   truncar os dois em cima um do outro. Classe própria, só aqui, pra não mexer
+   na largura dos outros painéis que reaproveitam bi-hbar-row/bi-hbar-row-money. */
+.bi-hbar-row-item{ grid-template-columns:168px 1fr 96px; }
+.bi-hbar-item-cod{ color:var(--ink-soft); font-size:10.5px; margin-right:3px; }
 .bi-hbar-track{ background:var(--surface2); border-radius:4px; height:14px; position:relative; overflow:hidden; }
 .bi-hbar-fill{ height:100%; border-radius:4px; background:var(--blue); }
 .bi-hbar-fill.orange{ background:var(--orange); }
