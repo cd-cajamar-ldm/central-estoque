@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v28';
+const MD_APP_VERSION = 'v29';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -659,6 +659,14 @@ function mdRestricaoPermitida(loc){ return mdRegraViolada(loc) === null; }
 function mdAvisosLinha(l){
   const avisos = [];
   if(l.quebrado) avisos.push(`Alt.Restrição Estoque (Shift+F6) — ${l.estoquesReais || 2} estoques`);
+  // Plano de bloqueio/liberação da aba Descasados (ver mdAlocarPorEndereco,
+  // rules.js): a quantidade movida é só o excedente do múltiplo, quase nunca
+  // o saldo inteiro do endereço — 10.MOVI Alt.Restrição Local não aceita
+  // quantidade parcial (altera tudo do endereço de uma vez), então sobra
+  // saldo lá e a execução tem que ser por Alt.Restrição Estoque (Shift+F6).
+  // Não se confunde com `quebrado` (vem de locais diferentes, nunca os dois
+  // juntos numa mesma linha) mas pede a mesma solução no coletor.
+  if(l.parcial) avisos.push(`Alt.Restrição Estoque (Shift+F6) — move só ${irFmtInt(l.quantidade)} de ${irFmtInt(l.saldoLocal)} no endereço`);
   // Aviso, não bloqueio: a situação pode ter mudado entre a importação e a
   // execução (a 390 pode já estar levemente desatualizada) — a pessoa
   // confirma no coletor na hora, só avisada com antecedência.
@@ -1086,7 +1094,7 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
   // (WN+86+outras), não pela quantidade da própria linha: duas linhas do
   // mesmo item comprado ficam juntas, ordenadas pelo item, não espalhadas
   // pela tabela.
-  const temAviso = l => (l.quebrado || l.emInventario) ? 1 : 0;
+  const temAviso = l => (l.quebrado || l.emInventario || l.parcial) ? 1 : 0;
   const comLinhas = blocos
     .map(b=>({...b, linhas: b.linhas.slice().sort((a,c)=>
       temAviso(a) - temAviso(c) || (a.totalComponente ?? 0) - (c.totalComponente ?? 0))}))

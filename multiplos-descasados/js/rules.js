@@ -446,7 +446,15 @@ function mdAlocarPorEndereco(locais, sigla, quantidade, campo, restricaoPermitid
   for(const l of disponiveis){
     if(resta <= 0) break;
     const usa = Math.min(resta, l.saldoLocal);
-    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: l.saldoLocal, quantidade: usa});
+    // 10.MOVI Alt.Restrição Local altera TODO o saldo do endereço+restrição de
+    // uma vez só, sem campo de quantidade — não tem como pedir só uma parte.
+    // Sobrando saldo no endereço depois desta linha (usa < saldoLocal, o normal
+    // aqui: só o excedente do múltiplo é bloqueado, raramente o endereço
+    // inteiro), a execução em massa não serve — tem que ser Alt.Restrição
+    // Estoque (Shift+F6), peça por peça, igual já vale pro caso de 2+ estoques
+    // físicos (ver mdPlanoCorrecaoRestricao).
+    const parcial = usa < l.saldoLocal;
+    out.push({local: l.local, desc: l.desc, predio: l.predio, clal: l.clal, x1: l.x1, x2: l.x2, saldoLocal: l.saldoLocal, quantidade: usa, parcial});
     resta -= usa;
   }
   // Sobrou quantidade sem endereço: a soma por restrição e a soma por endereço
@@ -478,7 +486,7 @@ function mdPlanoAjuste(pais, base, restricaoPermitida, naoBloquear){
             localColetor: mdLocalColetor(alvo.local),
             local: alvo.local, endereco: alvo.desc, predio: alvo.predio, clal: alvo.clal, x1: alvo.x1, x2: alvo.x2,
             saldoLocal: alvo.saldoLocal, semEndereco: !!alvo.semEndereco,
-            quantidade: alvo.quantidade,
+            quantidade: alvo.quantidade, parcial: !!alvo.parcial,
             pai: p.pai, nomePai: p.nome,
             componente: c.componente, nome: c.nome, ean: c.ean,
             inInterface: c.inInterface,
