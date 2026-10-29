@@ -355,6 +355,7 @@ const IR_TAB_LABELS = {
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
   configuracoes:['Configurações','Pesos do Índice de Prioridade de Auditoria.'],
+  gestaoInventario:['Gestão de Inventário','Inventário + local com contagem errada, desconsiderados da acurácia com justificativa.'],
   exportar:['Exportar','Exporte toda a base, as regras/lógicas e os indicadores do sistema.']
 };
 /* Abas que não são do ciclo rotativo: sem ciclo e sem contagem, o filtro de
@@ -460,7 +461,7 @@ function irRenderView(){
   if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias');
   // Transitórios não depende de ciclo importado: é um controle próprio, não uma
   // leitura da contagem.
-  const SEM_CICLO = new Set(['importacao','configuracoes','exportar']);
+  const SEM_CICLO = new Set(['importacao','configuracoes','exportar','gestaoInventario']);
   const needsCiclo = !SEM_CICLO.has(IR.currentTab);
   if(needsCiclo && !IR.cicloAtivo){
     root.innerHTML = IR.initErro
@@ -476,7 +477,7 @@ function irRenderView(){
     divergencias: irRenderDivergencias,
     indicadores: irRenderIndicadores,
     importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes,
-    exportar: irRenderExportar
+    exportar: irRenderExportar, gestaoInventario: irRenderGestaoInventario
   };
   root.innerHTML = (renderers[IR.currentTab] || (()=>''))();
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
@@ -973,7 +974,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v235';
+const IR_APP_VERSION = 'v236';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1078,7 +1079,7 @@ function irRenderDashboard(){
     irKpiTile('⚠️', irFmtInt(ind.pecasDivergentes), 'Peças Divergentes', 'bad', irFmtInt(ind.itensDivergentes)+' itens × locais')
   );
   const blocoLocais = irKpiBlock('blue','📍','Locais',
-    irKpiTile('🎯', irFmtPct(ind.acuraciaLocal), 'Acurácia Local', ind.acuraciaLocal>=ind.meta?'good':'bad', metaHint+' · base: '+irFmtInt(ind.locaisContadosTotal)+' contados') +
+    irKpiTile('🎯', irFmtPct(ind.acuraciaLocal), 'Acurácia Local', ind.acuraciaLocal>=ind.meta?'good':'bad', metaHint+' · base: '+irFmtInt(ind.locaisContadosAcuracia!=null?ind.locaisContadosAcuracia:ind.locaisContadosTotal)+' contados'+(ind.locaisDesconsiderados?' · '+irFmtInt(ind.locaisDesconsiderados)+' desconsiderado(s)':'')) +
     irKpiTile('✅', irFmtInt(ind.locaisConcluidos), 'Concluídos', '', 'de '+irFmtInt(ind.locaisContadosTotal)+' contados<br>'+irFmtInt(ind.locaisDivergentes)+' divergentes') +
     irKpiTile('⏳', irFmtInt(ind.locaisPendentes), 'Pendentes', 'bad', irFmtInt(ind.qtdRecontagens)+' recontagens · '+cancelHint)
   );
@@ -6967,6 +6968,10 @@ async function irExportarTudoXlsx(){
       irIndicadoresCatalogo(indAtivo || {}).map(([nome,valor,formula])=>({
         Indicador:nome, ['Valor (ciclo ativo)']: indAtivo ? valor : '—', Formula:formula})));
 
+    irAdicionarAbaExport(wb, 'Gestao de Inventario',
+      ((await irGetConfig(IR_CFG_EXCLUSOES)) || []).map(e=>({['Nº Inventário']:e.inventario, Local:e.local,
+        ['Endereço']:irDescLocal(e.local)||'', Justificativa:e.justificativa, ['Cadastrado em']:e.criadoEm||''})));
+
     irAdicionarAbaExport(wb, 'Ciclos', ciclos.map(irAchatarLinhaExport));
 
     const todasLocais=[], todasContagens=[], todasDivergencias=[];
@@ -7036,6 +7041,120 @@ async function irExportarTudoXlsx(){
     IR._exportandoTudo = false;
     irRenderView();
   }
+}
+/* ============================================================
+   GESTÃO DE INVENTÁRIO — (Nº Inventário + Local) desconsiderados da acurácia.
+   Pra contagem errada de um local específico, com justificativa: só aquele
+   inventário daquele local sai da conta, sem mexer na observação (que afetaria
+   todos os locais do inventário). A lista fica no IndexedDB (IR_CFG_EXCLUSOES)
+   e é aplicada pelo motor (worker.js, calcularIndicadores).
+   ============================================================ */
+async function irCarregarExclusoes(){
+  try{ IR.exclusoesInv = (await irGetConfig(IR_CFG_EXCLUSOES)) || []; }
+  catch(err){ IR.exclusoesInv = []; }
+  irRenderView();
+}
+// O campo Local aceita o código (ex.: 708184) ou o endereço (ex.: PP 003 090 05).
+function irResolverLocalDigitado(txt){
+  const t = String(txt||'').trim();
+  if(!t) return '';
+  const mapa = irDescLocalMapa();
+  if(mapa.has(t)) return t;
+  const norm = s => String(s||'').toUpperCase().replace(/\s+/g,' ').trim();
+  const alvo = norm(t);
+  for(const [id, desc] of mapa) if(norm(desc)===alvo) return id;
+  return t;
+}
+// Situação no ciclo ativo, pela mesma regra do motor: a rodada AIR de maior
+// Nº Inventário é a que fecha o local — só ela pode ser desconsiderada.
+function irSituacaoExclusao(e){
+  const local = String(e.local).trim();
+  const linhas = (IR.divergencias||[]).filter(d=>String(d.local).trim()===local && String(d.motivo||'').trim().toUpperCase()==='AIR');
+  if(!linhas.length) return {cls:'tag-muted', txt:'Não encontrado no ciclo ativo'};
+  const fechamento = Math.max(...linhas.map(d=>irNumInventario(d.inventario)));
+  if(irNumInventario(e.inventario)!==fechamento) return {cls:'tag-muted', txt:'Sem efeito — o local fechou no inventário '+fechamento};
+  const pecas = linhas.filter(d=>irNumInventario(d.inventario)===fechamento).reduce((s,d)=>s+Math.abs(d.diferenca||0),0);
+  return {cls:'tag-good', txt:'Aplicada · '+irFmtInt(pecas)+' pç divergente(s) fora da conta'};
+}
+async function irAdicionarExclusao(){
+  const inv = (document.getElementById('ir-gi-inv').value||'').trim();
+  const localTxt = (document.getElementById('ir-gi-local').value||'').trim();
+  const just = (document.getElementById('ir-gi-just').value||'').trim();
+  if(!inv || !localTxt){ irShowToast('Informe o Nº do inventário e o local.', true); return; }
+  if(irNumInventario(inv)<0){ irShowToast('Nº do inventário inválido.', true); return; }
+  if(!just){ irShowToast('A justificativa é obrigatória.', true); return; }
+  const local = irResolverLocalDigitado(localTxt);
+  const lista = (IR.exclusoesInv||[]).slice();
+  if(lista.some(e=>irNumInventario(e.inventario)===irNumInventario(inv) && String(e.local).trim()===local)){
+    irShowToast('Esse inventário + local já está cadastrado.', true); return;
+  }
+  lista.push({id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    inventario: inv, local, justificativa: just, criadoEm: new Date().toISOString()});
+  await irSalvarExclusoesERecalcular(lista, 'Local desconsiderado');
+}
+async function irRemoverExclusao(id){
+  await irSalvarExclusoesERecalcular((IR.exclusoesInv||[]).filter(e=>e.id!==id), 'Exclusão removida');
+}
+// Grava a lista e recalcula todos os ciclos (o ativo primeiro) — a acurácia
+// anual e o comparativo somam todos, então nenhum pode ficar na lista antiga.
+async function irSalvarExclusoesERecalcular(lista, msg){
+  if(IR._recalculando){ irShowToast('Aguarde o recálculo em andamento terminar.', true); return; }
+  await irSetConfig(IR_CFG_EXCLUSOES, lista);
+  IR.exclusoesInv = lista;
+  IR._recalculando = true;
+  irRenderView();
+  irShowToast(msg+' — recalculando a acurácia dos ciclos...');
+  const ativoId = (IR.cicloAtivo||{}).id;
+  const ciclos = (IR.ciclos||[]).slice().sort((a,b)=> (b.id===ativoId) - (a.id===ativoId));
+  let falhou = 0;
+  try{
+    for(const c of ciclos){
+      if(!(await irRecalcularCiclo(c.id))) falhou++;
+      if(c.id===ativoId){ IR.indicadores = await irGetIndicadores(c.id); irRenderView(); }
+    }
+    IR.comparativoCiclos = null;
+    await irCarregarComparativoCiclos();
+  }finally{
+    IR._recalculando = false;
+    irRenderView();
+  }
+  irShowToast(falhou ? 'Salvo. '+falhou+' ciclo(s) sem dados salvos não foram recalculados.' : 'Salvo — acurácia recalculada.', !!falhou);
+}
+function irRenderGestaoInventario(){
+  if(IR.exclusoesInv===undefined){ irCarregarExclusoes(); return '<div class="panel"><p class="field-hint">Carregando...</p></div>'; }
+  const lista = (IR.exclusoesInv||[]).slice().sort((a,b)=>String(b.criadoEm||'').localeCompare(String(a.criadoEm||'')));
+  const ind = IR.indicadores;
+  const ocupado = !!IR._recalculando;
+  return `
+  <div class="panel">
+    <h3>Desconsiderar contagem da acurácia</h3>
+    <p class="panel-sub">Informe o Nº do inventário e o local com contagem errada. Só aquele inventário daquele local sai da acurácia (peças, local e valor, inclusive nas quebras por rua, setor e mês) — os demais locais do mesmo inventário continuam contando. Andamento e locais concluídos não mudam: o local foi trabalhado, só o resultado da contagem não vale.</p>
+    <div class="gi-form">
+      <div><label>Nº Inventário</label><input type="text" id="ir-gi-inv" placeholder="ex.: 485919"></div>
+      <div><label>Local (código ou endereço)</label><input type="text" id="ir-gi-local" placeholder="ex.: 708184 ou PP 003 090 05"></div>
+      <div><label>Justificativa</label><input type="text" id="ir-gi-just" placeholder="ex.: contagem lançada no endereço errado, confirmada em recontagem"></div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" ${ocupado?'disabled':''} onclick="irAdicionarExclusao()">${ocupado?'Recalculando...':'Desconsiderar da acurácia'}</button></div>
+  </div>
+  <div class="panel">
+    <h3>Locais desconsiderados (${irFmtInt(lista.length)})</h3>
+    <p class="panel-sub">${ind && ind.locaisDesconsiderados!=null ? `No ciclo ativo, ${irFmtInt(ind.locaisDesconsiderados)} local(is) estão fora da acurácia. ` : ''}Só tem efeito o inventário que FECHOU o local (a última rodada AIR dele) — rodada intermediária já não entra na conta. Ciclos 1 e 2 de 2026 têm o número publicado travado e não mudam.</p>
+    ${lista.length ? `<div class="table-wrap"><table>
+      <thead><tr><th>Nº Inventário</th><th>Local</th><th>Endereço</th><th>Justificativa</th><th>Cadastrado em</th><th>Situação (ciclo ativo)</th><th></th></tr></thead>
+      <tbody>${lista.map(e=>{
+        const s = irSituacaoExclusao(e);
+        return `<tr>
+          <td class="mono">${irEsc(e.inventario)}</td>
+          <td class="mono">${irEsc(e.local)}</td>
+          <td>${irEsc(irDescLocal(e.local)||'—')}</td>
+          <td>${irEsc(e.justificativa)}</td>
+          <td class="mono">${e.criadoEm ? irEsc(new Date(e.criadoEm).toLocaleString('pt-BR')) : '—'}</td>
+          <td><span class="tag ${s.cls}">${irEsc(s.txt)}</span></td>
+          <td><button class="btn-link" style="color:var(--danger);" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>'}
+  </div>`;
 }
 /* ============================================================
    ABA EXPORTAR (Sistema) — exportação completa + referência de regras e
