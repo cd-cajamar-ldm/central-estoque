@@ -6924,41 +6924,56 @@ const IR_XLS_MAX_TEXTO = 32000;
 function irTextoCelulaExport(s){
   return s.length > IR_XLS_MAX_TEXTO ? s.slice(0, IR_XLS_MAX_TEXTO)+' …(truncado: '+s.length+' caracteres)' : s;
 }
+function irValorCelulaExport(v){
+  if(v===null || v===undefined || typeof v==='number' || typeof v==='boolean') return v;
+  if(typeof v==='string') return irTextoCelulaExport(v);
+  if(v instanceof Date) return v.toISOString();
+  return irTextoCelulaExport(JSON.stringify(v));
+}
 function irAchatarLinhaExport(obj){
   const out = {};
-  for(const k in obj){
-    const v = obj[k];
-    if(v===null || v===undefined || typeof v==='number' || typeof v==='boolean') out[k]=v;
-    else if(typeof v==='string') out[k]=irTextoCelulaExport(v);
-    else if(v instanceof Date) out[k]=v.toISOString();
-    else out[k] = irTextoCelulaExport(JSON.stringify(v));
-  }
+  for(const k in obj) out[k] = irValorCelulaExport(obj[k]);
   return out;
 }
 // Uma aba por tabela. Cabeçalho = união de TODAS as chaves vistas em TODAS as
 // linhas (não só a primeira) — schemas de ciclos antigos e novos divergem (o
 // app ganhou campo novo várias vezes nesta planilha), então confiar só na
 // primeira linha deixaria colunas de fora quando o dado existisse só mais
-// adiante na lista. Sem estilo pesado de célula (bordas etc.): com dezenas de
-// milhares de linha (Contagens, de vários ciclos somados), estilizar célula a
-// célula travaria o navegador por minutos — só cabeçalho congelado e largura
+// adiante na lista. Sem estilo de célula: só cabeçalho congelado e largura
 // de coluna, que são O(colunas), não O(linhas × colunas).
+// Aba montada em modo "dense" (lista de linhas): no modo padrão o SheetJS
+// guarda cada célula como propriedade de um objeto só ("A1", "B1"...), e aba
+// com milhões de células estourava o limite do navegador ("RangeError: Too
+// many properties to enumerate") — foi o erro da Contagens.
 function irAdicionarAbaExport(wb, nomeAba, linhas){
   const nome = String(nomeAba).replace(/[\\\/\?\*\[\]:]/g,'').slice(0,31) || 'Dados';
   if(!linhas || !linhas.length){
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['(sem dados)']]), nome);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['(sem dados)']], {dense:true}), nome);
     return;
   }
-  const achatadas = linhas.map(irAchatarLinhaExport);
   const colunas = new Set();
-  for(const l of achatadas) for(const k in l) colunas.add(k);
+  for(const l of linhas) for(const k in l) colunas.add(k);
   const cabecalho = Array.from(colunas);
-  // Aba do Excel tem teto de 1.048.576 linhas: acima disso o arquivo sai mas o
-  // Excel corta na abertura. Contagens de vários ciclos somados passam fácil —
-  // então quebra em várias abas ("Contagens", "Contagens (2)"...).
-  const POR_ABA = 1000000;
-  for(let i=0, parte=1; i<achatadas.length; i+=POR_ABA, parte++){
-    const ws = XLSX.utils.json_to_sheet(achatadas.slice(i, i+POR_ABA), {header: cabecalho});
+  // Quebra em várias abas ("Contagens", "Contagens (2)"...) por dois tetos:
+  // o Excel corta acima de 1.048.576 linhas, e o SheetJS monta o XML de cada
+  // aba como um texto só — passando de ~512 MB o navegador aborta ("Invalid
+  // string length"). O tamanho da linha é estimado por amostra, mirando
+  // ~150 MB de XML por aba.
+  const amostra = linhas.slice(0, 500);
+  let chars = 0;
+  for(const l of amostra) for(const h of cabecalho){
+    const v = l[h];
+    chars += 40 + (v==null ? 0 : Math.min(IR_XLS_MAX_TEXTO, typeof v==='object' ? 200 : String(v).length*1.2));
+  }
+  const POR_ABA = Math.max(1000, Math.min(1000000, Math.floor(150e6 / Math.max(1, chars/amostra.length))));
+  for(let i=0, parte=1; i<linhas.length; i+=POR_ABA, parte++){
+    const aoa = [cabecalho];
+    const fim = Math.min(linhas.length, i+POR_ABA);
+    for(let r=i; r<fim; r++){
+      const l = linhas[r];
+      aoa.push(cabecalho.map(h=>irValorCelulaExport(l[h])));
+    }
+    const ws = XLSX.utils.aoa_to_sheet(aoa, {dense:true});
     ws['!cols'] = cabecalho.map(h=>({wch: Math.min(40, Math.max(10, h.length+2))}));
     ws['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
     const sufixo = parte>1 ? ' ('+parte+')' : '';
