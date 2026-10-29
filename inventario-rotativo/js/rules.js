@@ -3,6 +3,9 @@
    (usado tanto pelo Web Worker quanto pela UI principal)
    ============================================================ */
 const IR_META_ACURACIA = 0.97;
+// Chave (config no IndexedDB) da lista de (Nº Inventário + Local) desconsiderados
+// da acurácia — aba Gestão de Inventário. Lida pelo worker no cálculo.
+const IR_CFG_EXCLUSOES = 'gestao-inventario-exclusoes';
 
 const IR_STATUS_LOCAL = {
   nao_iniciado:        {label:'Não iniciado',            cor:'#6B7280'},
@@ -197,6 +200,7 @@ const IR_REGRAS_CATALOGO = [
   {categoria:'Acurácia', regra:'Acurácia Local', detalhe:'1 − (locais com pelo menos 1 item divergente ÷ locais contados no ciclo).', fonte:'QRY0843 + Base Congelada'},
   {categoria:'Acurácia', regra:'Acurácia Valor', detalhe:'1 − (Σ|Vl. Divergência| ÷ Σ Vl. sistêmico). Valor de cada item vem da SIGEQ278 (preço de custo) cruzada com a ZBIQ0051 (só o componente marcado S carrega o valor do kit).', fonte:'SIGEQ278 × ZBIQ0051'},
   {categoria:'Acurácia', regra:'Meta de acurácia', detalhe:'Meta padrão de '+(IR_META_ACURACIA*100).toFixed(0)+'% para as três acurácias.', fonte:'Configuração'},
+  {categoria:'Acurácia', regra:'Gestão de Inventário (locais desconsiderados)', detalhe:'Nº Inventário + Local cadastrados com justificativa na aba Gestão de Inventário saem da acurácia (peças, local e valor, e das quebras por rua/setor/log/mês) — numerador e denominador. Só vale se o inventário for o que fechou o local (última rodada AIR). Andamento e locais concluídos não mudam. Os demais locais do mesmo inventário continuam contando.', fonte:'Cadastro manual'},
   {categoria:'Acurácia', regra:'Ciclos legados 1 e 2 de 2026', detalhe:'Os ciclos 1 e 2 de 2026 fecharam por qualquer motivo (não só AIR) e usam a base FÍSICA como denominador da Acurácia Peças, não o saldo sistêmico — régua da época, preservada pra não reescrever o histórico.', fonte:'Regra de transição'},
 
   // ---- Produtividade ----

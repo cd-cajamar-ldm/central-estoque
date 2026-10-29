@@ -299,7 +299,9 @@ async function recalcularIndicadores(cicloId){
 
   post('progress', {stage:'Recalculando indicadores...', pct:75});
   const cicloNumero = ciclo && ciclo.numero;
+  const exclusoes = (await irGetConfig(IR_CFG_EXCLUSOES)) || [];
   const ind = calcularIndicadores({
+    exclusoes,
     congelados, contagens: contagens.filter(c=>c.liquidada!==false), divergencias,
     statusPorLocal: irEhCicloLegadoAIR(cicloNumero, ciclo && ciclo.dataAbertura) ? statusPorLocalTodoMotivo : statusPorLocalAIR,
     pecasFisicasPorLocal, cicloNumero,
@@ -1080,7 +1082,8 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   }
 
   post('progress', {stage:'Calculando indicadores...', pct:90});
-  const indicadores = calcularIndicadores({congelados: locais, contagens: contagensLiquidadas, divergencias,
+  const exclusoes = (await irGetConfig(IR_CFG_EXCLUSOES)) || [];
+  const indicadores = calcularIndicadores({exclusoes, congelados: locais, contagens: contagensLiquidadas, divergencias,
     statusPorLocal: irEhCicloLegadoAIR(cicloNumero, dataAbertura) ? statusPorLocal : statusPorLocalAIR,
     pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino, cicloNumero,
     locaisComCancelamento: locaisComCancelamentoSet.size, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
@@ -1256,7 +1259,7 @@ function irDivergenciasLatestAnyMotivo(divergencias){
    A aba Divergências continua enxergando tudo, porque é auditoria do CD inteiro. */
 function calcularIndicadores({congelados: congeladosTodos, contagens, divergencias: divergenciasTodas, statusPorLocal: statusPorLocalTodos, pecasFisicasPorLocal, dataAbertura, dataPrevistaTermino, cicloNumero,
   locaisComCancelamento, tentativasCanceladas, minutosPerdidosCancelamento, sessoesComHorarioRegistrado,
-  locaisCanceladosAposBater, locaisCanceladosInterrompidos}){
+  locaisCanceladosAposBater, locaisCanceladosInterrompidos, exclusoes}){
   // Escopo do ciclo: a base congelada, inteira. Local fora dela não entra em
   // indicador nenhum; local dentro dela entra, seja qual for o prefixo do endereço.
   // A planilha tem 1 linha por (Local, Nº Inventário) — um local reaberto/recontado
@@ -1281,7 +1284,22 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   const modoLegado = irEhCicloLegadoAIR(cicloNumero, dataAbertura);
   // Daqui pra baixo, "divergencias" é só o recorte do ciclo rotativo (ou, em
   // modoLegado, só o escopo da base congelada — sem recorte de motivo/rodada).
-  const divergencias = (modoLegado ? irDivergenciasLatestAnyMotivo(divergenciasTodas) : irDivergenciasDoCiclo(divergenciasTodas)).filter(d=>noCiclo.has(d.local));
+  const divergenciasRecorte = (modoLegado ? irDivergenciasLatestAnyMotivo(divergenciasTodas) : irDivergenciasDoCiclo(divergenciasTodas)).filter(d=>noCiclo.has(d.local));
+  /* Gestão de Inventário: (Nº Inventário + Local) com contagem errada e
+     justificada, cadastrados à mão, saem da ACURÁCIA (peças, local, valor e as
+     quebras por rua/setor/log/mês). Aplicado DEPOIS de escolher a rodada de
+     fechamento de cada local: só tem efeito se o inventário informado for o que
+     fechou o local — excluir uma rodada intermediária não muda nada, porque ela
+     já não entrava na conta. Andamento/concluídos não mudam: o local foi
+     trabalhado, só o resultado da contagem não vale pra acurácia. */
+  const chaveExclusao = (inv, local)=>irNumInventario(inv)+'|'+String(local==null?'':local).trim();
+  const chavesExcluidas = new Set((exclusoes||[]).map(e=>chaveExclusao(e.inventario, e.local)));
+  const locaisDesconsiderados = new Set();
+  const divergencias = chavesExcluidas.size ? divergenciasRecorte.filter(d=>{
+    if(!chavesExcluidas.has(chaveExclusao(d.inventario, d.local))) return true;
+    locaisDesconsiderados.add(d.local);
+    return false;
+  }) : divergenciasRecorte;
 
   /* Base de cada item na Acurácia Peças/Valor = SALDO DO SISTEMA (a rodada 1, o que
      o WMS dizia ter antes da contagem). É a régua pedida pela operação: acurácia é
@@ -1349,8 +1367,12 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   // Acurácia Local (Posições) é medida sobre os locais CONTADOS (liquidados), não sobre
   // o total orçado do CD — mesma regra da Acurácia Peças ("1 − divergência ÷ total contado").
   const locaisContadosTotal = statusPorLocal.size;
+  // Local desconsiderado (Gestão de Inventário) sai também do denominador.
+  let desconsideradosContados = 0;
+  for(const l of locaisDesconsiderados) if(statusPorLocal.has(l)) desconsideradosContados++;
+  const locaisContadosAcuracia = locaisContadosTotal - desconsideradosContados;
   const locaisComDivergencia = new Set(divergencias.filter(d=>d.diferenca!==0).map(d=>d.local));
-  const acuraciaLocal = clamp01(locaisContadosTotal>0 ? 1-(locaisComDivergencia.size/locaisContadosTotal) : 1);
+  const acuraciaLocal = clamp01(locaisContadosAcuracia>0 ? 1-(locaisComDivergencia.size/locaisContadosAcuracia) : 1);
 
   let locaisConcluidos = 0, locaisPendentes = 0, locaisEmContagem = 0, locaisNaoIniciados = 0;
   for(const l of congelados){
@@ -1437,10 +1459,13 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
       const locaisContados = locaisDoGrupo.filter(l=>locaisContadosSet.has(l.idLocal)).length;
       const divsGrupoTodos = divergencias.filter(d=>idsGrupo.has(d.local));
       const divsGrupoConcluidos = divergenciasConcluidas.filter(d=>idsGrupo.has(d.local));
+      // Base da Acurácia Posições do grupo sem os locais desconsiderados (Gestão
+      // de Inventário); a coluna "Locais Contados" continua mostrando o real.
+      const desconsideradosNoGrupo = locaisDoGrupo.filter(l=>locaisDesconsiderados.has(l.idLocal) && locaisContadosSet.has(l.idLocal)).length;
       return {
         chave, locaisOrcados, locaisContados,
         pctContado: locaisOrcados>0 ? locaisContados/locaisOrcados : 0,
-        ...calcAcuraciasSubset(divsGrupoTodos, divsGrupoConcluidos, locaisContados)
+        ...calcAcuraciasSubset(divsGrupoTodos, divsGrupoConcluidos, locaisContados - desconsideradosNoGrupo)
       };
     }).sort((a,b)=>b.locaisOrcados-a.locaisOrcados);
   }
@@ -1571,6 +1596,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   for(const [local, {dia}] of diaFinalPorLocal){
     const mes = dia.slice(0,7);
     mesFinalPorLocal.set(local, mes);
+    if(locaisDesconsiderados.has(local)) continue; // fora da base da acurácia do mês
     getMes(mes).locaisContados++;
   }
   for(const d of divergenciasConcluidas){
@@ -1646,6 +1672,9 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     _v: IR_INDICADORES_VERSION,
     locaisCongelados, locaisContadosTotal, locaisConcluidos, locaisPendentes, locaisEmContagem, locaisNaoIniciados,
     andamentoCiclo, acuraciaPecas, acuraciaLocal, acuraciaValor, meta: IR_META_ACURACIA,
+    // Gestão de Inventário: quantos locais saíram da acurácia por exclusão manual,
+    // e a base de locais que de fato entrou na Acurácia Local.
+    locaisDesconsiderados: locaisDesconsiderados.size, locaisContadosAcuracia,
     itensDivergentes, itensContados: totalItensContados, valorDivergenteLiquido, valorDivergenteAbsoluto,
     locaisDivergentes: locaisComDivergencia.size, valorFisicoTotal: totalVlFisico,
     valorSaldoLogico: totalVlSaldoLogico,
