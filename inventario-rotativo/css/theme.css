@@ -267,6 +267,7 @@ button{ font-family:inherit; cursor:pointer; }
 .two-col{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 /* Filtros da tabela "NET — Detalhe por Lógica" — 5 selects, encolhe em telas
    estreitas em vez de vazar pro lado (mesma ideia do theme-picker-grid). */
+.export-erro{ color:var(--danger); font-weight:700; }
 .net-det-filtros{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
 /* Gestão de Inventário: Nº Inventário e Local estreitos, Justificativa larga. */
 .gi-form{ display:grid; grid-template-columns:160px 240px 1fr; gap:12px; }

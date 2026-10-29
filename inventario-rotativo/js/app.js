@@ -6965,25 +6965,53 @@ function irAdicionarAbaExport(wb, nomeAba, linhas){
     XLSX.utils.book_append_sheet(wb, ws, nome.slice(0, 31-sufixo.length)+sufixo);
   }
 }
+// Status da exportação na própria tela (o toast some em 2,6s — erro ou
+// andamento sumiam antes de o usuário ver).
+function irExportStatus(msg, erro){
+  IR.exportStatus = {msg, erro:!!erro};
+  const el = document.getElementById('ir-export-status');
+  if(el){ el.textContent = msg; el.className = 'field-hint'+(erro?' export-erro':''); }
+}
+const irEsperar = ms => new Promise(r=>setTimeout(r, ms));
+/* A base inteira num .xlsx só passava de ~900 MB (SheetJS grava sem
+   compressão por padrão) e levava minutos: no PC a aba ficava sem memória e
+   o download nunca saía. Agora sai em vários arquivos menores, comprimidos,
+   cada um liberado da memória antes de montar o próximo:
+   1) documentação + indicadores, 2) um por ciclo, 3) um por ano da NET410,
+   4) bases independentes de ciclo. */
+async function irGravarArquivoExport(wb, nomeArquivo, n, total){
+  irExportStatus('Gravando arquivo '+n+' de '+total+': '+nomeArquivo+'...');
+  await irEsperar(30); // deixa a tela atualizar antes do trabalho pesado
+  XLSX.writeFile(wb, nomeArquivo, {compression:true});
+  await irEsperar(600); // o navegador descarta download disparado em rajada
+}
 async function irExportarTudoXlsx(){
   if(IR._exportandoTudo) return;
-  if(typeof XLSX==='undefined' || !XLSX.utils){ irShowToast('Biblioteca de planilha não carregou — recarregue a página.', true); return; }
+  if(typeof XLSX==='undefined' || !XLSX.utils){
+    irExportStatus('A biblioteca de planilha não carregou (sem acesso ao cdn.jsdelivr.net?) — recarregue a página.', true);
+    irShowToast('Biblioteca de planilha não carregou — recarregue a página.', true); return;
+  }
   IR._exportandoTudo = true;
+  IR.exportStatus = {msg:'Lendo a base...', erro:false};
   irRenderView();
-  irShowToast('Gerando exportação completa — pode demorar em bases grandes, não feche a aba...');
   try{
+    const hoje = new Date().toISOString().slice(0,10);
+    const prefixo = 'inventario_rotativo_'+hoje+'_';
     const ciclos = (IR.ciclos && IR.ciclos.length) ? IR.ciclos : await irGetAllCiclos();
-    const wb = XLSX.utils.book_new();
+    const anosNet = await irGetAllNet410Anos();
+    const total = 2 + ciclos.length + anosNet.length;
+    let n = 0;
 
-    // Abas de documentação primeiro (regras/lógicas e catálogo de indicadores) —
-    // são a referência de COMO cada número é calculado, então vêm antes dos dados.
+    // 1) Documentação (regras/lógicas e catálogo — a referência de COMO cada
+    //    número é calculado) + indicadores de todos os ciclos.
+    irExportStatus('Montando documentação e indicadores...');
+    let wb = XLSX.utils.book_new();
     irAdicionarAbaExport(wb, 'Regras e Logicas',
       IR_REGRAS_CATALOGO.map(r=>({Categoria:r.categoria, Regra:r.regra, Detalhe:r.detalhe, Fonte:r.fonte})));
     const indAtivo = IR.indicadores;
     irAdicionarAbaExport(wb, 'Indicadores (catalogo)',
       irIndicadoresCatalogo(indAtivo || {}).map(([nome,valor,formula])=>({
         Indicador:nome, ['Valor (ciclo ativo)']: indAtivo ? valor : '—', Formula:formula})));
-
     irAdicionarAbaExport(wb, 'Gestao de Inventario',
       ((await irGetConfig(IR_CFG_EXCLUSOES)) || []).map(e=>{
         const d = irDetalheExclusao(e);
@@ -6992,86 +7020,95 @@ async function irExportarTudoXlsx(){
           ['Peças div. desconsideradas (ciclo ativo)']:d.aplicada?d.pecas:'', ['Valor div. desconsiderado (ciclo ativo)']:d.aplicada?d.valor:'',
           ['Situação (ciclo ativo)']:d.situacao.txt, Justificativa:e.justificativa, ['Cadastrado em']:e.criadoEm||''};
       }));
-
     irAdicionarAbaExport(wb, 'Ciclos', ciclos.map(irAchatarLinhaExport));
-
-    const todasLocais=[], todasContagens=[], todasDivergencias=[];
     const resumoIndicadores=[], porRua=[], porSetor=[], porLog=[];
     for(const c of ciclos){
+      const ind = await irGetIndicadores(c.id);
+      if(!ind) continue;
       const label = irCicloLabel(c);
-      const [locais, contagens, divergencias, ind] = await Promise.all([
-        irGetByCiclo(IR_STORES.locais, c.id),
-        irGetByCiclo(IR_STORES.contagens, c.id),
-        irGetByCiclo(IR_STORES.divergencias, c.id),
-        irGetIndicadores(c.id)
-      ]);
-      for(const l of locais) todasLocais.push({Ciclo:label, ...l});
-      for(const l of contagens) todasContagens.push({Ciclo:label, ...l});
-      for(const l of divergencias) todasDivergencias.push({Ciclo:label, ...l});
-      if(ind){
-        // Campos em array/lista viram abas próprias (achatados); o resto do
-        // objeto (os números soltos: acurácias, totais etc.) vira uma linha só
-        // na aba de resumo.
-        const {porRua:pr, porSetor:ps, porLog:pl, porDia, porDiaRua, divergentesPorDia, porMes,
-          rankingProdutividade, contadosPorDia, topItensPositivos, topItensNegativos, ...resumo} = ind;
-        resumoIndicadores.push({Ciclo:label, ...resumo});
-        for(const r of (pr||[])) porRua.push({Ciclo:label, ...r});
-        for(const r of (ps||[])) porSetor.push({Ciclo:label, ...r});
-        for(const r of (pl||[])) porLog.push({Ciclo:label, ...r});
-      }
+      // Campos em lista viram abas próprias; os números soltos (acurácias,
+      // totais etc.) viram uma linha só na aba de resumo.
+      const {porRua:pr, porSetor:ps, porLog:pl, porDia, porDiaRua, divergentesPorDia, porMes,
+        rankingProdutividade, contadosPorDia, topItensPositivos, topItensNegativos, ...resumo} = ind;
+      resumoIndicadores.push({Ciclo:label, ...resumo});
+      for(const r of (pr||[])) porRua.push({Ciclo:label, ...r});
+      for(const r of (ps||[])) porSetor.push({Ciclo:label, ...r});
+      for(const r of (pl||[])) porLog.push({Ciclo:label, ...r});
     }
-    irAdicionarAbaExport(wb, 'Base Congelada', todasLocais);
-    irAdicionarAbaExport(wb, 'Contagens', todasContagens);
-    irAdicionarAbaExport(wb, 'Divergencias', todasDivergencias);
     irAdicionarAbaExport(wb, 'Indicadores - Resumo', resumoIndicadores);
     irAdicionarAbaExport(wb, 'Indicadores - Por Rua', porRua);
     irAdicionarAbaExport(wb, 'Indicadores - Por Setor', porSetor);
     irAdicionarAbaExport(wb, 'Indicadores - Por Log', porLog);
+    await irGravarArquivoExport(wb, prefixo+'1_documentacao_indicadores.xlsx', ++n, total);
 
-    // NET410 (Perdas e Ganhos no CD) — independente de ciclo, por ano.
-    const anosNet = await irGetAllNet410Anos();
-    const netResumoAnos=[], netPorMes=[], netPorObsMes=[], netPorDeptoMes=[], netItensMes=[], netMovimentos=[], netDetalhe=[];
-    for(const ano of anosNet){
-      const d = await irGetNet410(ano);
-      if(!d) continue;
-      const {porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica, ...resumo} = d;
-      netResumoAnos.push({Ano:ano, ...resumo});
-      for(const m of (porMes||[])){
-        // Listas do mês viram abas próprias (uma linha por item/movimento) —
-        // como JSON numa célula só elas passavam do limite do Excel e
-        // derrubavam a exportação inteira.
-        const {porObs:po, porDepto:pd, topItensPositivos:tp, topItensNegativos:tn, ...mresumo} = m;
-        netPorMes.push({Ano:ano, ...mresumo});
-        for(const o of (po||[])) netPorObsMes.push({Ano:ano, Mes:m.mes, ...o});
-        for(const o of (pd||[])) netPorDeptoMes.push({Ano:ano, Mes:m.mes, ...o});
-        for(const it of [...(tp||[]), ...(tn||[])]){
-          const {movimentos, porObs:obsItem, ...campos} = it;
-          netItensMes.push({Ano:ano, Mes:m.mes, ...campos,
-            Motivos: (obsItem||[]).map(o=>o.id+': '+(Math.round((o.valor||0)*100)/100)).join(' | ')});
-          for(const mv of (movimentos||[])) netMovimentos.push({Ano:ano, Mes:m.mes, Item:it.item, Nome:it.nome, ...mv});
-        }
-      }
-      for(const l of (linhasLogica||[])) netDetalhe.push({Ano:ano, ...l});
+    // 2) Um arquivo por ciclo: base congelada, contagens e divergências.
+    for(const c of ciclos){
+      const label = irCicloLabel(c);
+      irExportStatus('Montando ciclo '+label+'...');
+      const [locais, contagens, divergencias] = await Promise.all([
+        irGetByCiclo(IR_STORES.locais, c.id),
+        irGetByCiclo(IR_STORES.contagens, c.id),
+        irGetByCiclo(IR_STORES.divergencias, c.id)
+      ]);
+      wb = XLSX.utils.book_new();
+      irAdicionarAbaExport(wb, 'Base Congelada', locais.map(l=>({Ciclo:label, ...l})));
+      irAdicionarAbaExport(wb, 'Contagens', contagens.map(l=>({Ciclo:label, ...l})));
+      irAdicionarAbaExport(wb, 'Divergencias', divergencias.map(l=>({Ciclo:label, ...l})));
+      const nomeCiclo = String(label).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'');
+      await irGravarArquivoExport(wb, prefixo+'2_ciclo_'+(nomeCiclo||c.id)+'.xlsx', ++n, total);
     }
-    irAdicionarAbaExport(wb, 'NET410 - Resumo Anual', netResumoAnos);
-    irAdicionarAbaExport(wb, 'NET410 - Por Mes', netPorMes);
-    irAdicionarAbaExport(wb, 'NET410 - Por Obs-Mes', netPorObsMes);
-    irAdicionarAbaExport(wb, 'NET410 - Por Depto-Mes', netPorDeptoMes);
-    irAdicionarAbaExport(wb, 'NET410 - Itens por Mes', netItensMes);
-    irAdicionarAbaExport(wb, 'NET410 - Movimentos', netMovimentos);
-    irAdicionarAbaExport(wb, 'NET410 - Detalhe 301-302', netDetalhe);
-    irAdicionarAbaExport(wb, 'NET410 - Legenda', (await irGetNet410LegendaAll()||[]).map(irAchatarLinhaExport));
 
-    // Dicionários/bases independentes de ciclo.
+    // 3) NET410 (Perdas e Ganhos no CD) — um arquivo por ano.
+    const legendaNet = (await irGetNet410LegendaAll()||[]).map(irAchatarLinhaExport);
+    for(const ano of anosNet){
+      irExportStatus('Montando NET410 '+ano+'...');
+      const d = await irGetNet410(ano);
+      wb = XLSX.utils.book_new();
+      const netResumoAnos=[], netPorMes=[], netPorObsMes=[], netPorDeptoMes=[], netItensMes=[], netMovimentos=[], netDetalhe=[];
+      if(d){
+        const {porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica, ...resumo} = d;
+        netResumoAnos.push({Ano:ano, ...resumo});
+        for(const m of (porMes||[])){
+          // Listas do mês viram abas próprias (uma linha por item/movimento) —
+          // como JSON numa célula só passavam do limite do Excel.
+          const {porObs:po, porDepto:pd, topItensPositivos:tp, topItensNegativos:tn, ...mresumo} = m;
+          netPorMes.push({Ano:ano, ...mresumo});
+          for(const o of (po||[])) netPorObsMes.push({Ano:ano, Mes:m.mes, ...o});
+          for(const o of (pd||[])) netPorDeptoMes.push({Ano:ano, Mes:m.mes, ...o});
+          for(const it of [...(tp||[]), ...(tn||[])]){
+            const {movimentos, porObs:obsItem, ...campos} = it;
+            netItensMes.push({Ano:ano, Mes:m.mes, ...campos,
+              Motivos: (obsItem||[]).map(o=>o.id+': '+(Math.round((o.valor||0)*100)/100)).join(' | ')});
+            for(const mv of (movimentos||[])) netMovimentos.push({Ano:ano, Mes:m.mes, Item:it.item, Nome:it.nome, ...mv});
+          }
+        }
+        for(const l of (linhasLogica||[])) netDetalhe.push({Ano:ano, ...l});
+      }
+      irAdicionarAbaExport(wb, 'NET410 - Resumo Anual', netResumoAnos);
+      irAdicionarAbaExport(wb, 'NET410 - Por Mes', netPorMes);
+      irAdicionarAbaExport(wb, 'NET410 - Por Obs-Mes', netPorObsMes);
+      irAdicionarAbaExport(wb, 'NET410 - Por Depto-Mes', netPorDeptoMes);
+      irAdicionarAbaExport(wb, 'NET410 - Itens por Mes', netItensMes);
+      irAdicionarAbaExport(wb, 'NET410 - Movimentos', netMovimentos);
+      irAdicionarAbaExport(wb, 'NET410 - Detalhe 301-302', netDetalhe);
+      irAdicionarAbaExport(wb, 'NET410 - Legenda', legendaNet);
+      await irGravarArquivoExport(wb, prefixo+'3_net410_'+ano+'.xlsx', ++n, total);
+    }
+
+    // 4) Bases independentes de ciclo.
+    irExportStatus('Montando bases (estoque, EAN, locais)...');
+    wb = XLSX.utils.book_new();
     irAdicionarAbaExport(wb, 'Estoque Atual (Local)', (await irGetEstoqueLocais()||[]).map(irAchatarLinhaExport));
     irAdicionarAbaExport(wb, 'Item Info (EAN)', (await irGetItemInfoTodos()||[]).map(irAchatarLinhaExport));
     irAdicionarAbaExport(wb, 'Local Info', (await irGetLocalInfoTodos()||[]).map(irAchatarLinhaExport));
+    await irGravarArquivoExport(wb, prefixo+'4_bases.xlsx', ++n, total);
+    wb = null;
 
-    const hoje = new Date().toISOString().slice(0,10);
-    XLSX.writeFile(wb, 'inventario_rotativo_export_completo_'+hoje+'.xlsx');
+    irExportStatus('Concluído: '+total+' arquivo(s) gerado(s) na pasta Downloads.');
     irShowToast('Exportação completa gerada.');
   }catch(err){
     console.error(err);
+    irExportStatus('Erro ao gerar a exportação: '+(err.message||err), true);
     irShowToast('Erro ao gerar a exportação: '+(err.message||err), true);
   }finally{
     IR._exportandoTudo = false;
@@ -7289,11 +7326,12 @@ function irRenderExportar(){
   return `
     <div class="panel">
       <h3>Exportar base completa</h3>
-      <p class="panel-sub">Gera um único arquivo Excel (.xlsx) com TUDO que está salvo no navegador, uma aba por tabela: regras e lógicas, catálogo de indicadores, todo ciclo gravado (base congelada, contagens, divergências), os indicadores por ciclo (resumo, por rua, por setor, por log), a NET (QRY410) e as bases independentes de ciclo (estoque atual, EAN, info de local).</p>
-      <p class="field-hint" style="margin-bottom:12px;">Em base grande pode demorar um pouco — não feche a aba enquanto gera.</p>
+      <p class="panel-sub">Gera arquivos Excel (.xlsx) com TUDO que está salvo no navegador, uma aba por tabela, separados pra não estourar a memória: 1) documentação + indicadores, 2) um por ciclo, 3) um por ano da NET, 4) bases. Conteúdo: regras e lógicas, catálogo de indicadores, todo ciclo gravado (base congelada, contagens, divergências), os indicadores por ciclo (resumo, por rua, por setor, por log), a NET (QRY410) e as bases independentes de ciclo (estoque atual, EAN, info de local).</p>
+      <p class="field-hint" style="margin-bottom:12px;">Em base grande pode demorar um pouco — não feche a aba enquanto gera. Se o navegador perguntar, permita o download de vários arquivos.</p>
       <div class="form-actions">
         <button class="btn btn-primary" ${IR._exportandoTudo?'disabled':''} onclick="irExportarTudoXlsx()">${IR._exportandoTudo?'Gerando...':'📥 Exportar tudo (.xlsx)'}</button>
       </div>
+      <p id="ir-export-status" class="field-hint${IR.exportStatus&&IR.exportStatus.erro?' export-erro':''}" style="margin-top:10px;">${IR.exportStatus?irEsc(IR.exportStatus.msg):''}</p>
     </div>
     <div class="panel">
       <h3>Indicadores — o que o sistema calcula</h3>
