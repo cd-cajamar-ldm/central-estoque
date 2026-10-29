@@ -6916,13 +6916,22 @@ function irPendMarcarTodas(marcar){
 // direto, array/objeto (ex.: locais, movimentos, porObs) vira uma coluna de
 // texto (JSON) — garante que NENHUMA estrutura aninhada quebra a exportação,
 // só fica menos legível naquela coluna específica.
+// Excel não aceita célula com mais de 32.767 caracteres — e a biblioteca, em vez
+// de cortar, ABORTA o arquivo inteiro ("Text length must not exceed 32767").
+// Uma lista aninhada grande virando JSON numa célula só bastava pra exportação
+// não sair. Corta com aviso no fim, em vez de perder o arquivo todo.
+const IR_XLS_MAX_TEXTO = 32000;
+function irTextoCelulaExport(s){
+  return s.length > IR_XLS_MAX_TEXTO ? s.slice(0, IR_XLS_MAX_TEXTO)+' …(truncado: '+s.length+' caracteres)' : s;
+}
 function irAchatarLinhaExport(obj){
   const out = {};
   for(const k in obj){
     const v = obj[k];
-    if(v===null || v===undefined || typeof v==='string' || typeof v==='number' || typeof v==='boolean') out[k]=v;
+    if(v===null || v===undefined || typeof v==='number' || typeof v==='boolean') out[k]=v;
+    else if(typeof v==='string') out[k]=irTextoCelulaExport(v);
     else if(v instanceof Date) out[k]=v.toISOString();
-    else out[k] = JSON.stringify(v);
+    else out[k] = irTextoCelulaExport(JSON.stringify(v));
   }
   return out;
 }
@@ -6944,10 +6953,17 @@ function irAdicionarAbaExport(wb, nomeAba, linhas){
   const colunas = new Set();
   for(const l of achatadas) for(const k in l) colunas.add(k);
   const cabecalho = Array.from(colunas);
-  const ws = XLSX.utils.json_to_sheet(achatadas, {header: cabecalho});
-  ws['!cols'] = cabecalho.map(h=>({wch: Math.min(40, Math.max(10, h.length+2))}));
-  ws['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
-  XLSX.utils.book_append_sheet(wb, ws, nome);
+  // Aba do Excel tem teto de 1.048.576 linhas: acima disso o arquivo sai mas o
+  // Excel corta na abertura. Contagens de vários ciclos somados passam fácil —
+  // então quebra em várias abas ("Contagens", "Contagens (2)"...).
+  const POR_ABA = 1000000;
+  for(let i=0, parte=1; i<achatadas.length; i+=POR_ABA, parte++){
+    const ws = XLSX.utils.json_to_sheet(achatadas.slice(i, i+POR_ABA), {header: cabecalho});
+    ws['!cols'] = cabecalho.map(h=>({wch: Math.min(40, Math.max(10, h.length+2))}));
+    ws['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
+    const sufixo = parte>1 ? ' ('+parte+')' : '';
+    XLSX.utils.book_append_sheet(wb, ws, nome.slice(0, 31-sufixo.length)+sufixo);
+  }
 }
 async function irExportarTudoXlsx(){
   if(IR._exportandoTudo) return;
@@ -7009,21 +7025,36 @@ async function irExportarTudoXlsx(){
 
     // NET410 (Perdas e Ganhos no CD) — independente de ciclo, por ano.
     const anosNet = await irGetAllNet410Anos();
-    const netResumoAnos=[], netPorMes=[], netPorObsMes=[];
+    const netResumoAnos=[], netPorMes=[], netPorObsMes=[], netPorDeptoMes=[], netItensMes=[], netMovimentos=[], netDetalhe=[];
     for(const ano of anosNet){
       const d = await irGetNet410(ano);
       if(!d) continue;
       const {porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica, ...resumo} = d;
       netResumoAnos.push({Ano:ano, ...resumo});
       for(const m of (porMes||[])){
-        const {porObs:po, porDepto:pd, ...mresumo} = m;
+        // Listas do mês viram abas próprias (uma linha por item/movimento) —
+        // como JSON numa célula só elas passavam do limite do Excel e
+        // derrubavam a exportação inteira.
+        const {porObs:po, porDepto:pd, topItensPositivos:tp, topItensNegativos:tn, ...mresumo} = m;
         netPorMes.push({Ano:ano, ...mresumo});
         for(const o of (po||[])) netPorObsMes.push({Ano:ano, Mes:m.mes, ...o});
+        for(const o of (pd||[])) netPorDeptoMes.push({Ano:ano, Mes:m.mes, ...o});
+        for(const it of [...(tp||[]), ...(tn||[])]){
+          const {movimentos, porObs:obsItem, ...campos} = it;
+          netItensMes.push({Ano:ano, Mes:m.mes, ...campos,
+            Motivos: (obsItem||[]).map(o=>o.id+': '+(Math.round((o.valor||0)*100)/100)).join(' | ')});
+          for(const mv of (movimentos||[])) netMovimentos.push({Ano:ano, Mes:m.mes, Item:it.item, Nome:it.nome, ...mv});
+        }
       }
+      for(const l of (linhasLogica||[])) netDetalhe.push({Ano:ano, ...l});
     }
     irAdicionarAbaExport(wb, 'NET410 - Resumo Anual', netResumoAnos);
     irAdicionarAbaExport(wb, 'NET410 - Por Mes', netPorMes);
     irAdicionarAbaExport(wb, 'NET410 - Por Obs-Mes', netPorObsMes);
+    irAdicionarAbaExport(wb, 'NET410 - Por Depto-Mes', netPorDeptoMes);
+    irAdicionarAbaExport(wb, 'NET410 - Itens por Mes', netItensMes);
+    irAdicionarAbaExport(wb, 'NET410 - Movimentos', netMovimentos);
+    irAdicionarAbaExport(wb, 'NET410 - Detalhe 301-302', netDetalhe);
     irAdicionarAbaExport(wb, 'NET410 - Legenda', (await irGetNet410LegendaAll()||[]).map(irAchatarLinhaExport));
 
     // Dicionários/bases independentes de ciclo.
