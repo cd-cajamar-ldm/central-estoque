@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v29';
+const MD_APP_VERSION = 'v30';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -1044,23 +1044,23 @@ function mdExportarAjusteClasses(){
    de cabeçalho, zebra etc. saem sempre em branco. */
 function mdGerarXlsxAjuste(blocos, prefixoArquivo){
   const COR_LARANJA = 'FE5000', COR_AZUL = '001A72', COR_BRANCO = 'FFFFFF', COR_ZEBRA = 'FFF4EE';
-  // Item pai (o código do múltiplo, não do componente) entra só como
-  // referência pra achar o item certo em caso de EAN duplicado entre SKUs
-  // diferentes — não é campo que se cola no coletor, por isso fica no fim,
-  // fora da sequência Local/EAN/Orig/Dest/Qtde que é exatamente a ordem dos
-  // campos na tela.
-  // Descrição entra pra quem está lendo a planilha impressa/exportada
-  // identificar a peça sem precisar voltar pra tela — nome inteiro pode ser
-  // comprido (é a mesma truncagem do pivô de Descasados: primeira palavra
-  // … última palavra) pra não estourar a largura da coluna.
-  const cab = ['Local (coletor)','EAN','Descrição','Orig','Dest','Qtde','Endereço','Obs','Item pai'];
-  const colNumerica = new Set([0,3,4,5]); // Local/Orig/Dest/Qtde — o resto é texto (EAN, ver acima, inclusive)
+  // Item pai (o código do múltiplo, não do componente) e Descrição entram só
+  // como referência/conferência — não são campos que se colam no coletor,
+  // por isso ficam no fim, fora da sequência Local/EAN/Orig/Dest/Qtde/
+  // Endereço/Obs que é exatamente a ordem de digitação na tela (ver
+  // mdPlanoAjuste/mdPlanoCorrecaoRestricao).
+  // Descrição é pra quem está lendo a planilha impressa/exportada identificar
+  // a peça sem precisar voltar pra tela — nome inteiro pode ser comprido (é a
+  // mesma truncagem do pivô de Descasados: primeira palavra … última
+  // palavra) pra não estourar a largura da coluna.
+  const cab = ['Local (coletor)','EAN','Orig','Dest','Qtde','Endereço','Obs','Item pai','Descrição'];
+  const colNumerica = new Set([0,2,3,4]); // Local/Orig/Dest/Qtde — o resto é texto (EAN, ver acima, inclusive)
 
   function construirAba(linhas){
     const dados = linhas.map(l=>[
-      Number(l.localColetor) || 0, String(l.ean || ''), mdTruncarNome(l.nome), Number(l.codDe) || 0,
+      Number(l.localColetor) || 0, String(l.ean || ''), Number(l.codDe) || 0,
       Number(l.codPara) || 0, Math.round(l.quantidade) || 0, l.endereco || '',
-      mdAvisosLinha(l).join(' · '), String(l.pai || '')
+      mdAvisosLinha(l).join(' · '), String(l.pai || ''), mdTruncarNome(l.nome)
     ]);
     const ws = XLSX.utils.aoa_to_sheet([cab, ...dados]);
     cab.forEach((_, c)=>{
@@ -1081,7 +1081,7 @@ function mdGerarXlsxAjuste(blocos, prefixoArquivo){
         if(colNumerica.has(c)) cel.z = '0';
       }
     });
-    ws['!cols'] = [{wch:14},{wch:16},{wch:26},{wch:7},{wch:7},{wch:8},{wch:28},{wch:34},{wch:12}];
+    ws['!cols'] = [{wch:14},{wch:16},{wch:7},{wch:7},{wch:8},{wch:28},{wch:34},{wch:12},{wch:26}];
     return ws;
   }
 
