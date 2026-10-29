@@ -6985,8 +6985,13 @@ async function irExportarTudoXlsx(){
         Indicador:nome, ['Valor (ciclo ativo)']: indAtivo ? valor : '—', Formula:formula})));
 
     irAdicionarAbaExport(wb, 'Gestao de Inventario',
-      ((await irGetConfig(IR_CFG_EXCLUSOES)) || []).map(e=>({['Nº Inventário']:e.inventario, Local:e.local,
-        ['Endereço']:irDescLocal(e.local)||'', Justificativa:e.justificativa, ['Cadastrado em']:e.criadoEm||''})));
+      ((await irGetConfig(IR_CFG_EXCLUSOES)) || []).map(e=>{
+        const d = irDetalheExclusao(e);
+        return {['Nº Inventário']:e.inventario, Local:e.local, ['Endereço']:irDescLocal(e.local)||'',
+          ['Usuário(s) da contagem']:irUsuariosExclusaoTxt(d),
+          ['Peças div. desconsideradas (ciclo ativo)']:d.aplicada?d.pecas:'', ['Valor div. desconsiderado (ciclo ativo)']:d.aplicada?d.valor:'',
+          ['Situação (ciclo ativo)']:d.situacao.txt, Justificativa:e.justificativa, ['Cadastrado em']:e.criadoEm||''};
+      }));
 
     irAdicionarAbaExport(wb, 'Ciclos', ciclos.map(irAchatarLinhaExport));
 
@@ -7096,16 +7101,46 @@ function irResolverLocalDigitado(txt){
   for(const [id, desc] of mapa) if(norm(desc)===alvo) return id;
   return t;
 }
-// Situação no ciclo ativo, pela mesma regra do motor: a rodada AIR de maior
-// Nº Inventário é a que fecha o local — só ela pode ser desconsiderada.
-function irSituacaoExclusao(e){
+// Detalhe de uma exclusão no ciclo ativo, pela mesma regra do motor: a rodada
+// AIR de maior Nº Inventário é a que fecha o local — só ela pode ser
+// desconsiderada. Traz as peças/valor que saíram da conta e quem contou.
+function irDetalheExclusao(e){
   const local = String(e.local).trim();
+  const inv = irNumInventario(e.inventario);
   const linhas = (IR.divergencias||[]).filter(d=>String(d.local).trim()===local && String(d.motivo||'').trim().toUpperCase()==='AIR');
-  if(!linhas.length) return {cls:'tag-muted', txt:'Não encontrado no ciclo ativo'};
+  // Quem contou as rodadas físicas (2ª em diante) desse inventário nesse local;
+  // a rodada 1 é o sistema. A última rodada é a que valeu como física.
+  const rodadasPorUsuario = new Map();
+  for(const c of (IR.contagens||[])){
+    if(c.idConferencia<2 || !c.usuario || String(c.local).trim()!==local || irNumInventario(c.inventario)!==inv) continue;
+    if(!rodadasPorUsuario.has(c.usuario)) rodadasPorUsuario.set(c.usuario, new Set());
+    rodadasPorUsuario.get(c.usuario).add(c.idConferencia);
+  }
+  const rodadaFinal = Math.max(0, ...Array.from(rodadasPorUsuario.values()).flatMap(r=>Array.from(r)));
+  const usuarios = Array.from(rodadasPorUsuario, ([usuario, r])=>({usuario, rodadas:Array.from(r).sort((a,b)=>a-b), final:r.has(rodadaFinal)}))
+    .sort((a,b)=>a.rodadas[0]-b.rodadas[0]);
+  const det = {usuarios, aplicada:false, pecas:0, valor:0, saldo:0, itens:0, pecasConcluidas:0, saldoConcluido:0};
+  if(!linhas.length){ det.situacao = {cls:'tag-muted', txt:'Não encontrado no ciclo ativo'}; return det; }
   const fechamento = Math.max(...linhas.map(d=>irNumInventario(d.inventario)));
-  if(irNumInventario(e.inventario)!==fechamento) return {cls:'tag-muted', txt:'Sem efeito — o local fechou no inventário '+fechamento};
-  const pecas = linhas.filter(d=>irNumInventario(d.inventario)===fechamento).reduce((s,d)=>s+Math.abs(d.diferenca||0),0);
-  return {cls:'tag-good', txt:'Aplicada · '+irFmtInt(pecas)+' pç divergente(s) fora da conta'};
+  if(inv!==fechamento){ det.situacao = {cls:'tag-muted', txt:'Sem efeito — o local fechou no inventário '+fechamento}; return det; }
+  const concluido = new Set(['convergido','encerrado_sem_convergencia']);
+  for(const d of linhas){
+    if(irNumInventario(d.inventario)!==fechamento) continue;
+    const dif = Math.abs(d.diferenca||0);
+    det.pecas += dif;
+    det.valor += Math.abs(d.vlDivergencia||0);
+    det.saldo += d.qtdeSistema||0;
+    if(dif) det.itens++;
+    // Só local concluído entra na acurácia — é o que a exclusão de fato tirou da conta.
+    if(concluido.has(d.statusLocal)){ det.pecasConcluidas += dif; det.saldoConcluido += d.qtdeSistema||0; }
+  }
+  det.aplicada = true;
+  det.situacao = {cls:'tag-good', txt:'Aplicada · '+irFmtInt(det.pecas)+' pç divergente(s) fora da conta'};
+  return det;
+}
+function irSituacaoExclusao(e){ return irDetalheExclusao(e).situacao; }
+function irUsuariosExclusaoTxt(det){
+  return det.usuarios.map(u=>irProdNome(u.usuario)+' ('+u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':'')+')').join(' · ');
 }
 async function irAdicionarExclusao(){
   const inv = (document.getElementById('ir-gi-inv').value||'').trim();
@@ -7156,6 +7191,37 @@ function irRenderGestaoInventario(){
   const lista = (IR.exclusoesInv||[]).slice().sort((a,b)=>String(b.criadoEm||'').localeCompare(String(a.criadoEm||'')));
   const ind = IR.indicadores;
   const ocupado = !!IR._recalculando;
+  const dets = new Map(lista.map(e=>[e.id, irDetalheExclusao(e)]));
+  const aplicadas = lista.filter(e=>dets.get(e.id).aplicada);
+  const tot = aplicadas.reduce((t,e)=>{ const d=dets.get(e.id);
+    t.pecas+=d.pecas; t.valor+=d.valor; t.itens+=d.itens; t.pecasConc+=d.pecasConcluidas; t.saldoConc+=d.saldoConcluido; return t; },
+    {pecas:0, valor:0, itens:0, pecasConc:0, saldoConc:0});
+  // Acurácia Peças como seria SEM a gestão: devolve à conta o que a exclusão tirou.
+  let impacto = null;
+  const ca = IR.cicloAtivo;
+  if(ind && ind.pecasSaldoLogico!=null && !(ca && irEhCicloLegadoAIR(ca.numero, ca.dataAbertura))){
+    const base = ind.pecasSaldoLogico + tot.saldoConc;
+    const sem = base>0 ? Math.max(0, Math.min(1, 1-(ind.pecasDivergentes+tot.pecasConc)/base)) : 1;
+    impacto = {sem, com: ind.acuraciaPecas, pp: (ind.acuraciaPecas-sem)*100};
+  }
+  // Por usuário: locais/peças desconsiderados em que ele contou alguma rodada física.
+  const porUsuario = new Map();
+  for(const e of aplicadas){
+    const d = dets.get(e.id);
+    for(const u of d.usuarios){
+      let g = porUsuario.get(u.usuario);
+      if(!g){ g = {usuario:u.usuario, locais:0, finais:0, pecas:0, valor:0}; porUsuario.set(u.usuario, g); }
+      g.locais++; if(u.final) g.finais++; g.pecas += d.pecas; g.valor += d.valor;
+    }
+  }
+  const rankUsuarios = Array.from(porUsuario.values()).sort((a,b)=>b.pecas-a.pecas || b.locais-a.locais);
+  const kpis = irKpiBlock('orange', '🚫', 'Divergência desconsiderada — ciclo ativo',
+    irKpiTile('📍', irFmtInt(aplicadas.length), 'Locais desconsiderados', '', `${irFmtInt(lista.length)} cadastrado(s) no total`)
+    + irKpiTile('📦', irFmtInt(tot.pecas), 'Peças divergentes desconsideradas', '', `${irFmtInt(tot.itens)} item(ns) divergente(s)`)
+    + irKpiTile('💰', irFmtMoneyCompact(tot.valor), 'Valor divergente desconsiderado', '', irFmtMoneyInt(tot.valor))
+    + irKpiTile('👤', irFmtInt(rankUsuarios.length), 'Usuários envolvidos', '', 'contaram alguma rodada física')
+    + (impacto ? irKpiTile('📉', irFmtPct(impacto.sem), 'Acurácia Peças sem a gestão', '', 'se as contagens erradas valessem')
+      + irKpiTile('🎯', irFmtPct(impacto.com), 'Acurácia Peças com a gestão', '', `impacto ${(impacto.pp>=0?'+':'')+irFmtNum(impacto.pp,2)} p.p.`) : ''));
   return `
   <div class="panel">
     <h3>Desconsiderar contagem da acurácia</h3>
@@ -7167,17 +7233,22 @@ function irRenderGestaoInventario(){
     </div>
     <div class="form-actions"><button class="btn btn-primary" ${ocupado?'disabled':''} onclick="irAdicionarExclusao()">${ocupado?'Recalculando...':'Desconsiderar da acurácia'}</button></div>
   </div>
+  <div class="kpi-blocks" style="margin-bottom:14px;">${kpis}</div>
   <div class="panel">
     <h3>Locais desconsiderados (${irFmtInt(lista.length)})</h3>
-    <p class="panel-sub">${ind && ind.locaisDesconsiderados!=null ? `No ciclo ativo, ${irFmtInt(ind.locaisDesconsiderados)} local(is) estão fora da acurácia. ` : ''}Só tem efeito o inventário que FECHOU o local (a última rodada AIR dele) — rodada intermediária já não entra na conta. Ciclos 1 e 2 de 2026 têm o número publicado travado e não mudam.</p>
+    <p class="panel-sub">${ind && ind.locaisDesconsiderados!=null ? `No ciclo ativo, ${irFmtInt(ind.locaisDesconsiderados)} local(is) estão fora da acurácia. ` : ''}Só tem efeito o inventário que FECHOU o local (a última rodada AIR dele) — rodada intermediária já não entra na conta. Ciclos 1 e 2 de 2026 têm o número publicado travado e não mudam. Usuários = quem contou cada rodada física (2ª em diante) daquele inventário; "final" é a rodada que valeu como contagem física.</p>
     ${lista.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Nº Inventário</th><th>Local</th><th>Endereço</th><th>Justificativa</th><th>Cadastrado em</th><th>Situação (ciclo ativo)</th><th></th></tr></thead>
+      <thead><tr><th>Nº Inventário</th><th>Local</th><th>Endereço</th><th>Usuário(s) da contagem</th><th>Peças div.</th><th>Valor div.</th><th>Justificativa</th><th>Cadastrado em</th><th>Situação (ciclo ativo)</th><th></th></tr></thead>
       <tbody>${lista.map(e=>{
-        const s = irSituacaoExclusao(e);
+        const d = dets.get(e.id);
+        const s = d.situacao;
         return `<tr>
           <td class="mono">${irEsc(e.inventario)}</td>
           <td class="mono">${irEsc(e.local)}</td>
           <td>${irEsc(irDescLocal(e.local)||'—')}</td>
+          <td>${d.usuarios.length ? d.usuarios.map(u=>`<div>${u.final?'<strong>':''}${irEsc(irProdNome(u.usuario))}${u.final?'</strong>':''} <span class="field-hint">(${u.rodadas.map(r=>r+'ª').join(', ')}${u.final?' · final':''})</span></div>`).join('') : '—'}</td>
+          <td class="mono">${d.aplicada ? irFmtInt(d.pecas) : '—'}</td>
+          <td class="mono">${d.aplicada ? irFmtMoney(d.valor) : '—'}</td>
           <td>${irEsc(e.justificativa)}</td>
           <td class="mono">${e.criadoEm ? irEsc(new Date(e.criadoEm).toLocaleString('pt-BR')) : '—'}</td>
           <td><span class="tag ${s.cls}">${irEsc(s.txt)}</span></td>
@@ -7185,7 +7256,21 @@ function irRenderGestaoInventario(){
         </tr>`;
       }).join('')}</tbody>
     </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>'}
-  </div>`;
+  </div>
+  ${rankUsuarios.length ? `<div class="panel">
+    <h3>Desconsiderados por usuário (ciclo ativo)</h3>
+    <p class="panel-sub">Local contado por mais de uma pessoa conta pra cada uma delas. "Na rodada final" = locais em que a contagem que valeu foi a dele.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Usuário</th><th>Locais</th><th>Na rodada final</th><th>Peças div. desconsideradas</th><th>Valor div. desconsiderado</th></tr></thead>
+      <tbody>${rankUsuarios.map(g=>`<tr>
+        <td><strong>${irEsc(irProdNome(g.usuario))}</strong></td>
+        <td class="mono">${irFmtInt(g.locais)}</td>
+        <td class="mono">${irFmtInt(g.finais)}</td>
+        <td class="mono">${irFmtInt(g.pecas)}</td>
+        <td class="mono">${irFmtMoney(g.valor)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>` : ''}`;
 }
 /* ============================================================
    ABA EXPORTAR (Sistema) — exportação completa + referência de regras e
