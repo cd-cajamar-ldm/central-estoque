@@ -354,12 +354,13 @@ const IR_TAB_LABELS = {
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
-  configuracoes:['Configurações','Pesos do Índice de Prioridade de Auditoria.']
+  configuracoes:['Configurações','Pesos do Índice de Prioridade de Auditoria.'],
+  exportar:['Exportar','Exporte toda a base, as regras/lógicas e os indicadores do sistema.']
 };
 /* Abas que não são do ciclo rotativo: sem ciclo e sem contagem, o filtro de
    ciclo e mês do topo não tem sobre o que agir. Hoje nenhuma aba está nesse
    caso — Transitórios, que era a única, virou módulo próprio (../transitorios/). */
-const IR_TAB_SEM_CICLO = new Set();
+const IR_TAB_SEM_CICLO = new Set(['exportar']);
 function irSwitchTab(tab){
   IR.currentTab = tab;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
@@ -459,7 +460,7 @@ function irRenderView(){
   if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias');
   // Transitórios não depende de ciclo importado: é um controle próprio, não uma
   // leitura da contagem.
-  const SEM_CICLO = new Set(['importacao','configuracoes']);
+  const SEM_CICLO = new Set(['importacao','configuracoes','exportar']);
   const needsCiclo = !SEM_CICLO.has(IR.currentTab);
   if(needsCiclo && !IR.cicloAtivo){
     root.innerHTML = IR.initErro
@@ -474,7 +475,8 @@ function irRenderView(){
     setores: irRenderSetores,
     divergencias: irRenderDivergencias,
     indicadores: irRenderIndicadores,
-    importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes
+    importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes,
+    exportar: irRenderExportar
   };
   root.innerHTML = (renderers[IR.currentTab] || (()=>''))();
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
@@ -971,7 +973,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v234';
+const IR_APP_VERSION = 'v235';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -6955,6 +6957,16 @@ async function irExportarTudoXlsx(){
   try{
     const ciclos = (IR.ciclos && IR.ciclos.length) ? IR.ciclos : await irGetAllCiclos();
     const wb = XLSX.utils.book_new();
+
+    // Abas de documentação primeiro (regras/lógicas e catálogo de indicadores) —
+    // são a referência de COMO cada número é calculado, então vêm antes dos dados.
+    irAdicionarAbaExport(wb, 'Regras e Logicas',
+      IR_REGRAS_CATALOGO.map(r=>({Categoria:r.categoria, Regra:r.regra, Detalhe:r.detalhe, Fonte:r.fonte})));
+    const indAtivo = IR.indicadores;
+    irAdicionarAbaExport(wb, 'Indicadores (catalogo)',
+      irIndicadoresCatalogo(indAtivo || {}).map(([nome,valor,formula])=>({
+        Indicador:nome, ['Valor (ciclo ativo)']: indAtivo ? valor : '—', Formula:formula})));
+
     irAdicionarAbaExport(wb, 'Ciclos', ciclos.map(irAchatarLinhaExport));
 
     const todasLocais=[], todasContagens=[], todasDivergencias=[];
@@ -7024,6 +7036,57 @@ async function irExportarTudoXlsx(){
     IR._exportandoTudo = false;
     irRenderView();
   }
+}
+/* ============================================================
+   ABA EXPORTAR (Sistema) — exportação completa + referência de regras e
+   indicadores na própria tela. Tudo que o módulo tem, no detalhe máximo.
+   ============================================================ */
+function irRenderExportar(){
+  const ind = IR.indicadores;
+  const catInd = ind ? irIndicadoresCatalogo(ind) : null;
+  // Agrupa o catálogo de regras por categoria, mantendo a ordem de aparição.
+  const porCategoria = [];
+  for(const r of IR_REGRAS_CATALOGO){
+    let g = porCategoria.find(x=>x.cat===r.categoria);
+    if(!g){ g = {cat:r.categoria, itens:[]}; porCategoria.push(g); }
+    g.itens.push(r);
+  }
+  return `
+    <div class="panel">
+      <h3>Exportar base completa</h3>
+      <p class="panel-sub">Gera um único arquivo Excel (.xlsx) com TUDO que está salvo no navegador, uma aba por tabela: regras e lógicas, catálogo de indicadores, todo ciclo gravado (base congelada, contagens, divergências), os indicadores por ciclo (resumo, por rua, por setor, por log), a NET (QRY410) e as bases independentes de ciclo (estoque atual, EAN, info de local).</p>
+      <p class="field-hint" style="margin-bottom:12px;">Em base grande pode demorar um pouco — não feche a aba enquanto gera.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" ${IR._exportandoTudo?'disabled':''} onclick="irExportarTudoXlsx()">${IR._exportandoTudo?'Gerando...':'📥 Exportar tudo (.xlsx)'}</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Indicadores — o que o sistema calcula</h3>
+      <p class="panel-sub">Todos os indicadores do módulo, com a fórmula de cada um.${ind?'':' Importe/processe um ciclo pra ver os valores; as fórmulas abaixo valem sempre.'}</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Indicador</th>${ind?'<th>Valor (ciclo ativo)</th>':''}<th>Fórmula</th></tr></thead>
+        <tbody>${(catInd || irIndicadoresCatalogo({})).map(([nome,valor,formula])=>`<tr>
+          <td><strong>${irEsc(nome)}</strong></td>
+          ${ind?`<td class="mono">${valor}</td>`:''}
+          <td class="field-hint">${irEsc(formula)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <h3>Regras e lógicas do sistema</h3>
+      <p class="panel-sub">Todas as regras de negócio que o módulo aplica pra montar os números — por categoria. É o mesmo conteúdo que vai na aba "Regras e Logicas" do Excel.</p>
+      ${porCategoria.map(g=>`
+        <h4 style="margin:18px 0 6px;color:var(--ink);font-size:13px;">${irEsc(g.cat)}</h4>
+        <div class="table-wrap"><table>
+          <thead><tr><th style="width:200px;">Regra</th><th>Detalhe</th><th style="width:150px;">Fonte</th></tr></thead>
+          <tbody>${g.itens.map(r=>`<tr>
+            <td><strong>${irEsc(r.regra)}</strong></td>
+            <td class="field-hint">${irEsc(r.detalhe)}</td>
+            <td class="mono" style="font-size:11px;">${irEsc(r.fonte)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      `).join('')}
+    </div>`;
 }
 function irExportarLocaisPendentesCsv(rua){
   if(!IR.cicloAtivo){ irShowToast('Nenhum ciclo ativo.', true); return; }
@@ -7140,10 +7203,11 @@ function irRenderCiclosCards(){
 /* ============================================================
    INDICADORES (detalhado, com fórmula)
    ============================================================ */
-function irRenderIndicadores(){
-  const ind = IR.indicadores;
-  if(!ind) return irEmptyState('Sem indicadores', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
-  const rows = [
+// Catálogo de indicadores do ciclo: [nome, valor formatado, fórmula]. Função
+// compartilhada entre a aba Indicadores e a exportação completa (aba Exportar),
+// pra as duas mostrarem exatamente a mesma lista com a mesma fórmula.
+function irIndicadoresCatalogo(ind){
+  return [
     ['Acurácia Peças', irFmtPct(ind.acuraciaPecas), IR_KPI_FORMULAS.acuraciaPecas],
     ['Acurácia Local', irFmtPct(ind.acuraciaLocal), IR_KPI_FORMULAS.acuraciaLocal],
     ['Acurácia Valor', irFmtPct(ind.acuraciaValor), IR_KPI_FORMULAS.acuraciaValor],
@@ -7157,6 +7221,11 @@ function irRenderIndicadores(){
     ['Dias Restantes', ind.diasRestantes===null?'—':irFmtInt(ind.diasRestantes), IR_KPI_FORMULAS.diasRestantes],
     ['Eficiência', irFmtPct(ind.eficiencia), IR_KPI_FORMULAS.eficiencia]
   ];
+}
+function irRenderIndicadores(){
+  const ind = IR.indicadores;
+  if(!ind) return irEmptyState('Sem indicadores', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
+  const rows = irIndicadoresCatalogo(ind);
   return `<div class="panel"><h3>Todos os indicadores</h3>
     <div class="table-wrap"><table><thead><tr><th>Indicador</th><th>Valor</th><th>Fórmula</th></tr></thead>
     <tbody>${rows.map(([l,v,f])=>`<tr><td>${l}</td><td class="mono">${v}</td><td class="field-hint">${irEsc(f)}</td></tr>`).join('')}</tbody>
@@ -7311,13 +7380,6 @@ function irRenderConfiguracoes(){
     </div>
     <p class="field-hint" id="ir-cfg-soma" style="margin-top:8px;">Soma atual: ${(soma*100).toFixed(0)}%</p>
     <div class="form-actions"><button class="btn btn-primary" onclick="irSalvarPrioridadeConfig()">Salvar pesos</button></div>
-  </div>
-  <div class="panel">
-    <h3>Exportar tudo</h3>
-    <p class="field-hint" style="margin-bottom:12px;">Baixa um .xlsx com todo ciclo já gravado (base congelada, contagens, divergências e indicadores — uma aba por tabela) mais as bases independentes de ciclo (NET/QRY410, estoque atual, EAN/Item Info, Local Info). Em base grande pode demorar um pouco — não feche a aba enquanto gera.</p>
-    <div class="form-actions">
-      <button class="btn btn-primary" ${IR._exportandoTudo?'disabled':''} onclick="irExportarTudoXlsx()">${IR._exportandoTudo?'Gerando...':'📥 Exportar tudo (.xlsx)'}</button>
-    </div>
   </div>
   ${irRenderCiclosConfig()}
   ${irRenderProdMetaConfig()}
