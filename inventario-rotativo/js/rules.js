@@ -170,6 +170,63 @@ const IR_KPI_FORMULAS = {
   eficiencia: 'Eficiência = 60% × (Acurácia Local ÷ Meta) + 40% × (Locais concluídos ÷ Locais esperados até hoje, considerando ritmo linear até a data prevista de término)'
 };
 
+/* Catálogo COMPLETO das regras e lógicas de negócio do módulo — a fonte única
+   usada tanto pela aba "Exportar" (exibição e planilha) quanto como referência
+   documental. Cada item: {categoria, regra, detalhe, fonte}. "fonte" diz de qual
+   planilha/coluna o dado vem, pra quem for conferir na origem. Mantido aqui, em
+   rules.js, pra viver junto das fórmulas e constantes que descreve. */
+const IR_REGRAS_CATALOGO = [
+  // ---- Bases / planilhas de entrada ----
+  {categoria:'Bases de entrada', regra:'QRY0843 — Produtividade', detalhe:'Fonte de peças, locais, itens e divergências do ciclo rotativo. Traz, por par (local, item), a contagem de cada rodada (Id Conferência) e as datas de início/fim de contagem.', fonte:'QRY0843'},
+  {categoria:'Bases de entrada', regra:'Base Congelada', detalhe:'Locais congelados do ciclo (planilha manual). Define o universo de locais orçados e a RUA (X1 + X2) e o SETOR (X1) de cada endereço.', fonte:'Base Congelada'},
+  {categoria:'Bases de entrada', regra:'SIGEQ278 — Preço', detalhe:'Preço de custo/compra por item. Usada pra valorar a divergência (Acurácia Valor) e dar nome a item sem saldo.', fonte:'SIGEQ278'},
+  {categoria:'Bases de entrada', regra:'ZBIQ0051 — Kits/Múltiplos', detalhe:'Item pai × componente, com S/N de quem carrega o valor (in_interface). Evita contar o valor do kit em mais de um componente.', fonte:'ZBIQ0051'},
+  {categoria:'Bases de entrada', regra:'QRY0390 — Estoque atual (opcional)', detalhe:'Saldo atual por item/local. Opcional: o estoque é rotativo e não entra em nenhum indicador de acurácia; alimenta EAN/descrição e a foto de estoque.', fonte:'QRY0390'},
+  {categoria:'Bases de entrada', regra:'QRY410 — Perdas e Ganhos (NET)', detalhe:'Movimentos de ajuste do CD, por ano. Independente do ciclo rotativo — processada por ano extraído de Dt.Mov.', fonte:'QRY410'},
+
+  // ---- Rodadas de contagem ----
+  {categoria:'Rodadas de contagem', regra:'Rodada 1 = sistêmico', detalhe:'A primeira rodada (Id Conferência 1) é o congelamento automático do sistema na abertura do inventário — é o saldo SISTÊMICO de referência, não uma contagem física.', fonte:'QRY0843 · Id Conferência'},
+  {categoria:'Rodadas de contagem', regra:'Rodada final = físico', detalhe:'A contagem física de cada local é a da ÚLTIMA rodada (maior Id Conferência). Nunca soma rodadas — sempre a última fecha o número do local.', fonte:'QRY0843 · Id Conferência'},
+  {categoria:'Rodadas de contagem', regra:'Recontagem', detalhe:'Local que precisou de MAIS de 2 rodadas pra fechar. Não confundir com cancelamento.', fonte:'QRY0843 · Id Conferência'},
+  {categoria:'Rodadas de contagem', regra:'Cancelamento', detalhe:'Local cuja contagem começou e foi interrompida antes de fechar (ex.: precisava coletar). É outra coisa, não é recontagem.', fonte:'QRY0843'},
+  {categoria:'Rodadas de contagem', regra:'Local concluído', detalhe:'Só locais "convergido" (rodadas bateram) ou "encerrado sem convergência" (fechou na 5ª rodada sem bater) entram em Acurácia Peças/Valor e Divergência. Local pendente/em contagem ainda pode mudar de rodada, então fica de fora desses indicadores.', fonte:'QRY0843'},
+
+  // ---- Acurácia: denominador ----
+  {categoria:'Acurácia', regra:'Denominador da Acurácia Peças = SISTEMA', detalhe:'Acurácia Peças = 1 − (Σ|Diferença| ÷ Σ saldo SISTÊMICO dos locais concluídos). O denominador é a quantidade do sistema (rodada 1), NÃO a física contada. Item que sumiu inteiro (sistema 500, físico 0) põe 500 no erro e 500 na base = 100% de erro, sem estourar.', fonte:'QRY0843'},
+  {categoria:'Acurácia', regra:'Lado cego aceito', detalhe:'Item ACHADO do nada (sistema 0, físico 500) entra no numerador do erro com base zero — pesa no erro sem somar na base. O resultado é travado entre 0% e 100%.', fonte:'QRY0843'},
+  {categoria:'Acurácia', regra:'Acurácia Local', detalhe:'1 − (locais com pelo menos 1 item divergente ÷ locais contados no ciclo).', fonte:'QRY0843 + Base Congelada'},
+  {categoria:'Acurácia', regra:'Acurácia Valor', detalhe:'1 − (Σ|Vl. Divergência| ÷ Σ Vl. sistêmico). Valor de cada item vem da SIGEQ278 (preço de custo) cruzada com a ZBIQ0051 (só o componente marcado S carrega o valor do kit).', fonte:'SIGEQ278 × ZBIQ0051'},
+  {categoria:'Acurácia', regra:'Meta de acurácia', detalhe:'Meta padrão de '+(IR_META_ACURACIA*100).toFixed(0)+'% para as três acurácias.', fonte:'Configuração'},
+  {categoria:'Acurácia', regra:'Ciclos legados 1 e 2 de 2026', detalhe:'Os ciclos 1 e 2 de 2026 fecharam por qualquer motivo (não só AIR) e usam a base FÍSICA como denominador da Acurácia Peças, não o saldo sistêmico — régua da época, preservada pra não reescrever o histórico.', fonte:'Regra de transição'},
+
+  // ---- Produtividade ----
+  {categoria:'Produtividade', regra:'Local contado (esforço)', detalhe:'Na Produtividade, a métrica é "local CONTADO" (esforço de quem contou), não "local fechado". Um local recontado por mais de uma pessoa conta pra todas — a soma das linhas pode passar do total único de locais do ciclo, de propósito.', fonte:'QRY0843'},
+  {categoria:'Produtividade', regra:'Hora do bloco = Data Fim Contagem', detalhe:'O bloco de hora-homem usa a Data Fim Contagem (quando o local foi finalizado), não o Início — o Início pode ficar aberto além do expediente de quem abriu.', fonte:'QRY0843 · Data Fim Contagem'},
+  {categoria:'Produtividade', regra:'Acertividade', detalhe:'Por colaborador: visitas (local + Nº Inventário) que fecharam SEM divergência ÷ total de visitas dele. É o complemento da taxa de erro (1 − erro). Verde ≥97% · amarelo ≥93% · vermelho <93%.', fonte:'QRY0843'},
+  {categoria:'Produtividade', regra:'Taxa de recontagem', detalhe:'Por colaborador: visitas em que veio outra rodada depois da dele ÷ total de visitas. Verde ≤8% · amarelo ≤15% · vermelho >15%.', fonte:'QRY0843'},
+
+  // ---- Setor / Rua ----
+  {categoria:'Setor / Rua', regra:'Rua = X1 + X2', detalhe:'A RUA de um endereço é a junção X1 + X2 (separados por espaço), não o X1 sozinho — ruas diferentes com o mesmo prefixo X1 não podem cair na mesma linha.', fonte:'Base Congelada · X1, X2'},
+  {categoria:'Setor / Rua', regra:'Setor = X1', detalhe:'O SETOR é só o X1 (sem o X2) — agrupa várias ruas, pra comparar rápido qual setor está pior antes de abrir a rua específica.', fonte:'Base Congelada · X1'},
+  {categoria:'Setor / Rua', regra:'Local pendente', detalhe:'Local da base congelada sem nenhuma rodada física (Id Conferência ≥ 2) — foi aberto/liquidado sem ninguém contar. Local só com rodada 1 continua pendente.', fonte:'QRY0843 + Base Congelada'},
+
+  // ---- NET (QRY410) ----
+  {categoria:'NET (QRY410)', regra:'Id Depósito 21 excluído', detalhe:'Toda linha com Id Depósito = 21 fica de fora de tudo no NET (regra explícita do usuário).', fonte:'QRY410 · Id Depósito'},
+  {categoria:'NET (QRY410)', regra:'Sinal do movimento', detalhe:'Saída = valor negativo, Entrada = valor positivo. NET = Entradas + Saídas.', fonte:'QRY410 · Sentido, Vl.Mov.'},
+  {categoria:'NET (QRY410)', regra:'Ano do movimento em UTC', detalhe:'O ano/mês vem dos componentes UTC da célula de data (convenção do leitor de planilha), não da hora local — senão lançamentos do dia 1º caíam no mês anterior em fuso negativo (Brasil, UTC−3).', fonte:'QRY410 · Dt.Mov.'},
+  {categoria:'NET (QRY410)', regra:'Classificação por Observação', detalhe:'O motivo vem da "Observação WMS"; se vazia, cai na coluna "Observacao". O código casa quando é a observação inteira ou vem seguido de um caractere não-alfanumérico (pra "AIR." e "AIR/2" contarem como AIR, mas "AIRTON" não).', fonte:'QRY410 · Observação WMS / Observacao'},
+  {categoria:'NET (QRY410)', regra:'Observação por extenso (≥6 letras)', detalhe:'Observação escrita por extenso (ex.: "SALDO INCLUIDO INDEVIDAMENTE VIA NF") é procurada em qualquer posição do texto, mas só pra chaves de 6+ caracteres — código de 3 letras buscado em qualquer posição classificaria errado.', fonte:'QRY410'},
+  {categoria:'NET (QRY410)', regra:'Sem legenda = considera', detalhe:'Motivo que não está na legenda conta como "considerar NET = SIM" por padrão. A legenda é editável em Configurações (não precisa mexer em código a cada motivo novo).', fonte:'Legenda editável'},
+  {categoria:'NET (QRY410)', regra:'Detalhe por Lógica 301/302', detalhe:'A tabela de detalhe linha a linha da NET lista só as Lógicas 301 e 302 (visão crua, não agregada). Net Ano/Mês de cada linha é o saldo do item no período somando todos os motivos considerados pro NET, não só aquela linha.', fonte:'QRY410 · Logica'},
+
+  // ---- Datas / dias úteis ----
+  {categoria:'Datas', regra:'Dias úteis (Cajamar-SP)', detalhe:'"Dias Restantes" conta dias úteis entre hoje e a data prevista de término, excluindo sábados, domingos e feriados nacionais, estaduais de SP e municipais de Cajamar (São Sebastião 20/01, emancipação 18/02).', fonte:'Calendário'},
+
+  // ---- Prioridade de Auditoria ----
+  {categoria:'Prioridade de Auditoria', regra:'Fórmula do score', detalhe:'Índice (0-100) = (valor×peso_valor + qtd×peso_qtd + recontagens×peso_reconta + reincidência×peso_reinc) × 100. Cada componente normalizado 0-1. Pesos configuráveis em Configurações (somam 100%).', fonte:'Configuração de pesos'},
+  {categoria:'Prioridade de Auditoria', regra:'Faixas de cor', detalhe:'Score ≥70 vermelho, ≥40 laranja, abaixo azul.', fonte:'Regra fixa'}
+];
+
 function irNormKey(s){
   if(s===undefined || s===null) return '';
   return String(s)
