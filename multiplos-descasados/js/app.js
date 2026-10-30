@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v30';
+const MD_APP_VERSION = 'v32';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -35,16 +35,21 @@ const MD = {
   // pessoa clica em "Salvar Configuração" — clique errado no meio de uma
   // conferência não pode mudar o resultado sozinho.
   regrasRascunho:{clal:{}, x1:{}, x1x2:{}},
-  // Endereços "Não alterar" (X1, ex.: DS, GAI — doca/expedição) — a
-  // restrição ali nem dá pra alterar no WMS, e estoque WN parado lá já
-  // significa conjunto coletado pra um pedido. Conta normal no total
-  // vendável (ver mdRegraViolada/restricaoPermitida, que ignoram esses
-  // endereços de propósito), nunca é sinalizado como errado (Ajustes/
-  // Auditoria) nem vira candidato ao sugerir ONDE executar um bloqueio
-  // (0→86) na aba Descasados — ver mdEnderecoDoca e mdAlocarPorEndereco
-  // (rules.js). valor X1 -> true/false, mesmo esquema de rascunho/salvar
-  // das demais configurações.
-  docaX1:{}, docaX1Rascunho:{},
+  // Endereços "Não alterar" — a restrição ali nem dá pra alterar no WMS
+  // (ex.: DS, GAI — doca/expedição), e estoque WN parado lá já significa
+  // conjunto coletado pra um pedido. Conta normal no total vendável (ver
+  // mdRegraViolada/restricaoPermitida, que ignoram esses endereços de
+  // propósito), nunca é sinalizado como errado (Ajustes/Auditoria) nem vira
+  // candidato ao sugerir ONDE executar um bloqueio (0→86) na aba Descasados
+  // — ver mdEnderecoDoca e mdAlocarPorEndereco (rules.js). Duas colunas
+  // separadas (X1 e X1+X2, mesmo esquema de rascunho/salvar das demais
+  // configurações) pelo mesmo motivo da matriz de regras: um bloco inteiro
+  // pode precisar ficar de fora (X1=GAI), ou só uma combinação específica
+  // dentro dele (X1+X2="CAN PAR"), sem mexer no resto do bloco. valor ->
+  // true/false em cada uma; mdEnderecoDoca considera flegado em QUALQUER
+  // uma das duas (OR, não cascata — não tem "mais específico vence" aqui,
+  // é só uma lista de exceções).
+  docaX1:{}, docaX1Rascunho:{}, docaX1x2:{}, docaX1x2Rascunho:{},
   selecionadas:{clal:null, x1:null, x1x2:null}, // dimensão -> null (todas) | Set() (só as marcadas)
   restricoesSel:null,             // null = todas as colunas | Set() = só estas siglas
   restricoesAberto:false,         // lista de restrições aberta ou recolhida
@@ -99,6 +104,7 @@ const MD_DIM_POR_CHAVE = {};
 MD_DIMENSOES.forEach(d=>{ MD_DIM_POR_CHAVE[d.chave] = d; });
 const MD_CONFIG_KEY_POR_DIM = {clal:'regras-classe', x1:'regras-x1', x1x2:'regras-x1x2'};
 const MD_CONFIG_KEY_DOCA_X1 = 'regras-x1-doca';
+const MD_CONFIG_KEY_DOCA_X1X2 = 'regras-x1x2-doca';
 
 function irEsc(v){ if(v===undefined||v===null) return ''; return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function irFmtInt(n){ return Math.round(n||0).toLocaleString('pt-BR'); }
@@ -576,7 +582,12 @@ function mdPlano(){
    de ajuste. */
 function mdEnderecoDoca(loc){
   const x1 = (loc.x1 || '').trim().split(/\s+/)[0] || '';
-  return !!(MD.docaX1 && MD.docaX1[x1]);
+  if(MD.docaX1 && MD.docaX1[x1]) return true;
+  // Mesma função de valor da dimensão X1+X2 usada na matriz/regras (ver
+  // MD_DIMENSOES) — combinação específica (ex.: "CAN PAR") flegada aqui vale
+  // mesmo que o X1 isolado ("CAN") não esteja.
+  const x1x2 = MD_DIM_POR_CHAVE.x1x2.valor(loc);
+  return !!(MD.docaX1x2 && MD.docaX1x2[x1x2]);
 }
 /* Matriz por dimensão de local (classe/X1/X1+X2) × restrição, no mesmo
    espírito da matriz que o usuário usa no PuTTY (linhas = valor da dimensão,
@@ -992,7 +1003,12 @@ function mdRenderAjustes(){
    pelo sentido do movimento: bloquear (0 → 86) e liberar (86 → 0) nunca se
    misturam na digitação do coletor, então não fazia sentido numa lista só. */
 function mdExportarAjustePivot(){
-  const plano = mdPlanoAjuste(mdPaisFiltrados(), MD.base, mdRestricaoPermitida);
+  // BUG real corrigido: essa função recalcula o plano direto (não reusa
+  // mdPlano()/MD._plano) e esquecia o 4º argumento — "Não alterar" nunca
+  // chegava a valer na planilha de verdade, só no cache interno que nada
+  // mais lia. Mesma assinatura de mdPlano(), ver mdAlocarPorEndereco
+  // (rules.js) pra como os dois argumentos finais são usados.
+  const plano = mdPlanoAjuste(mdPaisFiltrados(), MD.base, mdRestricaoPermitida, mdEnderecoDoca);
   mdGerarXlsxAjuste([
     {titulo:'Bloquear (0 para 86)', linhas: plano.filter(l=>l.sentido==='bloquear')},
     {titulo:'Liberar (86 para 0)', linhas: plano.filter(l=>l.sentido==='liberar')}
@@ -1442,11 +1458,13 @@ function mdSetRegra(chave, valor, sigla, permitido){
   }
 }
 /* Mesmo esquema de rascunho do mdSetRegra, só que pro checkbox único de
-   "doca/expedição" (coluna extra na tabela de X1, ver mdRenderConfiguracoes). */
-function mdSetDocaX1(valor, marcado){
-  MD.docaX1Rascunho[valor] = marcado;
+   "Não alterar" (coluna extra nas tabelas de X1 e X1+X2, ver
+   mdRenderConfiguracoes). `chave` escolhe qual das duas (docaX1/docaX1x2). */
+function mdSetDoca(chave, valor, marcado){
+  const campo = chave === 'x1x2' ? 'docaX1x2Rascunho' : 'docaX1Rascunho';
+  MD[campo][valor] = marcado;
   irRenderView();
-  for(const cb of document.querySelectorAll('input[type="checkbox"][data-doca-x1]')){
+  for(const cb of document.querySelectorAll(`input[type="checkbox"][data-doca-dim="${chave}"]`)){
     if(cb.dataset.valor === valor){ cb.focus(); break; }
   }
 }
@@ -1475,7 +1493,8 @@ function mdConfigNav(e, el){
 }
 function mdRascunhoAlterado(){
   return JSON.stringify(MD.regrasRascunho) !== JSON.stringify(MD.regras)
-    || JSON.stringify(MD.docaX1Rascunho) !== JSON.stringify(MD.docaX1);
+    || JSON.stringify(MD.docaX1Rascunho) !== JSON.stringify(MD.docaX1)
+    || JSON.stringify(MD.docaX1x2Rascunho) !== JSON.stringify(MD.docaX1x2);
 }
 function mdSalvarConfiguracao(){
   MD_DIMENSOES.forEach(dim=>{
@@ -1484,6 +1503,8 @@ function mdSalvarConfiguracao(){
   });
   MD.docaX1 = {...MD.docaX1Rascunho};
   mdSetConfig(MD_CONFIG_KEY_DOCA_X1, MD.docaX1);
+  MD.docaX1x2 = {...MD.docaX1x2Rascunho};
+  mdSetConfig(MD_CONFIG_KEY_DOCA_X1X2, MD.docaX1x2);
   // Só agora o pareamento de Descasados e Ajustes/Auditoria de Restrição
   // passam a enxergar a mudança (ver mdPais/mdPlanoCorrecaoRestricao).
   mdInvalidarCache();
@@ -1494,6 +1515,7 @@ function mdDescartarRascunho(){
   MD.regrasRascunho = {};
   MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = {...MD.regras[dim.chave]}; });
   MD.docaX1Rascunho = {...MD.docaX1};
+  MD.docaX1x2Rascunho = {...MD.docaX1x2};
   irRenderView();
   irShowToast('Alterações descartadas.');
 }
@@ -1507,14 +1529,18 @@ function mdRenderConfiguracoes(){
     let valores = mdValoresConhecidos(dim.chave);
     if(!valores.length) return '';
     if(termoDim) valores = valores.filter(v=>v.toLowerCase().includes(termoDim));
-    // Coluna extra só na tabela de X1: "Não alterar" (DS, GAI...) — endereço
-    // onde a restrição nem dá pra mudar no WMS. Flegado, o local nunca é
-    // sinalizado como errado (Ajustes/Auditoria) nem vira sugestão de troca
-    // de restrição em lugar nenhum (nem correção de restrição, nem bloqueio
-    // na aba Descasados) — ver mdRegraViolada/mdEnderecoDoca. Não é mais uma
-    // restrição permitida/proibida (por isso fica fora de MD_RESTRICOES_CONFIG),
-    // por isso tem título e estilo próprios pra não parecer parte da mesma régua.
-    const temColunaDoca = dim.chave === 'x1';
+    // Coluna extra nas tabelas de X1 e X1+X2: "Não alterar" (DS, GAI, ou uma
+    // combinação específica tipo "CAN PAR") — endereço onde a restrição nem
+    // dá pra mudar no WMS. Flegado, o local nunca é sinalizado como errado
+    // (Ajustes/Auditoria) nem vira sugestão de troca de restrição em lugar
+    // nenhum (nem correção de restrição, nem bloqueio na aba Descasados) —
+    // ver mdRegraViolada/mdEnderecoDoca. Não é mais uma restrição permitida/
+    // proibida (por isso fica fora de MD_RESTRICOES_CONFIG), por isso tem
+    // título e estilo próprios pra não parecer parte da mesma régua. Fica de
+    // fora só da tabela de Classe — "não alterar" é sobre um ENDEREÇO físico,
+    // não faz sentido pra uma classe inteira de locais.
+    const temColunaDoca = dim.chave === 'x1' || dim.chave === 'x1x2';
+    const docaRascunho = dim.chave === 'x1' ? MD.docaX1Rascunho : (dim.chave === 'x1x2' ? MD.docaX1x2Rascunho : null);
     const headerCols = MD_RESTRICOES_CONFIG.map(r=>
       `<th title="${irEsc(r.sigla+' — '+r.nome)}">${mdRotuloColunaHtml(r.sigla)}</th>`
     ).join('') + (temColunaDoca ? `<th class="md-col-doca" title="Endereço onde a restrição não dá pra alterar no WMS (ex.: DS, GAI — doca/expedição): nunca é sinalizado como errado nem vira sugestão de troca de restrição, em Ajustes/Auditoria ou na aba Descasados">Não alterar</th>` : '');
@@ -1527,7 +1553,7 @@ function mdRenderConfiguracoes(){
         const marcado = regra.includes(r.sigla);
         return `<td><input type="checkbox" ${marcado?'checked':''} data-chave="${irEsc(dim.chave)}" data-valor="${irEsc(v)}" data-sigla="${r.sigla}" onchange="mdSetRegra('${dim.chave}','${irEsc(v)}','${r.sigla}', this.checked)" onkeydown="mdConfigNav(event, this)"></td>`;
       }).join('') + (temColunaDoca
-        ? `<td class="md-col-doca"><input type="checkbox" ${MD.docaX1Rascunho[v]?'checked':''} data-doca-x1 data-valor="${irEsc(v)}" onchange="mdSetDocaX1('${irEsc(v)}', this.checked)"></td>`
+        ? `<td class="md-col-doca"><input type="checkbox" ${docaRascunho[v]?'checked':''} data-doca-dim="${dim.chave}" data-valor="${irEsc(v)}" onchange="mdSetDoca('${dim.chave}','${irEsc(v)}', this.checked)"></td>`
         : '');
       return `<tr><td class="md-left mono">${irEsc(v)}</td>${cels}</tr>`;
     }).join('');
@@ -1571,6 +1597,7 @@ function mdExportarConfiguracao(){
   const dados = { versao: 1 };
   MD_DIMENSOES.forEach(dim=>{ dados[dim.chave] = MD.regras[dim.chave]; });
   dados.doca = MD.docaX1;
+  dados.docaX1x2 = MD.docaX1x2;
   const payload = JSON.stringify(dados, null, 2);
   const blob = new Blob([payload], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
@@ -1597,9 +1624,11 @@ function mdImportarConfiguracao(file){
     // {} (vazio), não falta a função nem quebra o import.
     MD.regrasRascunho = {};
     MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = dados[dim.chave] || {}; });
-    // Arquivo exportado antes da coluna de doca existir não tem essa chave —
-    // cai em {} (vazio), não falta a função nem quebra o import.
+    // Arquivo exportado antes da coluna de doca (ou antes dela existir pra
+    // X1+X2) não tem essas chaves — cai em {} (vazio), não falta a função
+    // nem quebra o import.
     MD.docaX1Rascunho = dados.doca || {};
+    MD.docaX1x2Rascunho = dados.docaX1x2 || {};
     irRenderView();
     irShowToast('Configuração importada — clique em "Salvar Configuração" pra valer.');
   }).catch(()=>irShowToast('Erro ao ler o arquivo.', true));
@@ -1670,9 +1699,11 @@ async function mdRecarregar(){
   MD.regrasRascunho = {};
   MD_DIMENSOES.forEach(dim=>{ MD.regrasRascunho[dim.chave] = {...MD.regras[dim.chave]}; });
   // Sem padrão de fábrica pra doca (cada CD tem endereços de expedição
-  // diferentes) — sem nada salvo ainda, começa vazio (nenhum X1 marcado).
+  // diferentes) — sem nada salvo ainda, começa vazio (nenhum valor marcado).
   MD.docaX1 = (await mdGetConfig(MD_CONFIG_KEY_DOCA_X1)) || {};
   MD.docaX1Rascunho = {...MD.docaX1};
+  MD.docaX1x2 = (await mdGetConfig(MD_CONFIG_KEY_DOCA_X1X2)) || {};
+  MD.docaX1x2Rascunho = {...MD.docaX1x2};
   mdInvalidarCache();
 }
 async function irInit(){
