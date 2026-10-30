@@ -9,22 +9,32 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<meta name="theme-color" content="#0A0B23">
+<meta name="theme-color" content="#0B1230">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="audit/audit.css">
 <style>
+  /* Tema claro/escuro igual ao Painel Oficina LDM (raiz): :root é o padrão
+     claro, body.theme-dark sobrescreve pro escuro de sempre deste módulo.
+     accent/blue/success/danger/chip-bg/radius não mudam com o tema — são
+     cores de marca ou acentos que já funcionam nos dois fundos. */
   :root{
-    --paper:#0A0B23;--surface:#0B1934;--surface2:#0e1530;
-    --ink:#EEEDF5;--ink-soft:#7B80A0;--line:#1E2340;
-    --accent:#FA4616;--accent-light:rgba(250,70,22,.12);
+    --paper:#F2F4FA;--surface:#FFFFFF;--surface2:#F7F9FD;
+    --ink:#101633;--ink-soft:#5B6485;--line:#DCE1F0;
+    --chip-bg:#EDF0F9;--chip-bg-hover:#E1E6F4;
+    --accent:#FE5000;--accent-light:rgba(254,80,0,.12);--accent-bright:var(--accent);
     --blue:#001A72;--blue2:#1A3180;--blue3:#33488E;
     --success:#1A3180;--danger:#C83812;
     --radius:7px;--radius-lg:10px;
   }
+  body.theme-dark{
+    --paper:#0A0B23;--surface:#0B1934;--surface2:#0e1530;
+    --ink:#EEEDF5;--ink-soft:#7B80A0;--line:#1E2340;
+    --chip-bg:rgba(255,255,255,.05);--chip-bg-hover:rgba(255,255,255,.1);
+  }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;overflow:hidden;}
-  body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;font-size:13.5px;}
+  body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;font-size:13.5px;transition:background .3s,color .3s;}
   h1,h2,h3,h4{font-family:'Poppins',sans-serif;font-weight:700;letter-spacing:.01em;}
   .mono{font-family:'IBM Plex Mono',monospace;}
   button{font-family:'Inter',sans-serif;cursor:pointer;}
@@ -36,15 +46,16 @@
 
   /* SIDEBAR — mesmo azul-marinho da sidebar da Oficina LDM (Painel raiz) */
   .sidebar{
+    /* azul-marinho fixo, não acompanha o tema (mesma regra do Painel raiz) */
     width:220px;flex-shrink:0;
     background:#0B1230;
-    border-right:1px solid var(--line);
+    border-right:1px solid rgba(255,255,255,.08);
     display:flex;flex-direction:column;
     overflow:hidden;
   }
   .brand{
     padding:16px 14px 14px;
-    border-bottom:1px solid var(--line);
+    border-bottom:1px solid rgba(255,255,255,.08);
     flex-shrink:0;display:flex;align-items:center;gap:10px;
   }
   .brand-logo{
@@ -65,13 +76,13 @@
   .brand-logo:hover img{animation:brandWiggle 1s ease-in-out infinite;}
   @keyframes brandWiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
   .brand-text{flex:1;min-width:0;}
-  .brand-name{font-family:'Poppins',sans-serif;font-size:13px;font-weight:800;color:var(--ink);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .brand-sub{font-size:10px;color:var(--ink-soft);margin-top:1px;}
+  .brand-name{font-family:'Poppins',sans-serif;font-size:13px;font-weight:800;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .brand-sub{font-size:10px;color:#8891C4;margin-top:1px;}
   .brand-back{
-    display:flex;align-items:center;gap:6px;padding:9px 14px;border-bottom:1px solid var(--line);
-    font-size:11.5px;font-weight:600;color:var(--ink-soft);text-decoration:none;flex-shrink:0;
+    display:flex;align-items:center;gap:6px;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.08);
+    font-size:11.5px;font-weight:600;color:#9BA2CC;text-decoration:none;flex-shrink:0;
   }
-  .brand-back:hover{color:var(--ink);background:rgba(0,0,0,.03);}
+  .brand-back:hover{color:#fff;background:rgba(255,255,255,.04);}
 
   .sidebar-body{flex:1;overflow-y:auto;padding:6px 0;}
 
@@ -86,7 +97,7 @@
     content:'';display:block;width:3px;height:12px;border-radius:2px;flex-shrink:0;
   }
   .nsg-orange .nsl{color:#C84010;}
-  .nsg-orange .nsl::before{background:#FA4616;}
+  .nsg-orange .nsl::before{background:#FE5000;}
   .nsg-blue .nsl{color:#4060A0;}
   .nsg-blue .nsl::before{background:#001A72;}
   .nsg-blue2 .nsl{color:#4868A8;}
@@ -96,7 +107,7 @@
   .nsg-audit .nsl{color:#E0704C;}
   .nsg-audit .nsl::before{background:#FB6B45;}
 
-  .nsg-orange .nav-item.active{background:rgba(250,70,22,.1);color:#FA4616;border-left-color:#FA4616;}
+  .nsg-orange .nav-item.active{background:rgba(254,80,0,.1);color:#FE5000;border-left-color:#FE5000;}
   .nsg-blue .nav-item.active{background:rgba(0,26,114,.15);color:#6080D0;border-left-color:#001A72;}
   .nsg-blue2 .nav-item.active{background:rgba(26,49,128,.15);color:#7090D8;border-left-color:#1A3180;}
   .nsg-blue3 .nav-item.active{background:rgba(51,72,142,.15);color:#8098D8;border-left-color:#33488E;}
@@ -111,13 +122,13 @@
   }
   .nav-item span{flex:1;text-align:left;}
   .nav-item svg{flex-shrink:0;opacity:.5;transition:opacity .1s;}
-  .nav-item:hover{background:rgba(255,255,255,.04);color:var(--ink);}
+  .nav-item:hover{background:rgba(255,255,255,.04);color:#fff;}
   .nav-item:hover svg{opacity:.9;}
   .nav-item.active{font-weight:600;border-left:2px solid;}
   .nav-item.active svg{opacity:1;}
   .nav-item.nav-main{
     padding:6px 12px 6px 14px;font-size:13px;
-    font-weight:500;color:var(--ink);
+    font-weight:500;color:#C7CCEA;
   }
   .nav-item.nav-main svg{opacity:.75;}
 
@@ -133,7 +144,7 @@
   }
   .sq-btn{
     display:flex;align-items:center;gap:8px;width:100%;
-    background:rgba(250,70,22,.08);border:1px solid rgba(250,70,22,.2);border-radius:6px;
+    background:rgba(254,80,0,.08);border:1px solid rgba(254,80,0,.2);border-radius:6px;
     padding:7px 10px;color:var(--accent);font-size:12px;font-weight:500;cursor:pointer;
     margin-bottom:5px;transition:all .12s;
   }
@@ -141,7 +152,7 @@
   .sq-btn:hover{filter:brightness(1.15);}
   .sq-btn svg{opacity:.8;flex-shrink:0;}
 
-  .nav-rename-input{flex:1;background:rgba(255,255,255,.08);border:1px dashed var(--accent);border-radius:4px;color:var(--ink);font-size:12.5px;padding:3px 8px;font-family:'Inter',sans-serif;}
+  .nav-rename-input{flex:1;background:rgba(255,255,255,.08);border:1px dashed var(--accent);border-radius:4px;color:#fff;font-size:12.5px;padding:3px 8px;font-family:'Inter',sans-serif;}
 
   /* MAIN */
   .content{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--paper);}
@@ -153,8 +164,12 @@
   }
   .topbar-left h1{font-size:17px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--ink);}
   .topbar-left p{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
-  .cd-badge{flex-shrink:0;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;white-space:nowrap;}
-  .storage-warning{background:rgba(200,56,18,.15);color:#f08060;border:1px solid rgba(200,56,18,.35);border-radius:var(--radius);padding:7px 16px;font-size:12.5px;margin:0 24px;flex-shrink:0;}
+  .cd-badge{flex-shrink:0;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;white-space:nowrap;}
+  .theme-switch{position:relative;width:46px;height:24px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
+  .theme-knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
+  .theme-switch.on .theme-knob{left:24px;}
+  .storage-warning{background:rgba(200,56,18,.15);color:#A8290F;border:1px solid rgba(200,56,18,.35);border-radius:var(--radius);padding:7px 16px;font-size:12.5px;margin:0 24px;flex-shrink:0;}
+  body.theme-dark .storage-warning{color:#f08060;}
   .page-scroll{flex:1;overflow-y:auto;padding:20px 24px;}
 
   /* STAT CARDS */
@@ -213,7 +228,7 @@
   thead th:first-child{border-radius:4px 0 0 0;}
   thead th:last-child{border-radius:0 4px 0 0;}
   tbody td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  tbody tr:hover{background:rgba(250,70,22,.04);}
+  tbody tr:hover{background:rgba(254,80,0,.04);}
   .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);}
   .table-wrap table{min-width:560px;}
 
@@ -246,7 +261,8 @@
 
   /* TOAST */
   .toast{position:fixed;bottom:18px;right:18px;background:var(--surface);border:1px solid var(--line);color:var(--ink);padding:9px 16px;border-radius:var(--radius);font-size:13px;z-index:60;border-left:3px solid var(--accent);}
-  .toast.error{border-left-color:var(--danger);color:#f09080;}
+  .toast.error{border-left-color:var(--danger);color:#A8290F;}
+  body.theme-dark .toast.error{color:#f09080;}
   .toast.hidden{display:none;}
 
   /* LAYOUT UTILS */
@@ -269,7 +285,7 @@
 
   @media(max-width:760px){
     .shell{flex-direction:column;height:auto;overflow:auto;}
-    .sidebar{width:100%;border-right:none;border-bottom:1px solid var(--line);}
+    .sidebar{width:100%;border-right:none;border-bottom:1px solid rgba(255,255,255,.08);}
     .sidebar-body{display:flex;flex-direction:row;overflow-x:auto;padding:0;}
     .nav-section{display:none;}
     .content{overflow:visible;}
@@ -338,7 +354,12 @@
         <h1 id="tab-title">Painel</h1>
         <p id="tab-subtitle">Visão geral do estoque e da equipe.</p>
       </div>
-      <span class="cd-badge">CD CAJAMAR</span>
+      <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+        <span class="cd-badge">CD CAJAMAR</span>
+        <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro">
+          <span class="theme-knob" id="themeKnob"></span>
+        </button>
+      </div>
     </div>
     <div id="storage-banner"></div>
     <div class="page-scroll">
@@ -350,6 +371,27 @@
 <div id="modal-root"></div>
 <div id="toast" class="toast hidden"></div>
 <script>
+(function(){
+  /* Mesma chave usada no Painel Oficina LDM (raiz) — os dois compartilham
+     origem, então o tema escolhido em um lugar vale no outro também. */
+  var SUN = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+  var MOON = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  var btn = document.getElementById('themeSwitch');
+  var knob = document.getElementById('themeKnob');
+  function apply(dark){
+    document.body.classList.toggle('theme-dark', dark);
+    btn.classList.toggle('on', dark);
+    knob.innerHTML = dark ? MOON : SUN;
+  }
+  var dark = false;
+  try { dark = localStorage.getItem('ldm-theme') === 'dark'; } catch(e){}
+  apply(dark);
+  btn.addEventListener('click', function(){
+    dark = !dark;
+    apply(dark);
+    try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
+  });
+})();
 /* ===== CONFIGURAÇÃO SUPABASE =====
    1. Crie conta gratuita em supabase.com
    2. Crie um projeto. Vá em Settings > API e copie:
@@ -440,7 +482,7 @@ async function loadAll(){
   }
   try{
     document.getElementById('storage-banner').innerHTML =
-      '<div class="storage-warning" style="background:rgba(26,49,128,.25);border-color:#33488E;color:#AEB2C6;">Carregando dados...</div>';
+      '<div class="storage-warning" style="background:rgba(26,49,128,.12);border-color:#33488E;color:var(--ink);">Carregando dados...</div>';
     const all = await sbGetAll();
     for(const k of KEYS){
       const raw = all[k];
@@ -1375,8 +1417,8 @@ function renderAtividades(){
         const cr = CICLO_RANGES[n-1];
         const active = n===ciclo.num;
         return `<button onclick="jumpToCiclo(${n})"
-          style="padding:5px 16px;border-radius:20px;border:1.5px solid ${active?'#FA4616':'var(--line)'};
-          background:${active?'#FA4616':'var(--surface)'};color:${active?'#0A0B23':'var(--ink-soft)'};
+          style="padding:5px 16px;border-radius:20px;border:1.5px solid ${active?'var(--accent)':'var(--line)'};
+          background:${active?'var(--accent)':'var(--surface)'};color:${active?'#0A0B23':'var(--ink-soft)'};
           font-size:12.5px;font-weight:${active?'700':'400'};cursor:pointer;">
           C${n} <span style="opacity:.75;font-size:11px;">${cr.label}</span>
         </button>`;
@@ -1696,12 +1738,12 @@ async function gerarImagem(){
   <div style="background:linear-gradient(135deg,#001A72 0%,#1A3180 60%,#0A0B23 100%);border-radius:14px;padding:24px 28px;margin-bottom:20px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
       <div>
-        <div style="color:#FA4616;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px;">Central de Controle de Estoque</div>
+        <div style="color:#FE5000;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px;">Central de Controle de Estoque</div>
         <div style="color:#fff;font-size:22px;font-weight:700;margin-bottom:4px;">Responsáveis — ${esc(periodoLabel)}</div>
-        <div style="color:#FA4616;font-size:15px;font-weight:700;">📅 ${esc(rangeLabel)}</div>
-        ${ciclo?`<div style="display:flex;gap:6px;margin-top:10px;">${[1,2,3,4].map(n=>`<span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:${n===ciclo.num?'#FA4616':'rgba(255,255,255,.12)'};color:#fff;">C${n}</span>`).join('')}</div>`:''}
+        <div style="color:#FE5000;font-size:15px;font-weight:700;">📅 ${esc(rangeLabel)}</div>
+        ${ciclo?`<div style="display:flex;gap:6px;margin-top:10px;">${[1,2,3,4].map(n=>`<span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:${n===ciclo.num?'#FE5000':'rgba(255,255,255,.12)'};color:#fff;">C${n}</span>`).join('')}</div>`:''}
       </div>
-      <div style="background:#FA4616;border-radius:10px;padding:10px 18px;text-align:center;flex-shrink:0;">
+      <div style="background:#FE5000;border-radius:10px;padding:10px 18px;text-align:center;flex-shrink:0;">
         <div style="color:#0A0B23;font-size:13px;font-weight:700;">${esc(atividadePeriodo.toUpperCase())}</div>
         <div style="color:#0A0B23;font-size:11px;margin-top:2px;">${atribuidas.length} atividades · ${byPersonEntries.length} pessoas</div>
       </div>
@@ -1719,7 +1761,7 @@ async function gerarImagem(){
           </div>
         </div>
         ${data.items.map(item=>`
-          <div style="padding:7px 10px;background:#1D1F2A;border-radius:6px;margin-bottom:5px;border-left:3px solid #FA4616;">
+          <div style="padding:7px 10px;background:#1D1F2A;border-radius:6px;margin-bottom:5px;border-left:3px solid #FE5000;">
             <div style="font-weight:600;font-size:12px;color:#F2F1F7;">${esc(item.atividade)}</div>
             ${item.dataInicio?`<div style="font-size:10.5px;color:#AEB2C6;margin-top:2px;">📅 ${fmtRange(item.dataInicio,item.dataFim)}${item.inicio?' &nbsp;🕐 '+item.inicio+(item.fim?' → '+item.fim:''):''}</div>`:''}
             ${item.obs?`<div style="font-size:10.5px;color:#AEB2C6;margin-top:2px;font-style:italic;">${esc(item.obs)}</div>`:''}
@@ -1800,7 +1842,7 @@ function abrirPDF(){
     +'<div><div style="font-weight:700;font-size:14px;color:#1D1F2A;">'+data.nome+'</div>'
     +'<div style="font-size:11px;color:#888;">'+data.cargo+'</div></div></div>'
     +data.items.map(item=>
-      '<div style="padding:8px 10px;background:#f7f6fb;border-radius:6px;margin-bottom:6px;border-left:3px solid #FA4616;">'
+      '<div style="padding:8px 10px;background:#f7f6fb;border-radius:6px;margin-bottom:6px;border-left:3px solid #FE5000;">'
       +'<div style="font-weight:600;font-size:13px;color:#1D1F2A;">'+item.atividade+'</div>'
       +'<div style="font-size:11.5px;color:#555;margin-top:2px;">📅 '+fmtRange(item.dataInicio,item.dataFim)+(item.inicio?' &nbsp;🕐 '+item.inicio+(item.fim?' → '+item.fim:''):'')+'</div>'
       +(item.obs?'<div style="font-size:11.5px;color:#666;margin-top:3px;font-style:italic;">'+item.obs+'</div>':'')
@@ -1820,7 +1862,7 @@ function abrirPDF(){
     +'</tr>'
   ).join('');
 
-  const cicloBar = ciclo?'<div style="display:flex;gap:6px;margin-top:10px;">'+[1,2,3,4].map(n=>'<span style="padding:3px 10px;border-radius:12px;font-size:11px;background:'+(n===ciclo.num?'#FA4616':'rgba(255,255,255,.15)')+'%;color:#fff;">C'+n+' '+CICLO_RANGES[n-1].label+'</span>').join('')+'</div>':'';
+  const cicloBar = ciclo?'<div style="display:flex;gap:6px;margin-top:10px;">'+[1,2,3,4].map(n=>'<span style="padding:3px 10px;border-radius:12px;font-size:11px;background:'+(n===ciclo.num?'#FE5000':'rgba(255,255,255,.15)')+'%;color:#fff;">C'+n+' '+CICLO_RANGES[n-1].label+'</span>').join('')+'</div>':'';
 
   const printHtml = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">'
     +'<title>Responsaveis '+periodoLabel+'</title>'
@@ -1831,12 +1873,12 @@ function abrirPDF(){
     +'.hrow{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;}'
     +'.htitle{color:#fff;font-size:22px;font-weight:700;margin:0 0 4px;}'
     +'.hsub{color:rgba(255,255,255,.6);font-size:13px;}'
-    +'.hrange{color:#FA4616;font-size:15px;font-weight:700;margin-top:6px;}'
+    +'.hrange{color:#FE5000;font-size:15px;font-weight:700;margin-top:6px;}'
     +'.hstats{display:flex;gap:10px;margin-top:12px;}'
     +'.hstat{background:rgba(255,255,255,.12);border-radius:8px;padding:7px 14px;color:#fff;}'
     +'.hstat .n{font-size:20px;font-weight:700;line-height:1;}'
     +'.hstat .l{font-size:10px;opacity:.7;margin-top:2px;}'
-    +'.dbadge{background:#FA4616;color:#fff;border-radius:10px;padding:10px 18px;font-weight:700;text-align:center;line-height:1.5;min-width:130px;flex-shrink:0;}'
+    +'.dbadge{background:#FE5000;color:#fff;border-radius:10px;padding:10px 18px;font-weight:700;text-align:center;line-height:1.5;min-width:130px;flex-shrink:0;}'
     +'.stitle{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#999;margin:20px 0 10px;}'
     +'.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}'
     +'table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.07);}'
@@ -1885,7 +1927,7 @@ async function enviarTeams(){
   const card = {
     "@type":"MessageCard",
     "@context":"https://schema.org/extensions",
-    "themeColor":"FA4616",
+    "themeColor":"FE5000",
     "summary":"Responsáveis — "+periodoLabel,
     "sections":[{
       "activityTitle":"📋 Responsáveis — "+periodoLabel,
