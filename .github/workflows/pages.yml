@@ -32,6 +32,12 @@ jobs:
         run: |
           echo "window.MD_BUILD = { commit: '$(git rev-parse --short HEAD)', data: '$(date -u +"%d/%m %H:%M UTC")' };" \
             > multiplos-descasados/js/version.js
+      - name: Gravar versão do build (Oficina LDM)
+        # Mesma ideia no hub raiz: o rodapé da sidebar mostra commit + horário
+        # deste deploy, pra confirmar visualmente que uma atualização já subiu.
+        run: |
+          echo "window.LDM_BUILD = { commit: '$(git rev-parse --short HEAD)', data: '$(date -u +"%d/%m %H:%M UTC")' };" \
+            > version.js
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
