@@ -64,6 +64,7 @@
   .sb-fav-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--fav-accent,var(--orange));}
 
   .sb-foot{margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:#6B74A8;}
+  .sb-foot-version{display:block;margin-top:4px;opacity:.75;font-variant-numeric:tabular-nums;}
 
   /* MAIN */
   .main{position:relative;flex:1;min-width:0;padding:40px 48px 70px;overflow:hidden;}
@@ -185,8 +186,11 @@
      que fica atrás (é o que "chamou a atenção" no fundo do Painel). */
   .tv-sim-row{position:relative;z-index:2;display:flex;align-items:flex-start;gap:30px;flex-wrap:wrap;}
   .tv-sim-side{padding-top:6px;min-width:170px;max-width:220px;}
-  .tv-sim-side-label{margin:0 0 8px;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+  .tv-sim-side-label{margin:14px 0 8px;font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+  .tv-sim-side-label:first-child{margin-top:0;}
+  .tv-sim-side-value{margin:0;font-size:13px;font-weight:700;color:var(--ink);}
   .tv-sim-side-input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px;color:var(--ink);font-family:'Inter',sans-serif;}
+  select.tv-sim-side-input{cursor:pointer;}
   .tv-sim-side-hint{margin:8px 0 0;font-size:11.5px;color:var(--ink-soft);line-height:1.5;}
 
   .tv-link-row{position:relative;z-index:2;display:flex;gap:10px;align-items:center;max-width:720px;flex-wrap:wrap;}
@@ -274,7 +278,7 @@
       <p class="sb-favs-label">Favoritos</p>
       <div id="sbFavsList"></div>
     </div>
-    <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar</div>
+    <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar<br><span id="appVersion" class="sb-foot-version"></span></div>
   </aside>
 
   <main class="main">
@@ -398,6 +402,19 @@
         </div>
 
         <div class="tv-sim-side">
+          <p class="tv-sim-side-label">Exibindo</p>
+          <p class="tv-sim-side-value" id="tvSimSideApp">—</p>
+
+          <p class="tv-sim-side-label">Página</p>
+          <select id="tvSimSidePage" class="tv-sim-side-input"></select>
+
+          <p class="tv-sim-side-label">Velocidade</p>
+          <select id="tvSimSideSpeed" class="tv-sim-side-input">
+            <option value="slow">Lenta</option>
+            <option value="normal">Normal</option>
+            <option value="fast">Rápida</option>
+          </select>
+
           <p class="tv-sim-side-label">Local</p>
           <input type="text" id="tvDestino" class="tv-sim-side-input" placeholder="ex.: Recepção">
           <p class="tv-sim-side-hint">Só uma etiqueta sua, pra lembrar qual TV recebe este link.</p>
@@ -472,7 +489,17 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="version.js"></script>
 <script>
+  var APP_VERSION = '0.0.0.1';
+  (function(){
+    var el = document.getElementById('appVersion');
+    if(!el) return;
+    var build = window.LDM_BUILD;
+    el.textContent = (build && build.commit && build.commit !== 'local')
+      ? APP_VERSION + ' · ' + build.commit + ' · ' + build.data
+      : APP_VERSION;
+  })();
 (function(){
   var SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
   var MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
@@ -846,18 +873,23 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   }
   window.renderTvTable = renderTvTable;
 
+  function setTvCfgField(key, field, value){
+    var store = getTvConfigStore();
+    var cfg = store[key] || {};
+    cfg[field] = value;
+    store[key] = cfg;
+    setTvConfigStore(store);
+    showToast('Configuração da TV salva.');
+  }
+
   tvTableBody.addEventListener('change', function(e){
     var field = e.target.dataset.field;
     if(!field) return;
     var key = e.target.closest('tr').dataset.key;
-    var store = getTvConfigStore();
-    var cfg = store[key] || {};
-    if(e.target.type === 'checkbox') cfg[field] = e.target.checked;
-    else if(e.target.type === 'number') cfg[field] = parseInt(e.target.value, 10) || 0;
-    else cfg[field] = e.target.value;
-    store[key] = cfg;
-    setTvConfigStore(store);
-    showToast('Configuração da TV salva.');
+    var value = e.target.value;
+    if(e.target.type === 'checkbox') value = e.target.checked;
+    else if(e.target.type === 'number') value = parseInt(e.target.value, 10) || 0;
+    setTvCfgField(key, field, value);
     if(window.renderTvSim) window.renderTvSim();
   });
 
@@ -898,6 +930,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     var refreshBtn = document.getElementById('tvSimRefresh');
     var playPauseBtn = document.getElementById('tvSimPlayPause');
     var clockEl = document.getElementById('tvSimClock');
+    var sideApp = document.getElementById('tvSimSideApp');
+    var sidePage = document.getElementById('tvSimSidePage');
+    var sideSpeed = document.getElementById('tvSimSideSpeed');
 
     var fsOverlay = document.getElementById('tvSimFullscreen');
     var fsLabel = document.getElementById('tvSimFsLabel');
@@ -1007,6 +1042,25 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       closeFullscreen();
     }
 
+    function updateSidePanel(item){
+      sideApp.textContent = item.app.name;
+      var pages = APP_PAGES[item.app.key] || [];
+      sidePage.innerHTML = '<option value="">Página inicial</option>' + pages.map(function(p){
+        return '<option value="' + p.id + '"' + (p.id === item.cfg.viewPage ? ' selected' : '') + '>' + esc(p.label) + '</option>';
+      }).join('');
+      sidePage.disabled = !pages.length;
+      sideSpeed.value = item.cfg.scrollSpeed;
+    }
+    function onSideFieldChange(field, value){
+      if(!playlist.length) return;
+      var key = playlist[index].app.key;
+      setTvCfgField(key, field, value);
+      if(window.renderTvTable) window.renderTvTable();
+      refreshCurrent();
+    }
+    sidePage.addEventListener('change', function(){ onSideFieldChange('viewPage', sidePage.value); });
+    sideSpeed.addEventListener('change', function(){ onSideFieldChange('scrollSpeed', sideSpeed.value); });
+
     function playIndex(i){
       if(!playlist.length) return;
       index = ((i % playlist.length) + playlist.length) % playlist.length;
@@ -1020,6 +1074,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       updatePlayPauseIcon();
       setLabel((index + 1) + '/' + playlist.length + ' · ' + item.app.name);
       renderProgress(0);
+      updateSidePanel(item);
       iframe.src = pageUrl(item.app, item.cfg);
       iframe.onload = function(){
         if(!running) return;
