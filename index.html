@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<!--
+  LAYOUT PADRÃO "Painel Oficina LDM"
+  Sidebar fixa (marca + navegação + favoritos) · topbar com busca e tema ·
+  cards com parafusos nos cantos e menu de 3 pontos · modal de edição.
+  Este é o modelo a replicar nos demais apps da Oficina LDM.
+-->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oficina LDM</title>
@@ -51,12 +57,18 @@
   .sb-nav-item.active{background:rgba(254,80,0,.16);color:#fff;}
   .sb-nav-item.active svg{color:var(--orange);opacity:1;}
 
+  .sb-favs{margin:4px 0 16px;}
+  .sb-favs-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6B74A8;margin:0 0 6px;padding:0 12px;}
+  .sb-fav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:11px;color:#C7CCEA;text-decoration:none;font-size:12.5px;font-weight:600;transition:background .2s,color .2s;}
+  .sb-fav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .sb-fav-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--fav-accent,var(--orange));}
+
   .sb-foot{margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:#6B74A8;}
 
   /* MAIN */
   .main{position:relative;flex:1;min-width:0;padding:40px 48px 70px;overflow:hidden;}
-  .wheel-mark{position:absolute;right:-70px;top:38%;width:500px;height:500px;transform:translateY(-50%);opacity:.05;pointer-events:none;z-index:0;color:var(--ink);animation:wheelspin 11s linear infinite;}
-  @keyframes wheelspin{to{transform:translateY(-50%) rotate(360deg);}}
+  .wheel-mark{position:absolute;left:50%;top:50%;width:620px;height:620px;transform:translate(-50%,-50%);opacity:.08;pointer-events:none;z-index:0;color:var(--ink);animation:wheelspin 20s linear infinite;}
+  @keyframes wheelspin{to{transform:translate(-50%,-50%) rotate(360deg);}}
 
   .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;z-index:2;}
   .topbar h1{font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;margin:0;}
@@ -133,6 +145,11 @@
   .mt-open{color:var(--ink-soft);font-weight:700;font-size:12px;text-decoration:none;}
   .mt-open:hover{color:var(--ink);}
 
+  /* TV LDM */
+  .tv-num{width:72px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
+  select.tv-field{font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
+  input.tv-field[type=checkbox]{width:17px;height:17px;accent-color:var(--orange);cursor:pointer;}
+
   /* CONFIGURAÇÕES */
   .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:520px;margin-top:24px;}
 
@@ -189,33 +206,49 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>
         <span>Gestão de App</span>
       </button>
+      <button class="sb-nav-item" type="button" data-view="tv">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span>TV LDM</span>
+      </button>
       <button class="sb-nav-item" type="button" data-view="config">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>Configurações</span>
       </button>
     </nav>
+    <div class="sb-favs" id="sbFavs" hidden>
+      <p class="sb-favs-label">Favoritos</p>
+      <div id="sbFavsList"></div>
+    </div>
     <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar</div>
   </aside>
 
   <main class="main">
-    <svg class="wheel-mark" viewBox="0 0 100 100" fill="none" stroke="currentColor" aria-hidden="true">
-      <circle cx="50" cy="50" r="45" stroke-width="9"/>
-      <circle cx="50" cy="50" r="34" stroke-width="2.5"/>
-      <g stroke-width="6.5" stroke-linecap="round">
-        <line x1="50" y1="38" x2="50" y2="18"/>
-        <line x1="61.41" y1="46.29" x2="80.44" y2="40.11"/>
-        <line x1="57.05" y1="59.71" x2="68.81" y2="75.89"/>
-        <line x1="42.95" y1="59.71" x2="31.19" y2="75.89"/>
-        <line x1="38.59" y1="46.29" x2="19.56" y2="40.11"/>
+    <svg class="wheel-mark" viewBox="0 0 200 200" fill="none" stroke="currentColor" aria-hidden="true">
+      <!-- banda de rodagem (textura de pneu) -->
+      <circle cx="100" cy="100" r="99" stroke-width="7" stroke-linecap="round" stroke-dasharray="5 6"/>
+      <!-- pneu -->
+      <circle cx="100" cy="100" r="90" stroke-width="18"/>
+      <path id="tireTextPath" d="M100,10 A90,90 0 1,1 99.9,10" fill="none" stroke="none"/>
+      <text font-size="10" letter-spacing="2" font-family="Poppins, sans-serif" font-weight="700" fill="var(--bg0)" stroke="none">
+        <textPath href="#tireTextPath" startOffset="0%">OFICINA LDM &#8226; LOJA DO MECÂNICO &#8226; OFICINA LDM &#8226; LOJA DO MECÂNICO &#8226;</textPath>
+      </text>
+      <!-- aro -->
+      <circle cx="100" cy="100" r="68" stroke-width="5"/>
+      <g stroke-width="13" stroke-linecap="round">
+        <line x1="100" y1="76" x2="100" y2="36"/>
+        <line x1="122.82" y1="92.58" x2="160.88" y2="80.22"/>
+        <line x1="114.1" y1="119.42" x2="137.62" y2="151.78"/>
+        <line x1="85.9" y1="119.42" x2="62.38" y2="151.78"/>
+        <line x1="77.18" y1="92.58" x2="39.12" y2="80.22"/>
       </g>
-      <circle cx="50" cy="50" r="11" fill="currentColor" stroke="none"/>
-      <circle cx="50" cy="50" r="3.2" fill="var(--bg0)" stroke="none"/>
+      <circle cx="100" cy="100" r="22" fill="currentColor" stroke="none"/>
+      <circle cx="100" cy="100" r="6.4" fill="var(--bg0)" stroke="none"/>
       <g fill="var(--bg0)" stroke="none">
-        <circle cx="59.4" cy="37.06" r="2"/>
-        <circle cx="65.22" cy="54.94" r="2"/>
-        <circle cx="50" cy="66" r="2"/>
-        <circle cx="34.78" cy="54.94" r="2"/>
-        <circle cx="40.6" cy="37.06" r="2"/>
+        <circle cx="118.8" cy="74.12" r="4"/>
+        <circle cx="130.44" cy="109.88" r="4"/>
+        <circle cx="100" cy="132" r="4"/>
+        <circle cx="69.56" cy="109.88" r="4"/>
+        <circle cx="81.2" cy="74.12" r="4"/>
       </g>
     </svg>
 
@@ -248,6 +281,15 @@
           <tr><th>Aplicação</th><th>Status</th><th>Vínculo a TV</th><th></th></tr>
         </thead>
         <tbody id="manageTableBody"></tbody>
+      </table>
+    </section>
+
+    <section class="view" id="view-tv" hidden>
+      <table class="manage-table">
+        <thead>
+          <tr><th>Aplicação</th><th>Exibir na TV</th><th>Sequência</th><th>Tempo (seg)</th><th>Idioma</th></tr>
+        </thead>
+        <tbody id="tvTableBody"></tbody>
       </table>
     </section>
 
@@ -331,12 +373,14 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var VIEW_META = {
     painel: {title:'Painel', sub:'Dados, indicadores e operação do CD conectados em um único ambiente.'},
     gestao: {title:'Gestão de App', sub:'Gerencie nome, cor, status e vínculo de TV de cada aplicação.'},
+    tv: {title:'TV LDM', sub:'Gerencie a sequência, o tempo de exibição e o idioma de cada app na TV.'},
     config: {title:'Configurações', sub:'Preferências gerais da Oficina LDM.'}
   };
   var navButtons = Array.prototype.slice.call(document.querySelectorAll('.sb-nav-item'));
   var views = {
     painel: document.getElementById('view-painel'),
     gestao: document.getElementById('view-gestao'),
+    tv: document.getElementById('view-tv'),
     config: document.getElementById('view-config')
   };
   var viewTitle = document.getElementById('viewTitle');
@@ -349,6 +393,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       viewTitle.textContent = VIEW_META[v].title;
       viewSubtitle.textContent = VIEW_META[v].sub;
       if(v === 'gestao' && window.renderManageTable) window.renderManageTable();
+      if(v === 'tv' && window.renderTvTable) window.renderTvTable();
     });
   });
 })();
@@ -526,6 +571,62 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   }
   window.renderManageTable = renderManageTable;
 
+  var sbFavs = document.getElementById('sbFavs');
+  var sbFavsList = document.getElementById('sbFavsList');
+  function renderSidebarFavorites(){
+    var favoritos = getFavoritos();
+    var apps = getAllApps().filter(function(a){ return favoritos.indexOf(a.key) !== -1; });
+    sbFavs.hidden = apps.length === 0;
+    sbFavsList.innerHTML = apps.map(function(a){
+      return '<a class="sb-fav-item" href="' + a.href + '" style="--fav-accent:' + a.color + ';"><span class="sb-fav-dot"></span>' + esc(a.name) + '</a>';
+    }).join('');
+  }
+
+  var LANG_OPTIONS = [
+    {value:'pt-BR', label:'Português (BR)'},
+    {value:'en-US', label:'Inglês (EUA)'},
+    {value:'es-ES', label:'Espanhol'}
+  ];
+  var TV_KEY = 'ldm-tv-config';
+  function getTvConfigStore(){
+    try { return JSON.parse(localStorage.getItem(TV_KEY) || '{}'); } catch(e){ return {}; }
+  }
+  function setTvConfigStore(o){
+    try { localStorage.setItem(TV_KEY, JSON.stringify(o)); } catch(e){}
+  }
+  var tvTableBody = document.getElementById('tvTableBody');
+  function renderTvTable(){
+    var store = getTvConfigStore();
+    tvTableBody.innerHTML = getAllApps().map(function(a, i){
+      var cfg = Object.assign({included:false, order:i + 1, duration:20, lang:'pt-BR'}, store[a.key] || {});
+      return ''
+        + '<tr data-key="' + a.key + '">'
+        +   '<td><div class="mt-app"><span class="mt-icon" style="--accent:' + a.color + ';">' + a.icon + '</span><div class="mt-name">' + esc(a.name) + '</div></div></td>'
+        +   '<td><input type="checkbox" class="tv-field" data-field="included"' + (cfg.included ? ' checked' : '') + '></td>'
+        +   '<td><input type="number" class="tv-num tv-field" data-field="order" min="1" value="' + cfg.order + '"></td>'
+        +   '<td><input type="number" class="tv-num tv-field" data-field="duration" min="5" step="5" value="' + cfg.duration + '"></td>'
+        +   '<td><select class="tv-field" data-field="lang">' + LANG_OPTIONS.map(function(l){
+              return '<option value="' + l.value + '"' + (l.value === cfg.lang ? ' selected' : '') + '>' + l.label + '</option>';
+            }).join('') + '</select></td>'
+        + '</tr>';
+    }).join('');
+  }
+  window.renderTvTable = renderTvTable;
+
+  tvTableBody.addEventListener('change', function(e){
+    var field = e.target.dataset.field;
+    if(!field) return;
+    var key = e.target.closest('tr').dataset.key;
+    var store = getTvConfigStore();
+    var cfg = store[key] || {};
+    if(e.target.type === 'checkbox') cfg[field] = e.target.checked;
+    else if(e.target.type === 'number') cfg[field] = parseInt(e.target.value, 10) || 0;
+    else cfg[field] = e.target.value;
+    store[key] = cfg;
+    setTvConfigStore(store);
+    showToast('Configuração da TV salva.');
+  });
+
   /* Modal de edição */
   var modalOverlay = document.getElementById('modalOverlay');
   var editForm = document.getElementById('editForm');
@@ -620,6 +721,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       card.classList.toggle('is-favorite', nowFav);
       favBtn.classList.toggle('is-active', nowFav);
       favBtn.querySelector('.fav-label').textContent = nowFav ? 'Remover dos favoritos' : 'Favoritar';
+      renderSidebarFavorites();
       closeAllMenus();
       showToast(nowFav ? 'Adicionado aos favoritos.' : 'Removido dos favoritos.');
       return;
@@ -644,6 +746,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   document.addEventListener('click', function(){ closeAllMenus(); });
 
   renderCards();
+  renderSidebarFavorites();
 })();
 </script>
 </body>
