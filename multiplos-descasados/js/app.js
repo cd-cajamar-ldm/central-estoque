@@ -1726,5 +1726,11 @@ async function irInit(){
     console.error('Falha ao iniciar', e);
     MD.initErro = (e && (e.name ? e.name+': '+e.message : e.message)) || String(e);
   }
-  irRenderView();
+  /* Link direto para uma tela específica (ex.: usado pela TV LDM). */
+  var mdHashTela = null;
+  try {
+    var mdH = decodeURIComponent(location.hash.slice(1));
+    if(mdH && MD_TELAS[mdH]) mdHashTela = mdH;
+  } catch(e){}
+  if(mdHashTela) irSwitchTab(mdHashTela); else irRenderView();
 }
