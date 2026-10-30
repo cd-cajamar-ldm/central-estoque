@@ -16,13 +16,13 @@
     --ink:#101633;--ink-soft:#5B6485;--card-top:#FFFFFF;--card-bottom:#FFFFFF;
     --chip-bg:#EDF0F9;--chip-bg-hover:#E1E6F4;
     --shadow-col:rgba(16,22,60,.14);--shadow-near:rgba(16,22,60,.06);
-    --orange:#FE5000;
+    --orange:#FE5000;--rivet:rgba(16,22,60,.16);
   }
   body.theme-dark{
     --bg0:#070910;--surface:rgba(255,255,255,.045);--line:rgba(255,255,255,.1);
     --ink:#F3F2FA;--ink-soft:#8E95C2;--card-top:rgba(255,255,255,.055);--card-bottom:rgba(255,255,255,.02);
     --chip-bg:rgba(255,255,255,.06);--chip-bg-hover:rgba(255,255,255,.14);
-    --shadow-col:rgba(0,0,0,.55);--shadow-near:rgba(0,0,0,.3);
+    --shadow-col:rgba(0,0,0,.55);--shadow-near:rgba(0,0,0,.3);--rivet:rgba(255,255,255,.22);
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg0);color:var(--ink);-webkit-font-smoothing:antialiased;transition:background .3s,color .3s;}
@@ -44,6 +44,13 @@
   .brand-name{font-family:'Poppins',sans-serif;font-size:17px;font-weight:800;color:#fff;line-height:1.15;}
   .brand-sub{font-size:11px;color:#8891C4;margin-top:2px;}
 
+  .sb-nav{display:flex;flex-direction:column;gap:3px;margin:4px 0 20px;}
+  .sb-nav-item{display:flex;align-items:center;gap:11px;background:none;border:none;border-radius:11px;padding:10px 12px;color:#9BA2CC;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:background .2s,color .2s;}
+  .sb-nav-item svg{flex-shrink:0;opacity:.85;transition:opacity .2s,color .2s;}
+  .sb-nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .sb-nav-item.active{background:rgba(254,80,0,.16);color:#fff;}
+  .sb-nav-item.active svg{color:var(--orange);opacity:1;}
+
   .sb-foot{margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:#6B74A8;}
 
   /* MAIN */
@@ -60,6 +67,8 @@
   .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
   .theme-switch.on .theme-knob{left:29px;}
 
+  .view[hidden]{display:none;}
+
   .search-row{position:relative;margin:24px 0 8px;z-index:2;max-width:420px;}
   .search-row input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:11px 18px 11px 40px;font-size:13.5px;color:var(--ink);font-family:'Inter',sans-serif;}
   .search-row input::placeholder{color:var(--ink-soft);}
@@ -74,17 +83,20 @@
   .card:hover::before{opacity:.9;}
   /* link esticado: cobre o card inteiro para navegação, mas fica abaixo do kebab/menu (z-index) */
   .card-link{position:absolute;inset:0;z-index:1;border-radius:inherit;}
+  .rivet{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--rivet);box-shadow:inset 0 1px 1px rgba(0,0,0,.25);z-index:2;pointer-events:none;}
+  .rivet.tl{top:9px;left:9px;}
+  .rivet.tr{top:9px;right:9px;}
+  .rivet.bl{bottom:9px;left:9px;}
+  .rivet.br{bottom:9px;right:9px;}
   .card-top-row{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;padding-right:38px;}
-  .card-icon{position:relative;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 9px 18px -7px rgba(0,0,0,.4);flex-shrink:0;}
+  .card-icon{position:relative;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 9px 18px -7px rgba(0,0,0,.4);flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
   .card:hover .card-icon{animation:torque .5s ease-in-out;}
   @keyframes torque{0%,100%{transform:rotate(0deg);}30%{transform:rotate(-7deg);}70%{transform:rotate(5deg);}}
   .card-status{position:relative;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--ink-soft);margin-top:4px;}
-  .live-dot{width:6px;height:6px;border-radius:50%;background:#1F8A52;animation:live 2s infinite;flex-shrink:0;}
-  @keyframes live{0%{box-shadow:0 0 0 0 rgba(31,138,82,.45);}70%{box-shadow:0 0 0 6px rgba(31,138,82,0);}100%{box-shadow:0 0 0 0 rgba(31,138,82,0);}}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--dot,#1F8A52);animation:live 2s infinite;flex-shrink:0;}
+  @keyframes live{0%{box-shadow:0 0 0 0 color-mix(in srgb, var(--dot,#1F8A52) 45%, transparent);}70%{box-shadow:0 0 0 6px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
   .card-title{position:relative;font-size:16px;font-weight:700;margin:0 0 5px;}
-  .card-desc{position:relative;font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin:0 0 14px;flex:1;}
-  .card-tags{position:relative;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
-  .tag{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:100px;background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent);}
+  .card-desc{position:relative;font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin:0 0 16px;flex:1;}
   .card-cta{position:relative;display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:800;color:var(--accent);padding-top:13px;border-top:1px solid var(--line);}
   .card-cta .arrow{transition:transform .15s;}
   .card:hover .card-cta .arrow{transform:translateX(3px);}
@@ -102,15 +114,56 @@
 
   .no-results{display:none;text-align:center;padding:50px 20px;color:var(--ink-soft);font-size:13.5px;position:relative;z-index:2;}
 
-  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(0);background:#161A3A;color:#fff;font-size:12.5px;font-weight:600;padding:10px 18px;border-radius:999px;box-shadow:0 14px 30px -10px rgba(0,0,0,.5);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;}
+  /* GESTÃO DE APP */
+  .manage-table{position:relative;z-index:2;width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-top:24px;}
+  .manage-table th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);padding:14px 18px;border-bottom:1px solid var(--line);}
+  .manage-table td{padding:14px 18px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;}
+  .manage-table tr:last-child td{border-bottom:none;}
+  .mt-app{display:flex;align-items:center;gap:12px;}
+  .mt-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .mt-icon svg{width:16px;height:16px;}
+  .mt-name{font-weight:700;}
+  .mt-desc{font-size:11.5px;color:var(--ink-soft);margin-top:2px;max-width:340px;}
+  .mt-empty{color:var(--ink-soft);}
+  .status-pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--chip-bg);}
+  .status-pill::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--dot,#1F8A52);flex-shrink:0;}
+  .mt-actions{display:flex;align-items:center;gap:16px;}
+  .mt-edit{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:12px;padding:7px 14px;border-radius:999px;cursor:pointer;font-family:'Inter',sans-serif;}
+  .mt-edit:hover{background:var(--chip-bg-hover);}
+  .mt-open{color:var(--ink-soft);font-weight:700;font-size:12px;text-decoration:none;}
+  .mt-open:hover{color:var(--ink);}
+
+  /* CONFIGURAÇÕES */
+  .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:520px;margin-top:24px;}
+
+  /* MODAL DE EDIÇÃO */
+  .modal-overlay{position:fixed;inset:0;background:rgba(8,10,24,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
+  .modal-overlay[hidden]{display:none;}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px 26px 22px;width:100%;max-width:420px;box-shadow:0 30px 60px -20px rgba(0,0,0,.5);color:var(--ink);}
+  body.theme-dark .modal{background:#12162E;}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+  .modal-head h2{font-family:'Poppins',sans-serif;font-size:17px;font-weight:700;margin:0;}
+  .modal-close{background:none;border:none;color:var(--ink-soft);font-size:16px;cursor:pointer;padding:4px;line-height:1;}
+  .field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:14px;}
+  .field input[type=text],.field textarea,.field select{font-family:'Inter',sans-serif;font-size:13.5px;font-weight:400;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:10px;padding:9px 12px;}
+  .field input[type=color]{width:100%;height:38px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--bg0);cursor:pointer;}
+  .field textarea{resize:vertical;font-family:'Inter',sans-serif;}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px;}
+  .btn-secondary{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink);font-weight:700;font-size:13px;padding:9px 18px;border-radius:999px;cursor:pointer;font-family:'Inter',sans-serif;}
+  .btn-primary{background:var(--orange);border:none;color:#fff;font-weight:700;font-size:13px;padding:9px 20px;border-radius:999px;cursor:pointer;font-family:'Inter',sans-serif;box-shadow:0 10px 20px -8px rgba(254,80,0,.5);}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(0);background:#161A3A;color:#fff;font-size:12.5px;font-weight:600;padding:10px 18px;border-radius:999px;box-shadow:0 14px 30px -10px rgba(0,0,0,.5);z-index:150;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
 
   @media(max-width:760px){
     .shell{flex-direction:column;}
     .sidebar{width:100%;flex-direction:row;align-items:center;padding:16px 20px;}
     .brand{margin-bottom:0;}
+    .sb-nav{display:none;}
     .sb-foot{display:none;}
     .main{padding:24px 18px 50px;}
+    .field-row{grid-template-columns:1fr;}
   }
 </style>
 </head>
@@ -127,6 +180,20 @@
         <div class="brand-sub">lugar de quem faz</div>
       </div>
     </div>
+    <nav class="sb-nav">
+      <button class="sb-nav-item active" type="button" data-view="painel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Painel</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-view="gestao">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>
+        <span>Gestão de App</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-view="config">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Configurações</span>
+      </button>
+    </nav>
     <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar</div>
   </aside>
 
@@ -154,8 +221,8 @@
 
     <div class="topbar">
       <div>
-        <h1>Painel</h1>
-        <p>Dados, indicadores e operação do CD conectados em um único ambiente.</p>
+        <h1 id="viewTitle">Painel</h1>
+        <p id="viewSubtitle">Dados, indicadores e operação do CD conectados em um único ambiente.</p>
       </div>
       <div class="topbar-actions">
         <span class="cd-badge">CD CAJAMAR</span>
@@ -165,147 +232,68 @@
       </div>
     </div>
 
-    <div class="search-row">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" id="searchInput" placeholder="Buscar aplicação...">
-    </div>
-
-    <p class="section-label">Aplicações</p>
-    <div class="cards" id="cardsGrid">
-      <div class="card" style="--accent:#FA4616;" data-search="gestão de estoque auditoria de divergências, endereços e inventários do cd. divergências endereços inventários" data-key="estoque">
-        <a class="card-link" href="./auditoria/" aria-label="Acessar Gestão de Estoque"></a>
-        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Gestão de Estoque">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
-        </button>
-        <div class="card-menu" hidden>
-          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
-          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
-          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
-        </div>
-        <div class="card-top-row">
-          <div class="card-icon" style="background:linear-gradient(135deg,#FA4616,#FF8A3D);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 7v4l2.5 2.5"/></svg>
-          </div>
-          <span class="card-status"><span class="live-dot"></span>Disponível</span>
-        </div>
-        <h3 class="card-title">Gestão de Estoque</h3>
-        <p class="card-desc">Auditoria de divergências, endereços e inventários do CD.</p>
-        <div class="card-tags"><span class="tag">Divergências</span><span class="tag">Endereços</span><span class="tag">Inventários</span></div>
-        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+    <section class="view" id="view-painel">
+      <div class="search-row">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Buscar aplicação...">
       </div>
+      <p class="section-label">Aplicações</p>
+      <div class="cards" id="cardsGrid"></div>
+      <p class="no-results" id="noResults">Nenhuma aplicação encontrada.</p>
+    </section>
 
-      <div class="card" style="--accent:#1E33C7;" data-search="inventário rotativo ciclos, produtividade, divergências e net do inventário rotativo. ciclos produtividade net" data-key="inventario">
-        <a class="card-link" href="./inventario-rotativo/" aria-label="Acessar Inventário Rotativo"></a>
-        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Inventário Rotativo">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
-        </button>
-        <div class="card-menu" hidden>
-          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
-          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
-          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
-        </div>
-        <div class="card-top-row">
-          <div class="card-icon" style="background:linear-gradient(135deg,#0026B8,#3D5AFE 55%,#7C8CFF);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-          </div>
-          <span class="card-status"><span class="live-dot"></span>Disponível</span>
-        </div>
-        <h3 class="card-title">Inventário Rotativo</h3>
-        <p class="card-desc">Ciclos, produtividade, divergências e NET do inventário rotativo.</p>
-        <div class="card-tags"><span class="tag">Ciclos</span><span class="tag">Produtividade</span><span class="tag">NET</span></div>
-        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
-      </div>
+    <section class="view" id="view-gestao" hidden>
+      <table class="manage-table">
+        <thead>
+          <tr><th>Aplicação</th><th>Status</th><th>Vínculo a TV</th><th></th></tr>
+        </thead>
+        <tbody id="manageTableBody"></tbody>
+      </table>
+    </section>
 
-      <div class="card" style="--accent:#0E9488;" data-search="equalização de elevadores equalização de bases e colunas de elevadores do cd. bases colunas" data-key="elevadores">
-        <a class="card-link" href="./equalizacao-elevadores/" aria-label="Acessar Equalização de Elevadores"></a>
-        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Equalização de Elevadores">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
-        </button>
-        <div class="card-menu" hidden>
-          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
-          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
-          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
-        </div>
-        <div class="card-top-row">
-          <div class="card-icon" style="background:linear-gradient(135deg,#0E9488,#2DD4BF);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
-          </div>
-          <span class="card-status"><span class="live-dot"></span>Disponível</span>
-        </div>
-        <h3 class="card-title">Equalização de Elevadores</h3>
-        <p class="card-desc">Equalização de bases e colunas de elevadores do CD.</p>
-        <div class="card-tags"><span class="tag">Bases</span><span class="tag">Colunas</span></div>
-        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+    <section class="view" id="view-config" hidden>
+      <div class="config-placeholder">
+        <p>Em breve: controle de acessos, permissões e histórico de alterações para todos os apps da Oficina LDM.</p>
       </div>
-
-      <div class="card" style="--accent:#7C3AED;" data-search="projetos acompanhamento de projetos e iniciativas do cd. marcos cronograma painel" data-key="projetos">
-        <a class="card-link" href="./acompanhamento-projetos/" aria-label="Acessar Projetos"></a>
-        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Projetos">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
-        </button>
-        <div class="card-menu" hidden>
-          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
-          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
-          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
-        </div>
-        <div class="card-top-row">
-          <div class="card-icon" style="background:linear-gradient(135deg,#8B5CF6,#C4B5FD);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
-          <span class="card-status"><span class="live-dot"></span>Disponível</span>
-        </div>
-        <h3 class="card-title">Projetos</h3>
-        <p class="card-desc">Acompanhamento de projetos e iniciativas do CD.</p>
-        <div class="card-tags"><span class="tag">Marcos</span><span class="tag">Cronograma</span><span class="tag">Painel</span></div>
-        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
-      </div>
-
-      <div class="card" style="--accent:#B45309;" data-search="gestão de transitórios estoque parado fora do picking, por setor responsável. setores prazo 48h boletim" data-key="transitorios">
-        <a class="card-link" href="./transitorios/" aria-label="Acessar Gestão de Transitórios"></a>
-        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Gestão de Transitórios">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
-        </button>
-        <div class="card-menu" hidden>
-          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
-          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
-          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
-        </div>
-        <div class="card-top-row">
-          <div class="card-icon" style="background:linear-gradient(135deg,#D97706,#FBBF24);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M3 16v5h5"/><path d="M21 16v5h-5"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>
-          </div>
-          <span class="card-status"><span class="live-dot"></span>Disponível</span>
-        </div>
-        <h3 class="card-title">Gestão de Transitórios</h3>
-        <p class="card-desc">Estoque parado fora do picking, por setor responsável.</p>
-        <div class="card-tags"><span class="tag">Setores</span><span class="tag">Prazo 48h</span><span class="tag">Boletim</span></div>
-        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
-      </div>
-
-      <div class="card" style="--accent:#9D174D;" data-search="múltiplos descasados componente de múltiplo sem par no estoque, com valor e bloqueio em 86. zbiq0051 qry0390 bloqueio 86" data-key="multiplos">
-        <a class="card-link" href="./multiplos-descasados/" aria-label="Acessar Múltiplos Descasados"></a>
-        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Múltiplos Descasados">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
-        </button>
-        <div class="card-menu" hidden>
-          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
-          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
-          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
-        </div>
-        <div class="card-top-row">
-          <div class="card-icon" style="background:linear-gradient(135deg,#BE185D,#F472B6);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 7h7"/><path d="M17.5 3.5 21 7l-3.5 3.5"/><path d="M10 17H3"/><path d="M6.5 13.5 3 17l3.5 3.5"/></svg>
-          </div>
-          <span class="card-status"><span class="live-dot"></span>Disponível</span>
-        </div>
-        <h3 class="card-title">Múltiplos Descasados</h3>
-        <p class="card-desc">Componente de múltiplo sem par no estoque, com valor e bloqueio em 86.</p>
-        <div class="card-tags"><span class="tag">ZBIQ0051</span><span class="tag">QRY0390</span><span class="tag">Bloqueio 86</span></div>
-        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
-      </div>
-    </div>
-    <p class="no-results" id="noResults">Nenhuma aplicação encontrada.</p>
+    </section>
   </main>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h2 id="modalTitle">Editar aplicação</h2>
+      <button type="button" class="modal-close" id="modalClose" aria-label="Fechar">&#10005;</button>
+    </div>
+    <form id="editForm">
+      <label class="field">
+        <span>Nome</span>
+        <input type="text" id="fNome" required>
+      </label>
+      <label class="field">
+        <span>Texto explicativo</span>
+        <textarea id="fDesc" rows="3" required></textarea>
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>Cor</span>
+          <input type="color" id="fCor">
+        </label>
+        <label class="field">
+          <span>Status</span>
+          <select id="fStatus"></select>
+        </label>
+      </div>
+      <label class="field">
+        <span>Vínculo a TV</span>
+        <input type="text" id="fTv" placeholder="ex.: TV-01 (configuração futura)">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="modalCancel">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -338,31 +326,114 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   el.classList.add('spin');
 });
 
+/* Navegação da sidebar (Painel / Gestão de App / Configurações) */
 (function(){
-  var input = document.getElementById('searchInput');
-  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
-  var noResults = document.getElementById('noResults');
-  input.addEventListener('input', function(){
-    var q = input.value.trim().toLowerCase();
-    var visible = 0;
-    cards.forEach(function(c){
-      var match = !q || c.dataset.search.indexOf(q) !== -1;
-      c.style.display = match ? '' : 'none';
-      if(match) visible++;
+  var VIEW_META = {
+    painel: {title:'Painel', sub:'Dados, indicadores e operação do CD conectados em um único ambiente.'},
+    gestao: {title:'Gestão de App', sub:'Gerencie nome, cor, status e vínculo de TV de cada aplicação.'},
+    config: {title:'Configurações', sub:'Preferências gerais da Oficina LDM.'}
+  };
+  var navButtons = Array.prototype.slice.call(document.querySelectorAll('.sb-nav-item'));
+  var views = {
+    painel: document.getElementById('view-painel'),
+    gestao: document.getElementById('view-gestao'),
+    config: document.getElementById('view-config')
+  };
+  var viewTitle = document.getElementById('viewTitle');
+  var viewSubtitle = document.getElementById('viewSubtitle');
+  navButtons.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var v = btn.dataset.view;
+      navButtons.forEach(function(b){ b.classList.toggle('active', b === btn); });
+      Object.keys(views).forEach(function(k){ views[k].hidden = (k !== v); });
+      viewTitle.textContent = VIEW_META[v].title;
+      viewSubtitle.textContent = VIEW_META[v].sub;
+      if(v === 'gestao' && window.renderManageTable) window.renderManageTable();
     });
-    noResults.style.display = visible ? 'none' : 'block';
   });
 })();
 
-/* Menu de 3 pontos (Editar / Favoritar / Remover) de cada card */
+/* Catálogo de apps, favoritos, cards, tabela de gestão e modal de edição */
 (function(){
-  var toastEl = document.getElementById('toast');
-  var toastTimer = null;
-  function showToast(msg){
-    toastEl.textContent = msg;
-    toastEl.classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 2000);
+  var STATUS_OPTIONS = ['Disponível','Em produção','Manutenção','Indisponível'];
+  var STATUS_COLOR = {
+    'Disponível':'#1F8A52',
+    'Em produção':'#B45309',
+    'Manutenção':'#DC2626',
+    'Indisponível':'#6B7280'
+  };
+
+  var APPS = [
+    {
+      key:'estoque', href:'./auditoria/', color:'#FA4616',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 7v4l2.5 2.5"/></svg>',
+      name:'Gestão de Estoque',
+      desc:'Auditoria de divergências, endereços e inventários do CD.',
+      keywords:'divergências endereços inventários',
+      status:'Disponível', tv:''
+    },
+    {
+      key:'inventario', href:'./inventario-rotativo/', color:'#1E33C7',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>',
+      name:'Inventário Rotativo',
+      desc:'Ciclos, produtividade, divergências e NET do inventário rotativo.',
+      keywords:'ciclos produtividade net',
+      status:'Disponível', tv:''
+    },
+    {
+      key:'elevadores', href:'./equalizacao-elevadores/', color:'#0E9488',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>',
+      name:'Equalização de Elevadores',
+      desc:'Equalização de bases e colunas de elevadores do CD.',
+      keywords:'bases colunas',
+      status:'Disponível', tv:''
+    },
+    {
+      key:'projetos', href:'./acompanhamento-projetos/', color:'#7C3AED',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+      name:'Projetos',
+      desc:'Acompanhamento de projetos e iniciativas do CD.',
+      keywords:'marcos cronograma painel',
+      status:'Disponível', tv:''
+    },
+    {
+      key:'transitorios', href:'./transitorios/', color:'#B45309',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M3 16v5h5"/><path d="M21 16v5h-5"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>',
+      name:'Gestão de Transitórios',
+      desc:'Estoque parado fora do picking, por setor responsável.',
+      keywords:'setores prazo 48h boletim',
+      status:'Disponível', tv:''
+    },
+    {
+      key:'multiplos', href:'./multiplos-descasados/', color:'#9D174D',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 7h7"/><path d="M17.5 3.5 21 7l-3.5 3.5"/><path d="M10 17H3"/><path d="M6.5 13.5 3 17l3.5 3.5"/></svg>',
+      name:'Múltiplos Descasados',
+      desc:'Componente de múltiplo sem par no estoque, com valor e bloqueio em 86.',
+      keywords:'zbiq0051 qry0390 bloqueio 86',
+      status:'Disponível', tv:''
+    }
+  ];
+
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  var OVERRIDE_KEY = 'ldm-app-overrides';
+  function getOverrides(){
+    try { return JSON.parse(localStorage.getItem(OVERRIDE_KEY) || '{}'); } catch(e){ return {}; }
+  }
+  function setOverrides(o){
+    try { localStorage.setItem(OVERRIDE_KEY, JSON.stringify(o)); } catch(e){}
+  }
+  function getApp(key){
+    var base = APPS.filter(function(a){ return a.key === key; })[0];
+    var ov = getOverrides()[key] || {};
+    return Object.assign({}, base, ov);
+  }
+  function getAllApps(){
+    return APPS.map(function(a){ return getApp(a.key); });
   }
 
   var FAV_KEY = 'ldm-favoritos';
@@ -371,6 +442,15 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   }
   function setFavoritos(list){
     try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch(e){}
+  }
+
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 2000);
   }
 
   function closeAllMenus(except){
@@ -382,62 +462,188 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     });
   }
 
-  function applyFavState(card, isFav){
-    card.classList.toggle('is-favorite', isFav);
-    var favBtn = card.querySelector('.card-menu .fav');
-    if(favBtn){
-      favBtn.classList.toggle('is-active', isFav);
-      favBtn.querySelector('.fav-label').textContent = isFav ? 'Remover dos favoritos' : 'Favoritar';
-    }
+  function cardHTML(app, isFav){
+    var dot = STATUS_COLOR[app.status] || STATUS_COLOR['Disponível'];
+    var searchStr = esc((app.name + ' ' + app.desc + ' ' + app.keywords + ' ' + app.status).toLowerCase());
+    return ''
+      + '<div class="card' + (isFav ? ' is-favorite' : '') + '" style="--accent:' + app.color + ';" data-search="' + searchStr + '" data-key="' + app.key + '">'
+      +   '<span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>'
+      +   '<a class="card-link" href="' + app.href + '" aria-label="Acessar ' + esc(app.name) + '"></a>'
+      +   '<button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — ' + esc(app.name) + '">'
+      +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>'
+      +   '</button>'
+      +   '<div class="card-menu" hidden>'
+      +     '<button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>'
+      +     '<button type="button" class="fav' + (isFav ? ' is-active' : '') + '"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">' + (isFav ? 'Remover dos favoritos' : 'Favoritar') + '</span></button>'
+      +     '<button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>'
+      +   '</div>'
+      +   '<div class="card-top-row">'
+      +     '<div class="card-icon">' + app.icon + '</div>'
+      +     '<span class="card-status"><span class="live-dot" style="--dot:' + dot + ';"></span>' + esc(app.status) + '</span>'
+      +   '</div>'
+      +   '<h3 class="card-title">' + esc(app.name) + '</h3>'
+      +   '<p class="card-desc">' + esc(app.desc) + '</p>'
+      +   '<div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>'
+      + '</div>';
   }
 
-  var favoritos = getFavoritos();
-  document.querySelectorAll('.card').forEach(function(card){
-    applyFavState(card, favoritos.indexOf(card.dataset.key) !== -1);
+  var cardsGrid = document.getElementById('cardsGrid');
+  var searchInput = document.getElementById('searchInput');
+  var noResults = document.getElementById('noResults');
+
+  function applySearchFilter(){
+    var q = searchInput.value.trim().toLowerCase();
+    var visible = 0;
+    cardsGrid.querySelectorAll('.card').forEach(function(c){
+      var match = !q || c.dataset.search.indexOf(q) !== -1;
+      c.style.display = match ? '' : 'none';
+      if(match) visible++;
+    });
+    noResults.style.display = visible ? 'none' : 'block';
+  }
+  searchInput.addEventListener('input', applySearchFilter);
+
+  function renderCards(){
+    var favoritos = getFavoritos();
+    cardsGrid.innerHTML = getAllApps().map(function(a){
+      return cardHTML(a, favoritos.indexOf(a.key) !== -1);
+    }).join('');
+    applySearchFilter();
+  }
+
+  var manageTableBody = document.getElementById('manageTableBody');
+  function renderManageTable(){
+    manageTableBody.innerHTML = getAllApps().map(function(a){
+      var dot = STATUS_COLOR[a.status] || STATUS_COLOR['Disponível'];
+      return ''
+        + '<tr data-key="' + a.key + '">'
+        +   '<td><div class="mt-app"><span class="mt-icon" style="--accent:' + a.color + ';">' + a.icon + '</span><div><div class="mt-name">' + esc(a.name) + '</div><div class="mt-desc">' + esc(a.desc) + '</div></div></div></td>'
+        +   '<td><span class="status-pill" style="--dot:' + dot + ';">' + esc(a.status) + '</span></td>'
+        +   '<td>' + (a.tv ? esc(a.tv) : '<span class="mt-empty">—</span>') + '</td>'
+        +   '<td><div class="mt-actions"><button type="button" class="mt-edit" data-key="' + a.key + '">Editar</button><a class="mt-open" href="' + a.href + '">Abrir →</a></div></td>'
+        + '</tr>';
+    }).join('');
+  }
+  window.renderManageTable = renderManageTable;
+
+  /* Modal de edição */
+  var modalOverlay = document.getElementById('modalOverlay');
+  var editForm = document.getElementById('editForm');
+  var fNome = document.getElementById('fNome');
+  var fDesc = document.getElementById('fDesc');
+  var fCor = document.getElementById('fCor');
+  var fStatus = document.getElementById('fStatus');
+  var fTv = document.getElementById('fTv');
+  var editingKey = null;
+
+  STATUS_OPTIONS.forEach(function(s){
+    var opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = s;
+    fStatus.appendChild(opt);
   });
 
-  document.querySelectorAll('.card-kebab').forEach(function(btn){
-    btn.addEventListener('click', function(e){
+  function openEditModal(key){
+    var app = getApp(key);
+    editingKey = key;
+    fNome.value = app.name;
+    fDesc.value = app.desc;
+    fCor.value = app.color;
+    fStatus.value = app.status;
+    fTv.value = app.tv || '';
+    modalOverlay.hidden = false;
+    fNome.focus();
+  }
+  function closeEditModal(){
+    modalOverlay.hidden = true;
+    editingKey = null;
+  }
+  document.getElementById('modalClose').addEventListener('click', closeEditModal);
+  document.getElementById('modalCancel').addEventListener('click', closeEditModal);
+  modalOverlay.addEventListener('click', function(e){
+    if(e.target === modalOverlay) closeEditModal();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && !modalOverlay.hidden) closeEditModal();
+  });
+  editForm.addEventListener('submit', function(e){
+    e.preventDefault();
+    if(!editingKey) return;
+    var overrides = getOverrides();
+    overrides[editingKey] = {
+      name: fNome.value.trim(),
+      desc: fDesc.value.trim(),
+      color: fCor.value,
+      status: fStatus.value,
+      tv: fTv.value.trim()
+    };
+    setOverrides(overrides);
+    closeEditModal();
+    renderCards();
+    renderManageTable();
+    showToast('Alterações salvas.');
+  });
+
+  /* Favoritar / Editar / Remover — delegação de eventos (cards são re-renderizados) */
+  cardsGrid.addEventListener('click', function(e){
+    var kebabBtn = e.target.closest('.card-kebab');
+    if(kebabBtn){
       e.preventDefault();
       e.stopPropagation();
-      var menu = btn.nextElementSibling;
+      var menu = kebabBtn.nextElementSibling;
       var willOpen = menu.hidden;
       closeAllMenus(willOpen ? menu : null);
       menu.hidden = !willOpen;
-      btn.setAttribute('aria-expanded', String(willOpen));
-    });
-  });
-
-  document.querySelectorAll('.card-menu .edit, .card-menu .remove').forEach(function(btn){
-    btn.addEventListener('click', function(e){
+      kebabBtn.setAttribute('aria-expanded', String(willOpen));
+      return;
+    }
+    var editBtn = e.target.closest('.card-menu .edit');
+    if(editBtn){
       e.preventDefault();
       e.stopPropagation();
+      var editKey = editBtn.closest('.card').dataset.key;
       closeAllMenus();
-      showToast('Em breve.');
-    });
-  });
-
-  document.querySelectorAll('.card-menu .fav').forEach(function(btn){
-    btn.addEventListener('click', function(e){
+      openEditModal(editKey);
+      return;
+    }
+    var favBtn = e.target.closest('.card-menu .fav');
+    if(favBtn){
       e.preventDefault();
       e.stopPropagation();
-      var card = btn.closest('.card');
+      var card = favBtn.closest('.card');
       var key = card.dataset.key;
       var list = getFavoritos();
       var idx = list.indexOf(key);
       var nowFav;
       if(idx === -1){ list.push(key); nowFav = true; } else { list.splice(idx, 1); nowFav = false; }
       setFavoritos(list);
-      applyFavState(card, nowFav);
+      card.classList.toggle('is-favorite', nowFav);
+      favBtn.classList.toggle('is-active', nowFav);
+      favBtn.querySelector('.fav-label').textContent = nowFav ? 'Remover dos favoritos' : 'Favoritar';
       closeAllMenus();
       showToast(nowFav ? 'Adicionado aos favoritos.' : 'Removido dos favoritos.');
-    });
+      return;
+    }
+    var removeBtn = e.target.closest('.card-menu .remove');
+    if(removeBtn){
+      e.preventDefault();
+      e.stopPropagation();
+      closeAllMenus();
+      showToast('Em breve.');
+      return;
+    }
+  });
+
+  manageTableBody.addEventListener('click', function(e){
+    var editBtn = e.target.closest('.mt-edit');
+    if(editBtn){
+      openEditModal(editBtn.dataset.key);
+    }
   });
 
   document.addEventListener('click', function(){ closeAllMenus(); });
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape') closeAllMenus();
-  });
+
+  renderCards();
 })();
 </script>
 </body>
