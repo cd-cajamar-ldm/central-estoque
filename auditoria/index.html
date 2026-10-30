@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Central de Controle de Estoque</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Poppins:wght@600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -25,7 +25,7 @@
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;overflow:hidden;}
   body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;font-size:13.5px;}
-  h1,h2,h3,h4{font-family:'Oswald',sans-serif;letter-spacing:.01em;}
+  h1,h2,h3,h4{font-family:'Poppins',sans-serif;font-weight:700;letter-spacing:.01em;}
   .mono{font-family:'IBM Plex Mono',monospace;}
   button{font-family:'Inter',sans-serif;cursor:pointer;}
   :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
@@ -34,10 +34,10 @@
   /* SHELL */
   .shell{display:flex;height:100vh;overflow:hidden;}
 
-  /* SIDEBAR */
+  /* SIDEBAR — mesmo azul-marinho da sidebar da Oficina LDM (Painel raiz) */
   .sidebar{
     width:220px;flex-shrink:0;
-    background:var(--surface);
+    background:#0B1230;
     border-right:1px solid var(--line);
     display:flex;flex-direction:column;
     overflow:hidden;
@@ -153,6 +153,7 @@
   }
   .topbar-left h1{font-size:17px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--ink);}
   .topbar-left p{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
+  .cd-badge{flex-shrink:0;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;white-space:nowrap;}
   .storage-warning{background:rgba(200,56,18,.15);color:#f08060;border:1px solid rgba(200,56,18,.35);border-radius:var(--radius);padding:7px 16px;font-size:12.5px;margin:0 24px;flex-shrink:0;}
   .page-scroll{flex:1;overflow-y:auto;padding:20px 24px;}
 
@@ -208,7 +209,7 @@
 
   /* TABLES */
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  thead th{text-align:left;background:#001A72;color:#fff;font-family:'Oswald',sans-serif;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;}
+  thead th{text-align:left;background:#001A72;color:#fff;font-family:'Poppins',sans-serif;font-weight:700;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;}
   thead th:first-child{border-radius:4px 0 0 0;}
   thead th:last-child{border-radius:0 4px 0 0;}
   tbody td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
@@ -337,6 +338,7 @@
         <h1 id="tab-title">Painel</h1>
         <p id="tab-subtitle">Visão geral do estoque e da equipe.</p>
       </div>
+      <span class="cd-badge">CD CAJAMAR</span>
     </div>
     <div id="storage-banner"></div>
     <div class="page-scroll">
@@ -1160,7 +1162,7 @@ function renderCalendarioView(){
       ${ts.length>3?`<div style="font-size:10px;color:var(--ink-soft);">+${ts.length-3} mais</div>`:''}
     </div>`;
   }
-  return `<div style="margin-bottom:12px;font-family:'Oswald',sans-serif;font-size:16px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);">${monthName}</div>
+  return `<div style="margin-bottom:12px;font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);">${monthName}</div>
   <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
     ${dow.map(d=>`<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);text-align:center;padding:4px 0;">${d}</div>`).join('')}
   </div>
