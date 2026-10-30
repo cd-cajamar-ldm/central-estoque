@@ -1008,19 +1008,48 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       } catch(e){ /* conteúdo ainda não acessível: ignora */ }
     }
 
+    function findScrollTarget(win, doc){
+      /* Os apps embutidos usam um shell flex com overflow:hidden no próprio
+         <html>/<body> — quem realmente rola é um contêiner interno
+         (.page-scroll, convenção compartilhada entre os apps). Rolar
+         document.documentElement nesses casos não move nada, então
+         primeiro tenta essa classe conhecida e, se não achar, procura o
+         maior contêiner com overflow-y:auto/scroll na página. */
+      var known = doc.querySelector('.page-scroll');
+      if(known && known.scrollHeight - known.clientHeight > 4) return known;
+      var best = null, bestDelta = 4;
+      var all = doc.querySelectorAll('*');
+      for(var i = 0; i < all.length; i++){
+        var el = all[i];
+        var delta = el.scrollHeight - el.clientHeight;
+        if(delta <= bestDelta) continue;
+        var oy = win.getComputedStyle(el).overflowY;
+        if(oy === 'auto' || oy === 'scroll'){ best = el; bestDelta = delta; }
+      }
+      if(best) return best;
+      var de = doc.documentElement;
+      if(de.scrollHeight - win.innerHeight > 4) return de;
+      return null;
+    }
+    var scrollTarget = null;
     function getMaxScroll(){
       if(cachedMaxScroll != null) return cachedMaxScroll;
       try {
         var win = iframe.contentWindow, doc = win.document;
-        var m = doc.documentElement.scrollHeight - win.innerHeight;
-        if(m > 0){ cachedMaxScroll = m; return m; }
+        scrollTarget = findScrollTarget(win, doc);
+        if(scrollTarget){
+          var m = scrollTarget === doc.documentElement
+            ? scrollTarget.scrollHeight - win.innerHeight
+            : scrollTarget.scrollHeight - scrollTarget.clientHeight;
+          if(m > 0){ cachedMaxScroll = m; return m; }
+        }
       } catch(e){}
       return 0;
     }
     function applyScrollFraction(frac){
       var max = getMaxScroll();
-      if(max <= 0) return;
-      try { iframe.contentWindow.scrollTo(0, max * frac); } catch(e){}
+      if(max <= 0 || !scrollTarget) return;
+      try { scrollTarget.scrollTop = max * frac; } catch(e){}
     }
 
     function currentElapsed(){
@@ -1083,6 +1112,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       elapsedBeforeTick = 0;
       tickStartTs = Date.now();
       cachedMaxScroll = null;
+      scrollTarget = null;
       paused = false;
       updatePlayPauseIcon();
       setLabel((index + 1) + '/' + playlist.length + ' · ' + item.app.name);
