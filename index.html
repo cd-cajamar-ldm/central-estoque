@@ -156,6 +156,7 @@
   .tv-suburl-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:560px;}
   .tv-suburl-field{display:flex;flex-direction:column;gap:6px;font-size:11.5px;font-weight:700;color:var(--ink-soft);max-width:560px;}
   .tv-suburl-field input,.tv-suburl-field select{font-family:'Inter',sans-serif;font-size:13px;font-weight:400;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:8px 12px;}
+  .tv-suburl-warning{margin:10px 0 0;max-width:560px;font-size:12px;font-weight:600;line-height:1.5;color:#A8290F;background:rgba(200,56,18,.1);border:1px solid rgba(200,56,18,.3);border-radius:8px;padding:8px 12px;}
 
   /* Simulador de TV */
   .tv-sim-hint{position:relative;z-index:2;margin:6px 0 20px;font-size:12.5px;color:var(--ink-soft);max-width:580px;line-height:1.5;}
@@ -830,6 +831,14 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     return Object.assign(defaults, store[appKey] || {});
   }
 
+  /* Apps sem suporte a página específica (bundles prontos, sem rota por
+     hash) cuja tela inicial não serve pra TV — aviso pra quem for marcar
+     "Exibir na TV" não ser pego de surpresa (ex.: Equalização de Elevadores
+     abre direto num formulário de importar planilha). */
+  var TV_HOME_WARNINGS = {
+    elevadores: 'Este app abre direto na tela de Importação (upload de planilha) — não é uma tela passiva. Se não quiser isso na TV, desmarque "Exibir na TV" pra este app.'
+  };
+
   var tvTableBody = document.getElementById('tvTableBody');
   function renderTvTable(){
     tvTableBody.innerHTML = getAllApps().map(function(a, i){
@@ -838,6 +847,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       var pageOptions = '<option value="">Página inicial</option>' + pages.map(function(p){
         return '<option value="' + p.id + '"' + (p.id === cfg.viewPage ? ' selected' : '') + '>' + esc(p.label) + '</option>';
       }).join('');
+      var homeWarning = !pages.length && TV_HOME_WARNINGS[a.key]
+        ? '<p class="tv-suburl-warning">⚠ ' + esc(TV_HOME_WARNINGS[a.key]) + '</p>'
+        : '';
       return ''
         + '<tr data-key="' + a.key + '">'
         +   '<td><div class="mt-app"><span class="mt-icon" style="--accent:' + a.color + ';">' + a.icon + '</span><div class="mt-name">' + esc(a.name) + '</div></div></td>'
@@ -863,6 +875,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
                   }).join('') + '</select>'
         +       '</label>'
         +     '</div>'
+        +     homeWarning
         +     '<label class="tv-suburl-field" style="margin-top:12px;">'
         +       '<span>Ou link personalizado (avançado — sobrescreve a página acima)</span>'
         +       '<input type="text" class="tv-field" data-field="viewUrl" placeholder="' + esc(a.href) + '" value="' + esc(cfg.viewUrl) + '">'
