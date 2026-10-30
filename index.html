@@ -150,6 +150,29 @@
   select.tv-field{font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
   input.tv-field[type=checkbox]{width:17px;height:17px;accent-color:var(--orange);cursor:pointer;}
 
+  /* Simulador de TV */
+  .tv-sim-hint{position:relative;z-index:2;margin:6px 0 20px;font-size:12.5px;color:var(--ink-soft);max-width:580px;line-height:1.5;}
+  .tv-sim-tv{position:relative;z-index:2;background:#15193A;border-radius:18px;padding:14px;width:380px;box-shadow:0 20px 40px -18px var(--shadow-col);}
+  .tv-sim-screen-box{position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;}
+  .tv-sim-screen-box iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;}
+  .tv-sim-empty{margin:0;padding:0 18px;text-align:center;font-size:12px;color:#8891C4;}
+  .tv-sim-stand{width:54px;height:12px;background:#15193A;border:1px solid rgba(255,255,255,.1);border-top:none;margin:0 auto;border-radius:0 0 7px 7px;}
+  .tv-sim-foot{width:130px;height:6px;background:#0B0E26;margin:0 auto;border-radius:3px;}
+  .tv-sim-label{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;font-size:11.5px;font-weight:600;color:#C7CCEA;}
+  .tv-sim-label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tv-sim-expand{flex-shrink:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#fff;font-weight:700;font-size:11px;padding:6px 12px;border-radius:999px;cursor:pointer;font-family:'Inter',sans-serif;}
+  .tv-sim-expand:hover{background:rgba(255,255,255,.14);}
+  .tv-sim-progress{height:3px;background:rgba(255,255,255,.14);border-radius:3px;overflow:hidden;margin-top:8px;}
+  .tv-sim-progress-bar{height:100%;width:0%;background:var(--orange);}
+
+  .tv-sim-modal-overlay{position:fixed;inset:0;background:rgba(5,7,16,.72);display:flex;align-items:center;justify-content:center;z-index:120;padding:28px;}
+  .tv-sim-modal-overlay[hidden]{display:none;}
+  .tv-sim-modal{background:#15193A;border-radius:20px;padding:20px;width:min(920px,94vw);}
+  .tv-sim-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;color:#fff;font-size:14px;}
+  .tv-sim-modal-head .modal-close{color:#C7CCEA;}
+  .tv-sim-modal-screen{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:16/9;}
+  .tv-sim-modal-screen iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;}
+
   /* CONFIGURAÇÕES */
   .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:520px;margin-top:24px;}
 
@@ -317,7 +340,34 @@
         </thead>
         <tbody id="tvTableBody"></tbody>
       </table>
+
+      <p class="section-label" style="margin-top:30px;">Simular TV</p>
+      <p class="tv-sim-hint">Pré-visualização do que vai passar na TV — só os apps marcados "Exibir na TV" acima, na sequência e no tempo configurados. Nem todos os apps aparecem aqui, só os marcados.</p>
+
+      <div class="tv-sim-tv" id="tvSimTv">
+        <div class="tv-sim-screen-box" id="tvSimScreenBox">
+          <p class="tv-sim-empty" id="tvSimEmpty" hidden>Nenhum app marcado para a TV ainda. Marque "Exibir na TV" na tabela acima.</p>
+        </div>
+        <div class="tv-sim-stand"></div>
+        <div class="tv-sim-foot"></div>
+        <div class="tv-sim-label">
+          <span id="tvSimLabel">—</span>
+          <button type="button" class="tv-sim-expand" id="tvSimExpand">Expandir ⤢</button>
+        </div>
+        <div class="tv-sim-progress"><div class="tv-sim-progress-bar" id="tvSimProgressBar"></div></div>
+      </div>
     </section>
+
+    <div class="tv-sim-modal-overlay" id="tvSimModalOverlay" hidden>
+      <div class="tv-sim-modal">
+        <div class="tv-sim-modal-head">
+          <strong id="tvSimModalLabel">—</strong>
+          <button type="button" class="modal-close" id="tvSimModalClose" aria-label="Fechar">&#10005;</button>
+        </div>
+        <div class="tv-sim-modal-screen" id="tvSimModalScreenBox"></div>
+        <div class="tv-sim-progress" style="margin-top:14px;"><div class="tv-sim-progress-bar" id="tvSimModalProgressBar"></div></div>
+      </div>
+    </div>
 
     <section class="view" id="view-config" hidden>
       <div class="config-placeholder">
@@ -419,7 +469,12 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       viewTitle.textContent = VIEW_META[v].title;
       viewSubtitle.textContent = VIEW_META[v].sub;
       if(v === 'gestao' && window.renderManageTable) window.renderManageTable();
-      if(v === 'tv' && window.renderTvTable) window.renderTvTable();
+      if(v === 'tv'){
+        if(window.renderTvTable) window.renderTvTable();
+        if(window.renderTvSim) window.renderTvSim();
+      } else if(window.stopTvSim){
+        window.stopTvSim();
+      }
     });
   });
 })();
@@ -651,7 +706,141 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     store[key] = cfg;
     setTvConfigStore(store);
     showToast('Configuração da TV salva.');
+    if(window.renderTvSim) window.renderTvSim();
   });
+
+  /* Simulador de TV — mostra, em sequência, só os apps marcados "Exibir na
+     TV", rolando devagar cada página até o fim antes de trocar de app. */
+  (function(){
+    var SETTLE_MS = 1200;
+    var END_PAUSE_MS = 900;
+
+    var screenBox = document.getElementById('tvSimScreenBox');
+    var emptyMsg = document.getElementById('tvSimEmpty');
+    var label = document.getElementById('tvSimLabel');
+    var progressBar = document.getElementById('tvSimProgressBar');
+    var expandBtn = document.getElementById('tvSimExpand');
+    var modalOverlay2 = document.getElementById('tvSimModalOverlay');
+    var modalScreenBox = document.getElementById('tvSimModalScreenBox');
+    var modalLabel = document.getElementById('tvSimModalLabel');
+    var modalProgressBar = document.getElementById('tvSimModalProgressBar');
+    var modalClose = document.getElementById('tvSimModalClose');
+
+    var iframe = null;
+    var playlist = [];
+    var index = 0;
+    var timer = null;
+    var scrollRaf = null;
+    var running = false;
+
+    function buildPlaylist(){
+      var store = getTvConfigStore();
+      var list = getAllApps().map(function(a, i){
+        var cfg = Object.assign({included:false, order:i + 1, duration:20, lang:'pt-BR'}, store[a.key] || {});
+        return {app:a, cfg:cfg};
+      }).filter(function(x){ return x.cfg.included; });
+      list.sort(function(a, b){ return a.cfg.order - b.cfg.order; });
+      return list;
+    }
+
+    function setLabel(text){
+      label.textContent = text;
+      modalLabel.textContent = text;
+    }
+    function setProgress(pct, withTransition, durationMs){
+      [progressBar, modalProgressBar].forEach(function(bar){
+        bar.style.transition = withTransition ? ('width ' + durationMs + 'ms linear') : 'none';
+        bar.style.width = pct + '%';
+      });
+    }
+
+    function stop(){
+      running = false;
+      clearTimeout(timer);
+      if(scrollRaf) cancelAnimationFrame(scrollRaf);
+      if(iframe) iframe.src = 'about:blank';
+    }
+
+    function autoScrollIframe(frame, totalDurationMs){
+      var win, doc;
+      try { win = frame.contentWindow; doc = win.document; } catch(e){ return; }
+      var scrollMs = Math.max(600, totalDurationMs - SETTLE_MS - END_PAUSE_MS);
+      var maxScroll = doc.documentElement.scrollHeight - win.innerHeight;
+      if(!maxScroll || maxScroll <= 0) return;
+      var start = null;
+      function step(ts){
+        if(!running) return;
+        if(start === null) start = ts;
+        var pct = Math.min(1, (ts - start) / scrollMs);
+        try { win.scrollTo(0, maxScroll * pct); } catch(e){ return; }
+        if(pct < 1) scrollRaf = requestAnimationFrame(step);
+      }
+      scrollRaf = requestAnimationFrame(step);
+    }
+
+    function playIndex(i){
+      if(!running || !playlist.length) return;
+      clearTimeout(timer);
+      if(scrollRaf) cancelAnimationFrame(scrollRaf);
+      index = i % playlist.length;
+      var item = playlist[index];
+      var durationMs = Math.max(5, item.cfg.duration) * 1000;
+
+      setLabel((index + 1) + '/' + playlist.length + ' · ' + item.app.name);
+      setProgress(0, false, 0);
+      iframe.src = item.app.href;
+      iframe.onload = function(){
+        if(!running) return;
+        void progressBar.offsetWidth;
+        setProgress(100, true, durationMs);
+        setTimeout(function(){ autoScrollIframe(iframe, durationMs); }, SETTLE_MS);
+      };
+
+      timer = setTimeout(function(){ playIndex(index + 1); }, durationMs);
+    }
+
+    function renderTvSim(){
+      playlist = buildPlaylist();
+      stop();
+      if(!playlist.length){
+        emptyMsg.hidden = false;
+        setLabel('—');
+        setProgress(0, false, 0);
+        if(iframe) iframe.remove();
+        modalOverlay2.hidden = true;
+        return;
+      }
+      emptyMsg.hidden = true;
+      if(!iframe){
+        iframe = document.createElement('iframe');
+        iframe.setAttribute('title', 'Simulação da TV LDM');
+        screenBox.appendChild(iframe);
+      } else if(iframe.parentElement !== screenBox && modalOverlay2.hidden){
+        screenBox.appendChild(iframe);
+      }
+      running = true;
+      playIndex(0);
+    }
+    window.renderTvSim = renderTvSim;
+    window.stopTvSim = stop;
+
+    expandBtn.addEventListener('click', function(){
+      if(!iframe) return;
+      modalScreenBox.appendChild(iframe);
+      modalOverlay2.hidden = false;
+    });
+    function collapseModal(){
+      if(iframe) screenBox.appendChild(iframe);
+      modalOverlay2.hidden = true;
+    }
+    modalClose.addEventListener('click', collapseModal);
+    modalOverlay2.addEventListener('click', function(e){
+      if(e.target === modalOverlay2) collapseModal();
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && !modalOverlay2.hidden) collapseModal();
+    });
+  })();
 
   /* Modal de edição */
   var modalOverlay = document.getElementById('modalOverlay');
