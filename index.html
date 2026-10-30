@@ -3,219 +3,442 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Central Loja do Mecânico</title>
+<title>Oficina LDM</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<meta name="theme-color" content="#0A0E3D">
+<meta name="theme-color" content="#0B1230">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#161933; --ink-soft:#6A6F94; --line:#E7E8F5;
-    --paper:#F3F4FB; --surface:#FFFFFF;
+    --bg0:#F2F4FA;--surface:#FFFFFF;--line:#DCE1F0;
+    --ink:#101633;--ink-soft:#5B6485;--card-top:#FFFFFF;--card-bottom:#FFFFFF;
+    --chip-bg:#EDF0F9;--chip-bg-hover:#E1E6F4;
+    --shadow-col:rgba(16,22,60,.14);--shadow-near:rgba(16,22,60,.06);
+    --orange:#FE5000;
   }
-  *{ box-sizing:border-box; }
-  body{
-    margin:0; font-family:'Inter',system-ui,-apple-system,sans-serif; background:var(--paper); color:var(--ink);
-    -webkit-font-smoothing:antialiased;
+  body.theme-dark{
+    --bg0:#070910;--surface:rgba(255,255,255,.045);--line:rgba(255,255,255,.1);
+    --ink:#F3F2FA;--ink-soft:#8E95C2;--card-top:rgba(255,255,255,.055);--card-bottom:rgba(255,255,255,.02);
+    --chip-bg:rgba(255,255,255,.06);--chip-bg-hover:rgba(255,255,255,.14);
+    --shadow-col:rgba(0,0,0,.55);--shadow-near:rgba(0,0,0,.3);
   }
-  .hero{
-    position:relative; overflow:hidden;
-    background:radial-gradient(1100px 520px at 12% -10%, #2A3AA8 0%, transparent 55%),
-               radial-gradient(900px 480px at 100% 0%, #FF6A2E 0%, transparent 45%),
-               linear-gradient(150deg, #0A0E3D 0%, #0D1250 55%, #1A1466 100%);
-    color:#fff; padding:28px 32px 58px;
-  }
-  .hero::after{
-    content:''; position:absolute; inset:0; opacity:.5; pointer-events:none;
-    background-image:radial-gradient(circle, rgba(255,255,255,.09) 1px, transparent 1px);
-    background-size:26px 26px; mask-image:linear-gradient(to bottom, rgba(0,0,0,.6), transparent 70%);
-  }
-  .hero-inner{ position:relative; }
-  .hero-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:30px; }
-  .hero-logo{ height:54px; display:block; filter:drop-shadow(0 3px 10px rgba(0,0,0,.35)); }
-  .hero-badge{
-    display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.1);
-    border:1px solid rgba(255,255,255,.2); backdrop-filter:blur(6px); border-radius:100px; padding:5px 13px;
-    font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:#E4E7FF;
-  }
-  .hero-badge.hero-badge-accent{ background:linear-gradient(90deg,#FF6A2E,#FF9142); border-color:transparent; color:#fff; }
-  h1{
-    font-size:34px; font-weight:800; margin:16px 0 8px; letter-spacing:-.02em;
-    background:linear-gradient(90deg,#fff 30%,#C9CEFF 100%); -webkit-background-clip:text; background-clip:text; color:transparent;
-  }
-  .hero-inner p{ margin:0; color:#AEB3E0; font-size:14.5px; max-width:520px; }
-  .body{ max-width:1160px; margin:-30px auto 60px; padding:0 32px; position:relative; }
-  .section-label{
-    font-size:11.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-soft);
-    margin:0 0 14px 4px;
-  }
-  .cards{ display:grid; grid-template-columns:repeat(auto-fit, minmax(255px, 1fr)); gap:20px; }
-  .card{
-    background:var(--surface); border:1px solid var(--line); border-radius:16px; overflow:hidden;
-    box-shadow:0 14px 30px -20px rgba(20,24,60,.35); display:flex; flex-direction:column;
-    transition:transform .18s ease, box-shadow .18s ease;
-  }
-  a.card{ text-decoration:none; color:inherit; }
-  a.card:hover{ transform:translateY(-4px); box-shadow:0 22px 40px -18px rgba(20,24,60,.45); }
-  .card-top{
-    position:relative; height:96px; display:flex; align-items:center; justify-content:space-between; padding:16px;
-    overflow:hidden;
-  }
-  .card-top::after{
-    content:''; position:absolute; inset:0;
-    background-image:radial-gradient(circle, rgba(255,255,255,.16) 1.5px, transparent 1.5px);
-    background-size:16px 16px; opacity:.5;
-  }
-  .card-auditoria .card-top{ background:linear-gradient(135deg,#FA4616 0%,#FF8A3D 100%); }
-  .card-inventario .card-top{ background:linear-gradient(135deg,#0026B8 0%,#3D5AFE 55%,#7C8CFF 100%); }
-  .card-elevadores .card-top{ background:linear-gradient(135deg,#0E9488 0%,#2DD4BF 100%); }
-  .card-projetos .card-top{ background:linear-gradient(135deg,#8B5CF6 0%,#C4B5FD 100%); }
-  .card-transitorios .card-top{ background:linear-gradient(135deg,#D97706 0%,#FBBF24 100%); }
-  .card-multiplos .card-top{ background:linear-gradient(135deg,#BE185D 0%,#F472B6 100%); }
-  /* "Em breve" fica com a cor do módulo, só esmaecida — mantém cada card
-     reconhecível pela cor mesmo antes de ficar disponível. */
-  .card.disabled .card-top{ filter:saturate(.4) brightness(1.12); }
-  .card-icon{
-    position:relative; z-index:1; width:42px; height:42px; border-radius:11px; background:rgba(255,255,255,.22);
-    backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; color:#fff;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.35);
-  }
-  .card-status{
-    position:relative; z-index:1; font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:100px;
-    background:rgba(255,255,255,.22); color:#fff; display:flex; align-items:center; gap:5px; backdrop-filter:blur(4px);
-  }
-  .card-status .dot{ width:6px; height:6px; border-radius:50%; background:#3DFFA0; box-shadow:0 0 6px #3DFFA0; }
-  .card.disabled .card-status .dot{ background:#8890B8; box-shadow:none; }
-  .card-body{ padding:18px 18px 16px; flex:1; display:flex; flex-direction:column; }
-  .card-title{ font-size:17px; font-weight:800; margin:0 0 5px; color:var(--ink); letter-spacing:-.01em; }
-  .card-desc{ font-size:12.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 14px; flex:1; }
-  .card-tags{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
-  .tag{ font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:100px; }
-  .card-auditoria .tag{ background:#FFF0E8; color:#D6390F; }
-  .card-inventario .tag{ background:#E9EDFF; color:#1E33C7; }
-  .card-elevadores .tag{ background:#E3FBF7; color:#0B7A70; }
-  .card-projetos .tag{ background:#F1EAFE; color:#6D28D9; }
-  .card-transitorios .tag{ background:#FEF3E2; color:#B45309; }
-  .card-multiplos .tag{ background:#FDECF4; color:#9D174D; }
-  .card.disabled .tag{ background:#F0F1F8; color:#8890B8; }
-  .card-cta{
-    display:flex; align-items:center; justify-content:space-between; font-size:12.5px; font-weight:800;
-    padding-top:12px; border-top:1px solid var(--line);
-  }
-  .card-auditoria .card-cta{ color:#FA4616; }
-  .card-inventario .card-cta{ color:#3D5AFE; }
-  .card-elevadores .card-cta{ color:#0E9488; }
-  .card-projetos .card-cta{ color:#7C3AED; }
-  .card.disabled .card-cta{ color:#9AA1C4; }
-  .card-cta .arrow{ transition:transform .15s; }
-  a.card:hover .card-cta .arrow{ transform:translateX(3px); }
-  @media(max-width:640px){
-    .hero{ padding:22px 18px 46px; } .body{ padding:0 18px; } h1{ font-size:25px; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg0);color:var(--ink);-webkit-font-smoothing:antialiased;transition:background .3s,color .3s;}
+
+  .shell{display:flex;min-height:100vh;width:100%;}
+
+  /* SIDEBAR — azul-marinho fixo, não acompanha o tema (âncora visual da marca) */
+  .sidebar{width:252px;flex-shrink:0;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
+  .brand{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+  .brand-logo{position:relative;width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;overflow:hidden;border:none;box-shadow:0 10px 22px -6px rgba(254,80,0,.6),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s;padding:0;}
+  .brand-logo:hover{transform:translateY(-2px) scale(1.045);}
+  .brand-logo::before{content:'';position:absolute;top:-50%;left:-70%;width:55%;height:220%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:rotate(18deg);animation:shine 5s ease-in-out infinite;}
+  @keyframes shine{0%{left:-70%;}38%{left:150%;}100%{left:150%;}}
+  .brand-logo img{position:relative;z-index:1;width:70%;height:70%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));pointer-events:none;}
+  .brand-logo:hover img{animation:wiggle 1s ease-in-out infinite;}
+  @keyframes wiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
+  .brand-logo.spin img{animation:spin360 .6s cubic-bezier(.34,1.56,.64,1);}
+  @keyframes spin360{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  .brand-name{font-family:'Poppins',sans-serif;font-size:17px;font-weight:800;color:#fff;line-height:1.15;}
+  .brand-sub{font-size:11px;color:#8891C4;margin-top:2px;}
+
+  .sb-foot{margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:#6B74A8;}
+
+  /* MAIN */
+  .main{position:relative;flex:1;min-width:0;padding:40px 48px 70px;overflow:hidden;}
+  .wheel-mark{position:absolute;right:-70px;top:38%;width:500px;height:500px;transform:translateY(-50%);opacity:.05;pointer-events:none;z-index:0;color:var(--ink);animation:wheelspin 11s linear infinite;}
+  @keyframes wheelspin{to{transform:translateY(-50%) rotate(360deg);}}
+
+  .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;z-index:2;}
+  .topbar h1{font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;margin:0;}
+  .topbar p{margin:5px 0 0;color:var(--ink-soft);font-size:13.5px;max-width:480px;}
+  .topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+  .cd-badge{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;}
+  .theme-switch{position:relative;width:54px;height:28px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
+  .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
+  .theme-switch.on .theme-knob{left:29px;}
+
+  .search-row{position:relative;margin:24px 0 8px;z-index:2;max-width:420px;}
+  .search-row input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:11px 18px 11px 40px;font-size:13.5px;color:var(--ink);font-family:'Inter',sans-serif;}
+  .search-row input::placeholder{color:var(--ink-soft);}
+  .search-row svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-soft);pointer-events:none;}
+
+  .section-label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin:20px 0 14px;position:relative;z-index:2;}
+
+  .cards{position:relative;display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:20px;z-index:2;}
+  .card{position:relative;background:linear-gradient(180deg,var(--card-top),var(--card-bottom));border:1px solid var(--line);border-radius:22px;padding:22px 22px 18px;color:inherit;display:flex;flex-direction:column;box-shadow:0 1px 2px var(--shadow-near),0 14px 30px -18px var(--shadow-col);transition:transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .3s;}
+  .card::before{content:'';position:absolute;inset:0;border-radius:22px;padding:1px;background:linear-gradient(135deg,var(--accent),transparent 45%);opacity:0;transition:opacity .3s;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;}
+  .card:hover{transform:perspective(900px) rotateX(2deg) translateY(-6px) scale(1.012);box-shadow:0 2px 4px var(--shadow-near),0 26px 46px -18px var(--shadow-col);}
+  .card:hover::before{opacity:.9;}
+  /* link esticado: cobre o card inteiro para navegação, mas fica abaixo do kebab/menu (z-index) */
+  .card-link{position:absolute;inset:0;z-index:1;border-radius:inherit;}
+  .card-top-row{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;padding-right:38px;}
+  .card-icon{position:relative;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 9px 18px -7px rgba(0,0,0,.4);flex-shrink:0;}
+  .card:hover .card-icon{animation:torque .5s ease-in-out;}
+  @keyframes torque{0%,100%{transform:rotate(0deg);}30%{transform:rotate(-7deg);}70%{transform:rotate(5deg);}}
+  .card-status{position:relative;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--ink-soft);margin-top:4px;}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:#1F8A52;animation:live 2s infinite;flex-shrink:0;}
+  @keyframes live{0%{box-shadow:0 0 0 0 rgba(31,138,82,.45);}70%{box-shadow:0 0 0 6px rgba(31,138,82,0);}100%{box-shadow:0 0 0 0 rgba(31,138,82,0);}}
+  .card-title{position:relative;font-size:16px;font-weight:700;margin:0 0 5px;}
+  .card-desc{position:relative;font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin:0 0 14px;flex:1;}
+  .card-tags{position:relative;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
+  .tag{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:100px;background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent);}
+  .card-cta{position:relative;display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:800;color:var(--accent);padding-top:13px;border-top:1px solid var(--line);}
+  .card-cta .arrow{transition:transform .15s;}
+  .card:hover .card-cta .arrow{transform:translateX(3px);}
+
+  .card-kebab{position:absolute;top:18px;right:18px;z-index:3;width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;transition:all .2s;}
+  .card-kebab:hover{background:var(--chip-bg-hover);color:var(--ink);}
+  .card-menu{position:absolute;top:52px;right:18px;z-index:4;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:6px;min-width:168px;box-shadow:0 18px 34px -14px var(--shadow-col);}
+  .card-menu[hidden]{display:none;}
+  .card-menu button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--ink);font-size:12.5px;padding:8px 10px;border-radius:9px;text-align:left;cursor:pointer;font-family:'Inter',sans-serif;}
+  .card-menu button:hover{background:var(--chip-bg);}
+  .card-menu button.danger{color:#D83C1E;}
+  .card-menu button.fav svg{transition:fill .15s,stroke .15s;}
+  .card-menu button.fav.is-active svg{fill:#FFB020;stroke:#FFB020;}
+  .card.is-favorite .card-icon::after{content:'★';position:absolute;top:-6px;right:-6px;width:17px;height:17px;border-radius:50%;background:#FFB020;color:#3A2600;font-size:10px;line-height:17px;text-align:center;box-shadow:0 0 0 2px var(--card-top,#fff);}
+
+  .no-results{display:none;text-align:center;padding:50px 20px;color:var(--ink-soft);font-size:13.5px;position:relative;z-index:2;}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(0);background:#161A3A;color:#fff;font-size:12.5px;font-weight:600;padding:10px 18px;border-radius:999px;box-shadow:0 14px 30px -10px rgba(0,0,0,.5);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+
+  @media(max-width:760px){
+    .shell{flex-direction:column;}
+    .sidebar{width:100%;flex-direction:row;align-items:center;padding:16px 20px;}
+    .brand{margin-bottom:0;}
+    .sb-foot{display:none;}
+    .main{padding:24px 18px 50px;}
   }
 </style>
 </head>
 <body>
-  <div class="hero">
-    <div class="hero-inner">
-      <div class="hero-top">
-        <img src="brand/Logo_LDM_hor_2_Branco.png" alt="Loja do Mecânico" class="hero-logo">
-        <span class="hero-badge">CD Cajamar</span>
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <button class="brand-logo" id="brandLogo" type="button" aria-label="Oficina LDM">
+        <img src="brand/Logo_LDM_icon.png" alt="">
+      </button>
+      <div>
+        <div class="brand-name">OFICINA LDM</div>
+        <div class="brand-sub">lugar de quem faz</div>
       </div>
-      <span class="hero-badge hero-badge-accent">Torre de Controle</span>
-      <h1>Central Loja do Mecânico</h1>
-      <p>Dados, indicadores e operação do CD conectados em um único ambiente.</p>
     </div>
-  </div>
-  <div class="body">
+    <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar</div>
+  </aside>
+
+  <main class="main">
+    <svg class="wheel-mark" viewBox="0 0 100 100" fill="none" stroke="currentColor" aria-hidden="true">
+      <circle cx="50" cy="50" r="45" stroke-width="9"/>
+      <circle cx="50" cy="50" r="34" stroke-width="2.5"/>
+      <g stroke-width="6.5" stroke-linecap="round">
+        <line x1="50" y1="38" x2="50" y2="18"/>
+        <line x1="61.41" y1="46.29" x2="80.44" y2="40.11"/>
+        <line x1="57.05" y1="59.71" x2="68.81" y2="75.89"/>
+        <line x1="42.95" y1="59.71" x2="31.19" y2="75.89"/>
+        <line x1="38.59" y1="46.29" x2="19.56" y2="40.11"/>
+      </g>
+      <circle cx="50" cy="50" r="11" fill="currentColor" stroke="none"/>
+      <circle cx="50" cy="50" r="3.2" fill="var(--bg0)" stroke="none"/>
+      <g fill="var(--bg0)" stroke="none">
+        <circle cx="59.4" cy="37.06" r="2"/>
+        <circle cx="65.22" cy="54.94" r="2"/>
+        <circle cx="50" cy="66" r="2"/>
+        <circle cx="34.78" cy="54.94" r="2"/>
+        <circle cx="40.6" cy="37.06" r="2"/>
+      </g>
+    </svg>
+
+    <div class="topbar">
+      <div>
+        <h1>Painel</h1>
+        <p>Dados, indicadores e operação do CD conectados em um único ambiente.</p>
+      </div>
+      <div class="topbar-actions">
+        <span class="cd-badge">CD CAJAMAR</span>
+        <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro">
+          <span class="theme-knob" id="themeKnob"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="search-row">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="Buscar aplicação...">
+    </div>
+
     <p class="section-label">Aplicações</p>
-    <div class="cards">
-      <a class="card card-auditoria" href="./auditoria/">
-        <div class="card-top">
-          <div class="card-icon">
+    <div class="cards" id="cardsGrid">
+      <div class="card" style="--accent:#FA4616;" data-search="gestão de estoque auditoria de divergências, endereços e inventários do cd. divergências endereços inventários" data-key="estoque">
+        <a class="card-link" href="./auditoria/" aria-label="Acessar Gestão de Estoque"></a>
+        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Gestão de Estoque">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+        </button>
+        <div class="card-menu" hidden>
+          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
+          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
+          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
+        </div>
+        <div class="card-top-row">
+          <div class="card-icon" style="background:linear-gradient(135deg,#FA4616,#FF8A3D);">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 7v4l2.5 2.5"/></svg>
           </div>
-          <span class="card-status"><span class="dot"></span>Disponível</span>
+          <span class="card-status"><span class="live-dot"></span>Disponível</span>
         </div>
-        <div class="card-body">
-          <h3 class="card-title">Gestão de Estoque</h3>
-          <p class="card-desc">Auditoria de divergências, endereços e inventários do CD.</p>
-          <div class="card-tags"><span class="tag">Divergências</span><span class="tag">Endereços</span><span class="tag">Inventários</span></div>
-          <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+        <h3 class="card-title">Gestão de Estoque</h3>
+        <p class="card-desc">Auditoria de divergências, endereços e inventários do CD.</p>
+        <div class="card-tags"><span class="tag">Divergências</span><span class="tag">Endereços</span><span class="tag">Inventários</span></div>
+        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+      </div>
+
+      <div class="card" style="--accent:#1E33C7;" data-search="inventário rotativo ciclos, produtividade, divergências e net do inventário rotativo. ciclos produtividade net" data-key="inventario">
+        <a class="card-link" href="./inventario-rotativo/" aria-label="Acessar Inventário Rotativo"></a>
+        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Inventário Rotativo">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+        </button>
+        <div class="card-menu" hidden>
+          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
+          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
+          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
         </div>
-      </a>
-      <a class="card card-inventario" href="./inventario-rotativo/">
-        <div class="card-top">
-          <div class="card-icon">
+        <div class="card-top-row">
+          <div class="card-icon" style="background:linear-gradient(135deg,#0026B8,#3D5AFE 55%,#7C8CFF);">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
           </div>
-          <span class="card-status"><span class="dot"></span>Disponível</span>
+          <span class="card-status"><span class="live-dot"></span>Disponível</span>
         </div>
-        <div class="card-body">
-          <h3 class="card-title">Inventário Rotativo</h3>
-          <p class="card-desc">Ciclos, produtividade, divergências e NET do inventário rotativo.</p>
-          <div class="card-tags"><span class="tag">Ciclos</span><span class="tag">Produtividade</span><span class="tag">NET</span></div>
-          <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+        <h3 class="card-title">Inventário Rotativo</h3>
+        <p class="card-desc">Ciclos, produtividade, divergências e NET do inventário rotativo.</p>
+        <div class="card-tags"><span class="tag">Ciclos</span><span class="tag">Produtividade</span><span class="tag">NET</span></div>
+        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+      </div>
+
+      <div class="card" style="--accent:#0E9488;" data-search="equalização de elevadores equalização de bases e colunas de elevadores do cd. bases colunas" data-key="elevadores">
+        <a class="card-link" href="./equalizacao-elevadores/" aria-label="Acessar Equalização de Elevadores"></a>
+        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Equalização de Elevadores">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+        </button>
+        <div class="card-menu" hidden>
+          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
+          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
+          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
         </div>
-      </a>
-      <a class="card card-elevadores" href="./equalizacao-elevadores/">
-        <div class="card-top">
-          <div class="card-icon">
+        <div class="card-top-row">
+          <div class="card-icon" style="background:linear-gradient(135deg,#0E9488,#2DD4BF);">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
           </div>
-          <span class="card-status"><span class="dot"></span>Disponível</span>
+          <span class="card-status"><span class="live-dot"></span>Disponível</span>
         </div>
-        <div class="card-body">
-          <h3 class="card-title">Equalização de Elevadores</h3>
-          <p class="card-desc">Equalização de bases e colunas de elevadores do CD.</p>
-          <div class="card-tags"><span class="tag">Bases</span><span class="tag">Colunas</span></div>
-          <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+        <h3 class="card-title">Equalização de Elevadores</h3>
+        <p class="card-desc">Equalização de bases e colunas de elevadores do CD.</p>
+        <div class="card-tags"><span class="tag">Bases</span><span class="tag">Colunas</span></div>
+        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+      </div>
+
+      <div class="card" style="--accent:#7C3AED;" data-search="projetos acompanhamento de projetos e iniciativas do cd. marcos cronograma painel" data-key="projetos">
+        <a class="card-link" href="./acompanhamento-projetos/" aria-label="Acessar Projetos"></a>
+        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Projetos">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+        </button>
+        <div class="card-menu" hidden>
+          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
+          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
+          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
         </div>
-      </a>
-      <a class="card card-projetos" href="./acompanhamento-projetos/">
-        <div class="card-top">
-          <div class="card-icon">
+        <div class="card-top-row">
+          <div class="card-icon" style="background:linear-gradient(135deg,#8B5CF6,#C4B5FD);">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
-          <span class="card-status"><span class="dot"></span>Disponível</span>
+          <span class="card-status"><span class="live-dot"></span>Disponível</span>
         </div>
-        <div class="card-body">
-          <h3 class="card-title">Projetos</h3>
-          <p class="card-desc">Acompanhamento de projetos e iniciativas do CD.</p>
-          <div class="card-tags"><span class="tag">Marcos</span><span class="tag">Cronograma</span><span class="tag">Painel</span></div>
-          <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+        <h3 class="card-title">Projetos</h3>
+        <p class="card-desc">Acompanhamento de projetos e iniciativas do CD.</p>
+        <div class="card-tags"><span class="tag">Marcos</span><span class="tag">Cronograma</span><span class="tag">Painel</span></div>
+        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+      </div>
+
+      <div class="card" style="--accent:#B45309;" data-search="gestão de transitórios estoque parado fora do picking, por setor responsável. setores prazo 48h boletim" data-key="transitorios">
+        <a class="card-link" href="./transitorios/" aria-label="Acessar Gestão de Transitórios"></a>
+        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Gestão de Transitórios">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+        </button>
+        <div class="card-menu" hidden>
+          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
+          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
+          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
         </div>
-      </a>
-      <a class="card card-transitorios" href="./transitorios/">
-        <div class="card-top">
-          <div class="card-icon">
+        <div class="card-top-row">
+          <div class="card-icon" style="background:linear-gradient(135deg,#D97706,#FBBF24);">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M3 16v5h5"/><path d="M21 16v5h-5"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>
           </div>
-          <span class="card-status"><span class="dot"></span>Disponível</span>
+          <span class="card-status"><span class="live-dot"></span>Disponível</span>
         </div>
-        <div class="card-body">
-          <h3 class="card-title">Gestão de Transitórios</h3>
-          <p class="card-desc">Estoque parado fora do picking, por setor responsável.</p>
-          <div class="card-tags"><span class="tag">Setores</span><span class="tag">Prazo 48h</span><span class="tag">Boletim</span></div>
-          <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+        <h3 class="card-title">Gestão de Transitórios</h3>
+        <p class="card-desc">Estoque parado fora do picking, por setor responsável.</p>
+        <div class="card-tags"><span class="tag">Setores</span><span class="tag">Prazo 48h</span><span class="tag">Boletim</span></div>
+        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+      </div>
+
+      <div class="card" style="--accent:#9D174D;" data-search="múltiplos descasados componente de múltiplo sem par no estoque, com valor e bloqueio em 86. zbiq0051 qry0390 bloqueio 86" data-key="multiplos">
+        <a class="card-link" href="./multiplos-descasados/" aria-label="Acessar Múltiplos Descasados"></a>
+        <button class="card-kebab" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Mais opções — Múltiplos Descasados">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+        </button>
+        <div class="card-menu" hidden>
+          <button type="button" class="edit"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Editar</button>
+          <button type="button" class="fav"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15 9 22 9.3 16.5 14 18 21 12 17 6 21 7.5 14 2 9.3 9 9"/></svg><span class="fav-label">Favoritar</span></button>
+          <button type="button" class="danger remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Remover</button>
         </div>
-      </a>
-      <a class="card card-multiplos" href="./multiplos-descasados/">
-        <div class="card-top">
-          <div class="card-icon">
+        <div class="card-top-row">
+          <div class="card-icon" style="background:linear-gradient(135deg,#BE185D,#F472B6);">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M14 7h7"/><path d="M17.5 3.5 21 7l-3.5 3.5"/><path d="M10 17H3"/><path d="M6.5 13.5 3 17l3.5 3.5"/></svg>
           </div>
-          <span class="card-status"><span class="dot"></span>Disponível</span>
+          <span class="card-status"><span class="live-dot"></span>Disponível</span>
         </div>
-        <div class="card-body">
-          <h3 class="card-title">Múltiplos Descasados</h3>
-          <p class="card-desc">Componente de múltiplo sem par no estoque, com valor e bloqueio em 86.</p>
-          <div class="card-tags"><span class="tag">ZBIQ0051</span><span class="tag">QRY0390</span><span class="tag">Bloqueio 86</span></div>
-          <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
-        </div>
-      </a>
+        <h3 class="card-title">Múltiplos Descasados</h3>
+        <p class="card-desc">Componente de múltiplo sem par no estoque, com valor e bloqueio em 86.</p>
+        <div class="card-tags"><span class="tag">ZBIQ0051</span><span class="tag">QRY0390</span><span class="tag">Bloqueio 86</span></div>
+        <div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>
+      </div>
     </div>
-  </div>
+    <p class="no-results" id="noResults">Nenhuma aplicação encontrada.</p>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+  var MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  var btn = document.getElementById('themeSwitch');
+  var knob = document.getElementById('themeKnob');
+  function apply(dark){
+    document.body.classList.toggle('theme-dark', dark);
+    btn.classList.toggle('on', dark);
+    knob.innerHTML = dark ? MOON : SUN;
+  }
+  var dark = false;
+  try { dark = localStorage.getItem('ldm-theme') === 'dark'; } catch(e){}
+  apply(dark);
+  btn.addEventListener('click', function(){
+    dark = !dark;
+    apply(dark);
+    try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
+  });
+})();
+
+document.getElementById('brandLogo').addEventListener('click', function(){
+  var el = this;
+  el.classList.remove('spin');
+  void el.offsetWidth;
+  el.classList.add('spin');
+});
+
+(function(){
+  var input = document.getElementById('searchInput');
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var noResults = document.getElementById('noResults');
+  input.addEventListener('input', function(){
+    var q = input.value.trim().toLowerCase();
+    var visible = 0;
+    cards.forEach(function(c){
+      var match = !q || c.dataset.search.indexOf(q) !== -1;
+      c.style.display = match ? '' : 'none';
+      if(match) visible++;
+    });
+    noResults.style.display = visible ? 'none' : 'block';
+  });
+})();
+
+/* Menu de 3 pontos (Editar / Favoritar / Remover) de cada card */
+(function(){
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 2000);
+  }
+
+  var FAV_KEY = 'ldm-favoritos';
+  function getFavoritos(){
+    try { return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); } catch(e){ return []; }
+  }
+  function setFavoritos(list){
+    try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch(e){}
+  }
+
+  function closeAllMenus(except){
+    document.querySelectorAll('.card-menu').forEach(function(m){
+      if(m === except) return;
+      m.hidden = true;
+      var k = m.previousElementSibling;
+      if(k && k.classList.contains('card-kebab')) k.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function applyFavState(card, isFav){
+    card.classList.toggle('is-favorite', isFav);
+    var favBtn = card.querySelector('.card-menu .fav');
+    if(favBtn){
+      favBtn.classList.toggle('is-active', isFav);
+      favBtn.querySelector('.fav-label').textContent = isFav ? 'Remover dos favoritos' : 'Favoritar';
+    }
+  }
+
+  var favoritos = getFavoritos();
+  document.querySelectorAll('.card').forEach(function(card){
+    applyFavState(card, favoritos.indexOf(card.dataset.key) !== -1);
+  });
+
+  document.querySelectorAll('.card-kebab').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      var menu = btn.nextElementSibling;
+      var willOpen = menu.hidden;
+      closeAllMenus(willOpen ? menu : null);
+      menu.hidden = !willOpen;
+      btn.setAttribute('aria-expanded', String(willOpen));
+    });
+  });
+
+  document.querySelectorAll('.card-menu .edit, .card-menu .remove').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      closeAllMenus();
+      showToast('Em breve.');
+    });
+  });
+
+  document.querySelectorAll('.card-menu .fav').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      var card = btn.closest('.card');
+      var key = card.dataset.key;
+      var list = getFavoritos();
+      var idx = list.indexOf(key);
+      var nowFav;
+      if(idx === -1){ list.push(key); nowFav = true; } else { list.splice(idx, 1); nowFav = false; }
+      setFavoritos(list);
+      applyFavState(card, nowFav);
+      closeAllMenus();
+      showToast(nowFav ? 'Adicionado aos favoritos.' : 'Removido dos favoritos.');
+    });
+  });
+
+  document.addEventListener('click', function(){ closeAllMenus(); });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closeAllMenus();
+  });
+})();
+</script>
 </body>
 </html>
