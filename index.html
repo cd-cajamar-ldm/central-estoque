@@ -156,22 +156,28 @@
   .tv-sim-screen-box{position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;}
   .tv-sim-screen-box iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;}
   .tv-sim-empty{margin:0;padding:0 18px;text-align:center;font-size:12px;color:#8891C4;}
+  .tv-sim-clock{position:absolute;top:8px;right:10px;z-index:5;background:rgba(0,0,0,.55);color:#fff;font-family:'Inter',sans-serif;font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:999px;letter-spacing:.02em;pointer-events:none;white-space:nowrap;}
   .tv-sim-stand{width:54px;height:12px;background:#15193A;border:1px solid rgba(255,255,255,.1);border-top:none;margin:0 auto;border-radius:0 0 7px 7px;}
   .tv-sim-foot{width:130px;height:6px;background:#0B0E26;margin:0 auto;border-radius:3px;}
-  .tv-sim-label{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;font-size:11.5px;font-weight:600;color:#C7CCEA;}
-  .tv-sim-label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .tv-sim-expand{flex-shrink:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#fff;font-weight:700;font-size:11px;padding:6px 12px;border-radius:999px;cursor:pointer;font-family:'Inter',sans-serif;}
-  .tv-sim-expand:hover{background:rgba(255,255,255,.14);}
+  .tv-sim-controls{display:flex;align-items:center;gap:8px;margin-top:14px;}
+  .tv-sim-ctrl{flex-shrink:0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;}
+  .tv-sim-ctrl:hover{background:rgba(255,255,255,.16);}
+  .tv-sim-label-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;font-weight:600;color:#C7CCEA;}
   .tv-sim-progress{height:3px;background:rgba(255,255,255,.14);border-radius:3px;overflow:hidden;margin-top:8px;}
   .tv-sim-progress-bar{height:100%;width:0%;background:var(--orange);}
+  .tv-sim-go-fullscreen{margin-top:12px;width:100%;background:var(--orange);border:none;color:#fff;font-weight:700;font-size:12.5px;padding:9px;border-radius:10px;cursor:pointer;font-family:'Inter',sans-serif;}
+  .tv-sim-go-fullscreen:hover{filter:brightness(1.08);}
 
-  .tv-sim-modal-overlay{position:fixed;inset:0;background:rgba(5,7,16,.72);display:flex;align-items:center;justify-content:center;z-index:120;padding:28px;}
-  .tv-sim-modal-overlay[hidden]{display:none;}
-  .tv-sim-modal{background:#15193A;border-radius:20px;padding:20px;width:min(920px,94vw);}
-  .tv-sim-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;color:#fff;font-size:14px;}
-  .tv-sim-modal-head .modal-close{color:#C7CCEA;}
-  .tv-sim-modal-screen{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:16/9;}
-  .tv-sim-modal-screen iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;}
+  /* O iframe nunca muda de pai no DOM (evita recarregar a página ao
+     entrar/sair da tela cheia) — só troca de posição via esta classe. */
+  .tv-sim-iframe-fs{position:fixed !important;inset:0 !important;width:100vw !important;height:100vh !important;z-index:250;}
+  .tv-sim-fullscreen{position:fixed;inset:0;z-index:260;pointer-events:none;}
+  .tv-sim-fullscreen[hidden]{display:none;}
+  .tv-sim-fullscreen .tv-sim-clock{pointer-events:auto;font-size:15px;padding:7px 16px;top:18px;right:22px;}
+  .tv-sim-fs-bar{position:absolute;left:0;right:0;bottom:0;pointer-events:auto;display:flex;align-items:center;gap:14px;padding:12px 22px;background:#0B0E26;border-top:1px solid rgba(255,255,255,.08);flex-wrap:wrap;}
+  .tv-sim-fs-bar .tv-sim-progress{flex:1;min-width:120px;margin-top:0;}
+  .tv-sim-fs-back{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:#fff;font-weight:700;font-size:12.5px;padding:8px 16px;border-radius:999px;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;}
+  .tv-sim-fs-back:hover{background:rgba(255,255,255,.16);}
 
   /* CONFIGURAÇÕES */
   .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:520px;margin-top:24px;}
@@ -347,25 +353,30 @@
       <div class="tv-sim-tv" id="tvSimTv">
         <div class="tv-sim-screen-box" id="tvSimScreenBox">
           <p class="tv-sim-empty" id="tvSimEmpty" hidden>Nenhum app marcado para a TV ainda. Marque "Exibir na TV" na tabela acima.</p>
+          <div class="tv-sim-clock" id="tvSimClock">--:--</div>
         </div>
         <div class="tv-sim-stand"></div>
         <div class="tv-sim-foot"></div>
-        <div class="tv-sim-label">
-          <span id="tvSimLabel">—</span>
-          <button type="button" class="tv-sim-expand" id="tvSimExpand">Expandir ⤢</button>
+        <div class="tv-sim-controls">
+          <button type="button" class="tv-sim-ctrl" id="tvSimPrev" title="Anterior" aria-label="App anterior">⏮</button>
+          <button type="button" class="tv-sim-ctrl" id="tvSimPlayPause" title="Pausar" aria-label="Pausar ou retomar">⏸</button>
+          <button type="button" class="tv-sim-ctrl" id="tvSimNext" title="Próximo" aria-label="Próximo app">⏭</button>
+          <span class="tv-sim-label-text" id="tvSimLabel">—</span>
         </div>
         <div class="tv-sim-progress"><div class="tv-sim-progress-bar" id="tvSimProgressBar"></div></div>
+        <button type="button" class="tv-sim-go-fullscreen" id="tvSimExpand">Simular em tela cheia ⛶</button>
       </div>
     </section>
 
-    <div class="tv-sim-modal-overlay" id="tvSimModalOverlay" hidden>
-      <div class="tv-sim-modal">
-        <div class="tv-sim-modal-head">
-          <strong id="tvSimModalLabel">—</strong>
-          <button type="button" class="modal-close" id="tvSimModalClose" aria-label="Fechar">&#10005;</button>
-        </div>
-        <div class="tv-sim-modal-screen" id="tvSimModalScreenBox"></div>
-        <div class="tv-sim-progress" style="margin-top:14px;"><div class="tv-sim-progress-bar" id="tvSimModalProgressBar"></div></div>
+    <div class="tv-sim-fullscreen" id="tvSimFullscreen" hidden>
+      <div class="tv-sim-clock" id="tvSimFsClock">--:--</div>
+      <div class="tv-sim-fs-bar">
+        <button type="button" class="tv-sim-ctrl" id="tvSimFsPrev" title="Anterior" aria-label="App anterior">⏮</button>
+        <button type="button" class="tv-sim-ctrl" id="tvSimFsPlayPause" title="Pausar" aria-label="Pausar ou retomar">⏸</button>
+        <button type="button" class="tv-sim-ctrl" id="tvSimFsNext" title="Próximo" aria-label="Próximo app">⏭</button>
+        <span class="tv-sim-label-text" id="tvSimFsLabel">—</span>
+        <div class="tv-sim-progress"><div class="tv-sim-progress-bar" id="tvSimFsProgressBar"></div></div>
+        <button type="button" class="tv-sim-fs-back" id="tvSimFsBack">Voltar à configuração ✕</button>
       </div>
     </div>
 
@@ -710,21 +721,32 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   });
 
   /* Simulador de TV — mostra, em sequência, só os apps marcados "Exibir na
-     TV", rolando devagar cada página até o fim antes de trocar de app. */
+     TV", rolando devagar cada página até o fim antes de trocar de app.
+     Esconde menu/filtros do app embutido (CSS injetada no iframe, mesma
+     origem) e oferece controles de avançar/voltar/pausar + tela cheia. */
   (function(){
     var SETTLE_MS = 1200;
     var END_PAUSE_MS = 900;
+    var KIOSK_CSS = '.sidebar,.sidebar-backdrop,.sidebar-toggle,[class*="filter" i]{display:none !important;}';
 
     var screenBox = document.getElementById('tvSimScreenBox');
     var emptyMsg = document.getElementById('tvSimEmpty');
     var label = document.getElementById('tvSimLabel');
     var progressBar = document.getElementById('tvSimProgressBar');
     var expandBtn = document.getElementById('tvSimExpand');
-    var modalOverlay2 = document.getElementById('tvSimModalOverlay');
-    var modalScreenBox = document.getElementById('tvSimModalScreenBox');
-    var modalLabel = document.getElementById('tvSimModalLabel');
-    var modalProgressBar = document.getElementById('tvSimModalProgressBar');
-    var modalClose = document.getElementById('tvSimModalClose');
+    var prevBtn = document.getElementById('tvSimPrev');
+    var nextBtn = document.getElementById('tvSimNext');
+    var playPauseBtn = document.getElementById('tvSimPlayPause');
+    var clockEl = document.getElementById('tvSimClock');
+
+    var fsOverlay = document.getElementById('tvSimFullscreen');
+    var fsLabel = document.getElementById('tvSimFsLabel');
+    var fsProgressBar = document.getElementById('tvSimFsProgressBar');
+    var fsPrevBtn = document.getElementById('tvSimFsPrev');
+    var fsNextBtn = document.getElementById('tvSimFsNext');
+    var fsPlayPauseBtn = document.getElementById('tvSimFsPlayPause');
+    var fsBackBtn = document.getElementById('tvSimFsBack');
+    var fsClockEl = document.getElementById('tvSimFsClock');
 
     var iframe = null;
     var playlist = [];
@@ -732,6 +754,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     var timer = null;
     var scrollRaf = null;
     var running = false;
+    var paused = false;
 
     function buildPlaylist(){
       var store = getTvConfigStore();
@@ -745,20 +768,42 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
     function setLabel(text){
       label.textContent = text;
-      modalLabel.textContent = text;
+      fsLabel.textContent = text;
     }
     function setProgress(pct, withTransition, durationMs){
-      [progressBar, modalProgressBar].forEach(function(bar){
+      [progressBar, fsProgressBar].forEach(function(bar){
         bar.style.transition = withTransition ? ('width ' + durationMs + 'ms linear') : 'none';
         bar.style.width = pct + '%';
       });
     }
+    function updatePlayPauseIcon(){
+      var icon = paused ? '▶' : '⏸';
+      var title = paused ? 'Retomar' : 'Pausar';
+      [playPauseBtn, fsPlayPauseBtn].forEach(function(btn){
+        btn.textContent = icon;
+        btn.title = title;
+        btn.setAttribute('aria-label', title);
+      });
+    }
+
+    function injectKioskCss(frame){
+      try {
+        var doc = frame.contentDocument;
+        if(!doc || !doc.head) return;
+        var style = doc.createElement('style');
+        style.setAttribute('data-ldm-tv-kiosk', '1');
+        style.textContent = KIOSK_CSS;
+        doc.head.appendChild(style);
+      } catch(e){ /* conteúdo ainda não acessível: ignora */ }
+    }
 
     function stop(){
       running = false;
+      paused = false;
       clearTimeout(timer);
       if(scrollRaf) cancelAnimationFrame(scrollRaf);
       if(iframe) iframe.src = 'about:blank';
+      closeFullscreen();
     }
 
     function autoScrollIframe(frame, totalDurationMs){
@@ -769,7 +814,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       if(!maxScroll || maxScroll <= 0) return;
       var start = null;
       function step(ts){
-        if(!running) return;
+        if(!running || paused) return;
         if(start === null) start = ts;
         var pct = Math.min(1, (ts - start) / scrollMs);
         try { win.scrollTo(0, maxScroll * pct); } catch(e){ return; }
@@ -780,9 +825,11 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
     function playIndex(i){
       if(!running || !playlist.length) return;
+      paused = false;
+      updatePlayPauseIcon();
       clearTimeout(timer);
       if(scrollRaf) cancelAnimationFrame(scrollRaf);
-      index = i % playlist.length;
+      index = ((i % playlist.length) + playlist.length) % playlist.length;
       var item = playlist[index];
       var durationMs = Math.max(5, item.cfg.duration) * 1000;
 
@@ -791,12 +838,29 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       iframe.src = item.app.href;
       iframe.onload = function(){
         if(!running) return;
+        injectKioskCss(iframe);
         void progressBar.offsetWidth;
         setProgress(100, true, durationMs);
         setTimeout(function(){ autoScrollIframe(iframe, durationMs); }, SETTLE_MS);
       };
 
       timer = setTimeout(function(){ playIndex(index + 1); }, durationMs);
+    }
+
+    function goNext(){ if(running && playlist.length) playIndex(index + 1); }
+    function goPrev(){ if(running && playlist.length) playIndex(index - 1); }
+    function togglePlayPause(){
+      if(!running || !playlist.length) return;
+      if(paused){
+        paused = false;
+        updatePlayPauseIcon();
+        playIndex(index);
+      } else {
+        paused = true;
+        updatePlayPauseIcon();
+        clearTimeout(timer);
+        if(scrollRaf) cancelAnimationFrame(scrollRaf);
+      }
     }
 
     function renderTvSim(){
@@ -807,7 +871,6 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         setLabel('—');
         setProgress(0, false, 0);
         if(iframe) iframe.remove();
-        modalOverlay2.hidden = true;
         return;
       }
       emptyMsg.hidden = true;
@@ -815,7 +878,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         iframe = document.createElement('iframe');
         iframe.setAttribute('title', 'Simulação da TV LDM');
         screenBox.appendChild(iframe);
-      } else if(iframe.parentElement !== screenBox && modalOverlay2.hidden){
+      } else if(iframe.parentElement !== screenBox){
         screenBox.appendChild(iframe);
       }
       running = true;
@@ -824,22 +887,45 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     window.renderTvSim = renderTvSim;
     window.stopTvSim = stop;
 
-    expandBtn.addEventListener('click', function(){
+    function openFullscreen(){
       if(!iframe) return;
-      modalScreenBox.appendChild(iframe);
-      modalOverlay2.hidden = false;
-    });
-    function collapseModal(){
-      if(iframe) screenBox.appendChild(iframe);
-      modalOverlay2.hidden = true;
+      iframe.classList.add('tv-sim-iframe-fs');
+      fsOverlay.hidden = false;
+      try {
+        if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){});
+      } catch(e){}
     }
-    modalClose.addEventListener('click', collapseModal);
-    modalOverlay2.addEventListener('click', function(e){
-      if(e.target === modalOverlay2) collapseModal();
-    });
+    function closeFullscreen(){
+      if(fsOverlay.hidden) return;
+      if(iframe) iframe.classList.remove('tv-sim-iframe-fs');
+      fsOverlay.hidden = true;
+      if(document.fullscreenElement){ try { document.exitFullscreen(); } catch(e){} }
+    }
+
+    expandBtn.addEventListener('click', openFullscreen);
+    fsBackBtn.addEventListener('click', closeFullscreen);
+    prevBtn.addEventListener('click', goPrev);
+    nextBtn.addEventListener('click', goNext);
+    playPauseBtn.addEventListener('click', togglePlayPause);
+    fsPrevBtn.addEventListener('click', goPrev);
+    fsNextBtn.addEventListener('click', goNext);
+    fsPlayPauseBtn.addEventListener('click', togglePlayPause);
     document.addEventListener('keydown', function(e){
-      if(e.key === 'Escape' && !modalOverlay2.hidden) collapseModal();
+      if(e.key === 'Escape' && !fsOverlay.hidden) closeFullscreen();
     });
+    document.addEventListener('fullscreenchange', function(){
+      if(!document.fullscreenElement && !fsOverlay.hidden) closeFullscreen();
+    });
+
+    function updateClock(){
+      var now = new Date();
+      var text = now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
+        + ' · ' + now.toLocaleDateString('pt-BR');
+      clockEl.textContent = text;
+      fsClockEl.textContent = text;
+    }
+    updateClock();
+    setInterval(updateClock, 15000);
   })();
 
   /* Modal de edição */
