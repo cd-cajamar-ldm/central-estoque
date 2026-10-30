@@ -14,7 +14,7 @@
    do Inventário: as bases são as mesmas (QRY0390, ZBIQ0051, SIGEQ278), mas o
    recorte guardado aqui é só o dos componentes de múltiplo.
    ============================================================ */
-const MD_APP_VERSION = 'v31';
+const MD_APP_VERSION = 'v32';
 const MD = {
   estrutura:null, saldos:null, precos:null, estoques:null,
   estruturaMeta:null, saldoMeta:null, precoMeta:null, estoquesMeta:null,
@@ -1003,7 +1003,12 @@ function mdRenderAjustes(){
    pelo sentido do movimento: bloquear (0 → 86) e liberar (86 → 0) nunca se
    misturam na digitação do coletor, então não fazia sentido numa lista só. */
 function mdExportarAjustePivot(){
-  const plano = mdPlanoAjuste(mdPaisFiltrados(), MD.base, mdRestricaoPermitida);
+  // BUG real corrigido: essa função recalcula o plano direto (não reusa
+  // mdPlano()/MD._plano) e esquecia o 4º argumento — "Não alterar" nunca
+  // chegava a valer na planilha de verdade, só no cache interno que nada
+  // mais lia. Mesma assinatura de mdPlano(), ver mdAlocarPorEndereco
+  // (rules.js) pra como os dois argumentos finais são usados.
+  const plano = mdPlanoAjuste(mdPaisFiltrados(), MD.base, mdRestricaoPermitida, mdEnderecoDoca);
   mdGerarXlsxAjuste([
     {titulo:'Bloquear (0 para 86)', linhas: plano.filter(l=>l.sentido==='bloquear')},
     {titulo:'Liberar (86 para 0)', linhas: plano.filter(l=>l.sentido==='liberar')}
