@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Central de Controle de Estoque</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Poppins:wght@600;800&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -48,12 +48,24 @@
     flex-shrink:0;display:flex;align-items:center;gap:10px;
   }
   .brand-logo{
-    width:32px;height:32px;border-radius:8px;
-    background:var(--accent);display:flex;align-items:center;justify-content:center;
-    font-family:'Oswald',sans-serif;font-weight:700;font-size:13px;color:#0A0B23;flex-shrink:0;
+    position:relative;width:40px;height:40px;border-radius:12px;overflow:hidden;
+    background:linear-gradient(145deg,#FF8A4C,#FE5000 55%,#C83812);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    box-shadow:0 6px 14px -4px rgba(254,80,0,.55),inset 0 1px 0 rgba(255,255,255,.3);
+    transition:transform .2s;
   }
+  .brand-logo:hover{transform:translateY(-1px) scale(1.05);}
+  .brand-logo::before{
+    content:'';position:absolute;top:-50%;left:-70%;width:55%;height:220%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);
+    transform:rotate(18deg);animation:brandShine 5s ease-in-out infinite;
+  }
+  @keyframes brandShine{0%{left:-70%;}38%{left:150%;}100%{left:150%;}}
+  .brand-logo img{position:relative;z-index:1;width:72%;height:72%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));}
+  .brand-logo:hover img{animation:brandWiggle 1s ease-in-out infinite;}
+  @keyframes brandWiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
   .brand-text{flex:1;min-width:0;}
-  .brand-name{font-family:'Oswald',sans-serif;font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .brand-name{font-family:'Poppins',sans-serif;font-size:13px;font-weight:800;color:var(--ink);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .brand-sub{font-size:10px;color:var(--ink-soft);margin-top:1px;}
   .brand-back{
     display:flex;align-items:center;gap:6px;padding:9px 14px;border-bottom:1px solid var(--line);
@@ -269,10 +281,10 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-logo">EC</div>
+      <div class="brand-logo"><img src="brand/Logo_LDM_icon.png" alt="Loja do Mecânico"></div>
       <div class="brand-text">
-        <div class="brand-name">Central de Estoque</div>
-        <div class="brand-sub">Loja do Mecânico</div>
+        <div class="brand-name">OFICINA LDM</div>
+        <div class="brand-sub">lugar de quem faz</div>
       </div>
     </div>
     <a class="brand-back" href="../">
@@ -586,7 +598,7 @@ function renderPainel(){
 
   if(tudoVazio){
     html += `<div class="empty-state panel">
-      <div class="stamp-mark" style="margin:0 auto 10px;">EC</div>
+      <div class="brand-logo" style="margin:0 auto 10px;width:48px;height:48px;border-radius:14px;"><img src="brand/Logo_LDM_icon.png" alt="Loja do Mecânico"></div>
       <h3>Ainda não há dados cadastrados</h3>
       <p>Comece cadastrando o quadro de pessoas, depois locais, classes e tarefas.</p>
       <button class="btn btn-primary" onclick="loadSampleData()">Carregar dados de exemplo</button>
