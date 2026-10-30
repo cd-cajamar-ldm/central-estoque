@@ -48,7 +48,7 @@
     flex-shrink:0;display:flex;align-items:center;gap:10px;
   }
   .brand-logo{
-    position:relative;width:40px;height:40px;border-radius:12px;overflow:hidden;
+    position:relative;width:52px;height:52px;border-radius:15px;overflow:hidden;
     background:linear-gradient(145deg,#FF8A4C,#FE5000 55%,#C83812);
     display:flex;align-items:center;justify-content:center;flex-shrink:0;
     box-shadow:0 6px 14px -4px rgba(254,80,0,.55),inset 0 1px 0 rgba(255,255,255,.3);
@@ -61,7 +61,7 @@
     transform:rotate(18deg);animation:brandShine 5s ease-in-out infinite;
   }
   @keyframes brandShine{0%{left:-70%;}38%{left:150%;}100%{left:150%;}}
-  .brand-logo img{position:relative;z-index:1;width:72%;height:72%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));}
+  .brand-logo img{position:relative;z-index:1;width:78%;height:78%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));}
   .brand-logo:hover img{animation:brandWiggle 1s ease-in-out infinite;}
   @keyframes brandWiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
   .brand-text{flex:1;min-width:0;}
@@ -2136,8 +2136,18 @@ document.getElementById('nav').addEventListener('dblclick', (e)=>{
   }
 
   applyTabNames();
-  document.querySelector('.nav-item[data-tab="painel"]').classList.add('active');
-  document.getElementById('tab-title').textContent = STATE.tabNomes['painel'] || TAB_LABELS['painel'][0];
+  /* Link direto para uma aba específica (ex.: usado pela TV LDM):
+     ?#aud-home abre direto no Dashboard de Auditoria, sem passar pelo Painel. */
+  var initialTab = 'painel';
+  try {
+    var hashTab = decodeURIComponent(location.hash.slice(1));
+    if(hashTab && TAB_LABELS[hashTab]) initialTab = hashTab;
+  } catch(e){}
+  CURRENT_TAB = initialTab;
+  var initialNavBtn = document.querySelector('.nav-item[data-tab="' + initialTab + '"]');
+  if(initialNavBtn) initialNavBtn.classList.add('active');
+  document.getElementById('tab-title').textContent = STATE.tabNomes[initialTab] || TAB_LABELS[initialTab][0];
+  document.getElementById('tab-subtitle').textContent = TAB_LABELS[initialTab][1];
   renderView();
 })();
 

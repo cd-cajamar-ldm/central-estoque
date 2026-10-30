@@ -248,7 +248,14 @@ async function irInit(){
     db.close();
   }catch(_){}
   irMostrarVersao();
-  irSwitchTab('dashboard');
+  /* Link direto para uma aba específica (ex.: usado pela TV LDM): #setores
+     abre direto em Setores, sem passar pelo Dashboard. */
+  var irHashTab = 'dashboard';
+  try {
+    var irH = decodeURIComponent(location.hash.slice(1));
+    if(irH && IR_TAB_LABELS[irH]) irHashTab = irH;
+  } catch(e){}
+  irSwitchTab(irHashTab);
   // Fora do try acima e sem await: se a pasta conectada falhar (permissão
   // revogada, política nova, arquivo só na nuvem), isso não pode impedir o app
   // de abrir — é conveniência, não dependência.
