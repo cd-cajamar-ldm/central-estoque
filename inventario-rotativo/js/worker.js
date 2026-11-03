@@ -1733,7 +1733,7 @@ async function runPipeline410({buf410}){
       // considerado pro NET, mesmo critério da quebra por Obs mês a mês.
       porDepto:new Map(), porDeptoMes:new Map(),
       porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0, linhasExcluidasLogica:0,
-      linhasSentidoInferido:0, valorSentidoInferido:0, exemplosSentidoInferido:[],
+      linhasSentidoInferido:0, valorSentidoInferido:0, exemplosSentidoInferido:[], dep21PorMes:new Map(),
       // Linhas cruas da própria 410, só Lógica 301/302 — alimenta a tabela de
       // detalhe da aba NET (visão linha a linha, não agregada). Os totais de
       // Net Ano/Mês de cada linha só ficam prontos depois do laço principal
@@ -1871,7 +1871,24 @@ async function runPipeline410({buf410}){
 
     // Id Depósito 21 fica de fora de tudo (regra explícita do usuário).
     const idDeposito = parseInt(parseNumber(getVal(row, r410.idDeposito)), 10);
-    if(idDeposito===21){ g.linhasExcluidasDeposito21++; continue; }
+    if(idDeposito===21){
+      g.linhasExcluidasDeposito21++;
+      // Guarda o que ficou de fora (só 301/302), por mês e Obs, pra tela
+      // mostrar — é a primeira coisa a conferir quando o NET não bate com a
+      // dinâmica da 410 (filtro de Id Depósito diferente).
+      const lg21 = String(getVal(row, r410.logica)||'').trim();
+      if(!r410.logica || lg21==='301' || lg21==='302'){
+        const sent21 = String(getVal(row, r410.sentido)||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        const vl21 = parseNumber(getVal(row, r410.vlMov));
+        const sin21 = sent21.startsWith('s') ? -1 : (sent21.startsWith('e') ? 1 : (vl21<0 ? -1 : 1));
+        const obs21 = String(getVal(row, r410.obsWms) || '').trim() || String(getVal(row, r410.observacao) || '').trim();
+        const id21 = irClassificarMotivo410(obs21, legenda410).id;
+        if(!g.dep21PorMes.has(mes)) g.dep21PorMes.set(mes, new Map());
+        const m21 = g.dep21PorMes.get(mes);
+        m21.set(id21, (m21.get(id21)||0) + sin21*Math.abs(vl21));
+      }
+      continue;
+    }
 
     // NET oficial = só Lógica 301 e 302 (regra explícita do usuário — é como a
     // dinâmica da própria 410 fecha). Outras lógicas ficam de fora de tudo,
@@ -1995,6 +2012,8 @@ async function runPipeline410({buf410}){
       m.porObs = Array.from(mapaObsMes.values()).map(o=>({...o, totalGeral:o.saida+o.entrada}));
       const mapaDeptoMes = g.porDeptoMes.get(m.mes) || new Map();
       m.porDepto = Array.from(mapaDeptoMes.values()).map(o=>({...o, totalGeral:o.saida+o.entrada}));
+      m.dep21PorObs = Array.from((g.dep21PorMes.get(m.mes)||new Map()).entries()).map(([id,valor])=>({id, valor}))
+        .sort((a,b)=>Math.abs(b.valor)-Math.abs(a.valor));
     });
     const porDia = finalizarPeriodos(g.porDia, g.porItemDia, g.porItem, 'dia');
     const porObs = Array.from(g.porObs.values()).map(o=>({...o, totalGeral: o.saida+o.entrada}))

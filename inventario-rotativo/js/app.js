@@ -3672,6 +3672,7 @@ function irRenderNet410PorObsMesTable(d){
           <td class="mono" style="color:${totalNet>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalNet)}</td>
         </tr></tfoot>
       </table></div>
+      ${mObj && mObj.dep21PorObs && mObj.dep21PorObs.length ? `<p class="field-hint" style="margin-top:10px;"><strong>Id Depósito 21 (fora do NET)</strong>, Lógica 301/302 neste mês: ${mObj.dep21PorObs.map(o=>`${irEsc(o.id)} ${irFmtMoney(o.valor)}`).join(' · ')}</p>` : (mObj && !mObj.dep21PorObs ? '' : `<p class="field-hint" style="margin-top:10px;"><strong>Id Depósito 21</strong>: nenhum lançamento 301/302 neste mês.</p>`)}
       ${foraNet.length ? `<p class="field-hint" style="margin-top:10px;"><strong>Fora do NET neste mês</strong> (Considerar NET = NÃO em Configurações): ${foraNet.map(o=>`${irEsc(o.id)}${o.legenda?' ('+irEsc(o.legenda)+')':''} ${irFmtMoney(o.net)}`).join(' · ')}</p>` : ''}
     </div>`;
 }
