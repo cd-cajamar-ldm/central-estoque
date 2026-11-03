@@ -1706,7 +1706,13 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
    ============================================================ */
 async function runPipeline410({buf410}){
   post('progress', {stage:'Lendo QRY410...', pct:5});
-  const wb410 = XLSX.read(buf410, {type:'array', cellDates:true});
+  // Sem cellDates: a data vem como número serial do Excel e o parseDateVal
+  // converte pelos componentes exatos (dia/mês/ano/hora), sem passar por fuso.
+  // Com cellDates o SheetJS monta a data em hora LOCAL, e a leitura por UTC
+  // jogava todo lançamento depois das 21h do último dia pro mês seguinte (em
+  // UTC-3, 31/10 22:30 é 01/11 01:30 UTC) — foi a diferença de R$ 47,45 do AIR
+  // de outubro contra a dinâmica da 410.
+  const wb410 = XLSX.read(buf410, {type:'array'});
   const rows410 = sheetToRows(wb410, ALIAS_410, ['dtMov','sentido','vlMov']);
   if(!rows410.length) throw new Error('QRY410: planilha vazia.');
   const r410 = buildAliasResolver(Object.keys(rows410[0]), ALIAS_410);
@@ -1789,16 +1795,12 @@ async function runPipeline410({buf410}){
     }
     const dt = parseDateVal(getVal(row, r410.dtMov));
     if(!dt) continue;
-    // getFullYear()/getMonth() (hora LOCAL) não servem aqui: o SheetJS (cellDates:true)
-    // monta esse Date usando os componentes UTC da célula (convenção dele pra evitar bug
-    // de DST) — em fuso negativo (Brasil, UTC-3) uma data sem hora tipo "01/03 00:00"
-    // vira 2026-03-01T00:00:00Z, que em hora local é 28/02 21:00. Ler com getFullYear()/
-    // getMonth() jogava os lançamentos do dia 1º pro mês anterior, subtraindo valor de
-    // março (e inflando fevereiro) — por isso as UTC, que refletem os componentes reais
-    // da célula, sem passar pela conversão de fuso.
-    const ano = dt.getUTCFullYear();
-    const mes = ano+'-'+String(dt.getUTCMonth()+1).padStart(2,'0');
-    const dia = mes+'-'+String(dt.getUTCDate()).padStart(2,'0');
+    // Componentes LOCAIS: o parseDateVal monta a data em hora local a partir dos
+    // componentes exatos da célula (serial do Excel ou texto dd/mm/aaaa), então
+    // é por eles que se lê dia/mês/ano — o mesmo que a dinâmica da 410 mostra.
+    const ano = dt.getFullYear();
+    const mes = ano+'-'+String(dt.getMonth()+1).padStart(2,'0');
+    const dia = mes+'-'+String(dt.getDate()).padStart(2,'0');
     const g = getAno(ano);
     g.totalLinhas++;
 
