@@ -1,0 +1,24 @@
+// QRY0160 — Tempo parado no endereço
+// Salvar como: QRY0160.csv
+// ⚠️ A confirmar: os nomes das colunas abaixo são os da extração manual de hoje.
+// Conferir no fluxo de dados "410, 160, 150" e ajustar aqui se forem diferentes.
+EVALUATE
+SELECTCOLUMNS(
+    'QRY0160',
+    "Item", COALESCE('QRY0160'[Item], ""),
+    "Descrição item", COALESCE('QRY0160'[Descrição item], ""),
+    "EAN", COALESCE('QRY0160'[EAN], ""),
+    "Local", COALESCE('QRY0160'[Local], ""),
+    "Endereço", COALESCE('QRY0160'[Endereço], ""),
+    "X1", COALESCE('QRY0160'[X1], ""),
+    "X2", COALESCE('QRY0160'[X2], ""),
+    "X3", COALESCE('QRY0160'[X3], ""),
+    "X4", COALESCE('QRY0160'[X4], ""),
+    "Restrição", COALESCE('QRY0160'[Restrição], ""),
+    "Qt", COALESCE('QRY0160'[Qt], ""),
+    "Qt Rom", COALESCE('QRY0160'[Qt Rom], ""),
+    "Operador", COALESCE('QRY0160'[Operador], ""),
+    "Data Movimento", FORMAT('QRY0160'[Data Movimento], "yyyy-mm-dd hh:nn:ss"),
+    "Data Limite", FORMAT('QRY0160'[Data Limite], "yyyy-mm-dd hh:nn:ss"),
+    "Num. Estoque", COALESCE('QRY0160'[Num. Estoque], "")
+)

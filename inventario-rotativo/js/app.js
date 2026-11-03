@@ -595,13 +595,13 @@ function irRenderImportacao(){
       ${resumo}
       <span class="imp-acoes">${acoes}</span>
     </div>`;
-    if(!multi) html = `<input type="file" id="ir-file-${t.key}" accept=".xlsx,.xls" style="display:none" onchange="irOnFile('${t.key}', this.files[0])">` + html;
+    if(!multi) html = `<input type="file" id="ir-file-${t.key}" accept=".xlsx,.xls,.csv" style="display:none" onchange="irOnFile('${t.key}', this.files[0])">` + html;
     if(multi && aberto){
       html += `<div class="imp-partes-lista">
         <p class="field-hint">Extração que não sai de uma vez pode ser dividida aqui — todas as partes são do mesmo ciclo. Reimportar na mesma parte substitui o arquivo.</p>
         ${slots.map((file,i)=>`<div class="dz-period-row ${file?'has-file':''}">
           <span class="dz-period-label">Parte ${i+1}</span>
-          <input type="file" id="ir-file-${t.key}-${i}" accept=".xlsx,.xls" style="display:none" onchange="irSetSlotFile('${t.key}', ${i}, this.files[0])">
+          <input type="file" id="ir-file-${t.key}-${i}" accept=".xlsx,.xls,.csv" style="display:none" onchange="irSetSlotFile('${t.key}', ${i}, this.files[0])">
           ${file
             ? `<span class="dz-file mono">${irEsc(file.name)}</span>
                <button class="btn-link" onclick="document.getElementById('ir-file-${t.key}-${i}').click()">Trocar</button>
@@ -619,7 +619,7 @@ function irRenderImportacao(){
     <details class="panel imp-manual" ${IR.pastaHandle && IR.pastaPerm==='granted' ? '' : 'open'}
         ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)">
       <summary>Importar planilhas à mão${IR.pastaHandle ? ' (sem usar a pasta conectada)' : ''}</summary>
-      <input type="file" id="ir-file-all" accept=".xlsx,.xls" multiple style="display:none" onchange="irOnPickMultiAll(this.files)">
+      <input type="file" id="ir-file-all" accept=".xlsx,.xls,.csv" multiple style="display:none" onchange="irOnPickMultiAll(this.files)">
       <div class="imp-drop" ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)"
            onclick="document.getElementById('ir-file-all').click()">
         <span class="imp-drop-icone">📂</span>
@@ -2861,7 +2861,7 @@ function irRenderBasesAvulsas(){
         <div class="av-nome"><strong>${irEsc(b.titulo)}</strong><span>${irEsc(b.sub)}</span></div>
       </div>
       <div class="av-estado">${irEsc(irAvulsaEstado(b.id))}</div>
-      <input type="file" id="${b.input}" accept=".xlsx,.xls" style="display:none" onchange="${b.onFile}(this.files[0])">
+      <input type="file" id="${b.input}" accept=".xlsx,.xls,.csv" style="display:none" onchange="${b.onFile}(this.files[0])">
       ${rodando ? `
         <div class="progress-wrap av-prog">
           <div class="progress-stage" id="${b.idStage}">${irEsc(prog.stage)}</div>
@@ -2896,18 +2896,62 @@ function irRenderBasesAvulsas(){
 const IR_PASTA_SUPORTA = typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
 /* Cada base e como reconhecê-la pelo nome do arquivo. Os padrões do bloco do
    ciclo são os mesmos do IR_FILE_TYPES de propósito — um só lugar pra errar. */
+/* A ordem da lista é a de PROCESSAMENTO (390 -> 160 -> 410, ver irPastaAtualizar).
+   A de RECONHECIMENTO pelo nome é outra: o "160" é o padrão mais solto de todos e
+   apareceria por acaso no nome de uma 843 ou congelada ("... 160 locais"), então
+   ele só é testado depois de todos os outros. */
 const IR_PASTA_BASES = [
   {id:'390', label:'QRY0390', desc:'Estoque por endereço', pattern:IR_PAT.p390, auto:true},
+  {id:'160', label:'QRY0160', desc:'Tempo parado no endereço', pattern:IR_PAT.p160, auto:true},
   {id:'410', label:'QRY410',  desc:'Perdas e ganhos',      pattern:IR_PAT.p410, auto:true},
   {id:'843', label:'QRY0843', desc:'Ajustes do ciclo',     pattern:IR_PAT.p843, slot:'f843'},
   {id:'cong',label:'Base Congelada', desc:'Locais do ciclo', pattern:IR_PAT.pCong, slot:'fCong'},
   {id:'278', label:'SIGEQ278', desc:'Custo médio',         pattern:IR_PAT.p278, slot:'f278'},
   {id:'051', label:'ZBIQ0051', desc:'Item pai × componente', pattern:IR_PAT.p051, slot:'f051'}
 ];
+const IR_PASTA_ORDEM_RECONHECER = ['390','410','843','cong','278','051','160'];
+// .csv entra porque é o formato da atualização automática (Power BI -> Power Automate).
 function irPastaBaseDe(nome){
-  if(!/\.xlsx?$/i.test(nome)) return null;
-  const b = IR_PASTA_BASES.find(x=>x.pattern.test(nome));
-  return b ? b.id : null;
+  if(!/\.(xlsx?|csv)$/i.test(nome)) return null;
+  const id = IR_PASTA_ORDEM_RECONHECER.find(id=>IR_PASTA_BASES.find(x=>x.id===id).pattern.test(nome));
+  return id || null;
+}
+/* Base grande em partes. A consulta automática ao Power BI traz no máximo cerca de
+   1 milhão de células por vez, e a QRY0390 passa disso — ela chega como
+   "QRY0390_parte1.csv", "QRY0390_parte2.csv"... na mesma pasta. Aqui as partes
+   viram um arquivo só antes de ir pro worker, que continua lendo uma planilha. */
+const IR_PARTE_RE = /[\s_\-]*parte[\s_\-]*(\d+)(?=\.[^.]+$)/i;
+function irPastaRaizParte(nome){ return nome.replace(IR_PARTE_RE, '').toLowerCase(); }
+function irPastaPartesDe(baseId){
+  const arq = (IR.pastaArquivos||{})[baseId];
+  if(!arq || !IR_PARTE_RE.test(arq.file.name)) return null;
+  const raiz = irPastaRaizParte(arq.file.name);
+  const partes = ((IR.pastaTodos||{})[baseId]||[])
+    .filter(x=>x.pasta===arq.pasta && IR_PARTE_RE.test(x.file.name) && irPastaRaizParte(x.file.name)===raiz)
+    .map(x=>x.file)
+    .sort((a,b)=>parseInt(a.name.match(IR_PARTE_RE)[1],10) - parseInt(b.name.match(IR_PARTE_RE)[1],10));
+  return partes.length > 1 ? partes : null;
+}
+/* Junta as partes num CSV só: cabeçalho da primeira, só as linhas de dados das
+   demais. Partes com cabeçalho diferente não são a mesma consulta — juntar daria
+   colunas trocadas sem ninguém perceber, então para com erro. */
+async function irPastaJuntarPartes(partes){
+  if(!partes.every(f=>/\.csv$/i.test(f.name))) throw new Error('as partes precisam ser todas .csv');
+  let cabecalho = null;
+  const blocos = [];
+  for(const f of partes){
+    let t = await f.text();
+    if(t.charCodeAt(0) === 0xFEFF) t = t.slice(1);
+    const fim = t.indexOf('\n');
+    const cab = (fim < 0 ? t : t.slice(0, fim)).replace(/\r$/, '');
+    const corpo = fim < 0 ? '' : t.slice(fim + 1).replace(/\s+$/, '');
+    if(cabecalho === null) cabecalho = cab;
+    else if(cab !== cabecalho) throw new Error(f.name+' tem colunas diferentes da primeira parte');
+    if(corpo) blocos.push(corpo);
+  }
+  const nome = partes[0].name.replace(IR_PARTE_RE, '');
+  const maisNova = Math.max(...partes.map(f=>f.lastModified));
+  return new File([cabecalho + '\n' + blocos.join('\n') + '\n'], nome, {type:'text/csv', lastModified:maisNova});
 }
 /* Autorização da pasta. O handle sobrevive a fechar o navegador, mas a
    permissão pode voltar pra "prompt" — e reconceder exige clique do usuário,
@@ -3031,7 +3075,8 @@ function irPastaNovo(baseId){
   const a = (IR.pastaArquivos||{})[baseId];
   if(!a) return false;
   const u = (IR.pastaUltimo||{})[baseId];
-  return !u || u.modificadoEm !== a.file.lastModified || u.nome !== a.file.name;
+  return !u || u.modificadoEm !== a.file.lastModified || u.nome !== a.file.name
+    || (u.partes||1) !== ((irPastaPartesDe(baseId)||[]).length || 1);
 }
 function irPastaPendentes(){
   return IR_PASTA_BASES.filter(b=>irPastaNovo(b.id));
@@ -3040,7 +3085,8 @@ async function irPastaMarcar(baseId){
   const a = (IR.pastaArquivos||{})[baseId];
   if(!a) return;
   IR.pastaUltimo = Object.assign({}, IR.pastaUltimo||{}, {
-    [baseId]: {nome:a.file.name, modificadoEm:a.file.lastModified, importadoEm:new Date().toISOString()}
+    [baseId]: {nome:a.file.name, modificadoEm:a.file.lastModified, importadoEm:new Date().toISOString(),
+               partes:(irPastaPartesDe(baseId)||[]).length || 1}
   });
   await irSetConfig('pasta-ultimo', IR.pastaUltimo);
 }
@@ -3067,10 +3113,16 @@ async function irPastaAtualizar(forcar){
       if(!forcar && !irPastaNovo(base.id)) continue;
       if(!IR.pastaArquivos[base.id]) continue;
       const arq = IR.pastaArquivos[base.id];
+      let arquivo = arq.file;
+      const partes = irPastaPartesDe(base.id);
+      if(partes){
+        try{ arquivo = await irPastaJuntarPartes(partes); }
+        catch(err){ irShowToast('Erro ao juntar as partes da '+base.label+': '+err.message, true); break; }
+      }
       let ok = false;
-      if(base.id === '390'){ IR.est390File = arq.file; ok = await irProcessarEst390(); }
-      else if(base.id === '160'){ IR.est160File = arq.file; ok = await irProcessar160(); }
-      else if(base.id === '410'){ IR.net410File = arq.file; ok = await irProcessar410(); }
+      if(base.id === '390'){ IR.est390File = arquivo; ok = await irProcessarEst390(); }
+      else if(base.id === '160'){ IR.est160File = arquivo; ok = await irProcessar160(); }
+      else if(base.id === '410'){ IR.net410File = arquivo; ok = await irProcessar410(); }
       if(ok){ await irPastaMarcar(base.id); feitas.push(base.label); }
       else break; // uma base que falhou derruba as seguintes, que dependem dela
     }
@@ -3089,6 +3141,16 @@ async function irPastaAtualizar(forcar){
   } finally {
     IR.pastaProcessando = false; irRenderView();
   }
+}
+/* "Dados de 03/11 15:12": a hora do arquivo MAIS ANTIGO entre as bases automáticas
+   encontradas. É o que responde "está fresquinho?" — se uma das três parou de
+   chegar, é ela que puxa a hora pra trás e denuncia o atraso. */
+function irPastaDadosDe(){
+  const datas = IR_PASTA_BASES.filter(b=>b.auto && (IR.pastaArquivos||{})[b.id])
+    .map(b=>IR.pastaArquivos[b.id].file.lastModified);
+  if(!datas.length) return '';
+  const d = new Date(Math.min(...datas));
+  return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 function irPastaQuando(baseId){
   const a = (IR.pastaArquivos||{})[baseId];
@@ -3124,7 +3186,8 @@ function irRenderPastaPanel(){
       <td><strong>${irEsc(b.label)}</strong><span class="pasta-desc">${irEsc(b.desc)}</span></td>
       <td class="mono">${arq
         ? irEsc(arq.file.name) + '<span class="pasta-caminho">' + irEsc(arq.pasta)
-          + (arq.copias > 1 ? ` <em class="pasta-copias">+${arq.copias-1} em outra pasta</em>` : '') + '</span>'
+          + (irPastaPartesDe(b.id) ? ` <em class="pasta-copias">${irPastaPartesDe(b.id).length} partes, juntadas na importação</em>`
+             : arq.copias > 1 ? ` <em class="pasta-copias">+${arq.copias-1} em outra pasta</em>` : '') + '</span>'
         : '<span class="pasta-falta">não encontrado</span>'}</td>
       <td class="mono">${arq ? irEsc(irPastaQuando(b.id)) : '—'}</td>
       <td>${!arq ? '—' : novo
@@ -3139,7 +3202,7 @@ function irRenderPastaPanel(){
       <span class="pc-ic">📁</span>
       <span class="pc-tx">
         <strong class="mono">${irEsc(IR.pastaHandle.name)}</strong>
-        <span>${IR.pastaVarridoEm ? 'Lida às '+irEsc(new Date(IR.pastaVarridoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})) : 'Ainda não lida'}${
+        <span>${irPastaDadosDe() ? 'Dados de '+irEsc(irPastaDadosDe())+' · ' : ''}${IR.pastaVarridoEm ? 'Lida às '+irEsc(new Date(IR.pastaVarridoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})) : 'Ainda não lida'}${
           pendCiclos ? ' · '+pendCiclos+' ciclo(s) novo(s)' : ''}${
           pend.length ? ' · '+pend.length+' base(s) fora do ciclo pra atualizar' : ''}</span>
       </span>
@@ -3153,7 +3216,7 @@ function irRenderPastaPanel(){
     ${IR.pastaErro ? `<p class="pasta-erro">${irEsc(IR.pastaErro)}</p>` : ''}
     ${irRenderPastaCiclos()}
     <details class="pc-det">
-      <summary>Bases fora do ciclo (QRY0390, QRY410)</summary>
+      <summary>Bases fora do ciclo (QRY0390, QRY0160, QRY410)</summary>
       <div class="table-wrap"><table class="pasta-table">
         <thead><tr><th>Base</th><th>Arquivo na pasta</th><th>Modificado em</th><th>Situação</th></tr></thead>
         <tbody>${IR_PASTA_BASES.map(linha).join('')}</tbody>

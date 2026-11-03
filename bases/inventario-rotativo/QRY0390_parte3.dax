@@ -1,0 +1,34 @@
+// QRY0390 — Estoque por endereço — PARTE 3 de 3
+// Salvar como: QRY0390_parte3.csv
+// Separa os itens em 3 grupos pelo resto da divisão do código por 3 (0, 1 e 2),
+// porque a QRY0390 inteira passa do limite de ~1 milhão de células por consulta.
+// O app junta as 3 partes sozinho.
+// COALESCE(..., ""): sem ele, célula vazia some da resposta e a coluna inteira
+// pode sumir do CSV.
+// Se o código do item não for número, este filtro dá erro: avise o Claude.
+EVALUATE
+SELECTCOLUMNS(
+    FILTER('QRY0390', MOD(VALUE('QRY0390'[ID_ITEM_FILHO]), 3) = 2),
+    "ID_ITEM_FILHO", COALESCE('QRY0390'[ID_ITEM_FILHO], ""),
+    "ITEM_PAI", COALESCE('QRY0390'[ITEM_PAI], ""),
+    "NOME_ITEM_FILHO", COALESCE('QRY0390'[NOME_ITEM_FILHO], ""),
+    "ID_LOCAL", COALESCE('QRY0390'[ID_LOCAL], ""),
+    "DESC_LOCAL", COALESCE('QRY0390'[DESC_LOCAL], ""),
+    "QTDE", COALESCE('QRY0390'[QTDE], ""),
+    "QTDE_DISP", COALESCE('QRY0390'[QTDE_DISP], ""),
+    "QTDE_ROM", COALESCE('QRY0390'[QTDE_ROM], ""),
+    "CURVA_ABC", COALESCE('QRY0390'[CURVA_ABC], ""),
+    "EAN", COALESCE('QRY0390'[EAN], ""),
+    "VALORIZA", COALESCE('QRY0390'[VALORIZA], ""),
+    "VALOR_UNITARIO", COALESCE('QRY0390'[VALOR_UNITARIO], ""),
+    "VALOR_ITEM_LOCAL", COALESCE('QRY0390'[VALOR_ITEM_LOCAL], ""),
+    "LOG_ITEM", COALESCE('QRY0390'[LOG_ITEM], ""),
+    "X1", COALESCE('QRY0390'[X1], ""),
+    "X2", COALESCE('QRY0390'[X2], ""),
+    "PREDIO", COALESCE('QRY0390'[PREDIO], ""),
+    "CLAL", COALESCE('QRY0390'[CLAL], ""),
+    "NM_SETOR", COALESCE('QRY0390'[NM_SETOR], ""),
+    "NM_FAMILIA", COALESCE('QRY0390'[NM_FAMILIA], ""),
+    "NM_MARCA", COALESCE('QRY0390'[NM_MARCA], ""),
+    "ULTIMA_ATUALIZACAO", FORMAT('QRY0390'[ULTIMA_ATUALIZACAO], "yyyy-mm-dd hh:nn:ss")
+)

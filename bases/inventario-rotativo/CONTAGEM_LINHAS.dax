@@ -1,0 +1,12 @@
+// Conferência: quantas linhas cada tabela tem. Rode no Power BI antes de montar o
+// Power Automate. Se alguma parte passar de 45 mil linhas, avise o Claude para
+// dividir em mais partes.
+EVALUATE
+{
+    ("QRY0390 total", COUNTROWS('QRY0390')),
+    ("QRY0390 parte 1", COUNTROWS(FILTER('QRY0390', MOD(VALUE('QRY0390'[ID_ITEM_FILHO]), 3) = 0))),
+    ("QRY0390 parte 2", COUNTROWS(FILTER('QRY0390', MOD(VALUE('QRY0390'[ID_ITEM_FILHO]), 3) = 1))),
+    ("QRY0390 parte 3", COUNTROWS(FILTER('QRY0390', MOD(VALUE('QRY0390'[ID_ITEM_FILHO]), 3) = 2))),
+    ("QRY0160 total", COUNTROWS('QRY0160')),
+    ("QRY410 ano atual", COUNTROWS(FILTER('QRY410', YEAR('QRY410'[Dt.Mov.]) = YEAR(TODAY()))))
+}

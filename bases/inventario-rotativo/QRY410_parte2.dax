@@ -1,0 +1,28 @@
+// QRY410 — Perdas e ganhos (NET) — PARTE 2 de 3 — só o ANO ATUAL
+// Salvar como: QRY410_parte2.csv
+// O app guarda a NET por ano: importar só o ano atual mantém os anos anteriores.
+// Separa os meses em 3 grupos (resto da divisão do mês por 3) pra caber no limite
+// de ~1 milhão de células por consulta.
+// ⚠️ A confirmar: os nomes das colunas abaixo são os da extração manual de hoje.
+// Conferir no fluxo de dados "410, 160, 150" e ajustar aqui se forem diferentes.
+EVALUATE
+SELECTCOLUMNS(
+    FILTER('QRY410',
+        YEAR('QRY410'[Dt.Mov.]) = YEAR(TODAY())
+        && MOD(MONTH('QRY410'[Dt.Mov.]), 3) = 1),
+    "Item", COALESCE('QRY410'[Item], ""),
+    "Nome", COALESCE('QRY410'[Nome], ""),
+    "Dt.Mov.", FORMAT('QRY410'[Dt.Mov.], "yyyy-mm-dd hh:nn:ss"),
+    "Quantidade", COALESCE('QRY410'[Quantidade], ""),
+    "Sentido", COALESCE('QRY410'[Sentido], ""),
+    "Vl.Mov.", COALESCE('QRY410'[Vl.Mov.], ""),
+    "Id Deposito", COALESCE('QRY410'[Id Deposito], ""),
+    "Observacao WMS", COALESCE('QRY410'[Observacao WMS], ""),
+    "Observacao", COALESCE('QRY410'[Observacao], ""),
+    "Nome Depto", COALESCE('QRY410'[Nome Depto], ""),
+    "Logica", COALESCE('QRY410'[Logica], ""),
+    "Id Depto", COALESCE('QRY410'[Id Depto], ""),
+    "Num Doc", COALESCE('QRY410'[Num Doc], ""),
+    "Usuário", COALESCE('QRY410'[Usuário], ""),
+    "Data/Hora", FORMAT('QRY410'[Data/Hora], "yyyy-mm-dd hh:nn:ss")
+)
