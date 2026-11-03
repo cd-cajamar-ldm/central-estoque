@@ -2683,7 +2683,7 @@ async function irBaixarBoletimImagem(html, nomeArquivo, email){
 /* ============================================================
    QRY410 — PERDAS E GANHOS NO CD
    Independente do ciclo rotativo (por ano, não por cicloId) — ver worker.js
-   runPipeline410() pras regras de negócio (Id Depósito 21 fora, Saída = negativo,
+   runPipeline410() pras regras de negócio (Id Depósito 21 fora, só Lógica 301/302, Saída = negativo,
    legenda de motivos que entram ou não no NET).
    ============================================================ */
 function irOnFile410(file){ if(!file) return; IR.net410File = file; irRenderView(); }
@@ -3578,7 +3578,7 @@ function irRenderNet410Resultado(d){
     </div>
     <div class="panel">
       <h3>Net mensal — ${d.ano}</h3>
-      <p class="panel-sub">Só considera motivos válidos pro NET (ver tabela por Obs abaixo). ${irFmtInt(d.linhasExcluidasDeposito21)} linha(s) do Id Depósito 21 ficaram de fora. Total de linhas do ano: ${irFmtInt(d.totalLinhas)}.</p>
+      <p class="panel-sub">Só considera motivos válidos pro NET (ver tabela por Obs abaixo). ${irFmtInt(d.linhasExcluidasDeposito21)} linha(s) do Id Depósito 21 ficaram de fora. ${d.temColunaLogica ? 'Só Lógica 301/302: '+irFmtInt(d.linhasExcluidasLogica||0)+' linha(s) de outras lógicas ficaram de fora.' : (d.linhasExcluidasLogica===undefined ? '<strong>Reimporte a QRY410 pra aplicar a regra de só Lógica 301/302.</strong>' : '<strong>Arquivo sem a coluna Lógica — não deu pra filtrar 301/302.</strong>')} Total de linhas do ano: ${irFmtInt(d.totalLinhas)}.</p>
       <div class="table-wrap"><table>
         <thead><tr><th>Mês</th><th>Net</th><th>Net Absoluto</th><th>Ganhos</th><th>Perdas</th></tr></thead>
         <tbody>${rows.map(m=>`<tr>
@@ -3621,24 +3621,33 @@ function irRenderNet410Resultado(d){
     ${irRenderNet410ItensMesSection(d)}
   `;
 }
-// Ordem fixa pedida pro operacional — mesma sequência sempre, uma linha por
-// observação (só as com Considerar NET = SIM na legenda) mais o Total Geral.
+// Ordem fixa pedida pro operacional pros códigos principais; depois deles
+// entra QUALQUER outro código considerado que tiver movimento no mês (ASR,
+// TID, PAR...). Antes a tabela só mostrava esses 6 e o Total Geral não
+// batia com o gráfico (ex.: ASR somava no NET e não aparecia aqui).
+// "Considerar NET" vem do próprio processamento (o mesmo que o gráfico usou).
 const IR_NET410_ORDEM_OBS = ['AEE','INV','ADE','AIR','LIT','AIN'];
 function irRenderNet410PorObsMesTable(d){
   const mes = IR.net410MesSel;
   const mObj = (d.porMes||[]).find(m=>m.mes===mes);
-  const mapaObsMes = new Map((mObj && mObj.porObs || []).map(o=>[o.id, o]));
+  const doMes = (mObj && mObj.porObs) || [];
   const legendaViva = IR.net410Legenda||[];
-  const linhas = IR_NET410_ORDEM_OBS.map(codigo=>{
-    const legendaEntry = legendaViva.find(l=>l.id===codigo);
-    const considerarNet = legendaEntry ? legendaEntry.considerarNet!==false : true;
-    if(!considerarNet) return null; // legenda diz pra nao considerar: some da tabela
-    const obs = mapaObsMes.get(codigo);
-    const saida = obs ? obs.saida : 0;
-    const entrada = obs ? obs.entrada : 0;
-    const legendaTexto = (legendaEntry && legendaEntry.legenda) || (obs && obs.legenda) || '';
-    return {id:codigo, legenda:legendaTexto, saida, entrada, net:saida+entrada};
-  }).filter(Boolean);
+  const comNet = o=>({id:o.id, legenda:o.legenda||((legendaViva.find(l=>l.id===o.id)||{}).legenda)||'', saida:o.saida||0, entrada:o.entrada||0, net:(o.saida||0)+(o.entrada||0)});
+  const considerados = doMes.filter(o=>o.considerarNet!==false);
+  // Os 6 da ordem fixa aparecem sempre (zerados se não teve movimento), como antes.
+  for(const codigo of IR_NET410_ORDEM_OBS){
+    if(doMes.some(o=>o.id===codigo)) continue;
+    const leg = legendaViva.find(l=>l.id===codigo);
+    if(leg && leg.considerarNet===false) continue;
+    considerados.push({id:codigo, saida:0, entrada:0});
+  }
+  const ordem = c=>{ const i = IR_NET410_ORDEM_OBS.indexOf(c.id); return i<0 ? IR_NET410_ORDEM_OBS.length : i; };
+  const linhas = considerados.map(comNet)
+    .sort((x,y)=> ordem(x)-ordem(y) || Math.abs(y.net)-Math.abs(x.net));
+  // Lançamentos do mês que NÃO entram no NET (legenda = não considerar) —
+  // listados à parte pra explicar diferença contra a dinâmica da 410.
+  const foraNet = doMes.filter(o=>o.considerarNet===false).map(comNet)
+    .filter(o=>o.saida || o.entrada).sort((x,y)=>Math.abs(y.net)-Math.abs(x.net));
   const totalSaida = linhas.reduce((s,o)=>s+o.saida,0);
   const totalEntrada = linhas.reduce((s,o)=>s+o.entrada,0);
   const totalNet = totalSaida+totalEntrada;
@@ -3662,6 +3671,7 @@ function irRenderNet410PorObsMesTable(d){
           <td class="mono" style="color:${totalNet>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalNet)}</td>
         </tr></tfoot>
       </table></div>
+      ${foraNet.length ? `<p class="field-hint" style="margin-top:10px;"><strong>Fora do NET neste mês</strong> (Considerar NET = NÃO em Configurações): ${foraNet.map(o=>`${irEsc(o.id)}${o.legenda?' ('+irEsc(o.legenda)+')':''} ${irFmtMoney(o.net)}`).join(' · ')}</p>` : ''}
     </div>`;
 }
 /* ============================================================
@@ -3823,11 +3833,16 @@ function irRenderGestaoCiclo(){
   // Top 10 itens que mais impactam o NET no mês selecionado (positivo/negativo).
   const topPos = ((mObj && mObj.topItensPositivos) || []).slice(0, 10);
   const topNeg = ((mObj && mObj.topItensNegativos) || []).slice(0, 10);
-  return `
+  // Base processada antes da regra "só Lógica 301/302" não tem o contador —
+  // o NET dela ainda soma todas as lógicas até a QRY410 ser reimportada.
+  const avisoLogica = d && d.linhasExcluidasLogica===undefined
+    ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>Reimporte a QRY410</strong> pra aplicar a regra nova: o NET passa a somar só as Lógicas 301 e 302. Os números abaixo ainda são da regra antiga (todas as lógicas).</p></div>`
+    : (d && !d.temColunaLogica ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>A QRY410 importada não tem a coluna Lógica</strong> — não deu pra filtrar só 301/302; o NET abaixo soma todas as lógicas.</p></div>` : '');
+  return `${avisoLogica}
     <div class="bi-grid-2">
       ${netMensalRows.length ? `<div class="panel">
         <h3>NET Mensal em Colunas — ${d.ano}</h3>
-        <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
+        <p class="panel-sub">Ganho/perda líquido dos ajustes do CD (só Lógica 301/302), mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
         ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:620, H:260})}
       </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
       ${irRenderNet410PorObsMesTable(d)}
@@ -7052,12 +7067,13 @@ async function irExportarTudoXlsx(){
       irIndicadoresCatalogo(indAtivo || {}).map(([nome,valor,formula])=>({
         Indicador:nome, ['Valor (ciclo ativo)']: indAtivo ? valor : '—', Formula:formula})));
     irAdicionarAbaExport(wb, 'Gestao de Inventario',
-      ((await irGetConfig(IR_CFG_EXCLUSOES)) || []).map(e=>{
+      ((await irGetConfig(IR_CFG_EXCLUSOES)) || []).flatMap(e=>{
         const d = irDetalheExclusao(e);
-        return {['Nº Inventário']:e.inventario, Local:e.local, ['Endereço']:irDescLocal(e.local)||'',
-          ['Usuário(s) da contagem']:irUsuariosExclusaoTxt(d),
+        // Uma linha por usuário, igual à tela.
+        return (d.usuarios.length ? d.usuarios : [null]).map(u=>({['Nº Inventário']:e.inventario, Local:e.local, ['Endereço']:irDescLocal(e.local)||'',
+          ['Usuário']:u?irProdNome(u.usuario):'', Rodada:u?u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':''):'',
           ['Peças div. desconsideradas (ciclo ativo)']:d.aplicada?d.pecas:'', ['Valor div. desconsiderado (ciclo ativo)']:d.aplicada?d.valor:'',
-          ['Situação (ciclo ativo)']:d.situacao.txt, Justificativa:e.justificativa, ['Cadastrado em']:e.criadoEm||''};
+          ['Situação (ciclo ativo)']:d.situacao.txt, Justificativa:e.justificativa, ['Cadastrado em']:e.criadoEm||''}));
       }));
     irAdicionarAbaExport(wb, 'Ciclos', ciclos.map(irAchatarLinhaExport));
     const resumoIndicadores=[], porRua=[], porSetor=[], porLog=[];
@@ -7215,9 +7231,6 @@ function irDetalheExclusao(e){
   return det;
 }
 function irSituacaoExclusao(e){ return irDetalheExclusao(e).situacao; }
-function irUsuariosExclusaoTxt(det){
-  return det.usuarios.map(u=>irProdNome(u.usuario)+' ('+u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':'')+')').join(' · ');
-}
 async function irAdicionarExclusao(){
   const inv = (document.getElementById('ir-gi-inv').value||'').trim();
   const localTxt = (document.getElementById('ir-gi-local').value||'').trim();
@@ -7313,23 +7326,27 @@ function irRenderGestaoInventario(){
   <div class="panel">
     <h3>Locais desconsiderados (${irFmtInt(lista.length)})</h3>
     <p class="panel-sub">${ind && ind.locaisDesconsiderados!=null ? `No ciclo ativo, ${irFmtInt(ind.locaisDesconsiderados)} local(is) estão fora da acurácia. ` : ''}Só tem efeito o inventário que FECHOU o local (a última rodada AIR dele) — rodada intermediária já não entra na conta. Ciclos 1 e 2 de 2026 têm o número publicado travado e não mudam. Usuários = quem contou cada rodada física (2ª em diante) daquele inventário; "final" é a rodada que valeu como contagem física.</p>
-    ${lista.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Nº Inventário</th><th>Local</th><th>Endereço</th><th>Usuário(s) da contagem</th><th>Peças div.</th><th>Valor div.</th><th>Justificativa</th><th>Cadastrado em</th><th>Situação (ciclo ativo)</th><th></th></tr></thead>
+    ${lista.length ? `<div class="table-wrap"><table class="gi-tabela">
+      <thead><tr><th>Nº Inventário</th><th>Local</th><th>Endereço</th><th>Usuário</th><th>Rodada</th><th>Peças div.</th><th>Valor div.</th><th>Justificativa</th><th>Cadastrado em</th><th>Situação (ciclo ativo)</th><th></th></tr></thead>
       <tbody>${lista.map(e=>{
         const d = dets.get(e.id);
         const s = d.situacao;
-        return `<tr>
+        // Uma linha por usuário: mesmo inventário+local, desconsiderado do
+        // mesmo jeito — só separa quem errou. Peças/valor são do local.
+        const porUsuario = d.usuarios.length ? d.usuarios : [null];
+        return porUsuario.map(u=>`<tr>
           <td class="mono">${irEsc(e.inventario)}</td>
           <td class="mono">${irEsc(e.local)}</td>
           <td>${irEsc(irDescLocal(e.local)||'—')}</td>
-          <td>${d.usuarios.length ? d.usuarios.map(u=>`<div>${u.final?'<strong>':''}${irEsc(irProdNome(u.usuario))}${u.final?'</strong>':''} <span class="field-hint">(${u.rodadas.map(r=>r+'ª').join(', ')}${u.final?' · final':''})</span></div>`).join('') : '—'}</td>
+          <td>${u ? (u.final?'<strong>':'')+irEsc(irProdNome(u.usuario))+(u.final?'</strong>':'') : '—'}</td>
+          <td>${u ? u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':'') : '—'}</td>
           <td class="mono">${d.aplicada ? irFmtInt(d.pecas) : '—'}</td>
           <td class="mono">${d.aplicada ? irFmtMoney(d.valor) : '—'}</td>
-          <td>${irEsc(e.justificativa)}</td>
+          <td class="gi-just" title="${irEsc(e.justificativa)}">${irEsc(e.justificativa)}</td>
           <td class="mono">${e.criadoEm ? irEsc(new Date(e.criadoEm).toLocaleString('pt-BR')) : '—'}</td>
           <td><span class="tag ${s.cls}">${irEsc(s.txt)}</span></td>
-          <td><button class="btn-link" style="color:var(--danger);" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
-        </tr>`;
+          <td><button class="btn-link" style="color:var(--danger);" title="Remove o inventário ${irEsc(e.inventario)} + local ${irEsc(e.local)} (todas as linhas dele)" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
+        </tr>`).join('');
       }).join('')}</tbody>
     </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>'}
   </div>
