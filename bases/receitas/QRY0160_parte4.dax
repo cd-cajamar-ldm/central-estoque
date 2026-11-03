@@ -1,0 +1,25 @@
+// QRY0160 — Tempo parado no endereço — PARTE 4 de 5
+// Salvar como: QRY0160_parte4.csv
+// Conferido em 03/11/2026: 147.606 linhas. Passa do limite de 100 mil linhas por
+// consulta, e cada resposta do Power BI também tem limite de ~15 MB, então vai em 5 partes
+// (~30 mil linhas cada), separadas pelo resto da divisão do item por 5.
+EVALUATE
+SELECTCOLUMNS(
+    FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 5) = 3),
+    "Item", COALESCE('QRY0160'[Item], ""),
+    "Descrição item", COALESCE('QRY0160'[Descrição item], ""),
+    "EAN", COALESCE('QRY0160'[EAN], ""),
+    "Local", COALESCE('QRY0160'[Local], ""),
+    "Endereço", COALESCE('QRY0160'[Endereço], ""),
+    "X1", COALESCE('QRY0160'[X1], ""),
+    "X2", COALESCE('QRY0160'[X2], ""),
+    "X3", COALESCE('QRY0160'[X3], ""),
+    "X4", COALESCE('QRY0160'[X4], ""),
+    "Restrição", COALESCE('QRY0160'[Restrição], ""),
+    "Qt", COALESCE('QRY0160'[Qt], ""),
+    "Qt Rom", COALESCE('QRY0160'[Qt Rom], ""),
+    "Operador", COALESCE('QRY0160'[Operador], ""),
+    "Data Movimento", FORMAT('QRY0160'[Data Movimento], "yyyy-mm-dd hh:nn:ss"),
+    "Data Limite", FORMAT('QRY0160'[Data Limite], "yyyy-mm-dd hh:nn:ss"),
+    "Num. Estoque", COALESCE('QRY0160'[Num. Estoque], "")
+)

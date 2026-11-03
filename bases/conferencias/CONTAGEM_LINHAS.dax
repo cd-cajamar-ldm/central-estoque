@@ -1,10 +1,12 @@
-// Conferência 1 (rodar no Power BI Desktop, não copiar para Receitas): linhas por parte. Cada parte precisa ficar abaixo de 45 mil.
+// Conferência 1 (rodar no Power BI Desktop, não copiar para Receitas): linhas por parte. Cada parte precisa ficar abaixo de 35 mil.
 EVALUATE
 {
     ("QRY0390 parte 1", COUNTROWS(FILTER('QRY0390', MOD(IFERROR(VALUE('QRY0390'[Item]), 0), 3) = 0))),
     ("QRY0390 parte 2", COUNTROWS(FILTER('QRY0390', MOD(IFERROR(VALUE('QRY0390'[Item]), 0), 3) = 1))),
     ("QRY0390 parte 3", COUNTROWS(FILTER('QRY0390', MOD(IFERROR(VALUE('QRY0390'[Item]), 0), 3) = 2))),
-    ("QRY0160 parte 1", COUNTROWS(FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 3) = 0))),
-    ("QRY0160 parte 2", COUNTROWS(FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 3) = 1))),
-    ("QRY0160 parte 3", COUNTROWS(FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 3) = 2)))
+    ("QRY0160 parte 1", COUNTROWS(FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 5) = 0))),
+    ("QRY0160 parte 2", COUNTROWS(FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 5) = 1))),
+    ("QRY0160 parte 3", COUNTROWS(FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 5) = 2))),
+    ("QRY0160 parte 4", COUNTROWS(FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 5) = 3))),
+    ("QRY0160 parte 5", COUNTROWS(FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 5) = 4)))
 }

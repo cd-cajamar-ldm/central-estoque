@@ -23,7 +23,7 @@ Fluxos de dados             Modelo no Power BI              Power Automate      
 1. No **SharePoint** (ou no OneDrive da empresa), crie a pasta **`Central de Estoque`** e, dentro dela, duas pastas:
    - **`Receitas`**: onde ficam as receitas (arquivos `.dax`);
    - **`Bases`**: onde o Power Automate salva os relatórios prontos.
-2. Copie para a pasta **`Receitas`** **todos** os arquivos da pasta [`receitas/`](receitas/) da Central (hoje são 11: QRY0390 em 3 partes, QRY0160 em 3 partes, QRY0843, SIGEQ278 em 3 partes e ZBIQ0051).
+2. Copie para a pasta **`Receitas`** **todos** os arquivos da pasta [`receitas/`](receitas/) da Central (hoje são 13: QRY0390 em 3 partes, QRY0160 em 5 partes, QRY0843, SIGEQ278 em 3 partes e ZBIQ0051).
 3. Na pasta **`Bases`**, clique em **Sincronizar** (ou **Adicionar atalho a Meus arquivos**) para que ela apareça no Explorador de Arquivos do computador.
 4. No Explorador de Arquivos, clique com o botão direito na pasta **`Bases`** → **Sempre manter neste dispositivo**.
    - Sem isso, os arquivos ficam "só na nuvem" e o app não consegue ler.
@@ -52,7 +52,7 @@ O **nome do arquivo de receita** decide o nome do relatório salvo: `QRY0390_par
 
 ### Conferência antes de seguir
 
-Na **Exibição de consulta DAX**, cole o conteúdo de [`conferencias/CONTAGEM_LINHAS.dax`](conferencias/CONTAGEM_LINHAS.dax) e clique em **Executar**. Cada parte precisa ficar **abaixo de 45 mil linhas**. Se passar, ou se der erro, mande um print para o Claude.
+Na **Exibição de consulta DAX**, cole o conteúdo de [`conferencias/CONTAGEM_LINHAS.dax`](conferencias/CONTAGEM_LINHAS.dax) e clique em **Executar**. Cada parte precisa ficar **abaixo de 35 mil linhas**. Se passar, ou se der erro, mande um print para o Claude.
 
 ---
 

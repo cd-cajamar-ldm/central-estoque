@@ -12,7 +12,7 @@ Todas vêm dos fluxos de dados do workspace **Operação CD Cajamar**.
 | Tabela | Linhas | Apps que usam | Receita |
 |---|---|---|---|
 | QRY0390 | 98.527 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização, Auditoria | ✅ Pronta (3 partes) |
-| QRY0160 | 147.606 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta (3 partes) |
+| QRY0160 | 147.606 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta (5 partes) |
 | QRY0843 | 11.645 | Inventário Rotativo | ✅ Pronta |
 | SIGEQ278 | 238.253 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização | ✅ Pronta (3 partes) |
 | ZBIQ0051 | 3.475 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta |
@@ -22,7 +22,7 @@ Todas vêm dos fluxos de dados do workspace **Operação CD Cajamar**.
 | QRY0139 | 764.787 | A definir | 🔴 Grande demais: falta decidir o recorte |
 | QRY0840 | 1.962.356 | A definir | 🔴 Grande demais: falta decidir o recorte |
 
-**Limite do caminho Power Automate:** cada receita traz no máximo 100 mil linhas e ~1 milhão de células. Até umas 300 mil linhas, dividir em partes resolve. Acima disso, a base precisa de um **recorte** (só um período, só uma filial, só um status) antes de virar receita.
+**Limite do caminho Power Automate:** cada receita traz no máximo 100 mil linhas, ~1 milhão de células e ~15 MB. Até umas 300 mil linhas, dividir em partes resolve. Acima disso, a base precisa de um **recorte** (só um período, só uma filial, só um status) antes de virar receita.
 
 A **Base Congelada** continua manual (planilha feita à mão).
 
@@ -31,7 +31,7 @@ A **Base Congelada** continua manual (planilha feita à mão).
 | Relatório | Para que serve no app | De onde vem | Atualização da origem | Como chega no app | Arquivo(s) na pasta |
 |---|---|---|---|---|---|
 | **QRY0390** | Estoque por endereço | Fluxo de dados **"180, 163, 390, 193 ETR"**, tabela `QRY0390` | De hora em hora | 🟢 Automático | `QRY0390_parte1.csv`, `QRY0390_parte2.csv`, `QRY0390_parte3.csv` |
-| **QRY0160** | Tempo parado no endereço (pendência de movimentação) | Fluxo de dados **"410, 160, 150"**, tabela `QRY0160` | 1x de madrugada, sem próxima agendada | 🟢 Automático | `QRY0160_parte1.csv` … `QRY0160_parte3.csv` |
+| **QRY0160** | Tempo parado no endereço (pendência de movimentação) | Fluxo de dados **"410, 160, 150"**, tabela `QRY0160` | 1x de madrugada, sem próxima agendada | 🟢 Automático | `QRY0160_parte1.csv` … `QRY0160_parte5.csv` |
 | **QRY410** | Perdas e ganhos (NET) | Fluxo de dados **"410, 160, 150"**, tabela `SIGEQ410` | 1x de madrugada, sem próxima agendada | ⚠️ Em análise (7 milhões de linhas) | Manual por enquanto |
 | **QRY0843** | Contagens do ciclo | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
 | **SIGEQ278** | Custo dos itens | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
