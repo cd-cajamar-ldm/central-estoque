@@ -4,138 +4,114 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Auditorias — Oficina LDM</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="theme-color" content="#0B1230">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
-  /* Casca inicial do módulo Auditorias — mesmo padrão visual da Oficina LDM
-     (claro/escuro, sidebar fixa, topbar). Só o shell por enquanto; as telas
-     de verdade entram depois, como um próximo passo. */
+  /* Mesmo padrão "Painel Oficina LDM" do hub raiz — mesmas variáveis,
+     mesma sidebar (252px, logo 60px interativa, nav em pílula) e mesmo
+     topbar (h1 26px Poppins, sem borda). Só o essencial do hub + o que
+     é específico deste módulo (grade e telas dos tipos de auditoria). */
   :root{
-    --paper:#F2F4FA;--surface:#FFFFFF;--surface2:#F7F9FD;
-    --ink:#101633;--ink-soft:#5B6485;--line:#DCE1F0;
+    --bg0:#F2F4FA;--surface:#FFFFFF;--line:#DCE1F0;
+    --ink:#101633;--ink-soft:#5B6485;--card-top:#FFFFFF;--card-bottom:#FFFFFF;
     --chip-bg:#EDF0F9;--chip-bg-hover:#E1E6F4;
-    --accent:#FE5000;--accent-light:rgba(254,80,0,.12);
-    --radius:7px;--radius-lg:10px;
+    --shadow-col:rgba(16,22,60,.14);--shadow-near:rgba(16,22,60,.06);
+    --orange:#FE5000;--rivet:rgba(16,22,60,.16);
   }
   body.theme-dark{
-    --paper:#0A0B23;--surface:#0B1934;--surface2:#0e1530;
-    --ink:#EEEDF5;--ink-soft:#7B80A0;--line:#1E2340;
-    --chip-bg:rgba(255,255,255,.05);--chip-bg-hover:rgba(255,255,255,.1);
+    --bg0:#070910;--surface:rgba(255,255,255,.045);--line:rgba(255,255,255,.1);
+    --ink:#F3F2FA;--ink-soft:#8E95C2;--card-top:rgba(255,255,255,.055);--card-bottom:rgba(255,255,255,.02);
+    --chip-bg:rgba(255,255,255,.06);--chip-bg-hover:rgba(255,255,255,.14);
+    --shadow-col:rgba(0,0,0,.55);--shadow-near:rgba(0,0,0,.3);--rivet:rgba(255,255,255,.22);
   }
-  *{box-sizing:border-box;margin:0;padding:0;}
-  html,body{height:100%;overflow:hidden;}
-  body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;font-size:13.5px;transition:background .3s,color .3s;}
-  h1,h2,h3,h4{font-family:'Poppins',sans-serif;font-weight:700;letter-spacing:.01em;}
-  button{font-family:'Inter',sans-serif;cursor:pointer;}
-  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-  a{color:var(--accent);}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg0);color:var(--ink);-webkit-font-smoothing:antialiased;transition:background .3s,color .3s;}
+  a{color:var(--orange);}
+  :focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
 
-  .shell{display:flex;height:100vh;overflow:hidden;}
+  .shell{display:flex;min-height:100vh;width:100%;}
 
-  /* SIDEBAR — azul-marinho fixo, não acompanha o tema (mesma regra do Painel raiz) */
-  .sidebar{
-    width:220px;flex-shrink:0;
-    background:#0B1230;
-    border-right:1px solid rgba(255,255,255,.08);
-    display:flex;flex-direction:column;
-    overflow:hidden;
-  }
-  .brand{
-    padding:16px 14px 14px;
-    border-bottom:1px solid rgba(255,255,255,.08);
-    flex-shrink:0;display:flex;align-items:center;gap:10px;
-  }
-  .brand-logo{
-    position:relative;width:52px;height:52px;border-radius:15px;overflow:hidden;
-    background:linear-gradient(145deg,#FF8A4C,#FE5000 55%,#C83812);
-    display:flex;align-items:center;justify-content:center;flex-shrink:0;
-    box-shadow:0 6px 14px -4px rgba(254,80,0,.55),inset 0 1px 0 rgba(255,255,255,.3);
-  }
-  .brand-logo img{position:relative;z-index:1;width:78%;height:78%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));}
-  .brand-text{flex:1;min-width:0;}
-  .brand-name{font-family:'Poppins',sans-serif;font-size:13px;font-weight:800;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .brand-sub{font-size:10px;color:#8891C4;margin-top:1px;}
-  .brand-back{
-    display:flex;align-items:center;gap:6px;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.08);
-    font-size:11.5px;font-weight:600;color:#9BA2CC;text-decoration:none;flex-shrink:0;
-  }
-  .brand-back:hover{color:#fff;background:rgba(255,255,255,.04);}
+  /* SIDEBAR — azul-marinho fixo, não acompanha o tema (âncora visual da marca) */
+  .sidebar{width:252px;flex-shrink:0;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
+  .brand{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+  .brand-logo{position:relative;width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;overflow:hidden;border:none;box-shadow:0 10px 22px -6px rgba(254,80,0,.6),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s;padding:0;}
+  .brand-logo:hover{transform:translateY(-2px) scale(1.045);}
+  .brand-logo::before{content:'';position:absolute;top:-50%;left:-70%;width:55%;height:220%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:rotate(18deg);animation:shine 5s ease-in-out infinite;}
+  @keyframes shine{0%{left:-70%;}38%{left:150%;}100%{left:150%;}}
+  .brand-logo img{position:relative;z-index:1;width:70%;height:70%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));pointer-events:none;}
+  .brand-logo:hover img{animation:wiggle 1s ease-in-out infinite;}
+  @keyframes wiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
+  .brand-logo.spin img{animation:spin360 .6s cubic-bezier(.34,1.56,.64,1);}
+  @keyframes spin360{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  .brand-name{font-family:'Poppins',sans-serif;font-size:17px;font-weight:800;color:#fff;line-height:1.15;}
+  .brand-sub{font-size:11px;color:#8891C4;margin-top:2px;}
 
-  .sidebar-body{flex:1;overflow-y:auto;padding:6px 0;}
-  .nsg{margin:0 0 6px 0;}
-  .nsl{
-    display:flex;align-items:center;gap:8px;
-    font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-    color:#C84010;padding:10px 12px 5px 14px;
-  }
-  .nsl::before{content:'';display:block;width:3px;height:12px;border-radius:2px;flex-shrink:0;background:#FE5000;}
-  .nav-item{
-    display:flex;align-items:center;gap:9px;
-    width:100%;text-align:left;background:none;border:none;
-    color:#C7CCEA;padding:6px 12px 6px 14px;
-    font-size:13px;font-weight:500;border-left:2px solid transparent;
-    transition:background .1s,color .1s;
-  }
-  .nav-item span{flex:1;text-align:left;}
-  .nav-item svg{flex-shrink:0;opacity:.75;}
-  .nav-item.active{background:rgba(254,80,0,.1);color:#FE5000;border-left-color:#FE5000;font-weight:600;}
-  .nav-item.active svg{opacity:1;}
+  /* Único item que o Painel raiz não tem (ele já é a Central) — estilizado
+     pra se encaixar no mesmo ritmo visual da navegação em pílula. */
+  .brand-back{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:0 0 16px;border-radius:11px;color:#9BA2CC;text-decoration:none;font-size:12.5px;font-weight:600;transition:background .2s,color .2s;}
+  .brand-back:hover{background:rgba(255,255,255,.06);color:#fff;}
+
+  .sb-nav{display:flex;flex-direction:column;gap:3px;margin:4px 0 20px;}
+  .sb-nav-item{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;border-radius:11px;padding:10px 12px;color:#9BA2CC;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:background .2s,color .2s;}
+  .sb-nav-item svg{flex-shrink:0;opacity:.85;transition:opacity .2s,color .2s;}
+  .sb-nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .sb-nav-item.active{background:rgba(254,80,0,.16);color:#fff;}
+  .sb-nav-item.active svg{color:var(--orange);opacity:1;}
+
+  .sb-foot{margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:#6B74A8;}
 
   /* MAIN */
-  .content{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--paper);}
-  .topbar{
-    padding:14px 24px 12px;
-    border-bottom:1px solid var(--line);
-    background:var(--surface2);flex-shrink:0;
-    display:flex;align-items:center;justify-content:space-between;gap:16px;
-  }
-  .topbar-left h1{font-size:17px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--ink);}
-  .topbar-left p{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
-  .cd-badge{flex-shrink:0;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;white-space:nowrap;}
-  .theme-switch{position:relative;width:46px;height:24px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
-  .theme-knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
-  .theme-switch.on .theme-knob{left:24px;}
-  .page-scroll{flex:1;overflow-y:auto;padding:20px 24px;}
+  .main{position:relative;flex:1;min-width:0;padding:40px 48px 70px;}
+  .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;}
+  .topbar h1{font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;margin:0;}
+  .topbar p{margin:5px 0 0;color:var(--ink-soft);font-size:13.5px;max-width:480px;}
+  .topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+  .cd-badge{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;}
+  .theme-switch{position:relative;width:54px;height:28px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
+  .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
+  .theme-switch.on .theme-knob{left:29px;}
 
-  .empty-state{text-align:center;padding:64px 20px;color:var(--ink-soft);}
-  .empty-state .eicon{font-size:34px;margin-bottom:16px;color:var(--line);}
-  .empty-state h3{color:var(--ink);font-size:16px;text-transform:none;margin-bottom:8px;font-family:'Poppins',sans-serif;font-weight:700;}
-  .empty-state p{font-size:13.5px;max-width:420px;margin:0 auto;}
+  .view[hidden]{display:none;}
 
-  /* Grade de tipos de auditoria (Painel) */
-  .audit-type-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:18px;}
-  .audit-type-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;cursor:pointer;transition:border-color .12s,transform .12s;text-align:left;width:100%;}
-  .audit-type-card:hover{border-color:var(--accent);transform:translateY(-1px);}
-  .audit-type-card .aticon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:10px;}
-  .audit-type-card h4{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;}
-  .audit-type-card p{font-size:12px;color:var(--ink-soft);line-height:1.5;}
+  /* Grade dos tipos de auditoria (Painel) — mesmo cartão do Painel raiz */
+  .audit-type-grid{position:relative;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px;margin-top:24px;}
+  .audit-type-card{position:relative;background:linear-gradient(180deg,var(--card-top),var(--card-bottom));border:1px solid var(--line);border-radius:22px;padding:22px 22px 18px;text-align:left;width:100%;color:var(--ink);font-family:'Inter',sans-serif;box-shadow:0 1px 2px var(--shadow-near),0 14px 30px -18px var(--shadow-col);transition:transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .3s;}
+  .audit-type-card:hover{transform:translateY(-4px);box-shadow:0 2px 4px var(--shadow-near),0 26px 46px -18px var(--shadow-col);}
+  .audit-type-card .aticon{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 9px 18px -7px rgba(0,0,0,.4);margin-bottom:14px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .audit-type-card h4{font-size:16px;font-weight:700;margin:0 0 5px;}
+  .audit-type-card p{font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin:0;}
 
   /* Tela de um tipo de auditoria específico */
-  .audit-type-view h2{font-size:18px;margin-bottom:6px;}
-  .audit-type-view .desc{color:var(--ink-soft);font-size:13.5px;max-width:560px;margin-bottom:18px;}
+  .audit-type-view h2{font-family:'Poppins',sans-serif;font-size:20px;font-weight:800;margin:24px 0 8px;}
+  .audit-type-view .desc{color:var(--ink-soft);font-size:13.5px;max-width:560px;margin:0 0 18px;}
   .wip-note{display:inline-flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:12px;font-weight:600;padding:8px 14px;border-radius:100px;}
 
   @media(max-width:760px){
-    .shell{flex-direction:column;height:auto;overflow:auto;}
-    .sidebar{width:100%;border-right:none;border-bottom:1px solid rgba(255,255,255,.08);}
-    .content{overflow:visible;}
-    .page-scroll{padding:14px;}
-    html,body{overflow:auto;}
+    .shell{flex-direction:column;}
+    .sidebar{width:100%;flex-direction:row;align-items:center;padding:16px 20px;flex-wrap:wrap;}
+    .brand{margin-bottom:0;}
+    .brand-back{display:none;}
+    .sb-nav{display:none;}
+    .sb-foot{display:none;}
+    .main{padding:24px 18px 50px;}
   }
 </style>
 </head>
 <body>
 <div class="shell">
+
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-logo"><img src="brand/Logo_LDM_icon.png" alt="Loja do Mecânico"></div>
-      <div class="brand-text">
+      <button class="brand-logo" id="brandLogo" type="button" aria-label="Oficina LDM">
+        <img src="brand/Logo_LDM_icon.png" alt="">
+      </button>
+      <div>
         <div class="brand-name">OFICINA LDM</div>
         <div class="brand-sub">lugar de quem faz</div>
       </div>
@@ -144,109 +120,120 @@
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       <span>Voltar para a Central</span>
     </a>
-    <nav class="sidebar-body" id="nav">
-      <div class="nsg">
-        <div class="nsl">Principal</div>
-        <button class="nav-item active" type="button" data-tab="painel"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Painel</span></button>
-      </div>
-      <div class="nsg">
-        <div class="nsl">Tipos de Auditoria</div>
-        <button class="nav-item" type="button" data-tab="movimentacao"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg><span>Movimentação</span></button>
-        <button class="nav-item" type="button" data-tab="ocupacao"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span>Ocupação</span></button>
-        <button class="nav-item" type="button" data-tab="recebimento"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9L11 16h2l1.41-2.1a2 2 0 0 1 1.69-.9H20a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2z"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Recebimento</span></button>
-        <button class="nav-item" type="button" data-tab="criticos"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Críticos</span></button>
-        <button class="nav-item" type="button" data-tab="picking"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Picking</span></button>
-      </div>
+    <nav class="sb-nav" id="nav">
+      <button class="sb-nav-item active" type="button" data-tab="painel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Painel</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="movimentacao">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+        <span>Movimentação</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="ocupacao">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Ocupação</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="recebimento">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9L11 16h2l1.41-2.1a2 2 0 0 1 1.69-.9H20a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2z"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Recebimento</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="criticos">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Críticos</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="picking">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        <span>Picking</span>
+      </button>
     </nav>
+    <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar</div>
   </aside>
 
-  <main class="content">
+  <main class="main">
     <div class="topbar">
-      <div class="topbar-left">
+      <div>
         <h1 id="tab-title">Painel</h1>
         <p id="tab-subtitle">Visão geral dos tipos de auditoria da Oficina LDM.</p>
       </div>
-      <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+      <div class="topbar-actions">
         <span class="cd-badge">CD CAJAMAR</span>
         <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro">
           <span class="theme-knob" id="themeKnob"></span>
         </button>
       </div>
     </div>
-    <div class="page-scroll">
 
-      <div class="view" data-view="painel">
-        <p style="color:var(--ink-soft);max-width:560px;">Primeiro passo do módulo: a estrutura dos tipos de auditoria de estoque. Cada um abaixo ainda está em construção — clique pra ver o escopo.</p>
-        <div class="audit-type-grid">
-          <button class="audit-type-card" type="button" data-goto="movimentacao">
-            <div class="aticon" style="background:#2563EB;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></div>
-            <h4>Movimentação</h4>
-            <p>Trilha de entradas, transferências, picking, ajustes e reversa.</p>
-          </button>
-          <button class="audit-type-card" type="button" data-goto="ocupacao">
-            <div class="aticon" style="background:#0E9488;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></div>
-            <h4>Ocupação</h4>
-            <p>Endereço físico x sistêmico — acha bin mal identificado ou divergente.</p>
-          </button>
-          <button class="audit-type-card" type="button" data-goto="recebimento">
-            <div class="aticon" style="background:#7C3AED;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9L11 16h2l1.41-2.1a2 2 0 0 1 1.69-.9H20a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2z"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-            <h4>Recebimento</h4>
-            <p>Conferência de nota fiscal x físico e prazo de liberação.</p>
-          </button>
-          <button class="audit-type-card" type="button" data-goto="criticos">
-            <div class="aticon" style="background:#B45309;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-            <h4>Críticos</h4>
-            <p>Itens de maior valor, giro ou histórico de divergência.</p>
-          </button>
-          <button class="audit-type-card" type="button" data-goto="picking">
-            <div class="aticon" style="background:#9D174D;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
-            <h4>Picking</h4>
-            <p>Acurácia da separação — leitura, sequência e conferência.</p>
-          </button>
-        </div>
+    <div class="view" data-view="painel">
+      <p style="position:relative;color:var(--ink-soft);max-width:560px;margin:24px 0 0;">Primeiro passo do módulo: a estrutura dos tipos de auditoria de estoque. Cada um abaixo ainda está em construção — clique pra ver o escopo.</p>
+      <div class="audit-type-grid">
+        <button class="audit-type-card" type="button" data-goto="movimentacao" style="--accent:#2563EB;">
+          <div class="aticon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></div>
+          <h4>Movimentação</h4>
+          <p>Trilha de entradas, transferências, picking, ajustes e reversa.</p>
+        </button>
+        <button class="audit-type-card" type="button" data-goto="ocupacao" style="--accent:#0E9488;">
+          <div class="aticon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></div>
+          <h4>Ocupação</h4>
+          <p>Endereço físico x sistêmico — acha bin mal identificado ou divergente.</p>
+        </button>
+        <button class="audit-type-card" type="button" data-goto="recebimento" style="--accent:#7C3AED;">
+          <div class="aticon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9L11 16h2l1.41-2.1a2 2 0 0 1 1.69-.9H20a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2z"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+          <h4>Recebimento</h4>
+          <p>Conferência de nota fiscal x físico e prazo de liberação.</p>
+        </button>
+        <button class="audit-type-card" type="button" data-goto="criticos" style="--accent:#B45309;">
+          <div class="aticon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <h4>Críticos</h4>
+          <p>Itens de maior valor, giro ou histórico de divergência.</p>
+        </button>
+        <button class="audit-type-card" type="button" data-goto="picking" style="--accent:#9D174D;">
+          <div class="aticon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+          <h4>Picking</h4>
+          <p>Acurácia da separação — leitura, sequência e conferência.</p>
+        </button>
       </div>
-
-      <div class="view" data-view="movimentacao" hidden>
-        <div class="audit-type-view">
-          <h2>Auditoria de Movimentação</h2>
-          <p class="desc">Audita a trilha de movimentações de estoque (entradas, transferências, picking, ajustes e reversa), cruzando o esperado com o executado para garantir rastreabilidade.</p>
-          <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
-        </div>
-      </div>
-
-      <div class="view" data-view="ocupacao" hidden>
-        <div class="audit-type-view">
-          <h2>Auditoria de Ocupação</h2>
-          <p class="desc">Audita a ocupação física dos endereços, comparando o que está armazenado de verdade com o que o sistema registra, para achar endereço mal identificado ou divergente.</p>
-          <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
-        </div>
-      </div>
-
-      <div class="view" data-view="recebimento" hidden>
-        <div class="audit-type-view">
-          <h2>Auditoria de Recebimento</h2>
-          <p class="desc">Audita a conferência do recebimento — nota fiscal x físico, prazo de conferência e liberação do material recebido.</p>
-          <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
-        </div>
-      </div>
-
-      <div class="view" data-view="criticos" hidden>
-        <div class="audit-type-view">
-          <h2>Auditoria de Críticos</h2>
-          <p class="desc">Audita os itens críticos do estoque — maior valor, maior giro ou maior histórico de divergência — com acompanhamento mais frequente que o padrão.</p>
-          <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
-        </div>
-      </div>
-
-      <div class="view" data-view="picking" hidden>
-        <div class="audit-type-view">
-          <h2>Auditoria de Picking</h2>
-          <p class="desc">Audita a acurácia do processo de separação (picking) — erros de leitura, sequência e conferência antes da expedição.</p>
-          <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
-        </div>
-      </div>
-
     </div>
+
+    <div class="view" data-view="movimentacao" hidden>
+      <div class="audit-type-view">
+        <h2>Auditoria de Movimentação</h2>
+        <p class="desc">Audita a trilha de movimentações de estoque (entradas, transferências, picking, ajustes e reversa), cruzando o esperado com o executado para garantir rastreabilidade.</p>
+        <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
+      </div>
+    </div>
+
+    <div class="view" data-view="ocupacao" hidden>
+      <div class="audit-type-view">
+        <h2>Auditoria de Ocupação</h2>
+        <p class="desc">Audita a ocupação física dos endereços, comparando o que está armazenado de verdade com o que o sistema registra, para achar endereço mal identificado ou divergente.</p>
+        <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
+      </div>
+    </div>
+
+    <div class="view" data-view="recebimento" hidden>
+      <div class="audit-type-view">
+        <h2>Auditoria de Recebimento</h2>
+        <p class="desc">Audita a conferência do recebimento — nota fiscal x físico, prazo de conferência e liberação do material recebido.</p>
+        <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
+      </div>
+    </div>
+
+    <div class="view" data-view="criticos" hidden>
+      <div class="audit-type-view">
+        <h2>Auditoria de Críticos</h2>
+        <p class="desc">Audita os itens críticos do estoque — maior valor, maior giro ou maior histórico de divergência — com acompanhamento mais frequente que o padrão.</p>
+        <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
+      </div>
+    </div>
+
+    <div class="view" data-view="picking" hidden>
+      <div class="audit-type-view">
+        <h2>Auditoria de Picking</h2>
+        <p class="desc">Audita a acurácia do processo de separação (picking) — erros de leitura, sequência e conferência antes da expedição.</p>
+        <span class="wip-note">Em construção — telas de verdade entram num próximo passo</span>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -254,8 +241,8 @@
 (function(){
   /* Mesma chave usada no Painel Oficina LDM (raiz) — os dois compartilham
      origem, então o tema escolhido em um lugar vale no outro também. */
-  var SUN = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-  var MOON = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  var SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+  var MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
   var btn = document.getElementById('themeSwitch');
   var knob = document.getElementById('themeKnob');
   function apply(dark){
@@ -272,6 +259,13 @@
     try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
   });
 })();
+
+document.getElementById('brandLogo').addEventListener('click', function(){
+  var el = this;
+  el.classList.remove('spin');
+  void el.offsetWidth;
+  el.classList.add('spin');
+});
 
 (function(){
   var TAB_LABELS = {
@@ -291,7 +285,7 @@
     document.querySelectorAll('.view').forEach(function(v){
       v.hidden = v.dataset.view !== tab;
     });
-    document.querySelectorAll('.nav-item[data-tab]').forEach(function(b){
+    document.querySelectorAll('.sb-nav-item[data-tab]').forEach(function(b){
       b.classList.toggle('active', b.dataset.tab === tab);
     });
     titleEl.textContent = TAB_LABELS[tab][0];
@@ -300,7 +294,7 @@
   }
 
   navEl.addEventListener('click', function(e){
-    var btn = e.target.closest('.nav-item[data-tab]');
+    var btn = e.target.closest('.sb-nav-item[data-tab]');
     if(btn) switchTab(btn.dataset.tab);
   });
   document.querySelectorAll('[data-goto]').forEach(function(btn){
