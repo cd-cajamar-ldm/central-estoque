@@ -981,7 +981,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v238';
+const IR_APP_VERSION = 'v239';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -3821,7 +3821,21 @@ function irRenderGestaoCiclo(){
   const avisoLogica = d && d.linhasExcluidasLogica===undefined
     ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>Reimporte a QRY410</strong> pra aplicar a regra nova: o NET passa a somar só as Lógicas 301 e 302. Os números abaixo ainda são da regra antiga (todas as lógicas).</p></div>`
     : (d && !d.temColunaLogica ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>A QRY410 importada não tem a coluna Lógica</strong> — não deu pra filtrar só 301/302; o NET abaixo soma todas as lógicas.</p></div>` : '');
-  return `${avisoLogica}
+  // Lançamentos 301/302 que a leitura não conseguiu encaixar direito — antes
+  // sumiam sem aviso e o NET não batia com a dinâmica da 410.
+  const exemplosDiag = d ? [
+    ...(d.exemplosSentidoInferido||[]).map(x=>({...x, motivo:'Sentido não reconhecido — usado o sinal do Vl.Mov.'})),
+    ...(d.exemplosSemData||[]).map(x=>({...x, motivo:'Dt.Mov. vazia ou ilegível — fora de todos os meses'}))
+  ] : [];
+  const avisoDiag = exemplosDiag.length ? `<div class="panel" style="border-left:4px solid var(--orange);">
+      <h3>Lançamentos com dado incompleto na QRY410</h3>
+      <p class="panel-sub">${d.linhasSentidoInferido ? irFmtInt(d.linhasSentidoInferido)+' linha(s) sem Sentido reconhecível (total '+irFmtMoney(d.valorSentidoInferido)+') — agora entram pelo sinal do Vl.Mov. ' : ''}${d.linhasSemData ? irFmtInt(d.linhasSemData)+' linha(s) 301/302 sem Dt.Mov. legível (total '+irFmtMoney(d.valorSemData)+') — não entram em nenhum mês.' : ''} Até 20 exemplos de cada:</p>
+      <div class="table-wrap"><table class="gi-tabela">
+        <thead><tr><th>Motivo</th><th>Mês</th><th>Item</th><th>Lógica</th><th>Sentido</th><th>Vl.Mov.</th><th>Dt.Mov.</th><th>Obs WMS</th><th>Num Doc</th></tr></thead>
+        <tbody>${exemplosDiag.map(x=>`<tr><td>${irEsc(x.motivo)}</td><td class="mono">${irEsc(x.mes||'—')}</td><td class="mono">${irEsc(x.item)}</td><td class="mono">${irEsc(x.logica)}</td><td>${irEsc(x.sentido||'(vazio)')}</td><td class="mono">${irFmtMoney(x.vlMov)}</td><td class="mono">${irEsc(x.dtMov||'(vazio)')}</td><td>${irEsc(x.obsWms)}</td><td class="mono">${irEsc(x.numDoc)}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>` : '';
+  return `${avisoLogica}${avisoDiag}
     <div class="bi-grid-2">
       ${netMensalRows.length ? `<div class="panel">
         <h3>NET Mensal em Colunas — ${d.ano}</h3>
