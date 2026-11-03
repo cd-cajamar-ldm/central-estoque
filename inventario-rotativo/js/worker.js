@@ -1795,11 +1795,61 @@ async function runPipeline410({buf410}){
     sentido:String(getVal(row, r410.sentido)||'').trim(), vlMov:parseNumber(getVal(row, r410.vlMov)),
     dtMov:String(getVal(row, r410.dtMov)??''), obsWms:String(getVal(row, r410.obsWms)||'').trim(),
     numDoc:String(getVal(row, r410.numDoc)||'').trim()});
-  let processadas = 0;
+  /* Importação por MÊS: os meses que vêm no arquivo substituem os mesmos meses
+     já gravados; os demais meses do ano ficam como estavam. Antes o ano inteiro
+     era trocado pelo arquivo — importar só outubro (fechamento) apagava
+     janeiro a setembro. Os meses mantidos são remontados a partir do detalhe
+     301/302 já gravado (linhasLogica), que é exatamente o que entra no NET.
+     Só vale quando o arquivo tem a coluna Lógica e a base gravada já é da regra
+     "só 301/302" — senão o ano é substituído inteiro, como antes. */
+  const mesesNoArquivo = new Map(); // ano -> Set(mes)
   for(const row of rows410){
+    const dt = parseDateVal(getVal(row, r410.dtMov));
+    if(!dt) continue;
+    const ano = dt.getFullYear();
+    if(!mesesNoArquivo.has(ano)) mesesNoArquivo.set(ano, new Set());
+    mesesNoArquivo.get(ano).add(ano+'-'+String(dt.getMonth()+1).padStart(2,'0'));
+  }
+  const dataLocalIso = (iso)=>{
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(String(iso||''));
+    return m ? new Date(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0)) : null;
+  };
+  const linhaSintetica = (l, dt)=>{
+    const r = {};
+    const pos = (canon, v)=>{ if(r410[canon]) r[r410[canon]] = v; };
+    pos('dtMov', dt); pos('logica', l.logica);
+    pos('sentido', l.valor<0 ? 'Saida' : (l.valor>0 ? 'Entrada' : ''));
+    pos('vlMov', l.valor); pos('quantidade', l.qtd); pos('idDeposito', 0);
+    pos('item', l.item); pos('nomeItem', l.nome); pos('depto', l.depto); pos('idDepto', l.idDepto);
+    pos('numDoc', l.numDoc); pos('observacao', l.observacao); pos('obsWms', l.obsWms);
+    pos('usuario', l.usuario); pos('dataHora', dataLocalIso(l.dataHora));
+    return r;
+  };
+  const linhasMantidas = [];
+  const mesclagem = {}; // ano -> {novos:[], mantidos:[]}
+  if(r410.logica){
+    for(const [ano, meses] of mesesNoArquivo){
+      const anterior = await irGetNet410(ano);
+      if(!anterior || !Array.isArray(anterior.linhasLogica) || anterior.linhasExcluidasLogica===undefined) continue;
+      const mantidos = new Set();
+      for(const l of anterior.linhasLogica){
+        const dt = dataLocalIso(l.dtMov);
+        if(!dt) continue;
+        const mes = dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+        if(meses.has(mes)) continue;
+        mantidos.add(mes);
+        linhasMantidas.push(linhaSintetica(l, dt));
+      }
+      mesclagem[ano] = {novos:Array.from(meses).sort(), mantidos:Array.from(mantidos).sort()};
+    }
+  }
+  const todasLinhas = linhasMantidas.length ? rows410.concat(linhasMantidas) : rows410;
+
+  let processadas = 0;
+  for(const row of todasLinhas){
     processadas++;
     if(processadas % 20000 === 0){
-      post('progress', {stage:'Processando linha '+processadas+' de '+rows410.length+' (QRY410)...', pct:15+Math.round(processadas/rows410.length*60)});
+      post('progress', {stage:'Processando linha '+processadas+' de '+todasLinhas.length+' (QRY410)...', pct:15+Math.round(processadas/todasLinhas.length*60)});
     }
     const dt = parseDateVal(getVal(row, r410.dtMov));
     if(!dt){
@@ -1974,6 +2024,7 @@ async function runPipeline410({buf410}){
       linhasExcluidasLogica:g.linhasExcluidasLogica, temColunaLogica: !!r410.logica,
       linhasSentidoInferido:g.linhasSentidoInferido, valorSentidoInferido:g.valorSentidoInferido, exemplosSentidoInferido:g.exemplosSentidoInferido,
       linhasSemData:semData.linhas, valorSemData:semData.valor, exemplosSemData:semData.exemplos,
+      ultimaImportacao: {em:new Date().toISOString(), novos:(mesclagem[ano]||{}).novos || Array.from(mesesNoArquivo.get(ano)||[]).sort(), mantidos:(mesclagem[ano]||{}).mantidos || []},
       porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica,
       totalGanhos, totalPerdas, totalNet: totalGanhos+totalPerdas, totalNetAbs: Math.abs(totalGanhos+totalPerdas)
     };

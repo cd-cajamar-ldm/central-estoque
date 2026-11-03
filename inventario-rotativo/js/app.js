@@ -981,7 +981,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v239';
+const IR_APP_VERSION = 'v241';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2749,7 +2749,8 @@ function irProcessar410(){
         IR.net410AnoSel = msg.anos[0];
         IR.net410Data = await irGetNet410(IR.net410AnoSel);
         irSetNet410MesDefault();
-        irShowToast('✓ QRY410 processada: '+msg.anos.map(a=>a+'').join(', ')+'.');
+        const ui = (msg.resumos[IR.net410AnoSel]||{}).ultimaImportacao;
+        irShowToast('✓ QRY410 processada'+(ui ? ': atualizado '+ui.novos.map(irNet410MesCurto).join(', ')+(ui.mantidos.length ? ' · mantido '+ui.mantidos.map(irNet410MesCurto).join(', ') : '') : ': '+msg.anos.join(', '))+'.');
         irRenderView(); _fim(true);
       }
     };
@@ -3812,6 +3813,7 @@ function irRenderNet410ItensMesSection(d){
    (QRY410 é ano-a-ano, não por ciclo — por isso não tem filtro de Ciclo, só
    Ano/Mês). irRenderNetDistorcaoPanel (auditoria "por que o NET está
    distorcido") continua definida mais abaixo, só não é mais chamada daqui. */
+function irNet410MesCurto(mes){ return (IR_MES_NOMES_ABREV[parseInt(String(mes).slice(5,7),10)-1]||mes)+'/'+String(mes).slice(0,4); }
 function irRenderGestaoCiclo(){
   const anos = IR.net410Anos||[];
   if(!anos.length){
@@ -3833,6 +3835,9 @@ function irRenderGestaoCiclo(){
   // Top 10 itens que mais impactam o NET no mês selecionado (positivo/negativo).
   const topPos = ((mObj && mObj.topItensPositivos) || []).slice(0, 10);
   const topNeg = ((mObj && mObj.topItensNegativos) || []).slice(0, 10);
+  // Quais meses a última importação trouxe e quais ficaram da base anterior.
+  const ui = d && d.ultimaImportacao;
+  const avisoImport = ui ? `<p class="field-hint" style="margin:0 0 10px;">Última importação da QRY410 (${irEsc(new Date(ui.em).toLocaleString('pt-BR'))}): atualizou <strong>${ui.novos.map(irNet410MesCurto).join(', ')||'—'}</strong>${ui.mantidos.length ? ' · manteve da base anterior '+ui.mantidos.map(irNet410MesCurto).join(', ') : ''}.</p>` : '';
   // Base processada antes da regra "só Lógica 301/302" não tem o contador —
   // o NET dela ainda soma todas as lógicas até a QRY410 ser reimportada.
   const avisoLogica = d && d.linhasExcluidasLogica===undefined
@@ -3852,7 +3857,7 @@ function irRenderGestaoCiclo(){
         <tbody>${exemplosDiag.map(x=>`<tr><td>${irEsc(x.motivo)}</td><td class="mono">${irEsc(x.mes||'—')}</td><td class="mono">${irEsc(x.item)}</td><td class="mono">${irEsc(x.logica)}</td><td>${irEsc(x.sentido||'(vazio)')}</td><td class="mono">${irFmtMoney(x.vlMov)}</td><td class="mono">${irEsc(x.dtMov||'(vazio)')}</td><td>${irEsc(x.obsWms)}</td><td class="mono">${irEsc(x.numDoc)}</td></tr>`).join('')}</tbody>
       </table></div>
     </div>` : '';
-  return `${avisoLogica}${avisoDiag}
+  return `${avisoImport}${avisoLogica}${avisoDiag}
     <div class="bi-grid-2">
       ${netMensalRows.length ? `<div class="panel">
         <h3>NET Mensal em Colunas — ${d.ano}</h3>
