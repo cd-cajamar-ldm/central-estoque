@@ -3604,24 +3604,33 @@ function irRenderNet410Resultado(d){
     ${irRenderNet410ItensMesSection(d)}
   `;
 }
-// Ordem fixa pedida pro operacional — mesma sequência sempre, uma linha por
-// observação (só as com Considerar NET = SIM na legenda) mais o Total Geral.
+// Ordem fixa pedida pro operacional pros códigos principais; depois deles
+// entra QUALQUER outro código considerado que tiver movimento no mês (ASR,
+// TID, PAR...). Antes a tabela só mostrava esses 6 e o Total Geral não
+// batia com o gráfico (ex.: ASR somava no NET e não aparecia aqui).
+// "Considerar NET" vem do próprio processamento (o mesmo que o gráfico usou).
 const IR_NET410_ORDEM_OBS = ['AEE','INV','ADE','AIR','LIT','AIN'];
 function irRenderNet410PorObsMesTable(d){
   const mes = IR.net410MesSel;
   const mObj = (d.porMes||[]).find(m=>m.mes===mes);
-  const mapaObsMes = new Map((mObj && mObj.porObs || []).map(o=>[o.id, o]));
+  const doMes = (mObj && mObj.porObs) || [];
   const legendaViva = IR.net410Legenda||[];
-  const linhas = IR_NET410_ORDEM_OBS.map(codigo=>{
-    const legendaEntry = legendaViva.find(l=>l.id===codigo);
-    const considerarNet = legendaEntry ? legendaEntry.considerarNet!==false : true;
-    if(!considerarNet) return null; // legenda diz pra nao considerar: some da tabela
-    const obs = mapaObsMes.get(codigo);
-    const saida = obs ? obs.saida : 0;
-    const entrada = obs ? obs.entrada : 0;
-    const legendaTexto = (legendaEntry && legendaEntry.legenda) || (obs && obs.legenda) || '';
-    return {id:codigo, legenda:legendaTexto, saida, entrada, net:saida+entrada};
-  }).filter(Boolean);
+  const comNet = o=>({id:o.id, legenda:o.legenda||((legendaViva.find(l=>l.id===o.id)||{}).legenda)||'', saida:o.saida||0, entrada:o.entrada||0, net:(o.saida||0)+(o.entrada||0)});
+  const considerados = doMes.filter(o=>o.considerarNet!==false);
+  // Os 6 da ordem fixa aparecem sempre (zerados se não teve movimento), como antes.
+  for(const codigo of IR_NET410_ORDEM_OBS){
+    if(doMes.some(o=>o.id===codigo)) continue;
+    const leg = legendaViva.find(l=>l.id===codigo);
+    if(leg && leg.considerarNet===false) continue;
+    considerados.push({id:codigo, saida:0, entrada:0});
+  }
+  const ordem = c=>{ const i = IR_NET410_ORDEM_OBS.indexOf(c.id); return i<0 ? IR_NET410_ORDEM_OBS.length : i; };
+  const linhas = considerados.map(comNet)
+    .sort((x,y)=> ordem(x)-ordem(y) || Math.abs(y.net)-Math.abs(x.net));
+  // Lançamentos do mês que NÃO entram no NET (legenda = não considerar) —
+  // listados à parte pra explicar diferença contra a dinâmica da 410.
+  const foraNet = doMes.filter(o=>o.considerarNet===false).map(comNet)
+    .filter(o=>o.saida || o.entrada).sort((x,y)=>Math.abs(y.net)-Math.abs(x.net));
   const totalSaida = linhas.reduce((s,o)=>s+o.saida,0);
   const totalEntrada = linhas.reduce((s,o)=>s+o.entrada,0);
   const totalNet = totalSaida+totalEntrada;
@@ -3645,6 +3654,7 @@ function irRenderNet410PorObsMesTable(d){
           <td class="mono" style="color:${totalNet>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalNet)}</td>
         </tr></tfoot>
       </table></div>
+      ${foraNet.length ? `<p class="field-hint" style="margin-top:10px;"><strong>Fora do NET neste mês</strong> (Considerar NET = NÃO em Configurações): ${foraNet.map(o=>`${irEsc(o.id)}${o.legenda?' ('+irEsc(o.legenda)+')':''} ${irFmtMoney(o.net)}`).join(' · ')}</p>` : ''}
     </div>`;
 }
 /* ============================================================
