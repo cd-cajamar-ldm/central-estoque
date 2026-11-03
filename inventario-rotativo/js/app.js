@@ -7035,12 +7035,13 @@ async function irExportarTudoXlsx(){
       irIndicadoresCatalogo(indAtivo || {}).map(([nome,valor,formula])=>({
         Indicador:nome, ['Valor (ciclo ativo)']: indAtivo ? valor : '—', Formula:formula})));
     irAdicionarAbaExport(wb, 'Gestao de Inventario',
-      ((await irGetConfig(IR_CFG_EXCLUSOES)) || []).map(e=>{
+      ((await irGetConfig(IR_CFG_EXCLUSOES)) || []).flatMap(e=>{
         const d = irDetalheExclusao(e);
-        return {['Nº Inventário']:e.inventario, Local:e.local, ['Endereço']:irDescLocal(e.local)||'',
-          ['Usuário(s) da contagem']:irUsuariosExclusaoTxt(d),
+        // Uma linha por usuário, igual à tela.
+        return (d.usuarios.length ? d.usuarios : [null]).map(u=>({['Nº Inventário']:e.inventario, Local:e.local, ['Endereço']:irDescLocal(e.local)||'',
+          ['Usuário']:u?irProdNome(u.usuario):'', Rodada:u?u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':''):'',
           ['Peças div. desconsideradas (ciclo ativo)']:d.aplicada?d.pecas:'', ['Valor div. desconsiderado (ciclo ativo)']:d.aplicada?d.valor:'',
-          ['Situação (ciclo ativo)']:d.situacao.txt, Justificativa:e.justificativa, ['Cadastrado em']:e.criadoEm||''};
+          ['Situação (ciclo ativo)']:d.situacao.txt, Justificativa:e.justificativa, ['Cadastrado em']:e.criadoEm||''}));
       }));
     irAdicionarAbaExport(wb, 'Ciclos', ciclos.map(irAchatarLinhaExport));
     const resumoIndicadores=[], porRua=[], porSetor=[], porLog=[];
@@ -7198,9 +7199,6 @@ function irDetalheExclusao(e){
   return det;
 }
 function irSituacaoExclusao(e){ return irDetalheExclusao(e).situacao; }
-function irUsuariosExclusaoTxt(det){
-  return det.usuarios.map(u=>irProdNome(u.usuario)+' ('+u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':'')+')').join(' · ');
-}
 async function irAdicionarExclusao(){
   const inv = (document.getElementById('ir-gi-inv').value||'').trim();
   const localTxt = (document.getElementById('ir-gi-local').value||'').trim();
@@ -7296,23 +7294,27 @@ function irRenderGestaoInventario(){
   <div class="panel">
     <h3>Locais desconsiderados (${irFmtInt(lista.length)})</h3>
     <p class="panel-sub">${ind && ind.locaisDesconsiderados!=null ? `No ciclo ativo, ${irFmtInt(ind.locaisDesconsiderados)} local(is) estão fora da acurácia. ` : ''}Só tem efeito o inventário que FECHOU o local (a última rodada AIR dele) — rodada intermediária já não entra na conta. Ciclos 1 e 2 de 2026 têm o número publicado travado e não mudam. Usuários = quem contou cada rodada física (2ª em diante) daquele inventário; "final" é a rodada que valeu como contagem física.</p>
-    ${lista.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Nº Inventário</th><th>Local</th><th>Endereço</th><th>Usuário(s) da contagem</th><th>Peças div.</th><th>Valor div.</th><th>Justificativa</th><th>Cadastrado em</th><th>Situação (ciclo ativo)</th><th></th></tr></thead>
+    ${lista.length ? `<div class="table-wrap"><table class="gi-tabela">
+      <thead><tr><th>Nº Inventário</th><th>Local</th><th>Endereço</th><th>Usuário</th><th>Rodada</th><th>Peças div.</th><th>Valor div.</th><th>Justificativa</th><th>Cadastrado em</th><th>Situação (ciclo ativo)</th><th></th></tr></thead>
       <tbody>${lista.map(e=>{
         const d = dets.get(e.id);
         const s = d.situacao;
-        return `<tr>
+        // Uma linha por usuário: mesmo inventário+local, desconsiderado do
+        // mesmo jeito — só separa quem errou. Peças/valor são do local.
+        const porUsuario = d.usuarios.length ? d.usuarios : [null];
+        return porUsuario.map(u=>`<tr>
           <td class="mono">${irEsc(e.inventario)}</td>
           <td class="mono">${irEsc(e.local)}</td>
           <td>${irEsc(irDescLocal(e.local)||'—')}</td>
-          <td>${d.usuarios.length ? d.usuarios.map(u=>`<div>${u.final?'<strong>':''}${irEsc(irProdNome(u.usuario))}${u.final?'</strong>':''} <span class="field-hint">(${u.rodadas.map(r=>r+'ª').join(', ')}${u.final?' · final':''})</span></div>`).join('') : '—'}</td>
+          <td>${u ? (u.final?'<strong>':'')+irEsc(irProdNome(u.usuario))+(u.final?'</strong>':'') : '—'}</td>
+          <td>${u ? u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':'') : '—'}</td>
           <td class="mono">${d.aplicada ? irFmtInt(d.pecas) : '—'}</td>
           <td class="mono">${d.aplicada ? irFmtMoney(d.valor) : '—'}</td>
-          <td>${irEsc(e.justificativa)}</td>
+          <td class="gi-just" title="${irEsc(e.justificativa)}">${irEsc(e.justificativa)}</td>
           <td class="mono">${e.criadoEm ? irEsc(new Date(e.criadoEm).toLocaleString('pt-BR')) : '—'}</td>
           <td><span class="tag ${s.cls}">${irEsc(s.txt)}</span></td>
-          <td><button class="btn-link" style="color:var(--danger);" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
-        </tr>`;
+          <td><button class="btn-link" style="color:var(--danger);" title="Remove o inventário ${irEsc(e.inventario)} + local ${irEsc(e.local)} (todas as linhas dele)" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
+        </tr>`).join('');
       }).join('')}</tbody>
     </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>'}
   </div>
