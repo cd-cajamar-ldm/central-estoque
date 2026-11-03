@@ -13,7 +13,7 @@ Todas vêm dos fluxos de dados do workspace **Operação CD Cajamar**.
 |---|---|---|---|
 | QRY0390 | 98.527 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização, Auditoria | ✅ Pronta (3 partes) |
 | QRY0160 | 147.606 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta (5 partes) |
-| QRY0843 | 11.645 | Inventário Rotativo | ✅ Pronta |
+| QRY0843 | 11.645 | Inventário Rotativo | 🔴 **Não serve:** a do fluxo está incompleta (ver abaixo). Continua manual |
 | SIGEQ278 | 238.253 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização | ✅ Pronta (3 partes) |
 | ZBIQ0051 | 3.475 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta |
 | SIGEQ410 | 2.657.098 (já com filtro de ano) | Inventário Rotativo, Transitórios | 🔴 Grande demais: falta decidir o recorte |
@@ -21,6 +21,8 @@ Todas vêm dos fluxos de dados do workspace **Operação CD Cajamar**.
 | QRY0845 | 617.269 | Auditoria | 🔴 Grande demais: falta decidir o recorte |
 | QRY0139 | 764.787 | A definir | 🔴 Grande demais: falta decidir o recorte |
 | QRY0840 | 1.962.356 | A definir | 🔴 Grande demais: falta decidir o recorte |
+
+**QRY0843 do fluxo × manual (comparação de 01/10 a 03/11/2026):** a manual tem 93.592 linhas, 39.923 locais e 2.088.872 peças; a do fluxo tem 1.442 linhas, 860 locais e 75.971 peças. Os inventários são quase os mesmos (940 de 942) e toda linha do fluxo existe na manual, mas o fluxo guarda só 1 ou 2 linhas por inventário, em vez de todos os itens e locais contados. Com ela o app calcularia acurácia e produtividade com ~2% dos dados. A receita fica em `receitas-em-preparo/` até o fluxo trazer a 843 completa.
 
 **Limite do caminho Power Automate:** cada receita traz no máximo 100 mil linhas, ~1 milhão de células e ~15 MB. Até umas 300 mil linhas, dividir em partes resolve. Acima disso, a base precisa de um **recorte** (só um período, só uma filial, só um status) antes de virar receita.
 
