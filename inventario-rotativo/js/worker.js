@@ -1701,12 +1701,18 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
    QRY410 — Perdas e Ganhos no CD
    Independente do ciclo rotativo: processa por ano (extraído de Dt.Mov.), não
    depende de nenhum arquivo dos outros slots. Ver irClassificarMotivo410() em
-   rules.js pras regras de negócio (Id Depósito 21 fora, Saída = negativo, legenda
+   rules.js pras regras de negócio (Id Depósito 21 fora, só Lógica 301/302, Saída = negativo, legenda
    de motivos — editável em Configurações).
    ============================================================ */
 async function runPipeline410({buf410}){
   post('progress', {stage:'Lendo QRY410...', pct:5});
-  const wb410 = XLSX.read(buf410, {type:'array', cellDates:true});
+  // Sem cellDates: a data vem como número serial do Excel e o parseDateVal
+  // converte pelos componentes exatos (dia/mês/ano/hora), sem passar por fuso.
+  // Com cellDates o SheetJS monta a data em hora LOCAL, e a leitura por UTC
+  // jogava todo lançamento depois das 21h do último dia pro mês seguinte (em
+  // UTC-3, 31/10 22:30 é 01/11 01:30 UTC) — foi a diferença de R$ 47,45 do AIR
+  // de outubro contra a dinâmica da 410.
+  const wb410 = XLSX.read(buf410, {type:'array'});
   const rows410 = sheetToRows(wb410, ALIAS_410, ['dtMov','sentido','vlMov']);
   if(!rows410.length) throw new Error('QRY410: planilha vazia.');
   const r410 = buildAliasResolver(Object.keys(rows410[0]), ALIAS_410);
@@ -1726,7 +1732,8 @@ async function runPipeline410({buf410}){
       // Depto (coluna "Nome Depto" da QRY410) — só conta movimento de motivo
       // considerado pro NET, mesmo critério da quebra por Obs mês a mês.
       porDepto:new Map(), porDeptoMes:new Map(),
-      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0,
+      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0, linhasExcluidasLogica:0,
+      linhasSentidoInferido:0, valorSentidoInferido:0, exemplosSentidoInferido:[],
       // Linhas cruas da própria 410, só Lógica 301/302 — alimenta a tabela de
       // detalhe da aba NET (visão linha a linha, não agregada). Os totais de
       // Net Ano/Mês de cada linha só ficam prontos depois do laço principal
@@ -1781,6 +1788,13 @@ async function runPipeline410({buf410}){
       };
     });
   }
+  // Linhas que antes sumiam sem aviso — ficam registradas pra tela mostrar.
+  // Sem data não tem mês/ano: vai pra todos os anos do resumo.
+  const semData = {linhas:0, valor:0, exemplos:[]};
+  const exemplo410 = (row)=>({item:String(getVal(row, r410.item)||'').trim(), logica:String(getVal(row, r410.logica)||'').trim(),
+    sentido:String(getVal(row, r410.sentido)||'').trim(), vlMov:parseNumber(getVal(row, r410.vlMov)),
+    dtMov:String(getVal(row, r410.dtMov)??''), obsWms:String(getVal(row, r410.obsWms)||'').trim(),
+    numDoc:String(getVal(row, r410.numDoc)||'').trim()});
   let processadas = 0;
   for(const row of rows410){
     processadas++;
@@ -1788,17 +1802,20 @@ async function runPipeline410({buf410}){
       post('progress', {stage:'Processando linha '+processadas+' de '+rows410.length+' (QRY410)...', pct:15+Math.round(processadas/rows410.length*60)});
     }
     const dt = parseDateVal(getVal(row, r410.dtMov));
-    if(!dt) continue;
-    // getFullYear()/getMonth() (hora LOCAL) não servem aqui: o SheetJS (cellDates:true)
-    // monta esse Date usando os componentes UTC da célula (convenção dele pra evitar bug
-    // de DST) — em fuso negativo (Brasil, UTC-3) uma data sem hora tipo "01/03 00:00"
-    // vira 2026-03-01T00:00:00Z, que em hora local é 28/02 21:00. Ler com getFullYear()/
-    // getMonth() jogava os lançamentos do dia 1º pro mês anterior, subtraindo valor de
-    // março (e inflando fevereiro) — por isso as UTC, que refletem os componentes reais
-    // da célula, sem passar pela conversão de fuso.
-    const ano = dt.getUTCFullYear();
-    const mes = ano+'-'+String(dt.getUTCMonth()+1).padStart(2,'0');
-    const dia = mes+'-'+String(dt.getUTCDate()).padStart(2,'0');
+    if(!dt){
+      const lg = String(getVal(row, r410.logica)||'').trim();
+      if(!r410.logica || lg==='301' || lg==='302'){
+        semData.linhas++; semData.valor += parseNumber(getVal(row, r410.vlMov));
+        if(semData.exemplos.length<20) semData.exemplos.push(exemplo410(row));
+      }
+      continue;
+    }
+    // Componentes LOCAIS: o parseDateVal monta a data em hora local a partir dos
+    // componentes exatos da célula (serial do Excel ou texto dd/mm/aaaa), então
+    // é por eles que se lê dia/mês/ano — o mesmo que a dinâmica da 410 mostra.
+    const ano = dt.getFullYear();
+    const mes = ano+'-'+String(dt.getMonth()+1).padStart(2,'0');
+    const dia = mes+'-'+String(dt.getDate()).padStart(2,'0');
     const g = getAno(ano);
     g.totalLinhas++;
 
@@ -1806,10 +1823,28 @@ async function runPipeline410({buf410}){
     const idDeposito = parseInt(parseNumber(getVal(row, r410.idDeposito)), 10);
     if(idDeposito===21){ g.linhasExcluidasDeposito21++; continue; }
 
-    const sentido = String(getVal(row, r410.sentido)||'').trim().toLowerCase();
-    const vlAbs = Math.abs(parseNumber(getVal(row, r410.vlMov)));
+    // NET oficial = só Lógica 301 e 302 (regra explícita do usuário — é como a
+    // dinâmica da própria 410 fecha). Outras lógicas ficam de fora de tudo,
+    // inclusive da quebra por Obs. Arquivo sem a coluna Lógica não tem como
+    // filtrar: entra inteiro, como antes, e a tela avisa.
+    if(r410.logica){
+      const lg = String(getVal(row, r410.logica)||'').trim();
+      if(lg!=='301' && lg!=='302'){ g.linhasExcluidasLogica++; continue; }
+    }
+
+    // Sentido sem acento e pelo começo ("Saída", "SAIDA", "S"...). Quando não
+    // dá pra reconhecer, vale o sinal do próprio Vl.Mov. (é o que a dinâmica da
+    // 410 soma) — antes o sinal virava 0 e o lançamento sumia do NET sem aviso.
+    const sentido = String(getVal(row, r410.sentido)||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const vlBruto = parseNumber(getVal(row, r410.vlMov));
+    const vlAbs = Math.abs(vlBruto);
     const qtdAbs = Math.abs(parseNumber(getVal(row, r410.quantidade)));
-    const sinal = sentido==='saida' || sentido==='saída' ? -1 : (sentido==='entrada' ? 1 : 0);
+    let sinal = sentido.startsWith('s') ? -1 : (sentido.startsWith('e') ? 1 : 0);
+    if(!sinal && vlBruto){
+      sinal = vlBruto<0 ? -1 : 1;
+      g.linhasSentidoInferido++; g.valorSentidoInferido += sinal*vlAbs;
+      if(g.exemplosSentidoInferido.length<20) g.exemplosSentidoInferido.push({...exemplo410(row), mes});
+    }
     const valor = sinal*vlAbs;
     const qtd = sinal*qtdAbs;
 
@@ -1936,6 +1971,9 @@ async function runPipeline410({buf410}){
     });
     resumos[ano] = {
       ano, totalLinhas:g.totalLinhas, linhasExcluidasDeposito21:g.linhasExcluidasDeposito21,
+      linhasExcluidasLogica:g.linhasExcluidasLogica, temColunaLogica: !!r410.logica,
+      linhasSentidoInferido:g.linhasSentidoInferido, valorSentidoInferido:g.valorSentidoInferido, exemplosSentidoInferido:g.exemplosSentidoInferido,
+      linhasSemData:semData.linhas, valorSemData:semData.valor, exemplosSemData:semData.exemplos,
       porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica,
       totalGanhos, totalPerdas, totalNet: totalGanhos+totalPerdas, totalNetAbs: Math.abs(totalGanhos+totalPerdas)
     };
