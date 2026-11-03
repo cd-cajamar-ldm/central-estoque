@@ -215,6 +215,7 @@ const IR_REGRAS_CATALOGO = [
   {categoria:'Setor / Rua', regra:'Local pendente', detalhe:'Local da base congelada sem nenhuma rodada física (Id Conferência ≥ 2) — foi aberto/liquidado sem ninguém contar. Local só com rodada 1 continua pendente.', fonte:'QRY0843 + Base Congelada'},
 
   // ---- NET (QRY410) ----
+  {categoria:'NET (QRY410)', regra:'Só Lógica 301 e 302', detalhe:'O NET soma só as linhas de Lógica 301 e 302 — demais lógicas ficam de fora de tudo (gráficos, quebras por Obs/Depto, itens). Arquivo sem a coluna Lógica entra inteiro.', fonte:'QRY410 · Lógica'},
   {categoria:'NET (QRY410)', regra:'Id Depósito 21 excluído', detalhe:'Toda linha com Id Depósito = 21 fica de fora de tudo no NET (regra explícita do usuário).', fonte:'QRY410 · Id Depósito'},
   {categoria:'NET (QRY410)', regra:'Sinal do movimento', detalhe:'Saída = valor negativo, Entrada = valor positivo. NET = Entradas + Saídas.', fonte:'QRY410 · Sentido, Vl.Mov.'},
   {categoria:'NET (QRY410)', regra:'Ano do movimento em UTC', detalhe:'O ano/mês vem dos componentes UTC da célula de data (convenção do leitor de planilha), não da hora local — senão lançamentos do dia 1º caíam no mês anterior em fuso negativo (Brasil, UTC−3).', fonte:'QRY410 · Dt.Mov.'},
