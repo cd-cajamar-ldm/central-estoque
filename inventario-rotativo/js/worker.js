@@ -1733,6 +1733,7 @@ async function runPipeline410({buf410}){
       // considerado pro NET, mesmo critério da quebra por Obs mês a mês.
       porDepto:new Map(), porDeptoMes:new Map(),
       porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0, linhasExcluidasLogica:0,
+      linhasSentidoInferido:0, valorSentidoInferido:0, exemplosSentidoInferido:[],
       // Linhas cruas da própria 410, só Lógica 301/302 — alimenta a tabela de
       // detalhe da aba NET (visão linha a linha, não agregada). Os totais de
       // Net Ano/Mês de cada linha só ficam prontos depois do laço principal
@@ -1787,6 +1788,13 @@ async function runPipeline410({buf410}){
       };
     });
   }
+  // Linhas que antes sumiam sem aviso — ficam registradas pra tela mostrar.
+  // Sem data não tem mês/ano: vai pra todos os anos do resumo.
+  const semData = {linhas:0, valor:0, exemplos:[]};
+  const exemplo410 = (row)=>({item:String(getVal(row, r410.item)||'').trim(), logica:String(getVal(row, r410.logica)||'').trim(),
+    sentido:String(getVal(row, r410.sentido)||'').trim(), vlMov:parseNumber(getVal(row, r410.vlMov)),
+    dtMov:String(getVal(row, r410.dtMov)??''), obsWms:String(getVal(row, r410.obsWms)||'').trim(),
+    numDoc:String(getVal(row, r410.numDoc)||'').trim()});
   let processadas = 0;
   for(const row of rows410){
     processadas++;
@@ -1794,7 +1802,14 @@ async function runPipeline410({buf410}){
       post('progress', {stage:'Processando linha '+processadas+' de '+rows410.length+' (QRY410)...', pct:15+Math.round(processadas/rows410.length*60)});
     }
     const dt = parseDateVal(getVal(row, r410.dtMov));
-    if(!dt) continue;
+    if(!dt){
+      const lg = String(getVal(row, r410.logica)||'').trim();
+      if(!r410.logica || lg==='301' || lg==='302'){
+        semData.linhas++; semData.valor += parseNumber(getVal(row, r410.vlMov));
+        if(semData.exemplos.length<20) semData.exemplos.push(exemplo410(row));
+      }
+      continue;
+    }
     // Componentes LOCAIS: o parseDateVal monta a data em hora local a partir dos
     // componentes exatos da célula (serial do Excel ou texto dd/mm/aaaa), então
     // é por eles que se lê dia/mês/ano — o mesmo que a dinâmica da 410 mostra.
@@ -1817,10 +1832,19 @@ async function runPipeline410({buf410}){
       if(lg!=='301' && lg!=='302'){ g.linhasExcluidasLogica++; continue; }
     }
 
-    const sentido = String(getVal(row, r410.sentido)||'').trim().toLowerCase();
-    const vlAbs = Math.abs(parseNumber(getVal(row, r410.vlMov)));
+    // Sentido sem acento e pelo começo ("Saída", "SAIDA", "S"...). Quando não
+    // dá pra reconhecer, vale o sinal do próprio Vl.Mov. (é o que a dinâmica da
+    // 410 soma) — antes o sinal virava 0 e o lançamento sumia do NET sem aviso.
+    const sentido = String(getVal(row, r410.sentido)||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const vlBruto = parseNumber(getVal(row, r410.vlMov));
+    const vlAbs = Math.abs(vlBruto);
     const qtdAbs = Math.abs(parseNumber(getVal(row, r410.quantidade)));
-    const sinal = sentido==='saida' || sentido==='saída' ? -1 : (sentido==='entrada' ? 1 : 0);
+    let sinal = sentido.startsWith('s') ? -1 : (sentido.startsWith('e') ? 1 : 0);
+    if(!sinal && vlBruto){
+      sinal = vlBruto<0 ? -1 : 1;
+      g.linhasSentidoInferido++; g.valorSentidoInferido += sinal*vlAbs;
+      if(g.exemplosSentidoInferido.length<20) g.exemplosSentidoInferido.push({...exemplo410(row), mes});
+    }
     const valor = sinal*vlAbs;
     const qtd = sinal*qtdAbs;
 
@@ -1948,6 +1972,8 @@ async function runPipeline410({buf410}){
     resumos[ano] = {
       ano, totalLinhas:g.totalLinhas, linhasExcluidasDeposito21:g.linhasExcluidasDeposito21,
       linhasExcluidasLogica:g.linhasExcluidasLogica, temColunaLogica: !!r410.logica,
+      linhasSentidoInferido:g.linhasSentidoInferido, valorSentidoInferido:g.valorSentidoInferido, exemplosSentidoInferido:g.exemplosSentidoInferido,
+      linhasSemData:semData.linhas, valorSemData:semData.valor, exemplosSemData:semData.exemplos,
       porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica,
       totalGanhos, totalPerdas, totalNet: totalGanhos+totalPerdas, totalNetAbs: Math.abs(totalGanhos+totalPerdas)
     };
