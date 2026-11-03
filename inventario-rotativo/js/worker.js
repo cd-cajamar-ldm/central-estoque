@@ -179,7 +179,7 @@ const ALIAS_390 = {
   classeSku: ['CURVA_ABC','Classe Sku'],
   ean: ['EAN','Ean','Código de Barras','Codigo de Barras','Cod Barras','Cód.Barras','Cod.Barras'],
   valoriza: ['VALORIZA'], valorUnitario: ['VALOR_UNITARIO'], valorItemLocal: ['VALOR_ITEM_LOCAL'],
-  log: ['LOG_ITEM'], x1: ['X1'], x2: ['X2'], predio: ['PREDIO'], classeLocal: ['CLAL'],
+  log: ['LOG_ITEM'], x1: ['X1'], x2: ['X2'], predio: ['PREDIO'], classeLocal: ['CLAL','Classe Local'],
   setor: ['NM_SETOR'], familia: ['NM_FAMILIA'], marca: ['NM_MARCA'],
   atualizadoEm: ['ULTIMA_ATUALIZACAO']
 };

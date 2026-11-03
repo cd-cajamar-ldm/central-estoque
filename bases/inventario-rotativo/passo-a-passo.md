@@ -51,10 +51,11 @@ No Power BI Desktop, abra **Exibição de consulta DAX**, cole o conteúdo de [`
 | 1 | [`QRY0390_parte1.dax`](QRY0390_parte1.dax) | `QRY0390_parte1.csv` |
 | 2 | [`QRY0390_parte2.dax`](QRY0390_parte2.dax) | `QRY0390_parte2.csv` |
 | 3 | [`QRY0390_parte3.dax`](QRY0390_parte3.dax) | `QRY0390_parte3.csv` |
-| 4 | [`QRY0160.dax`](QRY0160.dax) | `QRY0160.csv` |
-| 5 | [`SIGEQ410_parte1.dax`](SIGEQ410_parte1.dax) | `SIGEQ410_parte1.csv` |
-| 6 | [`SIGEQ410_parte2.dax`](SIGEQ410_parte2.dax) | `SIGEQ410_parte2.csv` |
-| 7 | [`SIGEQ410_parte3.dax`](SIGEQ410_parte3.dax) | `SIGEQ410_parte3.csv` |
+| 4 | [`QRY0160_parte1.dax`](QRY0160_parte1.dax) | `QRY0160_parte1.csv` |
+| 5 | [`QRY0160_parte2.dax`](QRY0160_parte2.dax) | `QRY0160_parte2.csv` |
+| 6 | [`QRY0160_parte3.dax`](QRY0160_parte3.dax) | `QRY0160_parte3.csv` |
+
+> A **QRY410 (SIGEQ410)** fica de fora por enquanto: tem 7 milhões de linhas no fluxo de dados. Continue subindo ela à mão até o recorte ser decidido (veja o [mapa](../mapa.md)).
 
 **Ação A: pedir o relatório ao Power BI**
 1. **+ Nova etapa** → procure **Power BI** → **Executar uma consulta em um conjunto de dados**.
@@ -82,7 +83,7 @@ No Power BI Desktop, abra **Exibição de consulta DAX**, cole o conteúdo de [`
 2. Para: o seu e-mail. Assunto: **`Falhou a atualização do Inventário Rotativo`**.
 3. Nessa ação, **⋯ → Configurar execução após** → marque **falhou** e **atingiu o tempo limite**, desmarque **foi bem-sucedido**.
 
-5. Clique em **Salvar** e depois em **Testar → Manualmente**. Confira se os 7 arquivos apareceram na pasta.
+5. Clique em **Salvar** e depois em **Testar → Manualmente**. Confira se os 6 arquivos apareceram na pasta.
 
 ---
 
@@ -94,7 +95,7 @@ No Power BI Desktop, abra **Exibição de consulta DAX**, cole o conteúdo de [`
 
 **No dia a dia:** ao abrir o app, se ele pedir, clique em **Permitir acesso** (o navegador exige esse clique por segurança). Depois disso, é só usar. Para puxar o que chegou depois, clique em **Buscar novidades**.
 
-Os relatórios manuais (**QRY0843, SIGEQ278, ZBIQ0051 e Base Congelada**) podem ficar na mesma pasta: o app lê tudo junto.
+Os relatórios manuais (**QRY410, QRY0843, SIGEQ278, ZBIQ0051 e Base Congelada**) podem ficar na mesma pasta: o app lê tudo junto.
 
 ---
 

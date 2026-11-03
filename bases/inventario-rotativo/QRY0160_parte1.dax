@@ -1,10 +1,10 @@
-// QRY0160 — Tempo parado no endereço
-// Salvar como: QRY0160.csv
-// ⚠️ A confirmar: os nomes das colunas abaixo são os da extração manual de hoje.
-// Conferir no fluxo de dados "410, 160, 150" e ajustar aqui se forem diferentes.
+// QRY0160 — Tempo parado no endereço — PARTE 1 de 3
+// Salvar como: QRY0160_parte1.csv
+// Conferido em 03/11/2026: 147.606 linhas. Passa do limite de 100 mil linhas por
+// consulta, então vai em 3 partes, separadas pelo resto da divisão do item por 3.
 EVALUATE
 SELECTCOLUMNS(
-    'QRY0160',
+    FILTER('QRY0160', MOD(COALESCE('QRY0160'[Item], 0), 3) = 0),
     "Item", COALESCE('QRY0160'[Item], ""),
     "Descrição item", COALESCE('QRY0160'[Descrição item], ""),
     "EAN", COALESCE('QRY0160'[EAN], ""),

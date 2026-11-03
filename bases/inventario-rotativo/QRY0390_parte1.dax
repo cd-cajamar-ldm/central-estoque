@@ -1,34 +1,25 @@
 // QRY0390 — Estoque por endereço — PARTE 1 de 3
 // Salvar como: QRY0390_parte1.csv
-// Separa os itens em 3 grupos pelo resto da divisão do código por 3 (0, 1 e 2),
-// porque a QRY0390 inteira passa do limite de ~1 milhão de células por consulta.
-// O app junta as 3 partes sozinho.
-// COALESCE(..., ""): sem ele, célula vazia some da resposta e a coluna inteira
-// pode sumir do CSV.
-// Se o código do item não for número, este filtro dá erro: avise o Claude.
+// Conferido em 03/11/2026: 98.527 linhas. Com 13 colunas passa do limite de
+// ~1 milhão de células por consulta, então vai em 3 partes, separadas pelo resto
+// da divisão do código do item por 3. O app junta as partes sozinho.
+// Item que não for número cai na parte 1 (IFERROR), pra nenhum ficar de fora.
+// COALESCE(..., ""): sem ele, célula vazia some da resposta e a coluna pode sumir do CSV.
+// ULTIMA_ATUALIZACAO vem da coluna "QRY0390" do fluxo de dados (data da carga).
 EVALUATE
 SELECTCOLUMNS(
-    FILTER('QRY0390', MOD(VALUE('QRY0390'[ID_ITEM_FILHO]), 3) = 0),
-    "ID_ITEM_FILHO", COALESCE('QRY0390'[ID_ITEM_FILHO], ""),
-    "ITEM_PAI", COALESCE('QRY0390'[ITEM_PAI], ""),
-    "NOME_ITEM_FILHO", COALESCE('QRY0390'[NOME_ITEM_FILHO], ""),
-    "ID_LOCAL", COALESCE('QRY0390'[ID_LOCAL], ""),
-    "DESC_LOCAL", COALESCE('QRY0390'[DESC_LOCAL], ""),
-    "QTDE", COALESCE('QRY0390'[QTDE], ""),
-    "QTDE_DISP", COALESCE('QRY0390'[QTDE_DISP], ""),
-    "QTDE_ROM", COALESCE('QRY0390'[QTDE_ROM], ""),
-    "CURVA_ABC", COALESCE('QRY0390'[CURVA_ABC], ""),
+    FILTER('QRY0390', MOD(IFERROR(VALUE('QRY0390'[Item]), 0), 3) = 0),
+    "Item", COALESCE('QRY0390'[Item], ""),
+    "Descrição", COALESCE('QRY0390'[Descrição], ""),
+    "Cod Terceiro", COALESCE('QRY0390'[Cod Terceiro], ""),
+    "Local", COALESCE('QRY0390'[Local], ""),
+    "Situação", COALESCE('QRY0390'[Situação], ""),
+    "Quantidade", COALESCE('QRY0390'[Quantidade], ""),
+    "Classe Sku", COALESCE('QRY0390'[Classe Sku], ""),
+    "Classe Local", COALESCE('QRY0390'[Classe Local], ""),
     "EAN", COALESCE('QRY0390'[EAN], ""),
-    "VALORIZA", COALESCE('QRY0390'[VALORIZA], ""),
-    "VALOR_UNITARIO", COALESCE('QRY0390'[VALOR_UNITARIO], ""),
-    "VALOR_ITEM_LOCAL", COALESCE('QRY0390'[VALOR_ITEM_LOCAL], ""),
-    "LOG_ITEM", COALESCE('QRY0390'[LOG_ITEM], ""),
     "X1", COALESCE('QRY0390'[X1], ""),
     "X2", COALESCE('QRY0390'[X2], ""),
-    "PREDIO", COALESCE('QRY0390'[PREDIO], ""),
-    "CLAL", COALESCE('QRY0390'[CLAL], ""),
-    "NM_SETOR", COALESCE('QRY0390'[NM_SETOR], ""),
-    "NM_FAMILIA", COALESCE('QRY0390'[NM_FAMILIA], ""),
-    "NM_MARCA", COALESCE('QRY0390'[NM_MARCA], ""),
-    "ULTIMA_ATUALIZACAO", FORMAT('QRY0390'[ULTIMA_ATUALIZACAO], "yyyy-mm-dd hh:nn:ss")
+    "Predio", COALESCE('QRY0390'[Predio], ""),
+    "ULTIMA_ATUALIZACAO", FORMAT('QRY0390'[QRY0390], "yyyy-mm-dd hh:nn:ss")
 )
