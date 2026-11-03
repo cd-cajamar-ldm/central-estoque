@@ -1,0 +1,28 @@
+// SIGEQ410 (QRY410) — Perdas e ganhos (NET) — PARTE 1 de 3 — só o ANO ATUAL
+// Salvar como: SIGEQ410_parte1.csv
+// O app guarda a NET por ano: importar só o ano atual mantém os anos anteriores.
+// Separa os meses em 3 grupos (resto da divisão do mês por 3) pra caber no limite
+// de ~1 milhão de células por consulta.
+// ⚠️ A confirmar: os nomes das colunas abaixo são os da extração manual de hoje.
+// Conferir no fluxo de dados "410, 160, 150" e ajustar aqui se forem diferentes.
+EVALUATE
+SELECTCOLUMNS(
+    FILTER('SIGEQ410',
+        YEAR('SIGEQ410'[Dt.Mov.]) = YEAR(TODAY())
+        && MOD(MONTH('SIGEQ410'[Dt.Mov.]), 3) = 0),
+    "Item", COALESCE('SIGEQ410'[Item], ""),
+    "Nome", COALESCE('SIGEQ410'[Nome], ""),
+    "Dt.Mov.", FORMAT('SIGEQ410'[Dt.Mov.], "yyyy-mm-dd hh:nn:ss"),
+    "Quantidade", COALESCE('SIGEQ410'[Quantidade], ""),
+    "Sentido", COALESCE('SIGEQ410'[Sentido], ""),
+    "Vl.Mov.", COALESCE('SIGEQ410'[Vl.Mov.], ""),
+    "Id Deposito", COALESCE('SIGEQ410'[Id Deposito], ""),
+    "Observacao WMS", COALESCE('SIGEQ410'[Observacao WMS], ""),
+    "Observacao", COALESCE('SIGEQ410'[Observacao], ""),
+    "Nome Depto", COALESCE('SIGEQ410'[Nome Depto], ""),
+    "Logica", COALESCE('SIGEQ410'[Logica], ""),
+    "Id Depto", COALESCE('SIGEQ410'[Id Depto], ""),
+    "Num Doc", COALESCE('SIGEQ410'[Num Doc], ""),
+    "Usuário", COALESCE('SIGEQ410'[Usuário], ""),
+    "Data/Hora", FORMAT('SIGEQ410'[Data/Hora], "yyyy-mm-dd hh:nn:ss")
+)

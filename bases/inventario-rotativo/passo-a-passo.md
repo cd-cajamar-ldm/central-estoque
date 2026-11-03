@@ -21,7 +21,7 @@ Tempo total: cerca de **1 hora**, uma vez só. Siga na ordem.
 2. **Obter dados → Fluxos de dados do Power BI** → entre com a sua conta.
 3. Abra o workspace **Operação CD Cajamar** e marque **só** estas tabelas:
    - no fluxo **"180, 163, 390, 193 ETR"**: `QRY0390` e `Dataatt`
-   - no fluxo **"410, 160, 150"**: `QRY410` e `QRY0160`
+   - no fluxo **"410, 160, 150"**: `SIGEQ410` e `QRY0160`
 4. Clique em **Carregar**. Não precisa montar gráfico nenhum.
 5. Salve como **`Inventário Rotativo – Bases`** e clique em **Publicar** → escolha **Operação CD Cajamar**.
 6. Em **app.powerbi.com**, abra o workspace e ache o modelo semântico **Inventário Rotativo – Bases** → **⋯ → Configurações**:
@@ -52,9 +52,9 @@ No Power BI Desktop, abra **Exibição de consulta DAX**, cole o conteúdo de [`
 | 2 | [`QRY0390_parte2.dax`](QRY0390_parte2.dax) | `QRY0390_parte2.csv` |
 | 3 | [`QRY0390_parte3.dax`](QRY0390_parte3.dax) | `QRY0390_parte3.csv` |
 | 4 | [`QRY0160.dax`](QRY0160.dax) | `QRY0160.csv` |
-| 5 | [`QRY410_parte1.dax`](QRY410_parte1.dax) | `QRY410_parte1.csv` |
-| 6 | [`QRY410_parte2.dax`](QRY410_parte2.dax) | `QRY410_parte2.csv` |
-| 7 | [`QRY410_parte3.dax`](QRY410_parte3.dax) | `QRY410_parte3.csv` |
+| 5 | [`SIGEQ410_parte1.dax`](SIGEQ410_parte1.dax) | `SIGEQ410_parte1.csv` |
+| 6 | [`SIGEQ410_parte2.dax`](SIGEQ410_parte2.dax) | `SIGEQ410_parte2.csv` |
+| 7 | [`SIGEQ410_parte3.dax`](SIGEQ410_parte3.dax) | `SIGEQ410_parte3.csv` |
 
 **Ação A: pedir o relatório ao Power BI**
 1. **+ Nova etapa** → procure **Power BI** → **Executar uma consulta em um conjunto de dados**.

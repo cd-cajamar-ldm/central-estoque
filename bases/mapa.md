@@ -8,7 +8,7 @@ Workspace do Power BI: **Operação CD Cajamar**.
 |---|---|---|---|---|---|
 | **QRY0390** | Estoque por endereço | Fluxo de dados **"180, 163, 390, 193 ETR"**, tabela `QRY0390` | De hora em hora | 🟢 Automático | `QRY0390_parte1.csv`, `QRY0390_parte2.csv`, `QRY0390_parte3.csv` |
 | **QRY0160** | Tempo parado no endereço (pendência de movimentação) | Fluxo de dados **"410, 160, 150"**, tabela `QRY0160` ⚠️ a confirmar | 1x de madrugada, sem próxima agendada | 🟢 Automático | `QRY0160.csv` |
-| **QRY410** | Perdas e ganhos (NET) | Fluxo de dados **"410, 160, 150"**, tabela `QRY410` ⚠️ a confirmar | 1x de madrugada, sem próxima agendada | 🟢 Automático | `QRY410_parte1.csv` … `QRY410_parte3.csv` |
+| **QRY410** | Perdas e ganhos (NET) | Fluxo de dados **"410, 160, 150"**, tabela `SIGEQ410` | 1x de madrugada, sem próxima agendada | 🟢 Automático | `SIGEQ410_parte1.csv` … `SIGEQ410_parte3.csv` |
 | **Dataatt** | Data e hora da última atualização da origem | Fluxo de dados **"180, 163, 390, 193 ETR"**, tabela `Dataatt` | De hora em hora | Só conferência (não vai para a pasta) | — |
 | **QRY0843** | Contagens do ciclo | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
 | **SIGEQ278** | Custo dos itens | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
