@@ -5,6 +5,25 @@
 - **Receitas** em [`receitas/`](receitas/) (copiar para a pasta `Central de Estoque/Receitas` do SharePoint). Em preparo, ainda não copiar: [`receitas-em-preparo/`](receitas-em-preparo/).
 - **Saída**: pasta `Central de Estoque/Bases` do SharePoint.
 
+## Tabelas do modelo "Central de Estoque – Bases" (conferido em 03/11/2026)
+
+Todas vêm dos fluxos de dados do workspace **Operação CD Cajamar**.
+
+| Tabela | Apps que usam | Receita |
+|---|---|---|
+| QRY0390 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização, Auditoria | ✅ Pronta (3 partes) |
+| QRY0160 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta (3 partes) |
+| SIGEQ410 | Inventário Rotativo, Transitórios | 🟡 Em preparo (filtrar ano atual + filial) |
+| QRY0843 | Inventário Rotativo | ⏳ A fazer |
+| SIGEQ278 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização | ⏳ A fazer |
+| ZBIQ0051 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ⏳ A fazer |
+| QRY0114 | Auditoria | ⏳ A fazer |
+| QRY0845 | Auditoria | ⏳ A fazer |
+| QRY0139 | A definir (relatório novo) | ⏳ A fazer |
+| QRY0840 | A definir (relatório novo) | ⏳ A fazer |
+
+A **Base Congelada** continua manual (planilha feita à mão).
+
 ## Inventário Rotativo
 
 | Relatório | Para que serve no app | De onde vem | Atualização da origem | Como chega no app | Arquivo(s) na pasta |
