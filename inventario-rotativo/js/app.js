@@ -2928,6 +2928,7 @@ async function irPastaCarregar(){
     IR.pastaPerm = await irPastaPermissao(h, false);
     if(IR.pastaPerm === 'granted') await irPastaSincronizar();
   }catch(err){ IR.pastaErro = String(err && err.message || err); }
+  irPastaAutoRefreshIniciar();
 }
 async function irPastaConectar(){
   if(!IR_PASTA_SUPORTA) return;
@@ -2937,6 +2938,7 @@ async function irPastaConectar(){
     await irSetConfig('pasta-handle', h);
     irShowToast('Pasta conectada: '+h.name);
     await irPastaSincronizar();
+    irPastaAutoRefreshIniciar();
   }catch(err){
     // Cancelar o seletor é AbortError e não é erro nenhum.
     if(err && err.name === 'AbortError') return;
@@ -2953,7 +2955,22 @@ async function irPastaDesconectar(){
   IR.pastaHandle = null; IR.pastaArquivos = null; IR.pastaTodos = null;
   IR.pastaCiclos = null; IR.pastaErro = null;
   await irSetConfig('pasta-handle', null);
+  irPastaAutoRefreshParar();
   irRenderView();
+}
+/* Varredura automática em segundo plano, pensada pra tela fixa (TV, painel de
+   setor): ninguém vai clicar em "Buscar novidades" ali. Com a pasta já
+   conectada e a permissão concedida, relê sozinha a cada 15 minutos. Se a
+   permissão cair (ver irPastaPermissao), a varredura falha em silêncio — só
+   um clique humano resolve isso, não dá pra automatizar essa parte. */
+const IR_PASTA_AUTO_REFRESH_MS = 15*60*1000;
+let irPastaAutoTimer = null;
+function irPastaAutoRefreshIniciar(){
+  if(irPastaAutoTimer || !IR.pastaHandle) return;
+  irPastaAutoTimer = setInterval(()=>{ irPastaSincronizar().catch(()=>{}); }, IR_PASTA_AUTO_REFRESH_MS);
+}
+function irPastaAutoRefreshParar(){
+  if(irPastaAutoTimer){ clearInterval(irPastaAutoTimer); irPastaAutoTimer = null; }
 }
 /* Varre a pasta escolhida e as subpastas de primeiro nível — é o formato
    recomendado (_Atual + uma pasta por ciclo) sem obrigar ninguém a ele: quem
