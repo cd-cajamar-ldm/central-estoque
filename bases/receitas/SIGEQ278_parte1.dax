@@ -1,0 +1,13 @@
+// SIGEQ278 — Custo dos itens — PARTE 1 de 3
+// Salvar como: SIGEQ278_parte1.csv
+// Conferido em 03/11/2026: 238.253 linhas. Passa do limite de 100 mil linhas por
+// consulta, então vai em 3 partes, separadas pelo resto da divisão do item por 3.
+// O app usa as 3 partes juntas.
+EVALUATE
+SELECTCOLUMNS(
+    FILTER('SIGEQ278', MOD(COALESCE('SIGEQ278'[Item], 0), 3) = 0),
+    "Item", COALESCE('SIGEQ278'[Item], ""),
+    "Nome item", COALESCE('SIGEQ278'[Nome item], ""),
+    "Preço de custo", COALESCE('SIGEQ278'[Preço de custo], ""),
+    "Preço de compra", COALESCE('SIGEQ278'[Preço de compra], "")
+)

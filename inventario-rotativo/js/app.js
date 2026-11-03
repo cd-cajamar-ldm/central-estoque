@@ -3304,7 +3304,18 @@ function irPastaEscolherBase(baseId, g, pastasCompartilhadas, pastasDeOutros){
     const janela = cand.filter(a=>a.file.lastModified >= inicio - 30*dia);
     return janela.length ? [maisNovo(janela)] : [];
   }
-  return [maisNovo(cand)];
+  return irPastaComPartes(maisNovo(cand), lista);
+}
+/* A SIGEQ278 automática chega em partes (SIGEQ278_parte1.csv...). Escolher só "a
+   mais nova" pegaria uma parte e deixaria o preço de dois terços dos itens de
+   fora. Quando o escolhido é uma parte, vão junto as irmãs da mesma pasta — o
+   worker já lê várias planilhas da mesma base e junta as linhas. */
+function irPastaComPartes(escolhido, lista){
+  if(!IR_PARTE_RE.test(escolhido.file.name)) return [escolhido];
+  const raiz = irPastaRaizParte(escolhido.file.name);
+  return lista.filter(a=>a.pasta===escolhido.pasta && IR_PARTE_RE.test(a.file.name)
+      && irPastaRaizParte(a.file.name)===raiz)
+    .sort((a,b)=>parseInt(a.file.name.match(IR_PARTE_RE)[1],10) - parseInt(b.file.name.match(IR_PARTE_RE)[1],10));
 }
 // Monta IR.pastaCiclos a partir da varredura. Não processa nada.
 async function irPastaMapearCiclos(){

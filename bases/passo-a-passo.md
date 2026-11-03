@@ -23,8 +23,7 @@ Fluxos de dados             Modelo no Power BI              Power Automate      
 1. No **SharePoint** (ou no OneDrive da empresa), crie a pasta **`Central de Estoque`** e, dentro dela, duas pastas:
    - **`Receitas`**: onde ficam as receitas (arquivos `.dax`);
    - **`Bases`**: onde o Power Automate salva os relatórios prontos.
-2. Copie para a pasta **`Receitas`** os arquivos da pasta [`receitas/`](receitas/) da Central:
-   `QRY0390_parte1.dax`, `QRY0390_parte2.dax`, `QRY0390_parte3.dax`, `QRY0160_parte1.dax`, `QRY0160_parte2.dax` e `QRY0160_parte3.dax`.
+2. Copie para a pasta **`Receitas`** **todos** os arquivos da pasta [`receitas/`](receitas/) da Central (hoje são 11: QRY0390 em 3 partes, QRY0160 em 3 partes, QRY0843, SIGEQ278 em 3 partes e ZBIQ0051).
 3. Na pasta **`Bases`**, clique em **Sincronizar** (ou **Adicionar atalho a Meus arquivos**) para que ela apareça no Explorador de Arquivos do computador.
 4. No Explorador de Arquivos, clique com o botão direito na pasta **`Bases`** → **Sempre manter neste dispositivo**.
    - Sem isso, os arquivos ficam "só na nuvem" e o app não consegue ler.
@@ -38,8 +37,7 @@ O **nome do arquivo de receita** decide o nome do relatório salvo: `QRY0390_par
 1. Abra o **Power BI Desktop** → **Arquivo → Novo** (ou abra o arquivo que você já começou).
 2. **Obter dados → Fluxos de dados** → entre com a sua conta.
 3. Abra o workspace **Operação CD Cajamar** e marque estas tabelas:
-   - no fluxo **"180, 163, 390, 193 ETR"**: `QRY0390`
-   - no fluxo **"410, 160, 150"**: `QRY0160` e `SIGEQ410`
+   - todas as tabelas do [mapa](mapa.md): QRY0390, QRY0160, SIGEQ410, QRY0843, SIGEQ278, ZBIQ0051, QRY0114, QRY0845, QRY0139 e QRY0840
 4. Clique em **Carregar**.
 5. **Filtre a SIGEQ410** em **Transformar dados**: `Dt.Mov.` → **Filtros de Data → Ano → Este ano**; `FIlial` → só a do CD Cajamar; deixe só as 15 colunas que o app usa (veja o [mapa](mapa.md)) → **Fechar e Aplicar**.
 6. Salve como **`Central de Estoque – Bases`**.
@@ -132,7 +130,7 @@ Para tirar um relatório, apague a receita da pasta **`Receitas`** (e o CSV anti
 
 **No dia a dia:** ao abrir o app, se ele pedir, clique em **Permitir acesso** (o navegador exige esse clique por segurança). Para puxar o que chegou depois, clique em **Buscar novidades**.
 
-Os relatórios manuais (**QRY410 até ela ficar automática, QRY0843, SIGEQ278, ZBIQ0051 e Base Congelada**) podem ser salvos na mesma pasta **`Bases`**: o app lê tudo junto.
+Os relatórios manuais (**QRY410 até ela ficar automática e a Base Congelada**) podem ser salvos na mesma pasta **`Bases`**: o app lê tudo junto.
 
 ---
 

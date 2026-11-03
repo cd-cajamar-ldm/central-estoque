@@ -58,8 +58,10 @@ function parseDateVal(v){
     const d = new Date(+yy, +mm-1, +dd, +(H||0), +(M||0), +(S||0));
     return isNaN(d.getTime()) ? null : d;
   }
-  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if(m) return new Date(+m[1], +m[2]-1, +m[3]);
+  // Com hora quando vier ("2026-11-03 15:20:00", formato da exportação automática):
+  // sem ela, toda contagem caía à meia-noite.
+  m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
+  if(m) return new Date(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0));
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
 }

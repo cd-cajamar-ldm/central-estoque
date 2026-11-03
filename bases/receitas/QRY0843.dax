@@ -1,0 +1,21 @@
+// QRY0843 — Contagens do ciclo (Inventário Rotativo)
+// Salvar como: QRY0843.csv
+// Conferido em 03/11/2026: 11.645 linhas — cabe numa consulta só.
+EVALUATE
+SELECTCOLUMNS(
+    'QRY0843',
+    "Inventario", COALESCE('QRY0843'[Inventario], ""),
+    "Local", COALESCE('QRY0843'[Local], ""),
+    "Descrição local", COALESCE('QRY0843'[Descrição local], ""),
+    "Data Situação", FORMAT('QRY0843'[Data Situação], "yyyy-mm-dd hh:nn:ss"),
+    "Data Inicio Contagem", FORMAT('QRY0843'[Data Inicio Contagem], "yyyy-mm-dd hh:nn:ss"),
+    "Data Fim Contagem", FORMAT('QRY0843'[Data Fim Contagem], "yyyy-mm-dd hh:nn:ss"),
+    "Obs inventario", COALESCE('QRY0843'[Obs inventario], ""),
+    "Usuário Conferencia", COALESCE('QRY0843'[Usuário Conferencia], ""),
+    "Situação Inventario", COALESCE('QRY0843'[Situação Inventario], ""),
+    "Situação Local", COALESCE('QRY0843'[Situação Local], ""),
+    "Id Conferencia", COALESCE('QRY0843'[Id Conferencia], ""),
+    "Id Item", COALESCE('QRY0843'[Id Item], ""),
+    "Item Nome", COALESCE('QRY0843'[Item Nome], ""),
+    "QT_FIS", COALESCE('QRY0843'[QT_FIS], "")
+)

@@ -9,18 +9,20 @@
 
 Todas vêm dos fluxos de dados do workspace **Operação CD Cajamar**.
 
-| Tabela | Apps que usam | Receita |
-|---|---|---|
-| QRY0390 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização, Auditoria | ✅ Pronta (3 partes) |
-| QRY0160 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta (3 partes) |
-| SIGEQ410 | Inventário Rotativo, Transitórios | 🟡 Em preparo (filtrar ano atual + filial) |
-| QRY0843 | Inventário Rotativo | ⏳ A fazer |
-| SIGEQ278 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização | ⏳ A fazer |
-| ZBIQ0051 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ⏳ A fazer |
-| QRY0114 | Auditoria | ⏳ A fazer |
-| QRY0845 | Auditoria | ⏳ A fazer |
-| QRY0139 | A definir (relatório novo) | ⏳ A fazer |
-| QRY0840 | A definir (relatório novo) | ⏳ A fazer |
+| Tabela | Linhas | Apps que usam | Receita |
+|---|---|---|---|
+| QRY0390 | 98.527 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização, Auditoria | ✅ Pronta (3 partes) |
+| QRY0160 | 147.606 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta (3 partes) |
+| QRY0843 | 11.645 | Inventário Rotativo | ✅ Pronta |
+| SIGEQ278 | 238.253 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização | ✅ Pronta (3 partes) |
+| ZBIQ0051 | 3.475 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta |
+| SIGEQ410 | 2.657.098 (já com filtro de ano) | Inventário Rotativo, Transitórios | 🔴 Grande demais: falta decidir o recorte |
+| QRY0114 | 166.633 | Auditoria | ⏳ Depois (o app Auditoria ainda não lê pasta) |
+| QRY0845 | 617.269 | Auditoria | 🔴 Grande demais: falta decidir o recorte |
+| QRY0139 | 764.787 | A definir | 🔴 Grande demais: falta decidir o recorte |
+| QRY0840 | 1.962.356 | A definir | 🔴 Grande demais: falta decidir o recorte |
+
+**Limite do caminho Power Automate:** cada receita traz no máximo 100 mil linhas e ~1 milhão de células. Até umas 300 mil linhas, dividir em partes resolve. Acima disso, a base precisa de um **recorte** (só um período, só uma filial, só um status) antes de virar receita.
 
 A **Base Congelada** continua manual (planilha feita à mão).
 
