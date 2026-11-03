@@ -1701,7 +1701,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
    QRY410 — Perdas e Ganhos no CD
    Independente do ciclo rotativo: processa por ano (extraído de Dt.Mov.), não
    depende de nenhum arquivo dos outros slots. Ver irClassificarMotivo410() em
-   rules.js pras regras de negócio (Id Depósito 21 fora, Saída = negativo, legenda
+   rules.js pras regras de negócio (Id Depósito 21 fora, só Lógica 301/302, Saída = negativo, legenda
    de motivos — editável em Configurações).
    ============================================================ */
 async function runPipeline410({buf410}){
@@ -1726,7 +1726,7 @@ async function runPipeline410({buf410}){
       // Depto (coluna "Nome Depto" da QRY410) — só conta movimento de motivo
       // considerado pro NET, mesmo critério da quebra por Obs mês a mês.
       porDepto:new Map(), porDeptoMes:new Map(),
-      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0,
+      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0, linhasExcluidasLogica:0,
       // Linhas cruas da própria 410, só Lógica 301/302 — alimenta a tabela de
       // detalhe da aba NET (visão linha a linha, não agregada). Os totais de
       // Net Ano/Mês de cada linha só ficam prontos depois do laço principal
@@ -1805,6 +1805,15 @@ async function runPipeline410({buf410}){
     // Id Depósito 21 fica de fora de tudo (regra explícita do usuário).
     const idDeposito = parseInt(parseNumber(getVal(row, r410.idDeposito)), 10);
     if(idDeposito===21){ g.linhasExcluidasDeposito21++; continue; }
+
+    // NET oficial = só Lógica 301 e 302 (regra explícita do usuário — é como a
+    // dinâmica da própria 410 fecha). Outras lógicas ficam de fora de tudo,
+    // inclusive da quebra por Obs. Arquivo sem a coluna Lógica não tem como
+    // filtrar: entra inteiro, como antes, e a tela avisa.
+    if(r410.logica){
+      const lg = String(getVal(row, r410.logica)||'').trim();
+      if(lg!=='301' && lg!=='302'){ g.linhasExcluidasLogica++; continue; }
+    }
 
     const sentido = String(getVal(row, r410.sentido)||'').trim().toLowerCase();
     const vlAbs = Math.abs(parseNumber(getVal(row, r410.vlMov)));
@@ -1936,6 +1945,7 @@ async function runPipeline410({buf410}){
     });
     resumos[ano] = {
       ano, totalLinhas:g.totalLinhas, linhasExcluidasDeposito21:g.linhasExcluidasDeposito21,
+      linhasExcluidasLogica:g.linhasExcluidasLogica, temColunaLogica: !!r410.logica,
       porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica,
       totalGanhos, totalPerdas, totalNet: totalGanhos+totalPerdas, totalNetAbs: Math.abs(totalGanhos+totalPerdas)
     };

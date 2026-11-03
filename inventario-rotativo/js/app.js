@@ -981,7 +981,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v236';
+const IR_APP_VERSION = 'v237';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2683,7 +2683,7 @@ async function irBaixarBoletimImagem(html, nomeArquivo, email){
 /* ============================================================
    QRY410 — PERDAS E GANHOS NO CD
    Independente do ciclo rotativo (por ano, não por cicloId) — ver worker.js
-   runPipeline410() pras regras de negócio (Id Depósito 21 fora, Saída = negativo,
+   runPipeline410() pras regras de negócio (Id Depósito 21 fora, só Lógica 301/302, Saída = negativo,
    legenda de motivos que entram ou não no NET).
    ============================================================ */
 function irOnFile410(file){ if(!file) return; IR.net410File = file; irRenderView(); }
@@ -3561,7 +3561,7 @@ function irRenderNet410Resultado(d){
     </div>
     <div class="panel">
       <h3>Net mensal — ${d.ano}</h3>
-      <p class="panel-sub">Só considera motivos válidos pro NET (ver tabela por Obs abaixo). ${irFmtInt(d.linhasExcluidasDeposito21)} linha(s) do Id Depósito 21 ficaram de fora. Total de linhas do ano: ${irFmtInt(d.totalLinhas)}.</p>
+      <p class="panel-sub">Só considera motivos válidos pro NET (ver tabela por Obs abaixo). ${irFmtInt(d.linhasExcluidasDeposito21)} linha(s) do Id Depósito 21 ficaram de fora. ${d.temColunaLogica ? 'Só Lógica 301/302: '+irFmtInt(d.linhasExcluidasLogica||0)+' linha(s) de outras lógicas ficaram de fora.' : (d.linhasExcluidasLogica===undefined ? '<strong>Reimporte a QRY410 pra aplicar a regra de só Lógica 301/302.</strong>' : '<strong>Arquivo sem a coluna Lógica — não deu pra filtrar 301/302.</strong>')} Total de linhas do ano: ${irFmtInt(d.totalLinhas)}.</p>
       <div class="table-wrap"><table>
         <thead><tr><th>Mês</th><th>Net</th><th>Net Absoluto</th><th>Ganhos</th><th>Perdas</th></tr></thead>
         <tbody>${rows.map(m=>`<tr>
@@ -3806,11 +3806,16 @@ function irRenderGestaoCiclo(){
   // Top 10 itens que mais impactam o NET no mês selecionado (positivo/negativo).
   const topPos = ((mObj && mObj.topItensPositivos) || []).slice(0, 10);
   const topNeg = ((mObj && mObj.topItensNegativos) || []).slice(0, 10);
-  return `
+  // Base processada antes da regra "só Lógica 301/302" não tem o contador —
+  // o NET dela ainda soma todas as lógicas até a QRY410 ser reimportada.
+  const avisoLogica = d && d.linhasExcluidasLogica===undefined
+    ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>Reimporte a QRY410</strong> pra aplicar a regra nova: o NET passa a somar só as Lógicas 301 e 302. Os números abaixo ainda são da regra antiga (todas as lógicas).</p></div>`
+    : (d && !d.temColunaLogica ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>A QRY410 importada não tem a coluna Lógica</strong> — não deu pra filtrar só 301/302; o NET abaixo soma todas as lógicas.</p></div>` : '');
+  return `${avisoLogica}
     <div class="bi-grid-2">
       ${netMensalRows.length ? `<div class="panel">
         <h3>NET Mensal em Colunas — ${d.ano}</h3>
-        <p class="panel-sub">Ganho/perda líquido de todos os ajustes do CD, mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
+        <p class="panel-sub">Ganho/perda líquido dos ajustes do CD (só Lógica 301/302), mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
         ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:620, H:260})}
       </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
       ${irRenderNet410PorObsMesTable(d)}
