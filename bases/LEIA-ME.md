@@ -7,8 +7,9 @@ Este é o lugar oficial que diz **de onde vem cada relatório e como ele chega a
 Os relatórios saem sozinhos do Power BI nos horários agendados, caem numa pasta do SharePoint, e o app lê essa pasta.
 
 ```
-Fluxo de dados (Jorran)  →  Modelo no Power BI  →  Power Automate  →  Pasta SharePoint  →  App da Central
-(a "torneira")              (só o que o app usa)    (o "despertador")   (sincronizada no PC)  (lê a pasta)
+Fluxos de dados (Jorran)  →  Modelo "Central de Estoque – Bases"  →  Power Automate        →  Pasta "Bases"  →  Apps da Central
+(Operação CD Cajamar)        (workspace Controle de Estoque)          (roda cada receita       (SharePoint)      (leem a pasta)
+                                                                       da pasta "Receitas")
 ```
 
 ## O que tem aqui
@@ -16,8 +17,10 @@ Fluxo de dados (Jorran)  →  Modelo no Power BI  →  Power Automate  →  Past
 | Arquivo | Para que serve |
 |---|---|
 | [`mapa.md`](mapa.md) | A tabela-mestre: cada relatório, de onde vem, de quanto em quanto tempo atualiza e qual app usa |
-| `inventario-rotativo/*.dax` | As "receitas": o texto que o Power Automate envia ao Power BI para pedir cada relatório. É só copiar e colar |
-| [`inventario-rotativo/passo-a-passo.md`](inventario-rotativo/passo-a-passo.md) | O guia de montagem, no estilo "clique aqui, depois aqui" |
+| [`receitas/`](receitas/) | As "receitas": o pedido que o Power Automate faz ao Power BI. **Cada arquivo `.dax` vira um `.csv` com o mesmo nome.** Copie para a pasta `Receitas` do SharePoint |
+| [`receitas-em-preparo/`](receitas-em-preparo/) | Receitas que ainda não estão prontas. **Não copie** para o SharePoint |
+| [`conferencias/`](conferencias/) | Consultas para rodar no Power BI Desktop e conferir tamanho e nomes antes de ligar uma receita |
+| [`passo-a-passo.md`](passo-a-passo.md) | O guia de montagem, no estilo "clique aqui, depois aqui" |
 
 ## Regras do caderno
 
@@ -32,7 +35,7 @@ Primeiro descubra **de onde ele vem hoje**. O caminho depende disso:
 
 | De onde vem hoje | Caminho | Fica automático? |
 |---|---|---|
-| **Já está em algum fluxo de dados** do Power BI | Marcar a tabela no modelo do app ("Obter dados → Fluxos de dados" → **Carregar** → **Publicar → Substituir**) e criar a receita `.dax` | ✅ Sim, sem computador ligado |
+| **Já está em algum fluxo de dados** do Power BI | Marcar a tabela no modelo **Central de Estoque – Bases** ("Obter dados → Fluxos de dados" → **Carregar** → **Publicar → Substituir**). O Claude cria a receita `.dax` e você copia para a pasta `Receitas`. O Power Automate não muda | ✅ Sim, sem computador ligado |
 | **Baixado de um sistema** (SIGE, ZBI, WMS...) e não está em fluxo de dados | Salvar o arquivo baixado **na pasta conectada**, com o número do relatório no nome. O app lê sozinho | 🟡 Meio automático: você baixa, o app importa |
 | Baixado de um sistema, mas **muda pouco** (custo, estrutura de kit) | O mesmo de cima, só que **1 vez por semana ou por ciclo** já basta | 🟡 Meio automático |
 

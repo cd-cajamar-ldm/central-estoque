@@ -1,4 +1,4 @@
-// Conferência 1: linhas por parte. Cada parte precisa ficar abaixo de 45 mil.
+// Conferência 1 (rodar no Power BI Desktop, não copiar para Receitas): linhas por parte. Cada parte precisa ficar abaixo de 45 mil.
 EVALUATE
 {
     ("QRY0390 parte 1", COUNTROWS(FILTER('QRY0390', MOD(IFERROR(VALUE('QRY0390'[Item]), 0), 3) = 0))),

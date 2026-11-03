@@ -1,6 +1,9 @@
 # Mapa das bases
 
-Workspace do Power BI: **Operação CD Cajamar**.
+- **Fluxos de dados** (só leitura, do Jorran): workspace **Operação CD Cajamar**.
+- **Modelo da Central** (o nosso): **Central de Estoque – Bases**, no workspace **Controle de Estoque**.
+- **Receitas** em [`receitas/`](receitas/) (copiar para a pasta `Central de Estoque/Receitas` do SharePoint). Em preparo, ainda não copiar: [`receitas-em-preparo/`](receitas-em-preparo/).
+- **Saída**: pasta `Central de Estoque/Bases` do SharePoint.
 
 ## Inventário Rotativo
 
@@ -9,7 +12,6 @@ Workspace do Power BI: **Operação CD Cajamar**.
 | **QRY0390** | Estoque por endereço | Fluxo de dados **"180, 163, 390, 193 ETR"**, tabela `QRY0390` | De hora em hora | 🟢 Automático | `QRY0390_parte1.csv`, `QRY0390_parte2.csv`, `QRY0390_parte3.csv` |
 | **QRY0160** | Tempo parado no endereço (pendência de movimentação) | Fluxo de dados **"410, 160, 150"**, tabela `QRY0160` | 1x de madrugada, sem próxima agendada | 🟢 Automático | `QRY0160_parte1.csv` … `QRY0160_parte3.csv` |
 | **QRY410** | Perdas e ganhos (NET) | Fluxo de dados **"410, 160, 150"**, tabela `SIGEQ410` | 1x de madrugada, sem próxima agendada | ⚠️ Em análise (7 milhões de linhas) | Manual por enquanto |
-| **Dataatt** | Data e hora da última atualização da origem | Fluxo de dados **"180, 163, 390, 193 ETR"**, tabela `Dataatt` | De hora em hora | Só conferência (não vai para a pasta) | — |
 | **QRY0843** | Contagens do ciclo | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
 | **SIGEQ278** | Custo dos itens | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
 | **ZBIQ0051** | Item pai × componente (kits) | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
@@ -21,7 +23,9 @@ O Power BI entrega no máximo cerca de **1 milhão de células por consulta** (l
 
 ### Por que a QRY410 ainda não é automática
 
-No fluxo de dados ela se chama `SIGEQ410` e tem **7.093.783 linhas** (todos os anos e filiais). Isso é grande demais para o Power Automate, que entrega no máximo 100 mil linhas por consulta. A consulta [`CONTAGEM_SIGEQ410.dax`](inventario-rotativo/CONTAGEM_SIGEQ410.dax) mostra quantas linhas são de cada filial e ano, para decidir o recorte. As receitas `SIGEQ410_parte*.dax` ficam guardadas até essa decisão.
+No fluxo de dados ela se chama `SIGEQ410` e tem **7.093.783 linhas** (todos os anos e filiais). Isso é grande demais para o Power Automate, que entrega no máximo 100 mil linhas por consulta. A consulta [`CONTAGEM_SIGEQ410.dax`](conferencias/CONTAGEM_SIGEQ410.dax) mostra quantas linhas são de cada filial e ano, para decidir o recorte. As receitas `SIGEQ410_parte*.dax` ficam em [`receitas-em-preparo/`](receitas-em-preparo/) até essa decisão.
+
+Colunas da SIGEQ410 que o app usa (as outras podem ser removidas no Power Query): Item, Nome, Dt.Mov., Quantidade, Sentido, Vl.Mov., Id Deposito, Observacao WMS, Observacao, Nome Depto, Logica, Id Depto, Num Doc, Usuário, Data/Hora.
 
 ### Como a QRY410 deve chegar quando for automática
 
