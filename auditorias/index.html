@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auditorias — Oficina LDM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="theme-color" content="#0B1230">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  /* Casca inicial do módulo Auditorias — mesmo padrão visual da Oficina LDM
+     (claro/escuro, sidebar fixa, topbar). Só o shell por enquanto; as telas
+     de verdade entram depois, como um próximo passo. */
+  :root{
+    --paper:#F2F4FA;--surface:#FFFFFF;--surface2:#F7F9FD;
+    --ink:#101633;--ink-soft:#5B6485;--line:#DCE1F0;
+    --chip-bg:#EDF0F9;--chip-bg-hover:#E1E6F4;
+    --accent:#FE5000;--accent-light:rgba(254,80,0,.12);
+    --radius:7px;--radius-lg:10px;
+  }
+  body.theme-dark{
+    --paper:#0A0B23;--surface:#0B1934;--surface2:#0e1530;
+    --ink:#EEEDF5;--ink-soft:#7B80A0;--line:#1E2340;
+    --chip-bg:rgba(255,255,255,.05);--chip-bg-hover:rgba(255,255,255,.1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;overflow:hidden;}
+  body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;font-size:13.5px;transition:background .3s,color .3s;}
+  h1,h2,h3,h4{font-family:'Poppins',sans-serif;font-weight:700;letter-spacing:.01em;}
+  button{font-family:'Inter',sans-serif;cursor:pointer;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  a{color:var(--accent);}
+
+  .shell{display:flex;height:100vh;overflow:hidden;}
+
+  /* SIDEBAR — azul-marinho fixo, não acompanha o tema (mesma regra do Painel raiz) */
+  .sidebar{
+    width:220px;flex-shrink:0;
+    background:#0B1230;
+    border-right:1px solid rgba(255,255,255,.08);
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  }
+  .brand{
+    padding:16px 14px 14px;
+    border-bottom:1px solid rgba(255,255,255,.08);
+    flex-shrink:0;display:flex;align-items:center;gap:10px;
+  }
+  .brand-logo{
+    position:relative;width:52px;height:52px;border-radius:15px;overflow:hidden;
+    background:linear-gradient(145deg,#FF8A4C,#FE5000 55%,#C83812);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    box-shadow:0 6px 14px -4px rgba(254,80,0,.55),inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .brand-logo img{position:relative;z-index:1;width:78%;height:78%;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));}
+  .brand-text{flex:1;min-width:0;}
+  .brand-name{font-family:'Poppins',sans-serif;font-size:13px;font-weight:800;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .brand-sub{font-size:10px;color:#8891C4;margin-top:1px;}
+  .brand-back{
+    display:flex;align-items:center;gap:6px;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.08);
+    font-size:11.5px;font-weight:600;color:#9BA2CC;text-decoration:none;flex-shrink:0;
+  }
+  .brand-back:hover{color:#fff;background:rgba(255,255,255,.04);}
+
+  .sidebar-body{flex:1;overflow-y:auto;padding:6px 0;}
+  .nsg{margin:0 0 6px 0;}
+  .nsl{
+    display:flex;align-items:center;gap:8px;
+    font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    color:#C84010;padding:10px 12px 5px 14px;
+  }
+  .nsl::before{content:'';display:block;width:3px;height:12px;border-radius:2px;flex-shrink:0;background:#FE5000;}
+  .nav-item{
+    display:flex;align-items:center;gap:9px;
+    width:100%;text-align:left;background:none;border:none;
+    color:#C7CCEA;padding:6px 12px 6px 14px;
+    font-size:13px;font-weight:500;border-left:2px solid transparent;
+    transition:background .1s,color .1s;
+  }
+  .nav-item span{flex:1;text-align:left;}
+  .nav-item svg{flex-shrink:0;opacity:.75;}
+  .nav-item.active{background:rgba(254,80,0,.1);color:#FE5000;border-left-color:#FE5000;font-weight:600;}
+  .nav-item.active svg{opacity:1;}
+
+  /* MAIN */
+  .content{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--paper);}
+  .topbar{
+    padding:14px 24px 12px;
+    border-bottom:1px solid var(--line);
+    background:var(--surface2);flex-shrink:0;
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+  }
+  .topbar-left h1{font-size:17px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--ink);}
+  .topbar-left p{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
+  .cd-badge{flex-shrink:0;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;white-space:nowrap;}
+  .theme-switch{position:relative;width:46px;height:24px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
+  .theme-knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
+  .theme-switch.on .theme-knob{left:24px;}
+  .page-scroll{flex:1;overflow-y:auto;padding:20px 24px;}
+
+  .empty-state{text-align:center;padding:64px 20px;color:var(--ink-soft);}
+  .empty-state .eicon{font-size:34px;margin-bottom:16px;color:var(--line);}
+  .empty-state h3{color:var(--ink);font-size:16px;text-transform:none;margin-bottom:8px;font-family:'Poppins',sans-serif;font-weight:700;}
+  .empty-state p{font-size:13.5px;max-width:420px;margin:0 auto;}
+
+  @media(max-width:760px){
+    .shell{flex-direction:column;height:auto;overflow:auto;}
+    .sidebar{width:100%;border-right:none;border-bottom:1px solid rgba(255,255,255,.08);}
+    .content{overflow:visible;}
+    .page-scroll{padding:14px;}
+    html,body{overflow:auto;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo"><img src="brand/Logo_LDM_icon.png" alt="Loja do Mecânico"></div>
+      <div class="brand-text">
+        <div class="brand-name">OFICINA LDM</div>
+        <div class="brand-sub">lugar de quem faz</div>
+      </div>
+    </div>
+    <a class="brand-back" href="../">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      <span>Voltar para a Central</span>
+    </a>
+    <nav class="sidebar-body">
+      <div class="nsg">
+        <div class="nsl">Principal</div>
+        <button class="nav-item active" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 7v4l2.5 2.5"/></svg><span>Painel</span></button>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>Auditorias</h1>
+        <p>Módulo de auditorias da Oficina LDM.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+        <span class="cd-badge">CD CAJAMAR</span>
+        <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro">
+          <span class="theme-knob" id="themeKnob"></span>
+        </button>
+      </div>
+    </div>
+    <div class="page-scroll">
+      <div class="empty-state">
+        <div class="eicon">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 7v4l2.5 2.5"/></svg>
+        </div>
+        <h3>Módulo em construção</h3>
+        <p>O módulo de Auditorias ainda está sendo desenvolvido. Esta é só a casca inicial — o conteúdo e as funcionalidades entram num próximo passo.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+  /* Mesma chave usada no Painel Oficina LDM (raiz) — os dois compartilham
+     origem, então o tema escolhido em um lugar vale no outro também. */
+  var SUN = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+  var MOON = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  var btn = document.getElementById('themeSwitch');
+  var knob = document.getElementById('themeKnob');
+  function apply(dark){
+    document.body.classList.toggle('theme-dark', dark);
+    btn.classList.toggle('on', dark);
+    knob.innerHTML = dark ? MOON : SUN;
+  }
+  var dark = false;
+  try { dark = localStorage.getItem('ldm-theme') === 'dark'; } catch(e){}
+  apply(dark);
+  btn.addEventListener('click', function(){
+    dark = !dark;
+    apply(dark);
+    try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
+  });
+})();
+</script>
+</body>
+</html>
