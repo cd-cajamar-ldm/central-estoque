@@ -175,7 +175,10 @@ button{ font-family:inherit; cursor:pointer; }
 .sidebar.collapsed .nav-item{ justify-content:center; gap:0; padding:10px 0; }
 .sidebar.collapsed .sidebar-nav{ padding-left:0; padding-right:0; }
 .sidebar.collapsed .sidebar-footer{ display:none; }
-.sidebar.collapsed .brand{ justify-content:center; padding:14px 0; }
+/* Recolhido, logo (44px) + botão de expandir lado a lado passavam dos 56px
+   da coluna e o excesso sumia no overflow:hidden do menu — cortava a logo
+   pela metade. Empilhados, cada um cabe sozinho na largura disponível. */
+.sidebar.collapsed .brand{ flex-direction:column; justify-content:center; gap:8px; padding:12px 0 10px; }
 .sidebar.collapsed .sidebar-toggle{ margin:0; }
 /* O rótulo da seção vira um filete: sem ele os grupos ficam indistinguíveis. */
 .sidebar.collapsed .nav-section-label{
