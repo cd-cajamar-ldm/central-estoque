@@ -973,6 +973,7 @@ function irKpiBlock(theme, icon, title, tilesHtml){
   return `<div class="kpi-block theme-${theme}">
     <div class="kpi-block-header"><span class="bh-icon">${icon}</span>${title}</div>
     <div class="kpi-block-body">${tilesHtml}</div>
+    <span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
   </div>`;
 }
 const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
@@ -981,7 +982,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v240';
+const IR_APP_VERSION = 'v241';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.

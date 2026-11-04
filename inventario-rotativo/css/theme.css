@@ -5,7 +5,8 @@
    ============================================================ */
 :root{
   --blue:#001A72; --blue-light:#E8ECF7; --blue-soft:#33488E;
-  --orange:#FA4616; --orange-light:#FFEDE7;
+  /* Laranja oficial da marca (Oficina LDM), antes FA4616. */
+  --orange:#FE5000; --orange-light:#FFEDE7;
   --gray-900:#1D1F2A; --gray-700:#3A3D4D; --gray-500:#6B7280; --gray-300:#D5D8E0; --gray-100:#F4F5F7;
   --white:#FFFFFF;
   --success:#1F8A52; --success-light:rgba(31,138,82,.10);
@@ -14,21 +15,25 @@
   --paper:var(--gray-100); --surface:var(--white); --surface2:#EEF0F4;
   --ink:var(--gray-900); --ink-soft:var(--gray-500); --line:var(--gray-300);
   --radius:8px; --radius-lg:12px;
-  --accent-glow:rgba(250,70,22,.18); --accent-shadow:rgba(250,70,22,.25); --primary-shadow:rgba(0,26,114,.22);
+  --accent-glow:rgba(254,80,0,.18); --accent-shadow:rgba(254,80,0,.25); --primary-shadow:rgba(0,26,114,.22);
   --orange-soft:#FF7A4D;
+  /* Parafuso decorativo dos cantos de card, igual ao da Oficina LDM. */
+  --rivet:rgba(16,22,60,.16);
 }
 :root[data-theme="dark"]{
   --paper:#12141C; --surface:#1A1D28; --surface2:#20232F;
   --ink:#EEEDF5; --ink-soft:#9AA1B4; --line:#2C3040;
-  --blue-light:rgba(0,26,114,.35); --orange-light:rgba(250,70,22,.16);
+  --blue-light:rgba(0,26,114,.35); --orange-light:rgba(254,80,0,.16);
   --success-light:rgba(31,138,82,.18); --danger-light:rgba(200,56,18,.18);
+  --rivet:rgba(255,255,255,.22);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --paper:#12141C; --surface:#1A1D28; --surface2:#20232F;
     --ink:#EEEDF5; --ink-soft:#9AA1B4; --line:#2C3040;
-    --blue-light:rgba(0,26,114,.35); --orange-light:rgba(250,70,22,.16);
+    --blue-light:rgba(0,26,114,.35); --orange-light:rgba(254,80,0,.16);
     --success-light:rgba(31,138,82,.18); --danger-light:rgba(200,56,18,.18);
+    --rivet:rgba(255,255,255,.22);
   }
 }
 
@@ -103,6 +108,8 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,Arial,sans-serif;
   background:var(--paper); color:var(--ink); font-size:13.5px; line-height:1.5;
 }
+/* Mesma fonte de título da Oficina LDM em todo o app (antes só o h1 do topbar). */
+h1,h2,h3,h4{ font-family:'Poppins',sans-serif; font-weight:700; }
 .mono{ font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; }
 button{ font-family:inherit; cursor:pointer; }
 :focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
@@ -319,9 +326,14 @@ button{ font-family:inherit; cursor:pointer; }
 /* ---------- BLOCOS TEMÁTICOS DE KPI (Peças/Locais/Valor/Ciclo) ---------- */
 .kpi-blocks{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-bottom:18px; }
 .kpi-block{
+  position:relative;
   border-radius:var(--radius-lg); overflow:hidden; background:var(--surface); border:1px solid var(--line);
   box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 10px 20px -12px rgba(20,24,40,.18);
 }
+/* Parafuso decorativo dos cantos, igual aos cards de app da Oficina LDM. */
+.rivet{ position:absolute; width:5px; height:5px; border-radius:50%; background:var(--rivet); box-shadow:inset 0 1px 1px rgba(0,0,0,.25); z-index:2; pointer-events:none; }
+.rivet.tl{ top:9px; left:9px; } .rivet.tr{ top:9px; right:9px; }
+.rivet.bl{ bottom:9px; left:9px; } .rivet.br{ bottom:9px; right:9px; }
 :root[data-theme="dark"] .kpi-block{ box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 10px 20px -12px rgba(0,0,0,.5); }
 .kpi-block-header{
   display:flex; align-items:center; gap:8px; padding:9px 14px; color:#fff; font-weight:800;
