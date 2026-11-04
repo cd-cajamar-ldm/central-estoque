@@ -206,21 +206,17 @@ button{ font-family:inherit; cursor:pointer; }
 /* Sem faixa de cor: o topbar fica no mesmo fundo do conteúdo, igual ao
    Painel raiz da Oficina LDM (lá a cor de marca só existe na sidebar). */
 .topbar{
-  position:relative; overflow:hidden;
   display:flex; align-items:center; gap:16px; padding:16px 24px;
   border-bottom:3px solid var(--orange);
   flex-shrink:0; flex-wrap:wrap;
 }
-/* Todo filho real do topbar fica acima do carrinho decorativo (ele é o único
-   sem position, então some pra trás dos dois — sem isso o z-index:auto de um
-   elemento posicionado pinta por cima do conteúdo estático, invertido do que
-   se quer aqui). */
-.topbar > *{ position:relative; }
-/* Carrinho do logo da Loja do Mecânico, bem sutil, atrás do título — mesma
-   ideia da roda de fundo do Painel raiz da Oficina LDM. Some em telas
-   estreitas, onde o topbar já quebra em várias linhas. */
-.topbar-cart{ position:absolute; left:195px; top:50%; transform:translateY(-50%); width:95px; height:auto; opacity:.32; pointer-events:none; z-index:0; }
-@media(max-width:1150px){ .topbar-cart{ display:none; } }
+/* Carrinho do logo da Loja do Mecânico, cheio e brilhante — não é textura de
+   fundo, é a identidade da marca ocupando o vão vazio entre o título e a
+   busca. Segue o fluxo normal (não é posicionado), então nunca fica atrás de
+   nada nem precisa de truque de z-index. Some em telas estreitas, onde esse
+   vão desaparece e o topbar já quebra em várias linhas. */
+.topbar-cart{ height:40px; width:auto; flex-shrink:0; filter:drop-shadow(0 0 6px rgba(254,80,0,.55)) drop-shadow(0 2px 4px rgba(0,0,0,.15)); }
+@media(max-width:900px){ .topbar-cart{ display:none; } }
 .topbar-titles{ min-width:0; }
 .topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
 /* Mesmo selo "CD CAJAMAR" do topbar da Oficina LDM — chip neutro, já que não
