@@ -211,21 +211,30 @@ button{ font-family:inherit; cursor:pointer; }
   border-bottom:3px solid var(--orange);
   flex-shrink:0; flex-wrap:wrap;
 }
-/* Todo filho real do topbar fica acima do carrinho decorativo (ele é o único
-   sem position, então some pra trás dos dois — sem isso o z-index:auto de um
-   elemento posicionado pinta por cima do conteúdo estático, invertido do que
-   se quer aqui). */
+/* Todo filho real do topbar fica acima do carrinho de fundo (ver .topbar-cart
+   abaixo) — ele é o único sem position, então sem isso o z-index:auto dele
+   pintaria por cima do conteúdo estático, invertido do que se quer aqui. */
 .topbar > *{ position:relative; }
-/* Carrinho do logo da Loja do Mecânico, bem sutil, atrás do título — mesma
-   ideia da roda de fundo do Painel raiz da Oficina LDM. Some em telas
-   estreitas, onde o topbar já quebra em várias linhas. */
-.topbar-cart{ position:absolute; left:195px; top:50%; transform:translateY(-50%); width:95px; height:auto; opacity:.32; pointer-events:none; z-index:0; }
-@media(max-width:1150px){ .topbar-cart{ display:none; } }
+/* Carrinho do logo em elemento de fundo — grande, cortado pelas bordas do
+   topbar de propósito (não precisa aparecer inteiro, é textura, não ícone).
+   A cor não vem do PNG: a máscara usa só o contorno do carrinho e o degradê
+   por trás é que pinta, com uma faixa clara cruzando na diagonal — o brilho
+   de reflexo no ferro, não o halo neon de um drop-shadow. */
+.topbar-cart{
+  position:absolute; left:280px; top:50%; transform:translateY(-50%);
+  width:230px; height:123px;
+  /* _hd é o mesmo PNG, só reamostrado em alta resolução (Lanczos) a partir do
+     original — que é paletizado com só 19 cores e alpha em degraus. Como
+     máscara, o original ficava com borda serrilhada/fosca; este dá antialiasing
+     de verdade pro navegador reduzir com qualidade, igual à logo original. */
+  -webkit-mask-image:url(../brand/Logo_LDM_icon_hd.png); -webkit-mask-size:contain; -webkit-mask-repeat:no-repeat; -webkit-mask-position:center;
+  mask-image:url(../brand/Logo_LDM_icon_hd.png); mask-size:contain; mask-repeat:no-repeat; mask-position:center;
+  background:linear-gradient(120deg, #8A2600 0%, #FE5000 24%, #FFD9C2 44%, #FFFFFF 50%, #FFD9C2 56%, #FE5000 76%, #8A2600 100%);
+  opacity:.85; pointer-events:none; z-index:0;
+}
+@media(max-width:900px){ .topbar-cart{ display:none; } }
 .topbar-titles{ min-width:0; }
 .topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
-/* Mesmo selo "CD CAJAMAR" do topbar da Oficina LDM — chip neutro, já que não
-   tem mais degradê de marca por trás pra contrastar. */
-.cd-badge{ flex-shrink:0; background:var(--surface2); border:1px solid var(--line); color:var(--ink-soft); font-size:11px; font-weight:700; letter-spacing:.04em; padding:7px 14px; border-radius:100px; white-space:nowrap; }
 /* Switch de tema igual ao da Oficina LDM. */
 .theme-switch{ position:relative; width:46px; height:24px; border-radius:999px; background:var(--surface2); border:1px solid var(--line); cursor:pointer; flex-shrink:0; padding:0; }
 .theme-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
