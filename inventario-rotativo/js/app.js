@@ -334,8 +334,11 @@ function irSetAppTheme(theme){
 }
 function irUpdateThemeLabel(){
   const cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
-  const label = document.getElementById('themeToggleLabel');
-  if(label) label.textContent = cur==='dark' ? 'Modo escuro' : 'Modo claro';
+  // Antes um texto ("Modo claro"/"Modo escuro") no botão da sidebar; agora o
+  // controle é o switch do topbar, igual ao da Oficina LDM — só liga a classe
+  // que desloca a bolinha.
+  const btn = document.getElementById('themeSwitchBtn');
+  if(btn) btn.classList.toggle('on', cur==='dark');
 }
 const IR_ZOOM_MIN = 70, IR_ZOOM_MAX = 150, IR_ZOOM_STEP = 10;
 function irApplyZoom(pct){
@@ -982,7 +985,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v241';
+const IR_APP_VERSION = 'v242';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.

@@ -139,26 +139,42 @@ button{ font-family:inherit; cursor:pointer; }
    repetida duas vezes na mesma tela lia como erro de montagem, e cada formato
    cabe melhor no seu espaço: a vertical na coluna estreita, a horizontal na
    faixa larga. */
-.sidebar .brand{ display:flex; align-items:center; gap:8px; padding:16px 14px; border-bottom:1px solid rgba(255,255,255,.12); flex-shrink:0; }
+.sidebar .brand{ display:flex; align-items:center; gap:10px; padding:16px 14px; border-bottom:1px solid rgba(255,255,255,.12); flex-shrink:0; }
 .brand-text{ min-width:0; flex:1; }
 .sidebar.collapsed .brand-text{ display:none; }
-/* Logo branca direto no azul, sem caixa. A caixa branca era um retângulo
-   estranho dentro de um menu azul, e a versão branca do logo é a mesma arte
-   monocromática — só troca a tinta. Os arquivos brancos são gerados em 4x pra
-   a redução no navegador sair nítida também em tela HiDPI. */
-.brand-logo-img{ height:104px; width:auto; display:block; margin:0 auto; }
-.sidebar.collapsed .brand-logo-img{ display:none; }
-.sidebar .brand-name{ font-weight:700; font-size:12px; line-height:1.25; white-space:normal; overflow-wrap:break-word; color:rgba(255,255,255,.9); min-width:0; flex:1; }
-.sidebar .brand-sub{ font-size:10px; color:rgba(255,255,255,.6); white-space:nowrap; }
+/* Logo em selo redondo laranja, igual ao da sidebar da Oficina LDM — a mesma
+   marca de botão usada no Painel raiz e nos demais apps (ver index.html da
+   raiz, "LAYOUT PADRÃO Painel Oficina LDM"). */
+.brand-logo{
+  position:relative; width:44px; height:44px; border-radius:14px; flex-shrink:0; padding:0; border:none; overflow:hidden;
+  background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  box-shadow:0 10px 22px -6px rgba(254,80,0,.6), inset 0 1px 0 rgba(255,255,255,.35);
+  transition:transform .25s;
+}
+.brand-logo:hover{ transform:translateY(-2px) scale(1.045); }
+.brand-logo::before{ content:''; position:absolute; top:-50%; left:-70%; width:55%; height:220%; background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent); transform:rotate(18deg); animation:ir-shine 5s ease-in-out infinite; }
+@keyframes ir-shine{ 0%{ left:-70%; } 38%{ left:150%; } 100%{ left:150%; } }
+.brand-logo img{ position:relative; z-index:1; width:70%; height:70%; object-fit:contain; filter:drop-shadow(0 2px 3px rgba(0,0,0,.3)); pointer-events:none; }
+.brand-logo:hover img{ animation:ir-wiggle 1s ease-in-out infinite; }
+@keyframes ir-wiggle{ 0%,100%{ transform:rotate(0deg); } 25%{ transform:rotate(-9deg); } 75%{ transform:rotate(9deg); } }
+.brand-logo.spin img{ animation:ir-spin360 .6s cubic-bezier(.34,1.56,.64,1); }
+@keyframes ir-spin360{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+.sidebar.collapsed .brand-logo{ margin:0 auto; }
+.sidebar .brand-name{ font-family:'Poppins',sans-serif; font-weight:800; font-size:15px; line-height:1.2; white-space:normal; overflow-wrap:break-word; color:#fff; min-width:0; }
+.sidebar .brand-sub{ font-size:10.5px; color:#8891C4; margin-top:2px; white-space:nowrap; }
+/* Link de volta pro hub, no mesmo lugar e estilo que os demais apps da Oficina. */
+.brand-back{ display:flex; align-items:center; gap:8px; margin:0 14px 8px; padding:7px 10px; border-radius:9px; color:#9BA2CC; text-decoration:none; font-size:12px; font-weight:600; transition:background .2s, color .2s; flex-shrink:0; }
+.brand-back:hover{ background:rgba(255,255,255,.06); color:#fff; }
+.sidebar.collapsed .brand-back{ display:none; }
 
 /* Recolhido, o menu só escondia o texto por overflow:hidden — os rótulos saíam
    cortados no meio da palavra e o ícone continuava encostado na esquerda. Aqui o
    texto some de fato e sobra o ícone, centralizado. */
-.sidebar.collapsed .nav-item span,
-.sidebar.collapsed .theme-toggle span{ display:none; }
-.sidebar.collapsed .nav-item{ justify-content:center; gap:0; padding:10px 0; border-left-width:2px; }
-.sidebar.collapsed .theme-toggle{ justify-content:center; padding:7px 0; }
-.sidebar.collapsed .sidebar-footer{ padding:10px 8px; }
+.sidebar.collapsed .nav-item span{ display:none; }
+.sidebar.collapsed .nav-item{ justify-content:center; gap:0; padding:10px 0; }
+.sidebar.collapsed .sidebar-nav{ padding-left:0; padding-right:0; }
+.sidebar.collapsed .sidebar-footer{ display:none; }
 .sidebar.collapsed .brand{ justify-content:center; padding:14px 0; }
 .sidebar.collapsed .sidebar-toggle{ margin:0; }
 /* O rótulo da seção vira um filete: sem ele os grupos ficam indistinguíveis. */
@@ -168,18 +184,20 @@ button{ font-family:inherit; cursor:pointer; }
 }
 .sidebar-toggle{ background:none; border:none; color:#fff; opacity:.7; padding:4px; margin-left:auto; }
 .sidebar-toggle:hover{ opacity:1; }
-.sidebar-nav{ flex:1; overflow-y:auto; padding:8px 0; }
+.sidebar-nav{ flex:1; overflow-y:auto; padding:4px 14px 20px; }
+/* Pílula com fundo ao ativar, igual ao .sb-nav-item da Oficina LDM — antes era
+   uma barra lateral colorida. */
 .nav-item{
-  display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:none;
-  color:rgba(255,255,255,.72); padding:9px 16px; font-size:12.5px; border-left:3px solid transparent;
-  white-space:nowrap; overflow:hidden;
+  display:flex; align-items:center; gap:11px; width:100%; text-align:left; background:none; border:none;
+  border-radius:11px; color:#9BA2CC; padding:10px 12px; font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
+  white-space:nowrap; overflow:hidden; transition:background .2s, color .2s;
 }
 .nav-item:hover{ background:rgba(255,255,255,.06); color:#fff; }
-.nav-item.active{ background:var(--accent-glow); color:#fff; border-left-color:var(--orange); font-weight:600; }
-.nav-item svg{ flex-shrink:0; opacity:.85; }
-.nav-section-label{ font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.4); padding:14px 16px 4px; white-space:nowrap; }
-.sidebar-footer{ padding:10px 16px; border-top:1px solid rgba(255,255,255,.12); flex-shrink:0; }
-.theme-toggle{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.08); border:none; color:#fff; padding:7px 10px; border-radius:6px; width:100%; font-size:12px; }
+.nav-item.active{ background:rgba(254,80,0,.16); color:#fff; }
+.nav-item svg{ flex-shrink:0; opacity:.85; transition:opacity .2s, color .2s; }
+.nav-item.active svg{ color:var(--orange); opacity:1; }
+.nav-section-label{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6B74A8; padding:14px 12px 6px; white-space:nowrap; }
+.sidebar-footer{ padding:16px 16px 18px; margin-top:auto; border-top:1px solid rgba(255,255,255,.08); flex-shrink:0; font-size:11px; color:#6B74A8; }
 
 .content{ flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--paper); }
 /* Barra em degradê da marca. A faixa branca antes emendava mal com o menu azul
@@ -195,6 +213,12 @@ button{ font-family:inherit; cursor:pointer; }
 .topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:#fff; letter-spacing:-.01em; }
 /* Mesmo selo "CD CAJAMAR" do topbar da Oficina LDM. */
 .cd-badge{ flex-shrink:0; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#fff; font-size:11px; font-weight:700; letter-spacing:.04em; padding:7px 14px; border-radius:100px; white-space:nowrap; }
+/* Switch de tema igual ao da Oficina LDM. Lá ele fica sobre um cartão claro —
+   aqui o fundo é o degradê de marca do topbar, então a trilha usa o mesmo
+   branco translúcido do selo/pesquisa ao lado em vez do --chip-bg do tema. */
+.theme-switch{ position:relative; width:46px; height:24px; border-radius:999px; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); cursor:pointer; flex-shrink:0; padding:0; }
+.theme-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
+.theme-switch.on .theme-knob{ left:24px; background:var(--orange); }
 /* A frase descritiva sai da barra: o eyebrow diz onde se está e de que ciclo são
    os números, que é o que se procura no topo. O elemento fica pra quem lê tela. */
 .topbar p{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
