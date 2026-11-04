@@ -206,16 +206,28 @@ button{ font-family:inherit; cursor:pointer; }
 /* Sem faixa de cor: o topbar fica no mesmo fundo do conteúdo, igual ao
    Painel raiz da Oficina LDM (lá a cor de marca só existe na sidebar). */
 .topbar{
+  position:relative; overflow:hidden;
   display:flex; align-items:center; gap:16px; padding:16px 24px;
   border-bottom:3px solid var(--orange);
   flex-shrink:0; flex-wrap:wrap;
 }
-/* Carrinho do logo da Loja do Mecânico, cheio e brilhante — não é textura de
-   fundo, é a identidade da marca ocupando o vão vazio entre o título e a
-   busca. Segue o fluxo normal (não é posicionado), então nunca fica atrás de
-   nada nem precisa de truque de z-index. Some em telas estreitas, onde esse
-   vão desaparece e o topbar já quebra em várias linhas. */
-.topbar-cart{ height:40px; width:auto; flex-shrink:0; filter:drop-shadow(0 0 6px rgba(254,80,0,.55)) drop-shadow(0 2px 4px rgba(0,0,0,.15)); }
+/* Todo filho real do topbar fica acima do carrinho de fundo (ver .topbar-cart
+   abaixo) — ele é o único sem position, então sem isso o z-index:auto dele
+   pintaria por cima do conteúdo estático, invertido do que se quer aqui. */
+.topbar > *{ position:relative; }
+/* Carrinho do logo em elemento de fundo — grande, cortado pelas bordas do
+   topbar de propósito (não precisa aparecer inteiro, é textura, não ícone).
+   A cor não vem do PNG: a máscara usa só o contorno do carrinho e o degradê
+   por trás é que pinta, com uma faixa clara cruzando na diagonal — o brilho
+   de reflexo no ferro, não o halo neon de um drop-shadow. */
+.topbar-cart{
+  position:absolute; left:360px; top:50%; transform:translateY(-50%);
+  width:230px; height:123px;
+  -webkit-mask-image:url(../brand/Logo_LDM_icon.png); -webkit-mask-size:contain; -webkit-mask-repeat:no-repeat; -webkit-mask-position:center;
+  mask-image:url(../brand/Logo_LDM_icon.png); mask-size:contain; mask-repeat:no-repeat; mask-position:center;
+  background:linear-gradient(120deg, #8A2600 0%, #FE5000 24%, #FFD9C2 44%, #FFFFFF 50%, #FFD9C2 56%, #FE5000 76%, #8A2600 100%);
+  opacity:.85; pointer-events:none; z-index:0;
+}
 @media(max-width:900px){ .topbar-cart{ display:none; } }
 .topbar-titles{ min-width:0; }
 .topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
