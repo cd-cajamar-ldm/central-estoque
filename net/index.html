@@ -114,6 +114,92 @@
   .wip-note{display:inline-flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:12px;font-weight:600;padding:8px 14px;border-radius:100px;margin-top:28px;}
   .wip-note .live{width:8px;height:8px;border-radius:50%;background:#B45309;}
 
+
+  /* ===== Telas do app ===== */
+  .btn{display:inline-flex;align-items:center;gap:8px;background:var(--orange);color:#fff;border:none;border-radius:12px;padding:10px 16px;font:700 13px 'Inter',sans-serif;cursor:pointer;box-shadow:0 8px 18px -8px rgba(254,80,0,.7);transition:transform .15s,filter .15s;}
+  .btn:hover{transform:translateY(-1px);filter:brightness(1.05);}
+  .btn.sec{background:var(--chip-bg);color:var(--ink);border:1px solid var(--line);box-shadow:none;}
+  .btn.sec:hover{background:var(--chip-bg-hover);}
+  .btn.cta{margin-top:30px;padding:13px 22px;font-size:14px;}
+  .muted{color:var(--ink-soft);}
+  .neg{color:#D83C1E;} .pos{color:#1F8A52;}
+  body.theme-dark .neg{color:#FF7A5C;} body.theme-dark .pos{color:#4ADE80;}
+
+  .mes-barra{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:22px 0 0;}
+  .mes-rot{font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+  .mes-chips{display:flex;gap:8px;flex-wrap:wrap;}
+  .mes-chip{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink);border-radius:100px;padding:7px 14px;font:600 12.5px 'Inter',sans-serif;cursor:pointer;}
+  .mes-chip.on{background:var(--orange);border-color:var(--orange);color:#fff;}
+
+  .dropzone{display:flex;align-items:center;gap:16px;margin:16px 0 0;padding:20px 22px;border:2px dashed var(--line);border-radius:20px;background:var(--surface);cursor:pointer;color:var(--ink-soft);transition:border-color .2s,background .2s;}
+  .dropzone svg{color:var(--orange);flex-shrink:0;}
+  .dropzone strong{display:block;color:var(--ink);font-size:14.5px;margin-bottom:3px;}
+  .dropzone span{font-size:12.5px;line-height:1.5;}
+  .dropzone:hover,.dropzone.over{border-color:var(--orange);background:color-mix(in srgb, var(--orange) 6%, var(--surface));}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:22px 0 0;}
+  .kpi{background:linear-gradient(180deg,var(--card-top),var(--card-bottom));border:1px solid var(--line);border-radius:20px;padding:18px 20px;display:flex;flex-direction:column;gap:6px;box-shadow:0 1px 2px var(--shadow-near),0 14px 30px -18px var(--shadow-col);border-top:4px solid var(--line);}
+  .kpi-rot{font-size:11.5px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
+  .kpi strong{font-family:'Poppins',sans-serif;font-size:22px;font-weight:800;}
+  .kpi-sub{font-size:12px;color:var(--ink-soft);}
+  .kpi.k-perda{border-top-color:#D83C1E;} .kpi.k-ganho{border-top-color:#1F8A52;}
+  .kpi.k-net{border-top-color:var(--orange);background:linear-gradient(135deg,#001A72,#0B1230);color:#fff;border-color:transparent;}
+  .kpi.k-net .kpi-rot,.kpi.k-net .kpi-sub{color:#C7CCEA;}
+  .kpi.k-net.neg strong{color:#FF8A6B;} .kpi.k-net.pos strong{color:#6EE7A0;}
+  .kpi.k-fora{border-top-color:#9AA1BD;}
+
+  .alerta{margin:16px 0 0;padding:13px 16px;border-radius:14px;background:rgba(254,80,0,.1);border:1px solid rgba(254,80,0,.35);font-size:13px;line-height:1.5;}
+
+  .painel{background:var(--surface);border:1px solid var(--line);border-radius:20px;margin:18px 0 0;box-shadow:0 1px 2px var(--shadow-near),0 14px 30px -20px var(--shadow-col);overflow:hidden;}
+  .painel-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;padding:18px 20px 12px;}
+  .painel-cab h3{margin:0 0 4px;font-size:15.5px;font-weight:800;}
+  .painel-cab p{margin:0;font-size:12.5px;color:var(--ink-soft);max-width:620px;line-height:1.5;}
+  .acoes{display:flex;gap:10px;flex-wrap:wrap;}
+  .tabela-wrap{overflow:auto;max-height:640px;}
+  .tab{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .tab th{position:sticky;top:0;z-index:1;background:var(--chip-bg);text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  body.theme-dark .tab th{background:#141A33;}
+  .tab td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .tab .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .tab td.nome{min-width:240px;}
+  .tab tfoot td{font-weight:800;background:var(--chip-bg);border-bottom:none;}
+  .tab tr.fora td{opacity:.55;}
+  .pref{display:inline-block;font:800 11px 'Inter',sans-serif;background:#001A72;color:#fff;border-radius:6px;padding:3px 7px;letter-spacing:.03em;}
+  .tag{display:inline-block;font-size:11px;font-weight:700;border-radius:100px;padding:3px 9px;}
+  .tag.sim{background:rgba(31,138,82,.14);color:#1F8A52;} .tag.nao{background:rgba(154,161,189,.2);color:var(--ink-soft);cursor:help;}
+  .rodape-info{font-size:12px;color:var(--ink-soft);margin:14px 2px 0;line-height:1.5;}
+  .vazio{margin:22px 0 0;padding:34px;border:1px dashed var(--line);border-radius:20px;text-align:center;color:var(--ink-soft);}
+  .vazio h3{color:var(--ink);margin:0 0 6px;font-size:16px;}
+  .vazio p{margin:0 auto;max-width:520px;font-size:13px;line-height:1.55;}
+
+  .filtros{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 0;}
+  .filtros input,.filtros select,.dep-linha input,.tab.leg input{font:500 13px 'Inter',sans-serif;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px;}
+  .filtros input{flex:1;min-width:220px;}
+  .resumo-linha{display:flex;gap:22px;flex-wrap:wrap;margin:14px 2px 0;font-size:13px;color:var(--ink-soft);}
+  .resumo-linha strong{color:var(--ink);}
+  .mais{padding:14px;text-align:center;}
+
+  .tab.leg input{width:100%;min-width:90px;padding:7px 9px;font-size:12.5px;background:transparent;}
+  .tab.leg input.in-id{min-width:80px;max-width:100px;font-weight:800;text-transform:uppercase;}
+  .tab.leg input.in-setor{max-width:100px;}
+  .tab.leg td{padding:6px 8px;}
+  .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:700;}
+  .switch input{width:16px;height:16px;accent-color:var(--orange);}
+  .x{background:none;border:none;color:var(--ink-soft);font-size:20px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:8px;}
+  .x:hover{background:rgba(216,60,30,.12);color:#D83C1E;}
+  .dep-linha{display:flex;gap:10px;padding:0 20px 18px;flex-wrap:wrap;}
+  .dep-linha input{width:220px;}
+
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:#0B1230;color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 14px 30px -10px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:all .25s;z-index:50;max-width:calc(100% - 32px);}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.erro{background:#B42318;}
+
+  @media(max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media(max-width:760px){
+    .kpis{grid-template-columns:1fr;}
+    .sb-nav{display:flex !important;flex-direction:row;overflow-x:auto;width:100%;margin:12px 0 0;gap:6px;}
+    .sb-nav-item{width:auto;white-space:nowrap;}
+  }
   @media(max-width:1100px){
     .hero{grid-template-columns:1fr;padding:32px 28px;}
     .steps{grid-template-columns:repeat(2,minmax(0,1fr));}
@@ -153,7 +239,23 @@
     <nav class="sb-nav" id="nav">
       <button class="sb-nav-item active" type="button" data-tab="painel">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-        <span>Painel</span>
+        <span>Apresentação</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="fechamento">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 15 11 17 15 13"/></svg>
+        <span>Fechamento do mês</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="l301">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
+        <span>Lógica 301 · Perda</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="l302">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        <span>Lógica 302 · Ganho</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="legenda">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        <span>Legenda</span>
       </button>
     </nav>
     <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar</div>
@@ -289,8 +391,34 @@
         </div>
       </div>
 
-      <span class="wip-note"><span class="live"></span>Em construção — as telas entram nos próximos passos</span>
+      <button class="btn cta" type="button" data-goto="fechamento">Começar o fechamento do mês →</button>
     </div>
+
+    <div class="view" data-view="fechamento" hidden>
+      <div class="mes-barra"><span class="mes-rot">Mês:</span><div class="mes-chips" data-meses></div></div>
+      <label class="dropzone" id="dropzone" tabindex="0" for="fileInput">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsb,.csv" multiple hidden>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div><strong>Importar QRY410</strong><span>Arraste aqui ou clique para escolher. Pode ser um arquivo só ou um da 301 e outro da 302 — o app junta, separa por mês e não duplica lançamento.</span></div>
+      </label>
+      <div id="fech-corpo"></div>
+    </div>
+
+    <div class="view" data-view="l301" hidden>
+      <div class="mes-barra"><span class="mes-rot">Mês:</span><div class="mes-chips" data-meses></div></div>
+      <div id="log-301"></div>
+    </div>
+
+    <div class="view" data-view="l302" hidden>
+      <div class="mes-barra"><span class="mes-rot">Mês:</span><div class="mes-chips" data-meses></div></div>
+      <div id="log-302"></div>
+    </div>
+
+    <div class="view" data-view="legenda" hidden>
+      <div id="leg-corpo"></div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   </main>
 </div>
@@ -327,7 +455,11 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
 (function(){
   var TAB_LABELS = {
-    painel: ['NET', 'Gestão automática do indicador de perdas e ganhos do CD.']
+    painel: ['NET', 'Gestão automática do indicador de perdas e ganhos do CD.'],
+    fechamento: ['Fechamento do mês', 'Importa a QRY410, aplica a legenda e gera a planilha da controladoria.'],
+    l301: ['Lógica 301 · Perda por Inventário', 'Todas as saídas da QRY410 no mês, com prefixo e se entram no NET.'],
+    l302: ['Lógica 302 · Localização Inventário (Ganho)', 'Todas as entradas da QRY410 no mês, com prefixo e se entram no NET.'],
+    legenda: ['Legenda', 'O que cada prefixo da Observação WMS significa e se entra no NET.']
   };
   var titleEl = document.getElementById('tab-title');
   var subtitleEl = document.getElementById('tab-subtitle');
@@ -345,13 +477,15 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     subtitleEl.textContent = TAB_LABELS[tab][1];
     try { history.replaceState(null, '', '#' + tab); } catch(e){}
   }
+  window.netSwitchTab = switchTab;
 
   navEl.addEventListener('click', function(e){
     var btn = e.target.closest('.sb-nav-item[data-tab]');
     if(btn) switchTab(btn.dataset.tab);
   });
-  document.querySelectorAll('[data-goto]').forEach(function(btn){
-    btn.addEventListener('click', function(){ switchTab(btn.dataset.goto); });
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('button[data-goto]');
+    if(b) switchTab(b.dataset.goto);
   });
 
   var initialTab = 'painel';
@@ -362,5 +496,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   switchTab(initialTab);
 })();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
