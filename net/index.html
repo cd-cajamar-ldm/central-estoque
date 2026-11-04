@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NET — Oficina LDM</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="theme-color" content="#0B1230">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Mesmo padrão "Painel Oficina LDM" do hub raiz — mesmas variáveis,
+     mesma sidebar (252px, logo 60px interativa, nav em pílula) e mesmo
+     topbar (h1 26px Poppins, sem borda). Só o essencial do hub + o que
+     é específico deste módulo (por enquanto só a casca do NET). */
+  :root{
+    --bg0:#F2F4FA;--surface:#FFFFFF;--line:#DCE1F0;
+    --ink:#101633;--ink-soft:#5B6485;--card-top:#FFFFFF;--card-bottom:#FFFFFF;
+    --chip-bg:#EDF0F9;--chip-bg-hover:#E1E6F4;
+    --shadow-col:rgba(16,22,60,.14);--shadow-near:rgba(16,22,60,.06);
+    --orange:#FE5000;--rivet:rgba(16,22,60,.16);
+  }
+  body.theme-dark{
+    --bg0:#070910;--surface:rgba(255,255,255,.045);--line:rgba(255,255,255,.1);
+    --ink:#F3F2FA;--ink-soft:#8E95C2;--card-top:rgba(255,255,255,.055);--card-bottom:rgba(255,255,255,.02);
+    --chip-bg:rgba(255,255,255,.06);--chip-bg-hover:rgba(255,255,255,.14);
+    --shadow-col:rgba(0,0,0,.55);--shadow-near:rgba(0,0,0,.3);--rivet:rgba(255,255,255,.22);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg0);color:var(--ink);-webkit-font-smoothing:antialiased;transition:background .3s,color .3s;}
+  a{color:var(--orange);}
+  :focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
+
+  .shell{display:flex;min-height:100vh;width:100%;}
+
+  /* SIDEBAR — azul-marinho fixo, não acompanha o tema (âncora visual da marca) */
+  .sidebar{width:252px;flex-shrink:0;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
+  .brand{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+  .brand-logo{position:relative;width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;overflow:hidden;border:none;box-shadow:0 10px 22px -6px rgba(254,80,0,.6),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s;padding:0;}
+  .brand-logo:hover{transform:translateY(-2px) scale(1.045);}
+  .brand-logo::before{content:'';position:absolute;top:-50%;left:-70%;width:55%;height:220%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:rotate(18deg);animation:shine 5s ease-in-out infinite;}
+  @keyframes shine{0%{left:-70%;}38%{left:150%;}100%{left:150%;}}
+  .brand-logo img{position:relative;z-index:1;width:70%;height:70%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));pointer-events:none;}
+  .brand-logo:hover img{animation:wiggle 1s ease-in-out infinite;}
+  @keyframes wiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
+  .brand-logo.spin img{animation:spin360 .6s cubic-bezier(.34,1.56,.64,1);}
+  @keyframes spin360{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  .brand-name{font-family:'Poppins',sans-serif;font-size:17px;font-weight:800;color:#fff;line-height:1.15;}
+  .brand-sub{font-size:11px;color:#8891C4;margin-top:2px;}
+
+  /* Único item que o Painel raiz não tem (ele já é a Central) — estilizado
+     pra se encaixar no mesmo ritmo visual da navegação em pílula. */
+  .brand-back{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:0 0 16px;border-radius:11px;color:#9BA2CC;text-decoration:none;font-size:12.5px;font-weight:600;transition:background .2s,color .2s;}
+  .brand-back:hover{background:rgba(255,255,255,.06);color:#fff;}
+
+  .sb-nav{display:flex;flex-direction:column;gap:3px;margin:4px 0 20px;}
+  .sb-nav-item{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;border-radius:11px;padding:10px 12px;color:#9BA2CC;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:background .2s,color .2s;}
+  .sb-nav-item svg{flex-shrink:0;opacity:.85;transition:opacity .2s,color .2s;}
+  .sb-nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .sb-nav-item.active{background:rgba(254,80,0,.16);color:#fff;}
+  .sb-nav-item.active svg{color:var(--orange);opacity:1;}
+
+  .sb-foot{margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:#6B74A8;}
+
+  /* MAIN */
+  .main{position:relative;flex:1;min-width:0;padding:40px 48px 70px;}
+  .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;}
+  .topbar h1{font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;margin:0;}
+  .topbar p{margin:5px 0 0;color:var(--ink-soft);font-size:13.5px;max-width:480px;}
+  .topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+  .cd-badge{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;}
+  .theme-switch{position:relative;width:54px;height:28px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
+  .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
+  .theme-switch.on .theme-knob{left:29px;}
+
+  .view[hidden]{display:none;}
+
+  /* Casca inicial do NET — conteúdo entra nos próximos passos */
+  .net-intro{position:relative;color:var(--ink-soft);max-width:560px;margin:24px 0 18px;font-size:13.5px;line-height:1.6;}
+  .wip-note{display:inline-flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:12px;font-weight:600;padding:8px 14px;border-radius:100px;}
+
+  @media(max-width:760px){
+    .shell{flex-direction:column;}
+    .sidebar{width:100%;flex-direction:row;align-items:center;padding:16px 20px;flex-wrap:wrap;}
+    .brand{margin-bottom:0;}
+    .brand-back{display:none;}
+    .sb-nav{display:none;}
+    .sb-foot{display:none;}
+    .main{padding:24px 18px 50px;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <button class="brand-logo" id="brandLogo" type="button" aria-label="Oficina LDM">
+        <img src="brand/Logo_LDM_icon.png" alt="">
+      </button>
+      <div>
+        <div class="brand-name">OFICINA LDM</div>
+        <div class="brand-sub">lugar de quem faz</div>
+      </div>
+    </div>
+    <a class="brand-back" href="../">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      <span>Voltar para a Central</span>
+    </a>
+    <nav class="sb-nav" id="nav">
+      <button class="sb-nav-item active" type="button" data-tab="painel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        <span>Painel</span>
+      </button>
+    </nav>
+    <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="tab-title">NET</h1>
+        <p id="tab-subtitle">Perdas e ganhos do estoque do CD.</p>
+      </div>
+      <div class="topbar-actions">
+        <span class="cd-badge">CD CAJAMAR</span>
+        <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro">
+          <span class="theme-knob" id="themeKnob"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="view" data-view="painel">
+      <p class="net-intro">Primeiro passo do módulo: só a estrutura do app NET. As telas e funcionalidades entram nos próximos passos.</p>
+      <span class="wip-note">Em construção</span>
+    </div>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  /* Mesma chave usada no Painel Oficina LDM (raiz) — os dois compartilham
+     origem, então o tema escolhido em um lugar vale no outro também. */
+  var SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+  var MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  var btn = document.getElementById('themeSwitch');
+  var knob = document.getElementById('themeKnob');
+  function apply(dark){
+    document.body.classList.toggle('theme-dark', dark);
+    btn.classList.toggle('on', dark);
+    knob.innerHTML = dark ? MOON : SUN;
+  }
+  var dark = false;
+  try { dark = localStorage.getItem('ldm-theme') === 'dark'; } catch(e){}
+  apply(dark);
+  btn.addEventListener('click', function(){
+    dark = !dark;
+    apply(dark);
+    try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
+  });
+})();
+
+document.getElementById('brandLogo').addEventListener('click', function(){
+  var el = this;
+  el.classList.remove('spin');
+  void el.offsetWidth;
+  el.classList.add('spin');
+});
+
+(function(){
+  var TAB_LABELS = {
+    painel: ['NET', 'Perdas e ganhos do estoque do CD.']
+  };
+  var titleEl = document.getElementById('tab-title');
+  var subtitleEl = document.getElementById('tab-subtitle');
+  var navEl = document.getElementById('nav');
+
+  function switchTab(tab){
+    if(!TAB_LABELS[tab]) return;
+    document.querySelectorAll('.view').forEach(function(v){
+      v.hidden = v.dataset.view !== tab;
+    });
+    document.querySelectorAll('.sb-nav-item[data-tab]').forEach(function(b){
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    titleEl.textContent = TAB_LABELS[tab][0];
+    subtitleEl.textContent = TAB_LABELS[tab][1];
+    try { history.replaceState(null, '', '#' + tab); } catch(e){}
+  }
+
+  navEl.addEventListener('click', function(e){
+    var btn = e.target.closest('.sb-nav-item[data-tab]');
+    if(btn) switchTab(btn.dataset.tab);
+  });
+  document.querySelectorAll('[data-goto]').forEach(function(btn){
+    btn.addEventListener('click', function(){ switchTab(btn.dataset.goto); });
+  });
+
+  var initialTab = 'painel';
+  try {
+    var hashTab = decodeURIComponent(location.hash.slice(1));
+    if(hashTab && TAB_LABELS[hashTab]) initialTab = hashTab;
+  } catch(e){}
+  switchTab(initialTab);
+})();
+</script>
+</body>
+</html>
