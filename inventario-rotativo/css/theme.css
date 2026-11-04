@@ -121,7 +121,9 @@ button{ font-family:inherit; cursor:pointer; }
    valendo a tela inteira. Sem a variável (zoom 100%), o valor é o mesmo. */
 .shell{ height:calc(100dvh / var(--zoom, 1)); }
 .sidebar{
-  width:230px; flex-shrink:0; background:var(--blue); color:#fff;
+  /* Azul-marinho da sidebar da Oficina LDM (Painel raiz), não o var(--blue) de
+     marca usado no topbar/gráficos — só o menu lateral alinha a esse padrão. */
+  width:230px; flex-shrink:0; background:#0B1230; color:#fff;
   display:flex; flex-direction:column; transition:width .18s;
   overflow:hidden;
 }
@@ -183,7 +185,9 @@ button{ font-family:inherit; cursor:pointer; }
   flex-shrink:0; flex-wrap:wrap;
 }
 .topbar-titles{ min-width:0; }
-.topbar h1{ font-size:19px; font-weight:800; color:#fff; letter-spacing:-.01em; }
+.topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:#fff; letter-spacing:-.01em; }
+/* Mesmo selo "CD CAJAMAR" do topbar da Oficina LDM. */
+.cd-badge{ flex-shrink:0; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#fff; font-size:11px; font-weight:700; letter-spacing:.04em; padding:7px 14px; border-radius:100px; white-space:nowrap; }
 /* A frase descritiva sai da barra: o eyebrow diz onde se está e de que ciclo são
    os números, que é o que se procura no topo. O elemento fica pra quem lê tela. */
 .topbar p{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
