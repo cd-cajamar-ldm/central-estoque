@@ -200,35 +200,31 @@ button{ font-family:inherit; cursor:pointer; }
 .sidebar-footer{ padding:16px 16px 18px; margin-top:auto; border-top:1px solid rgba(255,255,255,.08); flex-shrink:0; font-size:11px; color:#6B74A8; }
 
 .content{ flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--paper); }
-/* Barra em degradê da marca. A faixa branca antes emendava mal com o menu azul
-   e deixava o topo sem hierarquia nenhuma. O degradê é fixo nos dois temas: é
-   cor de marca, não superfície — por isso tudo que fica em cima dela declara a
-   própria cor, sem depender do token de tinta do tema. */
+/* Sem faixa de cor: o topbar fica no mesmo fundo do conteúdo, igual ao
+   Painel raiz da Oficina LDM (lá a cor de marca só existe na sidebar). */
 .topbar{
   display:flex; align-items:center; gap:16px; padding:16px 24px;
-  background:linear-gradient(100deg, var(--blue) 0%, #062A9E 55%, #0B3ACB 100%);
   flex-shrink:0; flex-wrap:wrap;
 }
 .topbar-titles{ min-width:0; }
-.topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:#fff; letter-spacing:-.01em; }
-/* Mesmo selo "CD CAJAMAR" do topbar da Oficina LDM. */
-.cd-badge{ flex-shrink:0; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#fff; font-size:11px; font-weight:700; letter-spacing:.04em; padding:7px 14px; border-radius:100px; white-space:nowrap; }
-/* Switch de tema igual ao da Oficina LDM. Lá ele fica sobre um cartão claro —
-   aqui o fundo é o degradê de marca do topbar, então a trilha usa o mesmo
-   branco translúcido do selo/pesquisa ao lado em vez do --chip-bg do tema. */
-.theme-switch{ position:relative; width:46px; height:24px; border-radius:999px; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); cursor:pointer; flex-shrink:0; padding:0; }
+.topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
+/* Mesmo selo "CD CAJAMAR" do topbar da Oficina LDM — chip neutro, já que não
+   tem mais degradê de marca por trás pra contrastar. */
+.cd-badge{ flex-shrink:0; background:var(--surface2); border:1px solid var(--line); color:var(--ink-soft); font-size:11px; font-weight:700; letter-spacing:.04em; padding:7px 14px; border-radius:100px; white-space:nowrap; }
+/* Switch de tema igual ao da Oficina LDM. */
+.theme-switch{ position:relative; width:46px; height:24px; border-radius:999px; background:var(--surface2); border:1px solid var(--line); cursor:pointer; flex-shrink:0; padding:0; }
 .theme-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
 .theme-switch.on .theme-knob{ left:24px; background:var(--orange); }
 /* A frase descritiva sai da barra: o eyebrow diz onde se está e de que ciclo são
    os números, que é o que se procura no topo. O elemento fica pra quem lê tela. */
 .topbar p{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .global-search{
-  border:1px solid rgba(255,255,255,.22); border-radius:8px; padding:8px 12px; font-size:12.5px;
-  background:rgba(255,255,255,.12); color:#fff; width:260px; flex:0 1 260px; min-width:150px;
+  border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:12.5px;
+  background:var(--surface); color:var(--ink); width:260px; flex:0 1 260px; min-width:150px;
   margin-left:auto; align-self:center;
 }
-.global-search::placeholder{ color:rgba(255,255,255,.62); }
-.global-search:focus{ outline:none; border-color:var(--orange); background:rgba(255,255,255,.18); }
+.global-search::placeholder{ color:var(--ink-soft); }
+.global-search:focus{ outline:none; border-color:var(--orange); }
 /* Barra de filtros no estilo "slicer" de BI: cada filtro é uma caixinha com o
    rótulo em cima e o valor/seletor embaixo, agrupadas do lado direito do topbar —
    junta Ciclo (já existia como pill solto) e Mês (novo) no mesmo visual. */
@@ -236,19 +232,19 @@ button{ font-family:inherit; cursor:pointer; }
 /* O display:flex acima ganha do [hidden] do navegador, que é regra de elemento —
    sem isto o hidden do JS não escondia nada. */
 .topbar-filters[hidden]{ display:none; }
-/* Cartões brancos elevados sobre o degradê — cor fixa pelo mesmo motivo da
-   barra: são controles em cima de uma superfície de marca, não do tema. */
+/* Chip neutro com contorno — sem o degradê por trás não há mais contraste de
+   cor pra vencer com cartão branco elevado, então segue o tema normalmente. */
 .tb-filter{
   display:flex; flex-direction:column; justify-content:center; gap:2px;
-  background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.18);
+  background:var(--surface); border:1px solid var(--line);
   border-radius:10px; padding:6px 14px; min-width:110px;
 }
 /* Mesmo motivo do .topbar-filters[hidden] acima — sem isto, esconder só a caixa
    de Ciclo (aba NET) via JS não tinha efeito nenhum. */
 .tb-filter[hidden]{ display:none; }
-.tb-filter label{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6B7280; }
+.tb-filter label{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); }
 .tb-filter #cycleBadge, .tb-filter select{
-  background:transparent; border:none; color:#001A72; font-size:12.5px; font-weight:800; font-family:inherit;
+  background:transparent; border:none; color:var(--orange); font-size:12.5px; font-weight:800; font-family:inherit;
   cursor:pointer; padding:0; margin:0;
 }
 .tb-filter select:focus, .tb-filter #cycleFilterSelect:focus{ outline:none; }
@@ -264,7 +260,7 @@ button{ font-family:inherit; cursor:pointer; }
 .zoom-ctrl-float{ position:fixed; right:16px; bottom:16px; z-index:70; box-shadow:0 6px 18px rgba(0,0,0,.18); }
 .page-scroll{ flex:1; overflow-y:auto; padding:20px 24px; }
 
-.mobile-menu-btn{ display:none; background:none; border:none; color:#fff; padding:6px; margin-right:2px; align-self:center; }
+.mobile-menu-btn{ display:none; background:none; border:none; color:var(--ink); padding:6px; margin-right:2px; align-self:center; }
 .sidebar-backdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:39; }
 /* Breakpoint baixo de propósito (celular, não "janela de desktop estreita") — uma
    janela de desktop redimensionada continua com o menu normal (230px / 56px
