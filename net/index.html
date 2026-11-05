@@ -194,6 +194,52 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   .toast.erro{background:#B42318;}
 
+
+  /* ===== Relatório da controladoria ===== */
+  .rel-prev{position:relative;overflow:hidden;padding:0;margin:0 20px 20px;border:1px solid var(--line);border-radius:12px;}
+  .rel-prev-in{width:1200px;transform-origin:0 0;}
+  .rel-campos{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;padding:0 20px 20px;}
+  .rel-campo:first-child{grid-column:1/-1;}
+  .rel-campo label{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;}
+  .rel-campo textarea{width:100%;resize:vertical;font:500 13px/1.45 'Inter',sans-serif;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px;}
+  .link{background:none;border:none;color:var(--orange);font:700 11.5px 'Inter',sans-serif;cursor:pointer;padding:0;text-decoration:underline;}
+  @media(max-width:900px){ .rel-campos{grid-template-columns:1fr;} }
+
+  /* Boletim — layout fixo de 1200px, sempre claro (é a imagem que vai pra controladoria) */
+  .bl{width:1200px;background:#fff;color:#14172B;font-family:'Inter',Arial,sans-serif;}
+  .bl-head{display:flex;justify-content:space-between;align-items:center;padding:34px 40px;background:linear-gradient(120deg,#001A72 0%,#0B1230 75%,#14172B 100%);}
+  .bl-eye{color:#FE5000;font-size:13px;font-weight:800;letter-spacing:.32em;}
+  .bl-h1{color:#fff;font-size:36px;font-weight:800;margin:10px 0 8px;}
+  .bl-sub{color:#C7CCEA;font-size:16px;}
+  .bl-logo{height:68px;}
+  .bl-body{padding:26px 40px 10px;}
+  .bl-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  .bl-kpi{background:#F5F6FA;border:1px solid #E3E6EF;border-radius:10px;padding:22px 24px;}
+  .bl-kpi span{display:block;font-size:12px;font-weight:700;letter-spacing:.3em;color:#6B7190;margin-bottom:12px;}
+  .bl-kpi strong{font-size:27px;font-weight:800;}
+  .bl-kpi.net{background:#fff;border:2px solid #FE5000;}
+  .bl-kpi.net span{color:#FE5000;}
+  .bl-row{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:22px;align-items:start;}
+  .bl-card{border:1px solid #E3E6EF;border-radius:10px;padding:20px;min-height:420px;display:flex;flex-direction:column;}
+  .bl-card h4,.bl-t{margin:0 0 12px;font-size:15px;font-weight:800;color:#001A72;letter-spacing:.02em;}
+  .bl-donut{display:flex;align-items:center;gap:8px;flex:1;}
+  .bl-dlista{display:flex;flex-direction:column;gap:9px;}
+  .bl-dl{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.3;}
+  .bl-dl span{display:block;color:#6B7190;}
+  .bl-dot{width:11px;height:11px;border-radius:3px;margin-top:3px;flex-shrink:0;}
+  .bl-leg{font-size:12.5px;color:#6B7190;font-style:italic;display:flex;align-items:center;gap:6px;}
+  .bl-leg i{display:inline-block;width:12px;height:12px;margin-left:6px;}
+  .bl-dep{flex:1;display:flex;align-items:center;justify-content:center;}
+  .bl-note{font-size:12px;color:#6B7190;font-style:italic;}
+  .bl-tab{width:100%;border-collapse:collapse;font-size:14px;}
+  .bl-tab th{background:#001A72;color:#fff;text-align:left;padding:11px 12px;font-weight:700;}
+  .bl-tab td{padding:10px 12px;border-bottom:1px solid #EEF0F6;}
+  .bl-tab tbody tr:nth-child(odd) td{background:#F8F9FD;}
+  .bl-tab .r{text-align:right;} .bl-tab .b{font-weight:800;}
+  .bl-tab .az{color:#001A72;} .bl-tab .la{color:#FE5000;}
+  .bl-tab tfoot td{background:#14172B;color:#fff;font-weight:800;}
+  .bl-leitura{margin-top:20px;background:#F5F6FA;border:1px solid #E3E6EF;border-radius:10px;padding:16px 18px;font-size:14px;line-height:1.55;}
+  .bl-foot{margin:18px 40px 0;padding:14px 0 22px;border-top:1px solid #E3E6EF;font-size:11.5px;letter-spacing:.18em;color:#6B7190;}
   @media(max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
   @media(max-width:760px){
     .kpis{grid-template-columns:1fr;}
@@ -244,6 +290,10 @@
       <button class="sb-nav-item" type="button" data-tab="fechamento">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 15 11 17 15 13"/></svg>
         <span>Fechamento do mês</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="relatorio">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/><polyline points="8 11 11 8 13 10 16 7"/></svg>
+        <span>Relatório controladoria</span>
       </button>
       <button class="sb-nav-item" type="button" data-tab="l301">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
@@ -404,6 +454,11 @@
       <div id="fech-corpo"></div>
     </div>
 
+    <div class="view" data-view="relatorio" hidden>
+      <div class="mes-barra"><span class="mes-rot">Mês:</span><div class="mes-chips" data-meses></div></div>
+      <div id="rel-corpo"></div>
+    </div>
+
     <div class="view" data-view="l301" hidden>
       <div class="mes-barra"><span class="mes-rot">Mês:</span><div class="mes-chips" data-meses></div></div>
       <div id="log-301"></div>
@@ -457,6 +512,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var TAB_LABELS = {
     painel: ['NET', 'Gestão automática do indicador de perdas e ganhos do CD.'],
     fechamento: ['Fechamento do mês', 'Importa a QRY410, aplica a legenda e gera a planilha da controladoria.'],
+    relatorio: ['Relatório da controladoria', 'Boletim de 1 página e apresentação do fechamento, gerados a partir do mês importado.'],
     l301: ['Lógica 301 · Perda por Inventário', 'Todas as saídas da QRY410 no mês, com prefixo e se entram no NET.'],
     l302: ['Lógica 302 · Localização Inventário (Ganho)', 'Todas as entradas da QRY410 no mês, com prefixo e se entram no NET.'],
     legenda: ['Legenda', 'O que cada prefixo da Observação WMS significa e se entra no NET.']
@@ -497,6 +553,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script src="js/app.js"></script>
+<script src="js/relatorio.js"></script>
 </body>
 </html>

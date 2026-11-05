@@ -269,7 +269,7 @@ function fechamento(){
 
 /* ---------- renderização ---------- */
 function $(id){ return document.getElementById(id); }
-function render(){ renderMeses(); renderFechamento(); renderLogica('301'); renderLogica('302'); renderLegenda(); }
+function render(){ renderMeses(); renderFechamento(); renderLogica('301'); renderLogica('302'); renderLegenda(); if(window.NETREL) window.NETREL.render(); }
 
 function renderMeses(){
   var ms=Object.keys(S.meses).sort().reverse();
@@ -496,6 +496,20 @@ function ligaDrop(){
   dz.addEventListener('drop',function(e){ var fs=Array.from(e.dataTransfer.files||[]); if(fs.length) importa(fs); });
   dz.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $('fileInput').click(); } });
 }
+
+/* ---------- API para o relatório (relatorio.js) ---------- */
+window.NET_API = {
+  meses: function(){ return Object.keys(S.meses).sort(); },
+  mesSel: function(){ return S.mesSel; },
+  getMes: function(m){ return S.meses[m]||null; },
+  avalia: avalia,
+  mesLabel: mesLabel,
+  MESES: MESES,
+  cfg: function(){ return CFG; },
+  toast: toast,
+  esc: esc,
+  salvarMes: async function(m){ try { await dbTx('readwrite',function(st){ return st.put(S.meses[m]); }); } catch(e){} }
+};
 
 /* ---------- início ---------- */
 (async function(){
