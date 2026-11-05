@@ -212,6 +212,21 @@ button{ font-family:inherit; cursor:pointer; }
 }
 .topbar-titles{ min-width:0; }
 .topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
+/* Duas engrenagens girando sozinhas, sem depender de hover/clique — reforça o
+   tema oficina/mecânica no espaço vazio do topbar. As cores seguem --orange e
+   --blue, então acompanham os 4 temas de cor do app e o modo escuro. */
+.topbar-gears{ position:relative; width:94px; height:50px; flex-shrink:0; }
+.tb-gear{ position:absolute; filter:drop-shadow(0 1px 2px rgba(0,0,0,.2)); }
+.tb-gear-big{ width:38px; height:38px; left:0; top:6px; color:var(--orange); animation:tbGearCW 22s linear infinite; }
+.tb-gear-small{ width:24px; height:24px; left:32px; top:22px; color:var(--blue); animation:tbGearCCW 15s linear infinite; }
+@keyframes tbGearCW{ to{ transform:rotate(360deg); } }
+@keyframes tbGearCCW{ to{ transform:rotate(-360deg); } }
+@media(prefers-reduced-motion:reduce){
+  .tb-gear{ animation:none; }
+}
+@media(max-width:640px){
+  .topbar-gears{ display:none; }
+}
 /* Switch de tema igual ao da Oficina LDM. */
 .theme-switch{ position:relative; width:46px; height:24px; border-radius:999px; background:var(--surface2); border:1px solid var(--line); cursor:pointer; flex-shrink:0; padding:0; }
 .theme-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
