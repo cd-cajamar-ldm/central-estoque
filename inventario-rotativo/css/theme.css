@@ -5,7 +5,8 @@
    ============================================================ */
 :root{
   --blue:#001A72; --blue-light:#E8ECF7; --blue-soft:#33488E;
-  --orange:#FA4616; --orange-light:#FFEDE7;
+  /* Laranja oficial da marca (Oficina LDM), antes FA4616. */
+  --orange:#FE5000; --orange-light:#FFEDE7;
   --gray-900:#1D1F2A; --gray-700:#3A3D4D; --gray-500:#6B7280; --gray-300:#D5D8E0; --gray-100:#F4F5F7;
   --white:#FFFFFF;
   --success:#1F8A52; --success-light:rgba(31,138,82,.10);
@@ -14,21 +15,25 @@
   --paper:var(--gray-100); --surface:var(--white); --surface2:#EEF0F4;
   --ink:var(--gray-900); --ink-soft:var(--gray-500); --line:var(--gray-300);
   --radius:8px; --radius-lg:12px;
-  --accent-glow:rgba(250,70,22,.18); --accent-shadow:rgba(250,70,22,.25); --primary-shadow:rgba(0,26,114,.22);
+  --accent-glow:rgba(254,80,0,.18); --accent-shadow:rgba(254,80,0,.25); --primary-shadow:rgba(0,26,114,.22);
   --orange-soft:#FF7A4D;
+  /* Parafuso decorativo dos cantos de card, igual ao da Oficina LDM. */
+  --rivet:rgba(16,22,60,.16);
 }
 :root[data-theme="dark"]{
   --paper:#12141C; --surface:#1A1D28; --surface2:#20232F;
   --ink:#EEEDF5; --ink-soft:#9AA1B4; --line:#2C3040;
-  --blue-light:rgba(0,26,114,.35); --orange-light:rgba(250,70,22,.16);
+  --blue-light:rgba(0,26,114,.35); --orange-light:rgba(254,80,0,.16);
   --success-light:rgba(31,138,82,.18); --danger-light:rgba(200,56,18,.18);
+  --rivet:rgba(255,255,255,.22);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --paper:#12141C; --surface:#1A1D28; --surface2:#20232F;
     --ink:#EEEDF5; --ink-soft:#9AA1B4; --line:#2C3040;
-    --blue-light:rgba(0,26,114,.35); --orange-light:rgba(250,70,22,.16);
+    --blue-light:rgba(0,26,114,.35); --orange-light:rgba(254,80,0,.16);
     --success-light:rgba(31,138,82,.18); --danger-light:rgba(200,56,18,.18);
+    --rivet:rgba(255,255,255,.22);
   }
 }
 
@@ -103,6 +108,8 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,Arial,sans-serif;
   background:var(--paper); color:var(--ink); font-size:13.5px; line-height:1.5;
 }
+/* Mesma fonte de título da Oficina LDM em todo o app (antes só o h1 do topbar). */
+h1,h2,h3,h4{ font-family:'Poppins',sans-serif; font-weight:700; }
 .mono{ font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; }
 button{ font-family:inherit; cursor:pointer; }
 :focus-visible{ outline:2px solid var(--orange); outline-offset:2px; }
@@ -121,7 +128,9 @@ button{ font-family:inherit; cursor:pointer; }
    valendo a tela inteira. Sem a variável (zoom 100%), o valor é o mesmo. */
 .shell{ height:calc(100dvh / var(--zoom, 1)); }
 .sidebar{
-  width:230px; flex-shrink:0; background:var(--blue); color:#fff;
+  /* Azul-marinho da sidebar da Oficina LDM (Painel raiz), não o var(--blue) de
+     marca usado no topbar/gráficos — só o menu lateral alinha a esse padrão. */
+  width:230px; flex-shrink:0; background:#0B1230; color:#fff;
   display:flex; flex-direction:column; transition:width .18s;
   overflow:hidden;
 }
@@ -130,27 +139,46 @@ button{ font-family:inherit; cursor:pointer; }
    repetida duas vezes na mesma tela lia como erro de montagem, e cada formato
    cabe melhor no seu espaço: a vertical na coluna estreita, a horizontal na
    faixa larga. */
-.sidebar .brand{ display:flex; align-items:center; gap:8px; padding:16px 14px; border-bottom:1px solid rgba(255,255,255,.12); flex-shrink:0; }
+.sidebar .brand{ display:flex; align-items:center; gap:10px; padding:16px 14px; border-bottom:1px solid rgba(255,255,255,.12); flex-shrink:0; }
 .brand-text{ min-width:0; flex:1; }
 .sidebar.collapsed .brand-text{ display:none; }
-/* Logo branca direto no azul, sem caixa. A caixa branca era um retângulo
-   estranho dentro de um menu azul, e a versão branca do logo é a mesma arte
-   monocromática — só troca a tinta. Os arquivos brancos são gerados em 4x pra
-   a redução no navegador sair nítida também em tela HiDPI. */
-.brand-logo-img{ height:104px; width:auto; display:block; margin:0 auto; }
-.sidebar.collapsed .brand-logo-img{ display:none; }
-.sidebar .brand-name{ font-weight:700; font-size:12px; line-height:1.25; white-space:normal; overflow-wrap:break-word; color:rgba(255,255,255,.9); min-width:0; flex:1; }
-.sidebar .brand-sub{ font-size:10px; color:rgba(255,255,255,.6); white-space:nowrap; }
+/* Logo em selo redondo laranja, igual ao da sidebar da Oficina LDM — a mesma
+   marca de botão usada no Painel raiz e nos demais apps (ver index.html da
+   raiz, "LAYOUT PADRÃO Painel Oficina LDM"). */
+.brand-logo{
+  position:relative; width:44px; height:44px; border-radius:14px; flex-shrink:0; padding:0; border:none; overflow:hidden;
+  background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  box-shadow:0 10px 22px -6px rgba(254,80,0,.6), inset 0 1px 0 rgba(255,255,255,.35);
+  transition:transform .25s;
+}
+.brand-logo:hover{ transform:translateY(-2px) scale(1.045); }
+.brand-logo::before{ content:''; position:absolute; top:-50%; left:-70%; width:55%; height:220%; background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent); transform:rotate(18deg); animation:ir-shine 5s ease-in-out infinite; }
+@keyframes ir-shine{ 0%{ left:-70%; } 38%{ left:150%; } 100%{ left:150%; } }
+.brand-logo img{ position:relative; z-index:1; width:70%; height:70%; object-fit:contain; filter:drop-shadow(0 2px 3px rgba(0,0,0,.3)); pointer-events:none; }
+.brand-logo:hover img{ animation:ir-wiggle 1s ease-in-out infinite; }
+@keyframes ir-wiggle{ 0%,100%{ transform:rotate(0deg); } 25%{ transform:rotate(-9deg); } 75%{ transform:rotate(9deg); } }
+.brand-logo.spin img{ animation:ir-spin360 .6s cubic-bezier(.34,1.56,.64,1); }
+@keyframes ir-spin360{ from{ transform:rotate(0deg); } to{ transform:rotate(360deg); } }
+.sidebar.collapsed .brand-logo{ margin:0 auto; }
+.sidebar .brand-name{ font-family:'Poppins',sans-serif; font-weight:800; font-size:15px; line-height:1.2; white-space:normal; overflow-wrap:break-word; color:#fff; min-width:0; }
+.sidebar .brand-sub{ font-size:10.5px; color:#8891C4; margin-top:2px; white-space:nowrap; }
+/* Link de volta pro hub, no mesmo lugar e estilo que os demais apps da Oficina. */
+.brand-back{ display:flex; align-items:center; gap:8px; margin:0 14px 8px; padding:7px 10px; border-radius:9px; color:#9BA2CC; text-decoration:none; font-size:12px; font-weight:600; transition:background .2s, color .2s; flex-shrink:0; }
+.brand-back:hover{ background:rgba(255,255,255,.06); color:#fff; }
+.sidebar.collapsed .brand-back{ display:none; }
 
 /* Recolhido, o menu só escondia o texto por overflow:hidden — os rótulos saíam
    cortados no meio da palavra e o ícone continuava encostado na esquerda. Aqui o
    texto some de fato e sobra o ícone, centralizado. */
-.sidebar.collapsed .nav-item span,
-.sidebar.collapsed .theme-toggle span{ display:none; }
-.sidebar.collapsed .nav-item{ justify-content:center; gap:0; padding:10px 0; border-left-width:2px; }
-.sidebar.collapsed .theme-toggle{ justify-content:center; padding:7px 0; }
-.sidebar.collapsed .sidebar-footer{ padding:10px 8px; }
-.sidebar.collapsed .brand{ justify-content:center; padding:14px 0; }
+.sidebar.collapsed .nav-item span{ display:none; }
+.sidebar.collapsed .nav-item{ justify-content:center; gap:0; padding:10px 0; }
+.sidebar.collapsed .sidebar-nav{ padding-left:0; padding-right:0; }
+.sidebar.collapsed .sidebar-footer{ display:none; }
+/* Recolhido, logo (44px) + botão de expandir lado a lado passavam dos 56px
+   da coluna e o excesso sumia no overflow:hidden do menu — cortava a logo
+   pela metade. Empilhados, cada um cabe sozinho na largura disponível. */
+.sidebar.collapsed .brand{ flex-direction:column; justify-content:center; gap:8px; padding:12px 0 10px; }
 .sidebar.collapsed .sidebar-toggle{ margin:0; }
 /* O rótulo da seção vira um filete: sem ele os grupos ficam indistinguíveis. */
 .sidebar.collapsed .nav-section-label{
@@ -159,41 +187,60 @@ button{ font-family:inherit; cursor:pointer; }
 }
 .sidebar-toggle{ background:none; border:none; color:#fff; opacity:.7; padding:4px; margin-left:auto; }
 .sidebar-toggle:hover{ opacity:1; }
-.sidebar-nav{ flex:1; overflow-y:auto; padding:8px 0; }
+.sidebar-nav{ flex:1; overflow-y:auto; padding:4px 14px 20px; }
+/* Pílula com fundo ao ativar, igual ao .sb-nav-item da Oficina LDM — antes era
+   uma barra lateral colorida. */
 .nav-item{
-  display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:none;
-  color:rgba(255,255,255,.72); padding:9px 16px; font-size:12.5px; border-left:3px solid transparent;
-  white-space:nowrap; overflow:hidden;
+  display:flex; align-items:center; gap:11px; width:100%; text-align:left; background:none; border:none;
+  border-radius:11px; color:#9BA2CC; padding:10px 12px; font-family:'Inter',sans-serif; font-size:13px; font-weight:600;
+  white-space:nowrap; overflow:hidden; transition:background .2s, color .2s;
 }
 .nav-item:hover{ background:rgba(255,255,255,.06); color:#fff; }
-.nav-item.active{ background:var(--accent-glow); color:#fff; border-left-color:var(--orange); font-weight:600; }
-.nav-item svg{ flex-shrink:0; opacity:.85; }
-.nav-section-label{ font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.4); padding:14px 16px 4px; white-space:nowrap; }
-.sidebar-footer{ padding:10px 16px; border-top:1px solid rgba(255,255,255,.12); flex-shrink:0; }
-.theme-toggle{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.08); border:none; color:#fff; padding:7px 10px; border-radius:6px; width:100%; font-size:12px; }
+.nav-item.active{ background:rgba(254,80,0,.16); color:#fff; }
+.nav-item svg{ flex-shrink:0; opacity:.85; transition:opacity .2s, color .2s; }
+.nav-item.active svg{ color:var(--orange); opacity:1; }
+.nav-section-label{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6B74A8; padding:14px 12px 6px; white-space:nowrap; }
+.sidebar-footer{ padding:16px 16px 18px; margin-top:auto; border-top:1px solid rgba(255,255,255,.08); flex-shrink:0; font-size:11px; color:#6B74A8; }
 
 .content{ flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--paper); }
-/* Barra em degradê da marca. A faixa branca antes emendava mal com o menu azul
-   e deixava o topo sem hierarquia nenhuma. O degradê é fixo nos dois temas: é
-   cor de marca, não superfície — por isso tudo que fica em cima dela declara a
-   própria cor, sem depender do token de tinta do tema. */
+/* Sem faixa de cor: o topbar fica no mesmo fundo do conteúdo, igual ao
+   Painel raiz da Oficina LDM (lá a cor de marca só existe na sidebar). */
 .topbar{
   display:flex; align-items:center; gap:16px; padding:16px 24px;
-  background:linear-gradient(100deg, var(--blue) 0%, #062A9E 55%, #0B3ACB 100%);
+  border-bottom:3px solid var(--orange);
   flex-shrink:0; flex-wrap:wrap;
 }
 .topbar-titles{ min-width:0; }
-.topbar h1{ font-size:19px; font-weight:800; color:#fff; letter-spacing:-.01em; }
+.topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
+/* Duas engrenagens girando sozinhas, sem depender de hover/clique — reforça o
+   tema oficina/mecânica no espaço vazio do topbar. As cores seguem --orange e
+   --blue, então acompanham os 4 temas de cor do app e o modo escuro. */
+.topbar-gears{ position:relative; width:94px; height:50px; flex-shrink:0; }
+.tb-gear{ position:absolute; filter:drop-shadow(0 1px 2px rgba(0,0,0,.2)); }
+.tb-gear-big{ width:38px; height:38px; left:0; top:6px; color:var(--orange); animation:tbGearCW 22s linear infinite; }
+.tb-gear-small{ width:24px; height:24px; left:32px; top:22px; color:var(--blue); animation:tbGearCCW 15s linear infinite; }
+@keyframes tbGearCW{ to{ transform:rotate(360deg); } }
+@keyframes tbGearCCW{ to{ transform:rotate(-360deg); } }
+@media(prefers-reduced-motion:reduce){
+  .tb-gear{ animation:none; }
+}
+@media(max-width:640px){
+  .topbar-gears{ display:none; }
+}
+/* Switch de tema igual ao da Oficina LDM. */
+.theme-switch{ position:relative; width:46px; height:24px; border-radius:999px; background:var(--surface2); border:1px solid var(--line); cursor:pointer; flex-shrink:0; padding:0; }
+.theme-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
+.theme-switch.on .theme-knob{ left:24px; background:var(--orange); }
 /* A frase descritiva sai da barra: o eyebrow diz onde se está e de que ciclo são
    os números, que é o que se procura no topo. O elemento fica pra quem lê tela. */
 .topbar p{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .global-search{
-  border:1px solid rgba(255,255,255,.22); border-radius:8px; padding:8px 12px; font-size:12.5px;
-  background:rgba(255,255,255,.12); color:#fff; width:260px; flex:0 1 260px; min-width:150px;
+  border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:12.5px;
+  background:var(--surface); color:var(--ink); width:260px; flex:0 1 260px; min-width:150px;
   margin-left:auto; align-self:center;
 }
-.global-search::placeholder{ color:rgba(255,255,255,.62); }
-.global-search:focus{ outline:none; border-color:var(--orange); background:rgba(255,255,255,.18); }
+.global-search::placeholder{ color:var(--ink-soft); }
+.global-search:focus{ outline:none; border-color:var(--orange); }
 /* Barra de filtros no estilo "slicer" de BI: cada filtro é uma caixinha com o
    rótulo em cima e o valor/seletor embaixo, agrupadas do lado direito do topbar —
    junta Ciclo (já existia como pill solto) e Mês (novo) no mesmo visual. */
@@ -201,19 +248,19 @@ button{ font-family:inherit; cursor:pointer; }
 /* O display:flex acima ganha do [hidden] do navegador, que é regra de elemento —
    sem isto o hidden do JS não escondia nada. */
 .topbar-filters[hidden]{ display:none; }
-/* Cartões brancos elevados sobre o degradê — cor fixa pelo mesmo motivo da
-   barra: são controles em cima de uma superfície de marca, não do tema. */
+/* Chip neutro com contorno — sem o degradê por trás não há mais contraste de
+   cor pra vencer com cartão branco elevado, então segue o tema normalmente. */
 .tb-filter{
   display:flex; flex-direction:column; justify-content:center; gap:2px;
-  background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.18);
+  background:var(--surface); border:1px solid var(--line);
   border-radius:10px; padding:6px 14px; min-width:110px;
 }
 /* Mesmo motivo do .topbar-filters[hidden] acima — sem isto, esconder só a caixa
    de Ciclo (aba NET) via JS não tinha efeito nenhum. */
 .tb-filter[hidden]{ display:none; }
-.tb-filter label{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#6B7280; }
+.tb-filter label{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); }
 .tb-filter #cycleBadge, .tb-filter select{
-  background:transparent; border:none; color:#001A72; font-size:12.5px; font-weight:800; font-family:inherit;
+  background:transparent; border:none; color:var(--orange); font-size:12.5px; font-weight:800; font-family:inherit;
   cursor:pointer; padding:0; margin:0;
 }
 .tb-filter select:focus, .tb-filter #cycleFilterSelect:focus{ outline:none; }
@@ -229,7 +276,7 @@ button{ font-family:inherit; cursor:pointer; }
 .zoom-ctrl-float{ position:fixed; right:16px; bottom:16px; z-index:70; box-shadow:0 6px 18px rgba(0,0,0,.18); }
 .page-scroll{ flex:1; overflow-y:auto; padding:20px 24px; }
 
-.mobile-menu-btn{ display:none; background:none; border:none; color:#fff; padding:6px; margin-right:2px; align-self:center; }
+.mobile-menu-btn{ display:none; background:none; border:none; color:var(--ink); padding:6px; margin-right:2px; align-self:center; }
 .sidebar-backdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:39; }
 /* Breakpoint baixo de propósito (celular, não "janela de desktop estreita") — uma
    janela de desktop redimensionada continua com o menu normal (230px / 56px
@@ -315,9 +362,14 @@ button{ font-family:inherit; cursor:pointer; }
 /* ---------- BLOCOS TEMÁTICOS DE KPI (Peças/Locais/Valor/Ciclo) ---------- */
 .kpi-blocks{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-bottom:18px; }
 .kpi-block{
+  position:relative;
   border-radius:var(--radius-lg); overflow:hidden; background:var(--surface); border:1px solid var(--line);
   box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 10px 20px -12px rgba(20,24,40,.18);
 }
+/* Parafuso decorativo dos cantos, igual aos cards de app da Oficina LDM. */
+.rivet{ position:absolute; width:5px; height:5px; border-radius:50%; background:var(--rivet); box-shadow:inset 0 1px 1px rgba(0,0,0,.25); z-index:2; pointer-events:none; }
+.rivet.tl{ top:9px; left:9px; } .rivet.tr{ top:9px; right:9px; }
+.rivet.bl{ bottom:9px; left:9px; } .rivet.br{ bottom:9px; right:9px; }
 :root[data-theme="dark"] .kpi-block{ box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 10px 20px -12px rgba(0,0,0,.5); }
 .kpi-block-header{
   display:flex; align-items:center; gap:8px; padding:9px 14px; color:#fff; font-weight:800;
