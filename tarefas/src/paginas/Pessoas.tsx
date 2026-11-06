@@ -66,7 +66,7 @@ export default function Pessoas({ pessoas, recarregar }: Props) {
                   </td>
                   <td className="px-4 py-2 text-right text-xs">
                     {!permissoes.ehAdmin ? <span className="text-tinta-suave">—</span> : <>
-                    <button className="mr-3 font-bold text-verde-escuro" onClick={() => setEmEdicao(p)}>Editar</button>
+                    <button className="mr-3 font-bold text-laranja-escuro" onClick={() => setEmEdicao(p)}>Editar</button>
                     <button
                       className="font-bold text-vermelho"
                       onClick={async () => {

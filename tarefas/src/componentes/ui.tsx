@@ -62,8 +62,8 @@ export function Aviso({ tipo = 'erro', children }: {
 }) {
   const estilo = {
     erro: 'border-vermelho/30 bg-vermelho/5 text-vermelho',
-    info: 'border-verde/30 bg-verde-suave text-verde-escuro',
-    sucesso: 'border-verde/30 bg-verde/5 text-verde-escuro',
+    info: 'border-laranja/30 bg-laranja/5 text-laranja-escuro',
+    sucesso: 'border-sucesso/30 bg-sucesso-suave text-sucesso',
     atencao: 'border-ambar/40 bg-ambar/10 text-ambar',
   }[tipo];
   return <div className={`rounded-lg border px-3 py-2 text-sm ${estilo}`}>{children}</div>;

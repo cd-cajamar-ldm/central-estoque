@@ -3,6 +3,7 @@ import Acesso from '@/paginas/Acesso';
 import ListaQuadros from '@/paginas/ListaQuadros';
 import DetalheQuadro from '@/paginas/DetalheQuadro';
 import Pessoas from '@/paginas/Pessoas';
+import Sidebar from '@/componentes/Sidebar';
 import { Aviso, Carregando } from '@/componentes/ui';
 import { useQuadros } from '@/estado/dados';
 import { ContextoPermissoes, permissoesDe, sair, useSessao } from '@/estado/sessao';
@@ -13,15 +14,16 @@ import type { Quadro } from '@/dominio/tipos';
 
 declare const __VERSAO__: string;
 
-const ABAS: { id: Aba; rotulo: string }[] = [
-  { id: 'quadros', rotulo: 'Quadros' },
-  { id: 'pessoas', rotulo: 'Pessoas' },
-];
+const TITULOS: Record<Aba, { titulo: string; sub: string }> = {
+  quadros: { titulo: 'Quadros', sub: 'Quadros de tarefas da equipe.' },
+  pessoas: { titulo: 'Pessoas', sub: 'Cadastro e controle de acesso ao módulo.' },
+};
 
 export default function App() {
   /* A posicao vive no endereco: atualizar a pagina tem de trazer de
      volta a mesma tela, e nao a lista de quadros. */
   const [rota, setRota] = useState(() => lerRota(window.location.hash));
+  const [mobileAberto, setMobileAberto] = useState(false);
   const sessao = useSessao();
 
   useEffect(() => {
@@ -71,64 +73,59 @@ export default function App() {
     );
   }
 
+  const { titulo, sub } = selecionado ? { titulo: selecionado.nome, sub: selecionado.descricao ?? '' } : TITULOS[aba];
+
   return (
     <ContextoPermissoes.Provider value={permissoes}>
-    <div className="min-h-screen">
-      <header className="bg-navy text-white">
-        <div className="mx-auto flex max-w-tela flex-wrap items-center gap-5 px-6 py-5 xl:px-10">
-          <img
-            src="./brand/Logo_LDM_hor_2_Branco.png" alt="Loja do Mecânico"
-            width={188} height={72}
-            className="h-14 w-auto drop-shadow-[0_2px_8px_rgba(0,0,0,.4)] sm:h-[72px]"
-          />
-          <span className="hidden h-12 w-px bg-white/20 sm:block" />
-          <div className="mr-auto">
-            <h1 className="font-titulo text-2xl font-extrabold leading-tight">Tarefas</h1>
-            <p className="text-[13px] text-white/60">CD Cajamar · quadros de tarefas da equipe</p>
+    <div className="flex h-screen overflow-hidden bg-papel">
+      <Sidebar
+        aba={aba} onNavigate={(a) => ir({ aba: a, quadroId: null })}
+        mobileOpen={mobileAberto} onFecharMobile={() => setMobileAberto(false)}
+      />
+
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex shrink-0 items-center gap-4 border-b-[3px] border-laranja bg-papel px-6 py-4">
+          <button
+            type="button" aria-label="Abrir menu" onClick={() => setMobileAberto(true)}
+            className="shrink-0 p-1 text-tinta sm:hidden"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div className="min-w-0">
+            <h1 className="truncate font-titulo text-lg font-extrabold leading-tight text-tinta">{titulo}</h1>
+            {sub && <p className="truncate text-xs text-tinta-suave">{sub}</p>}
           </div>
-          <div className="text-right text-xs">
-            <p className="font-bold text-white/90">{sessao.pessoa.nome}</p>
-            <p className="text-white/50">{rotuloPapel[sessao.pessoa.papel]}</p>
-            <div className="mt-1 flex gap-3 font-bold text-white/70">
-              <a href="../" className="hover:text-white">← Central</a>
-              <button className="hover:text-white" onClick={() => void sair()}>Sair</button>
+          <div className="ml-auto flex shrink-0 items-center gap-3 text-right text-xs">
+            <div>
+              <p className="font-bold text-tinta">{sessao.pessoa.nome}</p>
+              <p className="text-tinta-suave">{rotuloPapel[sessao.pessoa.papel]}</p>
             </div>
+            <button className="font-bold text-laranja-escuro hover:underline" onClick={() => void sair()}>Sair</button>
           </div>
-        </div>
-        <nav className="mx-auto flex max-w-tela gap-1 px-6 xl:px-10">
-          {ABAS.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => ir({ aba: a.id, quadroId: null })}
-              className={`rounded-t-lg px-4 py-2 text-sm font-bold transition ${
-                aba === a.id ? 'bg-papel text-navy' : 'text-white/70 hover:bg-white/10'
-              }`}
-            >{a.rotulo}</button>
-          ))}
-        </nav>
-      </header>
+        </header>
 
-      <main className="mx-auto max-w-tela px-6 py-6 xl:px-10">
-        {carteira.erro && <Aviso>{carteira.erro}</Aviso>}
-        {carteira.carregando ? <Carregando /> : selecionado ? (
-          <DetalheQuadro
-            quadro={selecionado}
-            pessoas={carteira.pessoas}
-            aoVoltar={() => ir({ aba: 'quadros', quadroId: null })}
-          />
-        ) : (
-          <>
-            {aba === 'quadros' && (
-              <ListaQuadros quadros={carteira.quadros} aoAbrir={abrirQuadro} recarregar={carteira.recarregar} />
-            )}
-            {aba === 'pessoas' && <Pessoas pessoas={carteira.pessoas} recarregar={carteira.recarregar} />}
-          </>
-        )}
-      </main>
+        <main className="flex-1 overflow-y-auto px-6 py-6">
+          {carteira.erro && <Aviso>{carteira.erro}</Aviso>}
+          {carteira.carregando ? <Carregando /> : selecionado ? (
+            <DetalheQuadro
+              quadro={selecionado}
+              pessoas={carteira.pessoas}
+              aoVoltar={() => ir({ aba: 'quadros', quadroId: null })}
+            />
+          ) : (
+            <>
+              {aba === 'quadros' && (
+                <ListaQuadros quadros={carteira.quadros} aoAbrir={abrirQuadro} recarregar={carteira.recarregar} />
+              )}
+              {aba === 'pessoas' && <Pessoas pessoas={carteira.pessoas} recarregar={carteira.recarregar} />}
+            </>
+          )}
+        </main>
 
-      <footer className="pb-8 text-center text-[11px] text-tinta-suave">
-        Central de Estoque · Loja do Mecânico · versão {__VERSAO__}
-      </footer>
+        <footer className="shrink-0 pb-4 text-center text-[11px] text-tinta-suave">
+          Central de Estoque · Loja do Mecânico · versão {__VERSAO__}
+        </footer>
+      </div>
     </div>
     </ContextoPermissoes.Provider>
   );
