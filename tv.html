@@ -26,6 +26,11 @@
   .tv-band-clock{color:#fff;font-size:15px;font-weight:700;}
   .tv-frame{position:relative;flex:1;min-height:0;background:#fff;}
   .tv-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;}
+  /* Vinheta entre um app e outro: logo animado da LDM (~2,9 s) enquanto o
+     próximo app carrega por trás — esconde também o "piscar" da troca. */
+  .tv-intro{position:absolute;inset:0;z-index:2;background:#fff;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease;pointer-events:none;}
+  .tv-intro.on{opacity:1;}
+  .tv-intro img{width:min(520px,40vw);height:auto;}
   .tv-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:40px;color:#8891C4;background:#0B0E26;font-size:16px;line-height:1.6;}
 </style>
 </head>
@@ -86,6 +91,31 @@
   var iframe = document.createElement('iframe');
   iframe.setAttribute('title', 'TV LDM');
   frameBox.appendChild(iframe);
+
+  /* Vinheta: o GIF é baixado uma vez e cada exibição usa um endereço novo
+     em memória (blob) — com o mesmo endereço o navegador não reinicia a
+     animação, e ela apareceria já no meio ou parada no último quadro. */
+  var INTRO_MS = 2900;
+  var INTRO_GIF = 'brand/Logo_LDM_animado.gif';
+  var introBox = document.createElement('div');
+  introBox.className = 'tv-intro';
+  var introImg = document.createElement('img');
+  introImg.alt = 'Loja do Mecânico';
+  introBox.appendChild(introImg);
+  frameBox.appendChild(introBox);
+  var introBlob = null, introUrl = null;
+  try {
+    fetch(INTRO_GIF).then(function(r){ return r.ok ? r.blob() : null; })
+      .then(function(b){ introBlob = b; }).catch(function(){});
+  } catch(e){}
+  function showIntro(){
+    var novo = introBlob ? URL.createObjectURL(introBlob) : INTRO_GIF + '?t=' + Date.now();
+    introImg.src = novo;
+    if(introUrl && introUrl.indexOf('blob:') === 0) URL.revokeObjectURL(introUrl);
+    introUrl = novo;
+    introBox.classList.add('on');
+  }
+  function hideIntro(){ introBox.classList.remove('on'); }
 
   var SCROLL_SPEED_MULT = {slow:1.6, normal:1, fast:0.6};
   var index = 0;
@@ -152,12 +182,18 @@
     var item = playlist[index];
     durationMs = Math.max(5, item.duration || 20) * 1000;
     scrollMult = SCROLL_SPEED_MULT[item.scrollSpeed] || 1;
-    startTs = Date.now();
     cachedMaxScroll = null;
     scrollTarget = null;
+    // Vinheta por cima enquanto o app carrega; o tempo do app só começa a
+    // contar depois dela, então cada app continua com o tempo configurado.
+    showIntro();
     iframe.src = item.href;
     iframe.onload = function(){ injectKioskCss(); };
-    tick();
+    setTimeout(function(){
+      hideIntro();
+      startTs = Date.now();
+      tick();
+    }, INTRO_MS);
   }
   function tick(){
     var el = Date.now() - startTs;

@@ -242,9 +242,36 @@
     .main{padding:24px 18px 50px;}
     .field-row{grid-template-columns:1fr;}
   }
+
+  /* TELA DE ABERTURA — logo animado da LDM (mesmo GIF da assinatura de e-mail).
+     Fundo branco fixo nos dois temas: o GIF tem fundo branco próprio. */
+  .intro{position:fixed;inset:0;z-index:9999;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .45s ease;}
+  .intro img{width:min(440px,72vw);height:auto;}
+  .intro.saindo{opacity:0;pointer-events:none;}
 </style>
 </head>
 <body>
+<div class="intro" id="intro" hidden><img alt="Loja do Mecânico" src="brand/Logo_LDM_animado.gif"></div>
+<script>
+/* Uma vez por sessão do navegador (voltar de um app pro painel não repete),
+   e nunca pra quem pediu menos movimento no sistema. Clique pula. A animação
+   dura ~2,9 s (146 quadros de 20 ms). */
+(function(){
+  var intro = document.getElementById('intro');
+  var jaViu = false;
+  try { jaViu = sessionStorage.getItem('ldm-intro-vista') === '1'; sessionStorage.setItem('ldm-intro-vista','1'); } catch(e){}
+  var poucoMovimento = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(jaViu || poucoMovimento){ intro.remove(); return; }
+  intro.hidden = false;
+  var fechar = function(){
+    if(!intro.isConnected || intro.classList.contains('saindo')) return;
+    intro.classList.add('saindo');
+    setTimeout(function(){ intro.remove(); }, 500);
+  };
+  intro.addEventListener('click', fechar);
+  setTimeout(fechar, 2900);
+})();
+</script>
 <div class="shell">
 
   <aside class="sidebar">
