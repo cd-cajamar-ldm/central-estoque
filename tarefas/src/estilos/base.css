@@ -15,13 +15,13 @@
   .rotulo { @apply block text-[11px] font-bold uppercase tracking-wider text-tinta-suave mb-1; }
   .campo {
     @apply w-full rounded-lg border border-linha bg-white px-3 py-2 text-sm
-           outline-none focus:border-verde focus:ring-2 focus:ring-verde/20;
+           outline-none focus:border-laranja focus:ring-2 focus:ring-laranja/20;
   }
   .botao {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
            text-sm font-bold transition disabled:opacity-50 disabled:cursor-not-allowed;
   }
-  .botao-primario { @apply botao bg-verde-escuro text-white hover:bg-verde-medio; }
+  .botao-primario { @apply botao bg-laranja text-white hover:bg-laranja-escuro; }
   .botao-neutro { @apply botao border border-linha bg-white text-tinta hover:bg-papel; }
   .botao-perigo { @apply botao border border-vermelho/30 bg-white text-vermelho hover:bg-vermelho/5; }
 }

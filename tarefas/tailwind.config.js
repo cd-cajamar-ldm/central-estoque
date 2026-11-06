@@ -6,13 +6,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        /* Verde e a cor de origem do card "Gerenciador de Tarefas" no hub
-           (index.html da raiz) — verde porque e a cor de "concluido" em
-           todo o resto da Central, e um gerenciador de tarefas e sobre
-           terminar coisas. Navy e laranja seguem a marca Loja do Mecanico. */
-        verde: { DEFAULT: '#16A34A', escuro: '#166534', medio: '#15803D', claro: '#86EFAC', suave: '#ECFDF5' },
-        navy: { DEFAULT: '#0A0E3D', medio: '#161933', claro: '#2A3AA8' },
-        laranja: '#FA4616',
+        /* Mesma identidade visual da Oficina LDM usada em Inventário
+           Rotativo: menu lateral navy, laranja de marca como destaque
+           principal. Verde fica só para o significado de "concluída",
+           nunca como cor de interface. */
+        navy: { DEFAULT: '#0B1230', medio: '#161933', claro: '#2A3AA8' },
+        laranja: { DEFAULT: '#FE5000', claro: '#FF8A4C', escuro: '#C83812' },
+        sucesso: { DEFAULT: '#1F8A52', suave: '#ECFDF5' },
         tinta: { DEFAULT: '#161933', suave: '#6A6F94' },
         linha: '#E7E8F5',
         papel: '#F3F4FB',

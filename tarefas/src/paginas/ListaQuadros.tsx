@@ -42,7 +42,7 @@ export default function ListaQuadros({ quadros, aoAbrir, recarregar }: Props) {
               {permissoes.podeEditarQuadro(q) && (
                 <div className="absolute right-3 top-3 hidden gap-2 group-hover:flex">
                   <button
-                    className="rounded-full bg-white/90 px-2 py-1 text-xs font-bold text-tinta-suave shadow-card hover:text-verde-escuro"
+                    className="rounded-full bg-white/90 px-2 py-1 text-xs font-bold text-tinta-suave shadow-card hover:text-laranja-escuro"
                     onClick={() => setEmEdicao(q)}
                   >Editar</button>
                 </div>

@@ -50,7 +50,7 @@ export default function DetalheQuadro({ quadro, pessoas, aoVoltar }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <button className="text-sm font-bold text-verde-escuro hover:underline" onClick={aoVoltar}>← Quadros</button>
+        <button className="text-sm font-bold text-laranja-escuro hover:underline" onClick={aoVoltar}>← Quadros</button>
         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: quadro.cor }} />
         <h2 className="font-titulo text-lg font-extrabold">{quadro.nome}</h2>
         {quadro.descricao && <p className="text-sm text-tinta-suave">{quadro.descricao}</p>}
@@ -58,11 +58,11 @@ export default function DetalheQuadro({ quadro, pessoas, aoVoltar }: Props) {
         <div className="ml-auto flex items-center gap-2">
           <div className="flex rounded-lg border border-linha bg-white p-0.5">
             <button
-              className={`rounded px-3 py-1 text-xs font-bold ${visao === 'quadro' ? 'bg-verde-escuro text-white' : 'text-tinta-suave'}`}
+              className={`rounded px-3 py-1 text-xs font-bold ${visao === 'quadro' ? 'bg-laranja-escuro text-white' : 'text-tinta-suave'}`}
               onClick={() => mudarVisao('quadro')}
             >Quadro</button>
             <button
-              className={`rounded px-3 py-1 text-xs font-bold ${visao === 'tabela' ? 'bg-verde-escuro text-white' : 'text-tinta-suave'}`}
+              className={`rounded px-3 py-1 text-xs font-bold ${visao === 'tabela' ? 'bg-laranja-escuro text-white' : 'text-tinta-suave'}`}
               onClick={() => mudarVisao('tabela')}
             >Tabela</button>
           </div>
@@ -239,7 +239,7 @@ function LinhaNovaTarefa({ aoCriar }: { aoCriar: (titulo: string) => void }) {
       onSubmit={(e) => { e.preventDefault(); if (titulo.trim()) { aoCriar(titulo.trim()); setTitulo(''); } }}
     >
       <input
-        className="w-full rounded-lg border border-dashed border-linha bg-transparent px-2 py-1.5 text-sm outline-none focus:border-verde"
+        className="w-full rounded-lg border border-dashed border-linha bg-transparent px-2 py-1.5 text-sm outline-none focus:border-laranja"
         placeholder="+ Adicionar tarefa"
         value={titulo} onChange={(e) => setTitulo(e.target.value)}
       />

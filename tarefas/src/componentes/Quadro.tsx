@@ -71,18 +71,18 @@ export default function Quadro<T extends CartaoDoQuadro>({
     <div>
       <div className="mb-1 flex items-center justify-end gap-1">
         <button
-          className="rounded px-1.5 py-0.5 text-sm font-bold text-tinta-suave hover:bg-papel hover:text-verde-escuro disabled:opacity-30"
+          className="rounded px-1.5 py-0.5 text-sm font-bold text-tinta-suave hover:bg-papel hover:text-laranja-escuro disabled:opacity-30"
           disabled={zoom <= ZOOM_MINIMO}
           onClick={() => mudarZoom(zoom - ZOOM_PASSO)}
           title="Diminuir o quadro"
         >−</button>
         <button
-          className="w-11 rounded px-1 py-0.5 text-[11px] font-bold text-tinta-suave hover:bg-papel hover:text-verde-escuro"
+          className="w-11 rounded px-1 py-0.5 text-[11px] font-bold text-tinta-suave hover:bg-papel hover:text-laranja-escuro"
           onClick={() => mudarZoom(1)}
           title="Voltar ao tamanho normal"
         >{Math.round(zoom * 100)}%</button>
         <button
-          className="rounded px-1.5 py-0.5 text-sm font-bold text-tinta-suave hover:bg-papel hover:text-verde-escuro disabled:opacity-30"
+          className="rounded px-1.5 py-0.5 text-sm font-bold text-tinta-suave hover:bg-papel hover:text-laranja-escuro disabled:opacity-30"
           disabled={zoom >= ZOOM_MAXIMO}
           onClick={() => mudarZoom(zoom + ZOOM_PASSO)}
           title="Aumentar o quadro"
@@ -115,7 +115,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 onClick={() => alternarRecolhida(coluna.id)}
                 title={`Abrir ${coluna.rotulo}`}
                 className={`flex w-10 shrink-0 cursor-pointer flex-col items-center gap-2 rounded-xl border py-2 transition ${
-                  alvo === coluna.id ? 'border-verde bg-verde-suave' : 'border-linha bg-papel hover:border-verde-claro'
+                  alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-linha bg-papel hover:border-laranja/50'
                 }`}
               >
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coluna.cor }} />
@@ -144,7 +144,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 else if (item.coluna !== coluna.id) void aoMover(item, coluna.id);
               }}
               className={`flex w-64 shrink-0 flex-col rounded-xl border p-2 transition ${
-                alvo === coluna.id ? 'border-verde bg-verde-suave' : 'border-linha bg-papel'
+                alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-linha bg-papel'
               }`}
             >
               <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 rounded-lg bg-papel/95 px-1 py-1 backdrop-blur">
@@ -154,7 +154,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 </span>
                 <span className="ml-auto text-[11px] font-bold text-tinta-suave">{daColuna.length}</span>
                 <button
-                  className="rounded px-1 text-xs font-bold text-tinta-suave hover:bg-white hover:text-verde-escuro"
+                  className="rounded px-1 text-xs font-bold text-tinta-suave hover:bg-white hover:text-laranja-escuro"
                   onClick={() => alternarRecolhida(coluna.id)}
                   title={`Recolher ${coluna.rotulo}`}
                 >«</button>
@@ -164,7 +164,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 {daColuna.map((item, indiceCartao) => (
                   <div key={item.id}>
                     {alvoCartao?.id === item.id && alvoCartao.pos === 'antes' && (
-                      <div className="mb-2 h-1 rounded-full bg-verde" />
+                      <div className="mb-2 h-1 rounded-full bg-laranja" />
                     )}
                     <div
                       draggable
@@ -202,7 +202,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                       {cartao(item)}
                     </div>
                     {alvoCartao?.id === item.id && alvoCartao.pos === 'depois' && (
-                      <div className="mt-2 h-1 rounded-full bg-verde" />
+                      <div className="mt-2 h-1 rounded-full bg-laranja" />
                     )}
                   </div>
                 ))}

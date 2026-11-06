@@ -90,7 +90,7 @@ export default function Acesso() {
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-verde-escuro"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-laranja-escuro"
                     onClick={() => setMostrarSenha((v) => !v)}
                   >{mostrarSenha ? 'Ocultar' : 'Mostrar'}</button>
                 </div>
@@ -98,7 +98,7 @@ export default function Acesso() {
             )}
 
             {erro && <Aviso>{erro}</Aviso>}
-            {recado && <p className="rounded-lg bg-verde-suave px-3 py-2 text-sm text-verde-escuro">{recado}</p>}
+            {recado && <p className="rounded-lg bg-laranja/5 px-3 py-2 text-sm text-laranja-escuro">{recado}</p>}
 
             <button type="submit" className="botao-primario w-full" disabled={enviando}>
               {enviando ? 'Enviando…'
@@ -108,7 +108,7 @@ export default function Acesso() {
             </button>
           </form>
 
-          <div className="mt-4 flex flex-wrap justify-between gap-2 text-xs font-bold text-verde-escuro">
+          <div className="mt-4 flex flex-wrap justify-between gap-2 text-xs font-bold text-laranja-escuro">
             {modo !== 'entrar' && <button onClick={() => setModo('entrar')}>← Já tenho acesso</button>}
             {modo !== 'criar' && <button onClick={() => setModo('criar')}>Primeiro acesso</button>}
             {modo !== 'recuperar' && <button onClick={() => setModo('recuperar')}>Esqueci a senha</button>}
