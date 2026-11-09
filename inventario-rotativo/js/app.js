@@ -7344,26 +7344,29 @@ function irRenderGestaoInventario(){
   <div class="panel">
     <h3>Locais desconsiderados (${irFmtInt(lista.length)})</h3>
     <p class="panel-sub">${ind && ind.locaisDesconsiderados!=null ? `No ciclo ativo, ${irFmtInt(ind.locaisDesconsiderados)} local(is) estão fora da acurácia. ` : ''}Só tem efeito o inventário que FECHOU o local (a última rodada AIR dele) — rodada intermediária já não entra na conta. Ciclos 1 e 2 de 2026 têm o número publicado travado e não mudam. Usuários = quem contou cada rodada física (2ª em diante) daquele inventário; "final" é a rodada que valeu como contagem física.</p>
-    ${lista.length ? `<div class="table-wrap"><table class="gi-tabela">
-      <thead><tr><th>Nº Inventário</th><th>Local</th><th>Endereço</th><th>Usuário</th><th>Rodada</th><th>Peças div.</th><th>Valor div.</th><th>Justificativa</th><th>Cadastrado em</th><th>Situação (ciclo ativo)</th><th></th></tr></thead>
+    ${lista.length ? `<div class="table-wrap gi-excl-wrap"><table class="gi-excl">
+      <thead><tr><th>Nº Inv.</th><th>Local</th><th class="gi-excl-txt">Endereço</th><th class="gi-excl-txt">Usuário</th><th>Rodada</th><th class="num">Peças div.</th><th class="num">Valor div.</th><th class="gi-excl-just">Justificativa</th><th>Cadastro</th><th></th></tr></thead>
       <tbody>${lista.map(e=>{
         const d = dets.get(e.id);
-        const s = d.situacao;
         // Uma linha por usuário: mesmo inventário+local, desconsiderado do
         // mesmo jeito — só separa quem errou. Peças/valor são do local.
+        // Sem coluna de situação: exclusão sem efeito no ciclo ativo mostra
+        // "—" em peças/valor, com o motivo ao passar o mouse.
         const porUsuario = d.usuarios.length ? d.usuarios : [null];
+        const semEfeito = d.aplicada ? '' : ` title="${irEsc(d.situacao.txt)}"`;
+        const dtCad = e.criadoEm ? new Date(e.criadoEm) : null;
+        const cad = dtCad ? dtCad.toLocaleDateString('pt-BR')+' '+dtCad.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '—';
         return porUsuario.map(u=>`<tr>
           <td class="mono">${irEsc(e.inventario)}</td>
           <td class="mono">${irEsc(e.local)}</td>
-          <td>${irEsc(irDescLocal(e.local)||'—')}</td>
-          <td>${u ? (u.final?'<strong>':'')+irEsc(irProdNome(u.usuario))+(u.final?'</strong>':'') : '—'}</td>
+          <td class="gi-excl-txt">${irEsc(irDescLocal(e.local)||'—')}</td>
+          <td class="gi-excl-txt">${u ? (u.final?'<strong>':'')+irEsc(irProdNome(u.usuario))+(u.final?'</strong>':'') : '—'}</td>
           <td>${u ? u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':'') : '—'}</td>
-          <td class="mono">${d.aplicada ? irFmtInt(d.pecas) : '—'}</td>
-          <td class="mono">${d.aplicada ? irFmtMoney(d.valor) : '—'}</td>
-          <td class="gi-just" title="${irEsc(e.justificativa)}">${irEsc(e.justificativa)}</td>
-          <td class="mono">${e.criadoEm ? irEsc(new Date(e.criadoEm).toLocaleString('pt-BR')) : '—'}</td>
-          <td><span class="tag ${s.cls}">${irEsc(s.txt)}</span></td>
-          <td><button class="btn-link" style="color:var(--danger);" title="Remove o inventário ${irEsc(e.inventario)} + local ${irEsc(e.local)} (todas as linhas dele)" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
+          <td class="mono num"${semEfeito}>${d.aplicada ? irFmtInt(d.pecas) : '—'}</td>
+          <td class="mono num"${semEfeito}>${d.aplicada ? irFmtMoney(d.valor) : '—'}</td>
+          <td class="gi-excl-just">${irEsc(e.justificativa)}</td>
+          <td>${irEsc(cad)}</td>
+          <td class="num"><button class="btn-link" style="color:var(--danger);" title="Remove o inventário ${irEsc(e.inventario)} + local ${irEsc(e.local)} (todas as linhas dele)" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
         </tr>`).join('');
       }).join('')}</tbody>
     </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>'}
