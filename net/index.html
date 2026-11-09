@@ -35,6 +35,12 @@
   a{color:var(--orange);}
   :focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
 
+  .zoom-ctrl{display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:100px;padding:3px;}
+  .zoom-ctrl button{width:24px;height:24px;border-radius:50%;border:none;background:var(--chip-bg);color:var(--ink);font-size:15px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .zoom-ctrl button:hover{background:var(--orange-light,rgba(254,80,0,.12));color:var(--orange);}
+  .zoom-ctrl span{font-size:11px;color:var(--ink-soft);min-width:34px;text-align:center;font-family:'SFMono-Regular',Consolas,monospace;}
+  .zoom-ctrl-float{position:fixed;right:16px;bottom:16px;z-index:70;box-shadow:0 6px 18px rgba(0,0,0,.18);}
+
   .shell{display:flex;min-height:100vh;width:100%;}
 
   /* SIDEBAR — azul-marinho fixo, não acompanha o tema (âncora visual da marca) */
@@ -478,6 +484,12 @@
   </main>
 </div>
 
+<div class="zoom-ctrl zoom-ctrl-float" title="Zoom da tela">
+  <button type="button" id="zoomOut" aria-label="Diminuir zoom">&minus;</button>
+  <span id="zoomLabel">100%</span>
+  <button type="button" id="zoomIn" aria-label="Aumentar zoom">+</button>
+</div>
+
 <script>
 (function(){
   /* Mesma chave usada no Painel Oficina LDM (raiz) — os dois compartilham
@@ -499,6 +511,25 @@
     apply(dark);
     try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
   });
+})();
+
+(function(){
+  var MIN = 70, MAX = 150, STEP = 10;
+  var label = document.getElementById('zoomLabel');
+  function aplicar(pct){
+    pct = Math.max(MIN, Math.min(MAX, pct));
+    document.body.style.zoom = (pct / 100);
+    if(label) label.textContent = pct + '%';
+    try { localStorage.setItem('ldm-zoom', pct); } catch(e){}
+    return pct;
+  }
+  var atual = 100;
+  try { atual = parseInt(localStorage.getItem('ldm-zoom'), 10) || 100; } catch(e){}
+  atual = aplicar(atual);
+  var btnOut = document.getElementById('zoomOut');
+  var btnIn = document.getElementById('zoomIn');
+  if(btnOut) btnOut.addEventListener('click', function(){ atual = aplicar(atual - STEP); });
+  if(btnIn) btnIn.addEventListener('click', function(){ atual = aplicar(atual + STEP); });
 })();
 
 document.getElementById('brandLogo').addEventListener('click', function(){
