@@ -16,6 +16,9 @@ export default {
         tinta: { DEFAULT: '#161933', suave: '#6A6F94' },
         linha: '#E7E8F5',
         papel: '#F3F4FB',
+        /* Fundo das colunas do kanban: um tom abaixo do papel da pagina,
+           para a coluna aparecer e o cartao branco saltar dentro dela. */
+        coluna: { DEFAULT: '#E6E8F4', borda: '#D3D7EA', tracejado: '#B9BEDB' },
         azul: '#2F6FE0',
         ambar: '#C79212',
         vermelho: '#D2453A',

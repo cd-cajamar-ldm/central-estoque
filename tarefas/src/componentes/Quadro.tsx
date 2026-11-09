@@ -115,7 +115,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 onClick={() => alternarRecolhida(coluna.id)}
                 title={`Abrir ${coluna.rotulo}`}
                 className={`flex w-10 shrink-0 cursor-pointer flex-col items-center gap-2 rounded-xl border py-2 transition ${
-                  alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-linha bg-papel hover:border-laranja/50'
+                  alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-coluna-borda bg-coluna hover:border-laranja/50'
                 }`}
               >
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coluna.cor }} />
@@ -143,13 +143,17 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 if (aoReordenarCartao) void aoReordenarCartao(item, coluna.id, null);
                 else if (item.coluna !== coluna.id) void aoMover(item, coluna.id);
               }}
-              className={`flex w-64 shrink-0 flex-col rounded-xl border p-2 transition ${
-                alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-linha bg-papel'
+              /* A coluna tem fundo proprio, mais escuro que o da pagina
+                 (papel), e uma faixa no topo com a cor da situacao: com o
+                 mesmo papel da pagina ela sumia e o quadro parecia vazio. */
+              style={{ borderTopColor: alvo === coluna.id ? undefined : coluna.cor }}
+              className={`flex w-64 shrink-0 flex-col rounded-xl border border-t-[3px] p-2 shadow-card transition ${
+                alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-coluna-borda bg-coluna'
               }`}
             >
-              <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 rounded-lg bg-papel/95 px-1 py-1 backdrop-blur">
+              <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 rounded-lg bg-coluna/95 px-1 py-1 backdrop-blur">
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coluna.cor }} />
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-tinta-suave">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-tinta">
                   {coluna.rotulo}
                 </span>
                 <span className="ml-auto text-[11px] font-bold text-tinta-suave">{daColuna.length}</span>
@@ -207,7 +211,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                   </div>
                 ))}
                 {!daColuna.length && (
-                  <p className="rounded-lg border border-dashed border-linha py-4 text-center text-[11px] text-tinta-suave">
+                  <p className="rounded-lg border border-dashed border-coluna-tracejado bg-white/60 py-4 text-center text-[11px] text-tinta-suave">
                     Arraste um cartão para cá
                   </p>
                 )}
