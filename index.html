@@ -80,6 +80,15 @@
   .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
   .theme-switch.on .theme-knob{left:29px;}
 
+  /* Zoom da tela, igual ao dos apps da Oficina (Inventário Rotativo etc.):
+     flutua no canto para não empurrar o conteúdo e continua ao alcance
+     depois de rolar o painel inteiro. */
+  .zoom-ctrl{display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:100px;padding:3px;}
+  .zoom-ctrl button{width:24px;height:24px;border-radius:50%;border:none;background:var(--chip-bg);color:var(--ink);font-size:15px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .zoom-ctrl button:hover{background:var(--orange-light,rgba(254,80,0,.12));color:var(--orange);}
+  .zoom-ctrl span{font-size:11px;color:var(--ink-soft);min-width:34px;text-align:center;font-family:'SFMono-Regular',Consolas,monospace;}
+  .zoom-ctrl-float{position:fixed;right:16px;bottom:16px;z-index:70;box-shadow:0 6px 18px rgba(0,0,0,.18);}
+
   .view[hidden]{display:none;}
 
   .search-row{position:relative;margin:24px 0 8px;z-index:2;max-width:420px;}
@@ -478,6 +487,12 @@
   </main>
 </div>
 
+<div class="zoom-ctrl zoom-ctrl-float" title="Zoom da tela">
+  <button type="button" id="zoomOut" aria-label="Diminuir zoom">&minus;</button>
+  <span id="zoomLabel">100%</span>
+  <button type="button" id="zoomIn" aria-label="Aumentar zoom">+</button>
+</div>
+
 <div class="modal-overlay" id="modalOverlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-head">
@@ -546,6 +561,24 @@
     apply(dark);
     try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
   });
+})();
+(function(){
+  var MIN = 70, MAX = 150, STEP = 10;
+  var label = document.getElementById('zoomLabel');
+  function aplicar(pct){
+    pct = Math.max(MIN, Math.min(MAX, pct));
+    document.body.style.zoom = (pct / 100);
+    if(label) label.textContent = pct + '%';
+    try { localStorage.setItem('ldm-zoom', pct); } catch(e){}
+    return pct;
+  }
+  var atual = 100;
+  try { atual = parseInt(localStorage.getItem('ldm-zoom'), 10) || 100; } catch(e){}
+  atual = aplicar(atual);
+  var btnOut = document.getElementById('zoomOut');
+  var btnIn = document.getElementById('zoomIn');
+  if(btnOut) btnOut.addEventListener('click', function(){ atual = aplicar(atual - STEP); });
+  if(btnIn) btnIn.addEventListener('click', function(){ atual = aplicar(atual + STEP); });
 })();
 
 document.getElementById('brandLogo').addEventListener('click', function(){

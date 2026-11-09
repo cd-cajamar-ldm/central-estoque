@@ -202,8 +202,8 @@ button{ font-family:inherit; cursor:pointer; }
 .topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
 /* Switch de tema igual ao da Oficina LDM. */
 .theme-switch{ position:relative; width:46px; height:24px; border-radius:999px; background:var(--surface2); border:1px solid var(--line); cursor:pointer; flex-shrink:0; margin-left:auto; padding:0; }
-.theme-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
-.theme-switch.on .theme-knob{ left:24px; background:var(--orange); }
+.theme-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; color:var(--orange); transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
+.theme-switch.on .theme-knob{ left:24px; background:var(--orange); color:#fff; }
 /* A frase descritiva sai da barra: o eyebrow diz onde se está e de que ciclo são
    os números, que é o que se procura no topo. O elemento fica pra quem lê tela. */
 .topbar p{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
