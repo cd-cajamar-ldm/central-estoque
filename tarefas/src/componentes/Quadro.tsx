@@ -38,6 +38,17 @@ const ZOOM_MINIMO = 0.5;
 const ZOOM_MAXIMO = 1.5;
 const ZOOM_PASSO = 0.1;
 
+/* Coluna tingida pela cor da situacao. A mistura e forte o bastante
+   para a coluna se destacar do fundo da pagina (papel) mesmo nas cores
+   mais apagadas, como Pendente e Cancelada; a borda, mais escura, fecha
+   o contorno. Os cartoes ficam brancos para saltar dentro dela. */
+function tingida(cor: string) {
+  return {
+    backgroundColor: `color-mix(in srgb, ${cor} 16%, white)`,
+    borderColor: `color-mix(in srgb, ${cor} 38%, white)`,
+  };
+}
+
 export default function Quadro<T extends CartaoDoQuadro>({
   colunas, itens, aoMover, aoAbrir, cartao, rodape, aoReordenarCartao,
 }: Props<T>) {
@@ -116,8 +127,9 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 }}
                 onClick={() => alternarRecolhida(coluna.id)}
                 title={`Abrir ${coluna.rotulo}`}
+                style={alvo === coluna.id ? undefined : tingida(coluna.cor)}
                 className={`flex w-10 shrink-0 cursor-pointer flex-col items-center gap-2 rounded-xl border py-2 transition ${
-                  alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-transparent bg-white shadow-coluna hover:border-laranja/50'
+                  alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'shadow-coluna hover:border-laranja/50'
                 }`}
               >
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coluna.cor }} />
@@ -145,12 +157,13 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 if (aoReordenarCartao) void aoReordenarCartao(item, coluna.id, null);
                 else if (item.coluna !== coluna.id) void aoMover(item, coluna.id);
               }}
-              className={`flex w-[268px] shrink-0 flex-col rounded-xl bg-white p-3 shadow-coluna transition ${
+              style={tingida(coluna.cor)}
+              className={`flex w-[268px] shrink-0 flex-col rounded-xl border p-3 shadow-coluna transition ${
                 alvo === coluna.id ? 'ring-2 ring-laranja' : ''
               }`}
             >
-              <div className="sticky top-0 z-10 mb-2.5 flex items-center gap-2 border-b border-linha bg-white/95 pb-2.5 pt-0.5 backdrop-blur">
-                <span className="text-[13px] font-bold text-tinta">{coluna.rotulo}</span>
+              <div className="sticky top-0 z-10 mb-2.5 flex items-center gap-2 border-b pb-2.5 pt-0.5" style={{ backgroundColor: 'inherit', borderColor: 'inherit' }}>
+                <span className="text-[13px] font-bold" style={{ color: `color-mix(in srgb, ${coluna.cor} 55%, #161933)` }}>{coluna.rotulo}</span>
                 {/* key = contagem: o selo pula de novo sempre que o número muda */}
                 <span
                   key={daColuna.length}
@@ -158,7 +171,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                   style={{ backgroundColor: coluna.cor }}
                 >{daColuna.length}</span>
                 <button
-                  className="rounded px-1 text-xs font-bold text-tinta-suave hover:bg-papel hover:text-laranja-escuro"
+                  className="rounded px-1 text-xs font-bold text-tinta-suave hover:bg-white hover:text-laranja-escuro"
                   onClick={() => alternarRecolhida(coluna.id)}
                   title={`Recolher ${coluna.rotulo}`}
                 >«</button>
@@ -200,7 +213,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                       }}
                       onClick={() => aoAbrir?.(item)}
                       style={{ animationDelay: `${indiceCartao * 35}ms` }}
-                      className={`animate-entra cursor-grab rounded-[10px] border border-linha bg-papel-claro p-3 transition active:cursor-grabbing ${
+                      className={`animate-entra cursor-grab rounded-[10px] border border-linha bg-white p-3 shadow-card transition active:cursor-grabbing ${
                         arrastado === item.id ? 'opacity-50' : 'hover:-translate-y-0.5 hover:border-laranja hover:shadow-alto'
                       }`}
                     >
@@ -212,7 +225,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                   </div>
                 ))}
                 {!daColuna.length && (
-                  <p className="rounded-[10px] border border-dashed border-linha py-4 text-center text-xs text-tinta-suave">
+                  <p className="rounded-[10px] border border-dashed bg-white/60 py-4 text-center text-xs text-tinta-suave" style={{ borderColor: `color-mix(in srgb, ${coluna.cor} 45%, white)` }}>
                     Arraste um cartão para cá
                   </p>
                 )}

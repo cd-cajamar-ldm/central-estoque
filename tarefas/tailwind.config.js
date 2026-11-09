@@ -19,7 +19,6 @@ export default {
         /* Azul oficial da marca (Pantone 2747 C): faixa atras do topo do
            kanban. Diferente de "azul", que e o azul de "em andamento". */
         marca: { DEFAULT: '#001A72' },
-        'papel-claro': '#F8F9FC',
         azul: '#2F6FE0',
         ambar: '#C79212',
         vermelho: '#D2453A',
