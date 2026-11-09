@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<!-- Manuais passo a passo — layout "Painel Oficina LDM" (ver index.html da raiz). -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manuais — Oficina LDM</title>
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="theme-color" content="#0B1230">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <button class="brand-logo" type="button" data-go="biblioteca" aria-label="Biblioteca de manuais"><img src="brand/Logo_LDM_icon.png" alt=""></button>
+      <div><div class="brand-name">OFICINA LDM</div><div class="brand-sub">manuais passo a passo</div></div>
+    </div>
+    <a class="brand-back" href="../">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      <span>Voltar para a Central</span>
+    </a>
+    <div class="nav-label">Manuais</div>
+    <button class="nav-item active" type="button" data-go="biblioteca">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>Biblioteca</span>
+    </button>
+    <button class="nav-item" type="button" data-go="editor" id="navEditor" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      <span>Editor<small id="navEditorSub">nenhum manual aberto</small></span>
+    </button>
+    <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar<br>Lugar de quem faz</div>
+  </aside>
+
+  <main class="content">
+    <div class="topbar">
+      <button class="mobile-menu" type="button" id="menuBtn" aria-label="Abrir menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+      <div class="topbar-titles"><h1 id="viewTitle">Biblioteca de manuais</h1><p id="viewSub">Passo a passo animado sobre prints reais das telas.</p></div>
+      <div class="topbar-gears" aria-hidden="true">
+        <svg class="tb-gear tb-gear-big" viewBox="0 0 24 24" fill="currentColor"><path id="gearPath" d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+        <svg class="tb-gear tb-gear-small" viewBox="0 0 24 24" fill="currentColor"><use href="#gearPath"/></svg>
+      </div>
+      <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro"><span class="theme-knob"></span></button>
+    </div>
+
+    <!-- BIBLIOTECA -->
+    <section class="view" id="view-biblioteca">
+      <div class="lib-bar">
+        <div class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="libSearch" placeholder="Buscar manual, sistema ou ambiente...">
+        </div>
+        <button class="btn pri" type="button" id="btnNovo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo manual</button>
+        <button class="btn" type="button" id="btnImportar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Importar projeto (.json)</button>
+        <button class="btn" type="button" id="btnExemplo">Restaurar exemplo PuTTY</button>
+        <input type="file" id="fileImportar" accept=".json,application/json" hidden>
+      </div>
+      <div class="lib-grid" id="libGrid"></div>
+      <p class="lib-empty" id="libEmpty" hidden>Nenhum manual por aqui ainda. Clique em <b>Novo manual</b> para começar.</p>
+    </section>
+
+    <!-- EDITOR -->
+    <section class="view" id="view-editor" hidden>
+      <div class="card ed-head"><i class="rivet tl"></i><i class="rivet tr"></i><i class="rivet bl"></i><i class="rivet br"></i>
+        <div class="ed-head-row">
+          <p class="card-h" style="margin:0">Dados do manual</p>
+          <span class="grow"></span>
+          <span class="save-state" id="saveState">Salvo</span>
+          <button class="btn" type="button" id="btnPreview"><svg viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z" fill="currentColor"/></svg>Assistir</button>
+          <button class="btn" type="button" id="btnExpJson">Salvar projeto (.json)</button>
+          <button class="btn pri" type="button" id="btnExpHtml"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar manual (.html)</button>
+        </div>
+        <div class="fgrid">
+          <label class="f">Título<input type="text" data-m="titulo" placeholder="Ex.: Configurando o PuTTY STG"></label>
+          <label class="f">Sistema<input type="text" data-m="sistema" placeholder="Ex.: BSeller"></label>
+          <label class="f">Ambiente<input type="text" data-m="ambiente" placeholder="Ex.: STG"></label>
+          <label class="f">Autor / setor<input type="text" data-m="autor" placeholder="Ex.: Estoque CD Cajamar"></label>
+          <label class="f wide">Descrição (aparece no topo)<textarea data-m="descricao" rows="2"></textarea></label>
+          <label class="f wide">Mensagem final (tela de concluído)<textarea data-m="conclusao" rows="2"></textarea></label>
+        </div>
+      </div>
+
+      <div class="alert" id="alertSenha" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <div><b>Parece ter uma senha no manual.</b> Pela política da LDM, senha não pode ficar salva em arquivo. Troque por um marcador (ex.: <code>SENHA_STG</code>) — enquanto isso, o manual não é salvo nem exportado. Se for realmente necessário manter a senha, fale com o Administrador.
+          <ul id="alertSenhaLista"></ul></div>
+      </div>
+
+      <div class="ed-body">
+        <aside class="card steps-card"><i class="rivet tl"></i><i class="rivet tr"></i>
+          <p class="card-h">Etapas</p>
+          <ol class="slist" id="stepList"></ol>
+          <button class="btn sm" type="button" id="btnAddStep" style="width:100%">+ Nova etapa</button>
+        </aside>
+
+        <section class="card step-card" id="stepCard"><i class="rivet tl"></i><i class="rivet tr"></i><i class="rivet bl"></i><i class="rivet br"></i>
+          <div class="step-top">
+            <label class="f">Título da etapa<input type="text" data-s="titulo" placeholder="Ex.: Dados da sessão"></label>
+            <label class="f">Caminho na tela (use &gt;)<input type="text" data-s="caminho" placeholder="Ex.: Session > Logging"></label>
+            <div class="step-tools">
+              <button class="btn sm icon" type="button" id="stUp" title="Mover para cima">↑</button>
+              <button class="btn sm icon" type="button" id="stDown" title="Mover para baixo">↓</button>
+              <button class="btn sm" type="button" id="stDup">Duplicar</button>
+              <button class="btn sm danger" type="button" id="stDel">Excluir</button>
+            </div>
+          </div>
+
+          <div class="sec">
+            <p class="card-h">Roteiro da animação <span class="grow"></span><button class="btn sm" type="button" id="btnTestStep"><svg viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z" fill="currentColor"/></svg>Assistir esta etapa</button></p>
+            <div class="toolbar" id="toolbar">
+              <button class="tool" type="button" data-tool="tela"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Nova tela</button>
+              <span class="tool-sep"></span>
+              <button class="tool" type="button" data-tool="clique"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>Clique</button>
+              <button class="tool" type="button" data-tool="clique-dir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 3v7h6"/></svg>Botão direito</button>
+              <button class="tool" type="button" data-tool="digitar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Digitar</button>
+              <button class="tool" type="button" data-tool="destacar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 3"/></svg>Destacar</button>
+              <span class="hint" id="toolHint">Cole um print com <b>Ctrl+V</b> ou use <b>Nova tela</b>.</span>
+            </div>
+            <input type="file" id="fileTela" accept="image/*" hidden>
+            <div class="work">
+              <div>
+                <div class="canvas-wrap">
+                  <div class="canvas" id="canvas"></div>
+                </div>
+                <div class="canvas-note"><span id="canvasInfo"></span><span>Arraste para marcar uma área · clique simples cria uma área pequena</span></div>
+              </div>
+              <ol class="alist" id="actionList"></ol>
+            </div>
+          </div>
+
+          <div class="sec">
+            <p class="card-h">Texto da etapa</p>
+            <div class="two">
+              <label class="f">O que fazer <span class="hint">(uma instrução por linha · **negrito** e `código`)</span><textarea data-s="instrucoes" rows="6"></textarea></label>
+              <div class="f">Valores para copiar
+                <div class="rows" id="valRows"></div>
+                <button class="btn sm" type="button" id="btnAddVal" style="justify-self:start">+ Valor</button>
+                <label class="f" style="margin-top:6px">Observação<textarea data-s="observacao" rows="2"></textarea></label>
+              </div>
+            </div>
+            <div style="margin-top:14px">
+              <label class="sw"><input type="checkbox" id="campoOn"> Pedir um dado ao leitor nesta etapa (ex.: caminho da pasta dele)</label>
+              <div class="campo-grid" id="campoGrid" hidden>
+                <label class="f">Chave<input type="text" data-c="chave" placeholder="pasta"></label>
+                <label class="f">Pergunta ao leitor<input type="text" data-c="rotulo" placeholder="Cole aqui o caminho da sua pasta"></label>
+                <label class="f">Exemplo (usado na animação)<input type="text" data-c="exemplo" placeholder="D:\Sistemas\Bseller"></label>
+                <label class="f">Marcador (se vazio)<input type="text" data-c="marcador" placeholder="CAMINHO_DA_SUA_PASTA"></label>
+              </div>
+              <p class="help">Use <code>{{chave}}</code> nos valores e nos textos digitados para encaixar o que o leitor preencher. Palavras como <code>SENHA_STG</code> (maiúsculas com _) aparecem destacadas para o leitor trocar.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="preview" id="preview" hidden>
+  <div class="preview-bar"><b id="previewTitle">Pré-visualização</b><button class="btn" type="button" id="previewClose">Fechar</button></div>
+  <iframe id="previewFrame" title="Pré-visualização do manual"></iframe>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
