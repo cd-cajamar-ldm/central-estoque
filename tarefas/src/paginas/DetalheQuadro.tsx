@@ -9,7 +9,7 @@ import {
 import { useDetalheQuadro } from '@/estado/dados';
 import { usePermissoes } from '@/estado/sessao';
 import {
-  PRIORIDADES, STATUS_TAREFA, rotuloPrioridade, rotuloStatus,
+  PRIORIDADES, STATUS_ENCERRADOS, STATUS_TAREFA, rotuloPrioridade, rotuloStatus,
 } from '@/dominio/tipos';
 import type { Grupo, Pessoa, Prioridade, Quadro as TipoQuadro, StatusTarefa, Tarefa } from '@/dominio/tipos';
 
@@ -128,7 +128,7 @@ function QuadroKanban({ tarefas, grupos, pessoaPorId, aoAbrir, aoMover, aoReorde
       cartao={(t) => {
         const responsavel = t.responsavel_id ? pessoaPorId.get(t.responsavel_id) : undefined;
         const grupo = t.grupo_id ? grupoPorId.get(t.grupo_id) : undefined;
-        const atrasada = !!t.prazo && t.status !== 'concluida' && t.prazo < new Date().toISOString().slice(0, 10);
+        const atrasada = !!t.prazo && !STATUS_ENCERRADOS.includes(t.status) && t.prazo < new Date().toISOString().slice(0, 10);
         return (
           <div className="space-y-1.5">
             <p className="text-sm font-bold leading-snug">{t.titulo}</p>
@@ -186,7 +186,7 @@ function TabelaDeTarefas({
               <tbody>
                 {daLista.map((t) => {
                   const responsavel = t.responsavel_id ? pessoaPorId.get(t.responsavel_id) : undefined;
-                  const atrasada = !!t.prazo && t.status !== 'concluida' && t.prazo < new Date().toISOString().slice(0, 10);
+                  const atrasada = !!t.prazo && !STATUS_ENCERRADOS.includes(t.status) && t.prazo < new Date().toISOString().slice(0, 10);
                   return (
                     <tr key={t.id} className="cursor-pointer border-t border-linha hover:bg-papel" onClick={() => aoAbrir(t)}>
                       <td className="px-4 py-2 font-semibold">{t.titulo}</td>
