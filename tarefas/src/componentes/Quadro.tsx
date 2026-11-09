@@ -88,9 +88,11 @@ export default function Quadro<T extends CartaoDoQuadro>({
           title="Aumentar o quadro"
         >+</button>
       </div>
-      <div data-quadro="colunas" className="max-h-[70vh] overflow-auto">
+      {/* Visual "Azul LDM": faixa azul da marca atrás do topo das colunas,
+          colunas brancas elevadas e laranja só nos destaques. */}
+      <div data-quadro="colunas" className="max-h-[70vh] overflow-auto rounded-2xl border border-linha bg-[linear-gradient(theme(colors.marca.DEFAULT)_0_56px,theme(colors.papel)_56px)]">
       <div
-        className="flex min-w-max gap-3 p-3"
+        className="flex min-w-max items-start gap-3.5 p-4"
         style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: `${100 / zoom}%` }}
       >
         {colunas.map((coluna) => {
@@ -115,7 +117,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 onClick={() => alternarRecolhida(coluna.id)}
                 title={`Abrir ${coluna.rotulo}`}
                 className={`flex w-10 shrink-0 cursor-pointer flex-col items-center gap-2 rounded-xl border py-2 transition ${
-                  alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-coluna-borda bg-coluna hover:border-laranja/50'
+                  alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-transparent bg-white shadow-coluna hover:border-laranja/50'
                 }`}
               >
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coluna.cor }} />
@@ -143,22 +145,20 @@ export default function Quadro<T extends CartaoDoQuadro>({
                 if (aoReordenarCartao) void aoReordenarCartao(item, coluna.id, null);
                 else if (item.coluna !== coluna.id) void aoMover(item, coluna.id);
               }}
-              /* A coluna tem fundo proprio, mais escuro que o da pagina
-                 (papel), e uma faixa no topo com a cor da situacao: com o
-                 mesmo papel da pagina ela sumia e o quadro parecia vazio. */
-              style={{ borderTopColor: alvo === coluna.id ? undefined : coluna.cor }}
-              className={`flex w-64 shrink-0 flex-col rounded-xl border border-t-[3px] p-2 shadow-card transition ${
-                alvo === coluna.id ? 'border-laranja bg-laranja/10' : 'border-coluna-borda bg-coluna'
+              className={`flex w-[268px] shrink-0 flex-col rounded-xl bg-white p-3 shadow-coluna transition ${
+                alvo === coluna.id ? 'ring-2 ring-laranja' : ''
               }`}
             >
-              <div className="sticky top-0 z-10 mb-2 flex items-center gap-2 rounded-lg bg-coluna/95 px-1 py-1 backdrop-blur">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: coluna.cor }} />
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-tinta">
-                  {coluna.rotulo}
-                </span>
-                <span className="ml-auto text-[11px] font-bold text-tinta-suave">{daColuna.length}</span>
+              <div className="sticky top-0 z-10 mb-2.5 flex items-center gap-2 border-b border-linha bg-white/95 pb-2.5 pt-0.5 backdrop-blur">
+                <span className="text-[13px] font-bold text-tinta">{coluna.rotulo}</span>
+                {/* key = contagem: o selo pula de novo sempre que o número muda */}
+                <span
+                  key={daColuna.length}
+                  className="ml-auto animate-pula rounded-md px-1.5 py-px text-[11px] font-bold tabular-nums text-white"
+                  style={{ backgroundColor: coluna.cor }}
+                >{daColuna.length}</span>
                 <button
-                  className="rounded px-1 text-xs font-bold text-tinta-suave hover:bg-white hover:text-laranja-escuro"
+                  className="rounded px-1 text-xs font-bold text-tinta-suave hover:bg-papel hover:text-laranja-escuro"
                   onClick={() => alternarRecolhida(coluna.id)}
                   title={`Recolher ${coluna.rotulo}`}
                 >«</button>
@@ -199,8 +199,9 @@ export default function Quadro<T extends CartaoDoQuadro>({
                         }
                       }}
                       onClick={() => aoAbrir?.(item)}
-                      className={`cursor-grab rounded-lg border border-linha bg-white p-2.5 shadow-card transition active:cursor-grabbing ${
-                        arrastado === item.id ? 'opacity-50' : 'hover:shadow-alto'
+                      style={{ animationDelay: `${indiceCartao * 35}ms` }}
+                      className={`animate-entra cursor-grab rounded-[10px] border border-linha bg-papel-claro p-3 transition active:cursor-grabbing ${
+                        arrastado === item.id ? 'opacity-50' : 'hover:-translate-y-0.5 hover:border-laranja hover:shadow-alto'
                       }`}
                     >
                       {cartao(item)}
@@ -211,7 +212,7 @@ export default function Quadro<T extends CartaoDoQuadro>({
                   </div>
                 ))}
                 {!daColuna.length && (
-                  <p className="rounded-lg border border-dashed border-coluna-tracejado bg-white/60 py-4 text-center text-[11px] text-tinta-suave">
+                  <p className="rounded-[10px] border border-dashed border-linha py-4 text-center text-xs text-tinta-suave">
                     Arraste um cartão para cá
                   </p>
                 )}
