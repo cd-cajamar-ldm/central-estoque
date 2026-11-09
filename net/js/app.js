@@ -216,15 +216,17 @@ function extraiLinhas(wb){
 }
 async function importa(files){
   if(typeof XLSX==='undefined'){ toast('Não foi possível carregar o leitor de planilhas. Verifique a internet e recarregue.', true); return; }
-  var novos={}, resumo=[];
+  var novos={}, resumo=[], logArq=[];
   for(var f of files){
     try {
       var wb=await lePlanilha(f), ex=extraiLinhas(wb);
-      if(!ex.linhas.length){ toast('“'+f.name+'”: nenhuma linha de Lógica 301/302 encontrada. Confira se é a QRY410.', true); continue; }
+      if(!ex.linhas.length){ toast('“'+f.name+'”: nenhuma linha de Lógica 301/302 encontrada. Confira se é a QRY410.', true); logArq.push({nome:f.name, linhas:0, erro:'Nenhuma linha de Lógica 301/302'}); continue; }
       ex.linhas.forEach(function(r){ (novos[r.mes]=novos[r.mes]||[]).push(r); });
       resumo.push(f.name);
-    } catch(e){ toast('Erro ao ler “'+f.name+'”: '+e.message, true); }
+      logArq.push({nome:f.name, linhas:ex.linhas.length});
+    } catch(e){ toast('Erro ao ler “'+f.name+'”: '+e.message, true); logArq.push({nome:f.name, linhas:0, erro:e.message}); }
   }
+  var totAdd=0, totUpd=0;
   var mesesAfetados=Object.keys(novos).sort();
   for(var m of mesesAfetados){
     var atual=S.meses[m] || {mes:m, linhas:[], arquivos:[]};
@@ -234,11 +236,13 @@ async function importa(files){
       if(idx[r.chave]!==undefined){ atual.linhas[idx[r.chave]]=r; upd++; }
       else { idx[r.chave]=atual.linhas.length; atual.linhas.push(r); add++; }
     });
+    totAdd+=add; totUpd+=upd;
     atual.arquivos=atual.arquivos.concat(resumo.map(function(n){return {nome:n, em:new Date().toISOString()};}));
     atual.atualizadoEm=new Date().toISOString();
     S.meses[m]=atual;
     try { await dbTx('readwrite',function(st){ return st.put(atual); }); } catch(e){}
   }
+  if(logArq.length) registraImportacao({em:new Date().toISOString(), arquivos:logArq, novos:totAdd, atualizados:totUpd, meses:mesesAfetados});
   if(mesesAfetados.length){
     S.mesSel=mesesAfetados[mesesAfetados.length-1];
     toast('✓ QRY410 importada: '+mesesAfetados.map(mesLabel).join(', ')+'.');
@@ -247,9 +251,9 @@ async function importa(files){
 }
 
 /* ---------- cálculo do fechamento ---------- */
-function linhasMes(){ var m=S.meses[S.mesSel]; return m ? m.linhas : []; }
-function fechamento(){
-  var L=linhasMes(), por={}, fora={}, semLegenda={}, t={p:0,g:0,n301:0,n302:0,f301:0,f302:0,fn:0};
+function linhasMes(mes){ var m=S.meses[mes||S.mesSel]; return m ? m.linhas : []; }
+function fechamento(mes){
+  var L=linhasMes(mes), por={}, fora={}, semLegenda={}, t={p:0,g:0,n301:0,n302:0,f301:0,f302:0,fn:0};
   L.forEach(function(r){
     var c=avalia(r); r._c=c;
     if(r.logica===301) t.n301++; else t.n302++;
@@ -267,9 +271,132 @@ function fechamento(){
   return {linhas:linhas, fora:Object.keys(fora).map(function(k){return fora[k];}), semLegenda:semLegenda, t:t, net:t.p+t.g, total:L.length};
 }
 
+/* ---------- histórico de importações (só neste navegador) ---------- */
+var LOG_KEY='ldm-net-importacoes';
+function leLog(){ try { return JSON.parse(localStorage.getItem(LOG_KEY)||'[]'); } catch(e){ return []; } }
+function registraImportacao(ent){ var l=leLog(); l.unshift(ent); try { localStorage.setItem(LOG_KEY, JSON.stringify(l.slice(0,40))); } catch(e){} }
+
+/* ---------- situação de um mês (Painel e Importação) ---------- */
+function mesAnteriorDe(m){ var y=+m.slice(0,4), mm=+m.slice(5,7)-1; if(mm<1){ mm=12; y--; } return y+'-'+String(mm).padStart(2,'0'); }
+// Mês a fechar = mês anterior ao de hoje (em novembro fecha-se outubro).
+function mesAlvo(){ var d=new Date(); return mesAnteriorDe(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); }
+function ultimoDia(m){ return new Date(+m.slice(0,4), +m.slice(5,7), 0).getDate(); }
+function periodo(L){
+  var min=99, max=0;
+  L.forEach(function(r){ var d=parseInt(String(r.dtmov).slice(0,2),10); if(!isNaN(d)){ if(d<min) min=d; if(d>max) max=d; } });
+  return max ? {ini:min, fim:max} : null;
+}
+function fmtDH(iso){ if(!iso) return ''; try { var d=new Date(iso); return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } }
+function situacao(mes){
+  var m=S.meses[mes]; if(!m) return null;
+  var F=fechamento(mes), per=periodo(m.linhas), pend=[], ent=m.entregas||{};
+  if(!F.t.n301) pend.push('Sem lançamentos da Lógica 301 (perdas)');
+  if(!F.t.n302) pend.push('Sem lançamentos da Lógica 302 (ganhos)');
+  var sl=Object.keys(F.semLegenda); if(sl.length) pend.push(sl.length+' prefixo(s) sem legenda: '+sl.join(', '));
+  if(per && per.fim<ultimoDia(mes)) pend.push('A base vai só até o dia '+per.fim+' — confira se o mês está completo');
+  var status = (ent.planilha && (ent.boletim||ent.pptx)) ? {cls:'ok', txt:'Enviado'} : pend.length ? {cls:'pend', txt:'Com pendências'} : {cls:'pronto', txt:'Pronto para enviar'};
+  return {F:F, per:per, pend:pend, ent:ent, status:status, m:m};
+}
+function marcarEntrega(mes, tipo){
+  var m=S.meses[mes]; if(!m) return;
+  m.entregas=m.entregas||{}; m.entregas[tipo]=new Date().toISOString();
+  dbTx('readwrite',function(st){ return st.put(m); }).catch(function(){});
+  renderPainel();
+}
+
+/* ---------- PAINEL DE FECHAMENTO ---------- */
+function passo(estado, n, titulo, detalhe, acao){
+  var ic = estado==='ok' ? '✓' : estado==='pend' ? '!' : n;
+  return '<li class="passo '+estado+'"><span class="passo-n">'+ic+'</span><div class="passo-txt"><strong>'+titulo+'</strong><span>'+detalhe+'</span></div>'+(acao||'')+'</li>';
+}
+function milR(v){ var a=Math.abs(v), s=v<0?'-':''; return a>=1e6 ? s+(a/1e6).toFixed(1).replace('.',',')+' mi' : a>=1e3 ? s+Math.round(a/1e3)+' mil' : s+a.toFixed(0); }
+function graficoNet(meses){
+  if(!meses.length) return '';
+  var vals=meses.map(function(m){ return fechamento(m).net; });
+  var mx=Math.max.apply(null, vals.map(Math.abs).concat([1]));
+  var W=Math.max(320, meses.length*90+20), H=180, base=H/2-6, bw=38;
+  var g=meses.map(function(m,i){
+    var v=vals[i], h=Math.max(2, Math.abs(v)/mx*(H/2-34)), x=i*90+26, y=v>=0?base-h:base;
+    var cor=v>=0?'#1F8A52':'#D83C1E';
+    return '<rect x="'+x+'" y="'+y.toFixed(1)+'" width="'+bw+'" height="'+h.toFixed(1)+'" rx="5" fill="'+cor+'"/>'
+      +'<text x="'+(x+bw/2)+'" y="'+(v>=0?y-6:y+h+13).toFixed(1)+'" text-anchor="middle" font-size="10.5" font-weight="700" fill="'+cor+'">'+esc(milR(v))+'</text>'
+      +'<text x="'+(x+bw/2)+'" y="'+(H-4)+'" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">'+esc(MESES[+m.slice(5,7)-1].slice(0,3)+'/'+m.slice(2,4))+'</text>';
+  }).join('');
+  return '<svg class="graf-net" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="NET mês a mês"><line x1="10" x2="'+(W-10)+'" y1="'+base+'" y2="'+base+'" stroke="currentColor" opacity=".25"/>'+g+'</svg>';
+}
+function renderPainel(){
+  var el=$('painel-corpo'); if(!el) return;
+  var alvo=mesAlvo(), st=situacao(alvo), ant=situacao(mesAnteriorDe(alvo));
+  var B='<button class="btn sec mini" type="button" data-goto="';
+  var card;
+  if(!st){
+    card='<div class="fech-card"><div class="fech-cab"><div><span class="fech-eyebrow">FECHAMENTO DO MÊS</span><h2>'+esc(mesLabel(alvo))+'</h2></div><span class="status pend">Aguardando base</span></div>'
+      +'<p class="fech-msg">A QRY410 de '+esc(mesLabel(alvo))+' ainda não foi importada. Extraia a base do mês fechado (dia 1 ao dia '+ultimoDia(alvo)+') e importe — o app separa as lógicas 301 e 302, aplica a legenda e monta o fechamento sozinho.</p>'
+      +'<button class="btn" type="button" data-goto="importar">⬆ Importar QRY410 de '+esc(mesLabel(alvo))+'</button></div>';
+  } else {
+    var F=st.F, varNet = ant ? F.net-ant.F.net : null, sl=Object.keys(F.semLegenda);
+    var passos=
+      passo('ok',1,'Base QRY410 importada', fmtInt.format(F.total)+' linhas · '+fmtInt.format(F.t.n301)+' da 301 · '+fmtInt.format(F.t.n302)+' da 302'+(st.per?' · dias '+st.per.ini+' a '+st.per.fim:''), B+'importar">Atualizar base</button>')
+      +passo(sl.length?'pend':'ok',2,'Prefixos classificados na legenda', sl.length?'Sem legenda: '+esc(sl.join(', '))+' — ficaram fora do NET':'Todos os prefixos do mês têm legenda', B+'legenda">Abrir legenda</button>')
+      +passo(st.pend.length?'pend':'ok',3,'Fechamento conferido', st.pend.length?esc(st.pend.join(' · ')):'Sem pendências · NET de '+esc(brl(F.net)), B+'fechamento" data-sel="'+alvo+'">Ver fechamento</button>')
+      +passo(st.ent.planilha?'ok':'todo',4,'Planilha da controladoria', st.ent.planilha?'Baixada em '+fmtDH(st.ent.planilha):'Ainda não baixada', '<button class="btn mini" type="button" data-baixar="'+alvo+'">⬇ Baixar</button>')
+      +passo((st.ent.boletim||st.ent.pptx)?'ok':'todo',5,'Boletim e apresentação', (st.ent.boletim||st.ent.pptx)?'Gerado em '+fmtDH(st.ent.pptx||st.ent.boletim):'Ainda não gerados', B+'relatorio" data-sel="'+alvo+'">Abrir relatório</button>');
+    card='<div class="fech-card"><div class="fech-cab"><div><span class="fech-eyebrow">FECHAMENTO DO MÊS</span><h2>'+esc(mesLabel(alvo))+'</h2></div><span class="status '+st.status.cls+'">'+st.status.txt+'</span></div>'
+      +'<div class="kpis">'
+      + kpi('k-perda','Perda · Lógica 301', brl(F.t.p), 'Perda por Inventário')
+      + kpi('k-ganho','Ganho · Lógica 302', brl(F.t.g), 'Localização Inventário')
+      + kpi('k-net '+(F.net<0?'neg':'pos'),'NET do mês', brl(F.net), varNet===null?'Ganho + Perda':(varNet>=0?'▲ ':'▼ ')+brl(Math.abs(varNet))+' vs '+esc(mesLabel(ant.m.mes)))
+      + kpi('k-fora','Fora do NET', brl(F.fora.reduce(function(s,f){return s+f.p+f.g;},0)), fmtInt.format(F.t.f301+F.t.f302)+' linha(s) excluídas pelas regras')
+      +'</div><h3 class="passos-tit">Checklist da entrega</h3><ol class="passos">'+passos+'</ol></div>';
+  }
+  var ms=Object.keys(S.meses).sort();
+  var hist = ms.length ? ms.slice().reverse().map(function(m){
+    var x=situacao(m), F=x.F;
+    return '<tr class="clicavel" data-abrir="'+m+'"><td><strong>'+esc(mesLabel(m))+'</strong></td><td class="n neg">'+brl(F.t.p)+'</td><td class="n pos">'+brl(F.t.g)+'</td><td class="n '+(F.net<0?'neg':'pos')+'"><strong>'+brl(F.net)+'</strong></td><td class="n">'+fmtInt.format(F.total)+'</td><td><span class="status '+x.status.cls+'">'+x.status.txt+'</span></td><td class="muted">'+fmtDH(x.m.atualizadoEm)+'</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="muted">Nenhum mês importado ainda.</td></tr>';
+  el.innerHTML = card
+    + (ms.length ? '<div class="painel"><div class="painel-cab"><div><h3>NET mês a mês</h3><p>Valor líquido (Ganho 302 + Perda 301) de cada mês importado.</p></div></div><div class="graf-wrap">'+graficoNet(ms.slice(-12))+'</div></div>' : '')
+    + '<div class="painel"><div class="painel-cab"><div><h3>Histórico de fechamentos</h3><p>Clique num mês para abrir o fechamento dele.</p></div></div>'
+    + '<div class="tabela-wrap"><table class="tab"><thead><tr><th>Mês</th><th class="n">Perda (301)</th><th class="n">Ganho (302)</th><th class="n">NET</th><th class="n">Linhas</th><th>Status</th><th>Atualizado em</th></tr></thead><tbody>'+hist+'</tbody></table></div></div>';
+}
+
+/* ---------- IMPORTAR QRY410 ---------- */
+function renderImportacao(){
+  var el=$('imp-corpo'); if(!el) return;
+  var ms=Object.keys(S.meses).sort().reverse();
+  var bases = ms.length ? ms.map(function(m){
+    var x=S.meses[m], per=periodo(x.linhas), n301=0, n302=0;
+    x.linhas.forEach(function(r){ if(r.logica===301) n301++; else n302++; });
+    var completo = per && per.ini===1 && per.fim===ultimoDia(m);
+    var arqs=(x.arquivos||[]).map(function(a){return a.nome;}).filter(function(v,i,a){return a.indexOf(v)===i;});
+    return '<tr><td><strong>'+esc(mesLabel(m))+'</strong></td><td class="n">'+fmtInt.format(n301)+'</td><td class="n">'+fmtInt.format(n302)+'</td>'
+      +'<td>'+(per?String(per.ini).padStart(2,'0')+' a '+String(per.fim).padStart(2,'0')+'/'+m.slice(5,7):'—')+' '+(completo?'<span class="tag sim">mês completo</span>':'<span class="tag nao">confira</span>')+'</td>'
+      +'<td class="arqs" title="'+esc(arqs.join(', '))+'">'+esc(arqs.join(', '))+'</td><td class="muted">'+fmtDH(x.atualizadoEm)+'</td>'
+      +'<td><button class="x" type="button" data-remover="'+m+'" aria-label="Remover '+esc(mesLabel(m))+'">×</button></td></tr>';
+  }).join('') : '<tr><td colspan="7" class="muted">Nenhuma base importada ainda.</td></tr>';
+  var log=leLog();
+  var logHtml = log.length ? log.map(function(l){
+    var arq=(l.arquivos||[]).map(function(a){ return esc(a.nome)+(a.erro?' <span class="tag nao" title="'+esc(a.erro)+'">erro</span>':' <span class="muted">('+fmtInt.format(a.linhas)+')</span>'); }).join('<br>');
+    return '<tr><td class="muted">'+fmtDH(l.em)+'</td><td>'+arq+'</td><td class="n">'+fmtInt.format(l.novos||0)+'</td><td class="n">'+fmtInt.format(l.atualizados||0)+'</td><td>'+esc((l.meses||[]).map(mesLabel).join(', ')||'—')+'</td></tr>';
+  }).join('') : '<tr><td colspan="5" class="muted">Nenhuma importação registrada neste navegador.</td></tr>';
+  var guia=$('imp-guia');
+  if(guia) guia.innerHTML = '<div class="painel guia"><div class="painel-cab"><div><h3>Como extrair a QRY410</h3><p>A base do fechamento é a QRY410 — Perdas e Ganhos no CD.</p></div></div><ol class="guia-lista">'
+    + '<li><strong>Período:</strong> do dia 1 ao último dia do mês fechado (ex.: 01/10 a 31/10).</li>'
+    + '<li><strong>Lógicas:</strong> 301 (Perda por Inventário) e 302 (Localização Inventário). Pode vir num arquivo só ou em dois — o app junta.</li>'
+    + '<li><strong>Formato:</strong> Excel (.xlsx) ou CSV, com o cabeçalho original da consulta.</li>'
+    + '<li><strong>Colunas usadas:</strong> Logica, Vl.Mov., Dt.Mov., Observacao WMS, Sentido, Id Deposito, Item, Nome Depto e Movimento ERP.</li>'
+    + '<li><strong>Reimportar não duplica:</strong> cada lançamento é identificado pelo Movimento ERP. Se a base for corrigida, é só importar de novo.</li>'
+    + '</ol></div>';
+  el.innerHTML =
+    '<div class="painel"><div class="painel-cab"><div><h3>Bases importadas</h3><p>Uma linha por mês — o app separa pela Dt.Mov. de cada lançamento.</p></div></div>'
+    + '<div class="tabela-wrap"><table class="tab"><thead><tr><th>Mês</th><th class="n">Linhas 301</th><th class="n">Linhas 302</th><th>Período da base</th><th>Arquivos</th><th>Atualizado</th><th></th></tr></thead><tbody>'+bases+'</tbody></table></div></div>'
+    + '<div class="painel"><div class="painel-cab"><div><h3>Histórico de importações</h3><p>Cada arquivo importado neste navegador, com quantas linhas entraram ou foram atualizadas.</p></div></div>'
+    + '<div class="tabela-wrap"><table class="tab"><thead><tr><th>Quando</th><th>Arquivo(s) · linhas lidas</th><th class="n">Novas</th><th class="n">Atualizadas</th><th>Meses</th></tr></thead><tbody>'+logHtml+'</tbody></table></div></div>';
+}
+
 /* ---------- renderização ---------- */
 function $(id){ return document.getElementById(id); }
-function render(){ renderMeses(); renderFechamento(); renderLogica('301'); renderLogica('302'); renderLegenda(); if(window.NETREL) window.NETREL.render(); }
+function render(){ renderMeses(); renderPainel(); renderImportacao(); renderFechamento(); renderLogica('301'); renderLogica('302'); renderLegenda(); if(window.NETREL) window.NETREL.render(); }
 
 function renderMeses(){
   var ms=Object.keys(S.meses).sort().reverse();
@@ -286,7 +413,7 @@ function kpi(cls, rot, val, sub){
 }
 function renderFechamento(){
   var el=$('fech-corpo'); if(!el) return;
-  if(!S.mesSel){ el.innerHTML='<div class="vazio"><h3>Importe a QRY410 do mês</h3><p>Arraste o arquivo (ou os arquivos da 301 e da 302) na área acima. O app separa as lógicas, aplica a legenda e monta o fechamento sozinho.</p></div>'; return; }
+  if(!S.mesSel){ el.innerHTML='<div class="vazio"><h3>Importe a QRY410 do mês</h3><p>O fechamento é montado a partir da QRY410. Importe o arquivo do mês na aba <a href="#importar" data-goto="importar">Importar QRY410</a>.</p></div>'; return; }
   var F=fechamento(), m=S.meses[S.mesSel];
   var alerta = Object.keys(F.semLegenda).length
     ? '<div class="alerta"><strong>Prefixos sem legenda:</strong> '+Object.keys(F.semLegenda).map(function(p){return esc(p)+' ('+F.semLegenda[p]+')';}).join(', ')+'. Ficaram <strong>fora do NET</strong> até serem classificados na aba <a href="#legenda" data-goto="legenda">Legenda</a>.</div>' : '';
@@ -404,7 +531,7 @@ async function exporta(){
   wb.creator='Oficina LDM · App NET'; wb.created=new Date();
 
   /* ===== 1) RESUMO NET (equivale à aba DINAMICA) ===== */
-  var wr=wb.addWorksheet('RESUMO NET',{properties:{tabColor:{argb:XL.laranja}}, views:[{showGridLines:false}]});
+  var wr=wb.addWorksheet('RESUMO NET',{properties:{tabColor:{argb:XL.laranja}}, views:[{showGridLines:false, zoomScale:80}]});
   wr.columns=[{width:3},{width:12},{width:30},{width:28},{width:28},{width:22},{width:3}];
   for(var r=1;r<=3;r++){ for(var c=1;c<=7;c++) wr.getCell(r,c).fill=xlFill(XL.navy); }
   wr.getRow(1).height=10; wr.getRow(2).height=30; wr.getRow(3).height=22;
@@ -504,7 +631,7 @@ async function exporta(){
   var IDS = {cia:1, filial:1, item:1, iddepto:1, idfornec:1, logica:1, referencia:1, iddeposito:1, numdoc:1, movimentoerp:1};
 
   function abaDados(nome, corAba, linhas, positivo, extras){
-    var ws=wb.addWorksheet(nome,{properties:{tabColor:{argb:corAba}}, views:[{state:'frozen', xSplit:4, ySplit:1, showGridLines:false}]});
+    var ws=wb.addWorksheet(nome,{properties:{tabColor:{argb:corAba}}, views:[{state:'frozen', xSplit:4, ySplit:1, showGridLines:false, zoomScale:80}]});
     var cols=COLUNAS.map(function(c){ return {header:c.t, key:c.k, width:LARG[c.k]||12}; })
       .concat(extras.map(function(e){ return {header:e.t, key:'x_'+e.k, width:e.w}; }));
     ws.columns=cols;
@@ -525,6 +652,7 @@ async function exporta(){
       });
       extras.forEach(function(e){ obj['x_'+e.k]=e.v(a,r); });
       var R=ws.addRow(obj);
+      R.height=15; // quebra de texto ligada, linha na altura padrão (como no modelo)
       var fundo=idx%2?XL.zebra:null;
       R.eachCell({includeEmpty:true}, function(c,i){
         if(fundo) c.fill=xlFill(fundo);
@@ -532,17 +660,17 @@ async function exporta(){
         c.border=xlBorda;
         var k = i<=nRaw ? COLUNAS[i-1].k : null;
         if(k && IDS[k] && typeof c.value==='number') c.numFmt=FMT.id;
-        if(k && CENTRO[k]) c.alignment={horizontal:'center'};
+        c.alignment = (k && CENTRO[k]) ? {horizontal:'center', wrapText:true} : {wrapText:true};
       });
       var vl=R.getCell(iVl); vl.numFmt=FMT.moeda; vl.font={name:'Calibri', size:10, bold:true, color:{argb:r.vl<0?XL.vermelho:XL.verde}};
       R.getCell(iQt).numFmt=FMT.inteiro;
       extras.forEach(function(e,j){
         var c=R.getCell(nRaw+1+j);
-        if(e.k==='obs'){ c.font={name:'Calibri', size:10, bold:true, color:{argb:XL.laranja}}; c.alignment={horizontal:'center'}; }
+        if(e.k==='obs'){ c.font={name:'Calibri', size:10, bold:true, color:{argb:XL.laranja}}; c.alignment={horizontal:'center', wrapText:true}; }
         if(e.k==='net'){
           var sim=c.value==='SIM';
           c.fill=xlFill(sim?XL.verdeClaro:XL.vermelhoClaro);
-          c.font={name:'Calibri', size:10, bold:true, color:{argb:sim?XL.verde:XL.vermelho}}; c.alignment={horizontal:'center'};
+          c.font={name:'Calibri', size:10, bold:true, color:{argb:sim?XL.verde:XL.vermelho}}; c.alignment={horizontal:'center', wrapText:true};
         }
         if(e.k==='fora' && c.value){ c.font={name:'Calibri', size:10, italic:true, color:{argb:XL.cinza}}; }
       });
@@ -566,7 +694,7 @@ async function exporta(){
   ]);
 
   /* ===== 5) LEGENDA ===== */
-  var wl=wb.addWorksheet('LEGENDA',{properties:{tabColor:{argb:XL.cinza}}, views:[{state:'frozen', ySplit:1, showGridLines:false}]});
+  var wl=wb.addWorksheet('LEGENDA',{properties:{tabColor:{argb:XL.cinza}}, views:[{state:'frozen', ySplit:1, showGridLines:false, zoomScale:80}]});
   wl.columns=[{header:'ID',width:10},{header:'Legenda',width:26},{header:'Setor',width:11},{header:'MOTIVO',width:46},{header:'DESCRIÇÃO',width:70},{header:'CONSIDERAR NET?',width:17}];
   wl.getRow(1).height=26;
   wl.getRow(1).eachCell(function(c){ c.fill=xlFill(XL.azul); c.font={name:'Calibri', size:10, bold:true, color:{argb:XL.branco}}; c.alignment={vertical:'middle', horizontal:'center'}; });
@@ -574,7 +702,7 @@ async function exporta(){
     var R=wl.addRow([l.id,l.legenda,l.setor,l.motivo,l.descricao,l.net?'SIM':'NÃO']);
     R.eachCell({includeEmpty:true},function(c,j){
       if(i%2) c.fill=xlFill(XL.zebra);
-      c.font={name:'Calibri', size:10, color:{argb:XL.texto}}; c.border=xlBorda; c.alignment={vertical:'middle', wrapText:j>=4&&j<=5};
+      c.font={name:'Calibri', size:10, color:{argb:XL.texto}}; c.border=xlBorda; c.alignment={vertical:'middle', wrapText:true};
     });
     R.getCell(1).font={name:'Calibri', size:10, bold:true, color:{argb:XL.laranja}};
     var n=R.getCell(6); n.fill=xlFill(l.net?XL.verdeClaro:XL.vermelhoClaro); n.font={name:'Calibri', size:10, bold:true, color:{argb:l.net?XL.verde:XL.vermelho}}; n.alignment={horizontal:'center', vertical:'middle'};
@@ -585,6 +713,7 @@ async function exporta(){
   var blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='CONSOLIDADO - NET CDS - '+ano+' '+nomeMes+'.xlsx';
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+  marcarEntrega(mes,'planilha');
   toast('✓ Planilha de '+nomeMes+'/'+ano+' gerada.');
 }
 
@@ -599,7 +728,24 @@ function toast(msg, erro){
 document.addEventListener('click', async function(e){
   var b;
   if((b=e.target.closest('.mes-chip'))){ S.mesSel=b.dataset.mes; render(); return; }
-  if((b=e.target.closest('[data-goto]')) && b.tagName==='A'){ e.preventDefault(); if(window.netSwitchTab) window.netSwitchTab(b.dataset.goto); return; }
+  if((b=e.target.closest('[data-goto]'))){
+    if(b.dataset.sel && S.meses[b.dataset.sel]){ S.mesSel=b.dataset.sel; render(); }
+    if(b.tagName==='A'){ e.preventDefault(); if(window.netSwitchTab) window.netSwitchTab(b.dataset.goto); }
+    return;
+  }
+  if((b=e.target.closest('[data-abrir]'))){ S.mesSel=b.dataset.abrir; render(); if(window.netSwitchTab) window.netSwitchTab('fechamento'); return; }
+  if((b=e.target.closest('[data-baixar]'))){
+    S.mesSel=b.dataset.baixar; render(); b.disabled=true;
+    exporta().catch(function(err){ toast('Erro ao gerar a planilha: '+err.message, true); }).finally(function(){ b.disabled=false; });
+    return;
+  }
+  if((b=e.target.closest('[data-remover]'))){
+    var mr=b.dataset.remover;
+    if(!confirm('Remover a base de '+mesLabel(mr)+' deste navegador? (Dá pra importar de novo depois.)')) return;
+    delete S.meses[mr]; if(S.mesSel===mr) S.mesSel=null;
+    try { await dbTx('readwrite',function(st){ return st.delete(mr); }); } catch(err){}
+    render(); toast('Base removida.'); return;
+  }
   if(e.target.id==='btnExportar'){ var bt=e.target; bt.disabled=true; exporta().catch(function(err){ toast('Erro ao gerar a planilha: '+err.message, true); }).finally(function(){ bt.disabled=false; }); return; }
   if(e.target.id==='btnLimparMes'){
     if(!confirm('Remover os dados de '+mesLabel(S.mesSel)+' deste navegador? (Dá pra importar de novo depois.)')) return;
@@ -654,6 +800,7 @@ window.NET_API = {
   cfg: function(){ return CFG; },
   toast: toast,
   esc: esc,
+  marcarEntrega: function(m,t){ marcarEntrega(m,t); },
   salvarMes: async function(m){ try { await dbTx('readwrite',function(st){ return st.put(S.meses[m]); }); } catch(e){} }
 };
 

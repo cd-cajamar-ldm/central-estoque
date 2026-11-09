@@ -86,41 +86,6 @@
   .view[hidden]{display:none;}
 
   /* Casca inicial do NET — conteúdo entra nos próximos passos */
-  /* Apresentação do app (tela inicial) */
-  .hero{position:relative;overflow:hidden;margin-top:26px;border-radius:26px;background:linear-gradient(135deg,#001A72 0%,#0B1230 70%);color:#fff;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);align-items:center;gap:12px;padding:40px 44px;box-shadow:0 2px 4px var(--shadow-near),0 30px 50px -24px var(--shadow-col);}
-  .hero::after{content:'';position:absolute;right:-120px;top:-120px;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,rgba(254,80,0,.35),transparent 65%);pointer-events:none;}
-  .hero-tag{display:inline-flex;align-items:center;gap:7px;background:rgba(254,80,0,.18);color:#FFB08A;border:1px solid rgba(254,80,0,.4);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:6px 12px;border-radius:100px;}
-  .hero h2{font-family:'Poppins',sans-serif;font-size:32px;line-height:1.15;font-weight:800;margin:16px 0 12px;}
-  .hero h2 em{font-style:normal;color:var(--orange);}
-  .hero p{color:#C7CCEA;font-size:14.5px;line-height:1.65;margin:0;max-width:470px;}
-  .hero-art{position:relative;z-index:1;width:100%;height:auto;display:block;}
-
-  .sec-title{font-family:'Poppins',sans-serif;font-size:19px;font-weight:800;margin:40px 0 4px;}
-  .sec-sub{color:var(--ink-soft);font-size:13px;margin:0 0 18px;}
-
-  .compare{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-  .cmp{background:linear-gradient(180deg,var(--card-top),var(--card-bottom));border:1px solid var(--line);border-radius:22px;padding:22px 24px;box-shadow:0 1px 2px var(--shadow-near),0 14px 30px -18px var(--shadow-col);}
-  .cmp h3{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:800;margin:0 0 14px;}
-  .cmp h3 .dot{width:10px;height:10px;border-radius:50%;}
-  .cmp ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
-  .cmp li{display:flex;gap:10px;font-size:13px;line-height:1.5;color:var(--ink-soft);}
-  .cmp li svg{flex-shrink:0;margin-top:2px;}
-  .cmp.hoje h3 .dot{background:#9AA1BD;}
-  .cmp.net{border-color:color-mix(in srgb, var(--orange) 45%, var(--line));}
-  .cmp.net h3 .dot{background:var(--orange);}
-  .cmp.net li{color:var(--ink);}
-
-  .steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;counter-reset:step;}
-  .step{position:relative;background:linear-gradient(180deg,var(--card-top),var(--card-bottom));border:1px solid var(--line);border-radius:22px;padding:22px 20px 20px;box-shadow:0 1px 2px var(--shadow-near),0 14px 30px -18px var(--shadow-col);}
-  .step-ico{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:14px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));box-shadow:0 9px 18px -7px rgba(0,0,0,.4);}
-  .step-n{position:absolute;top:18px;right:20px;font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;color:var(--line);}
-  .step h4{font-size:14.5px;font-weight:700;margin:0 0 6px;}
-  .step p{font-size:12.5px;line-height:1.55;color:var(--ink-soft);margin:0;}
-
-  .wip-note{display:inline-flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:12px;font-weight:600;padding:8px 14px;border-radius:100px;margin-top:28px;}
-  .wip-note .live{width:8px;height:8px;border-radius:50%;background:#B45309;}
-
-
   /* ===== Telas do app ===== */
   .btn{display:inline-flex;align-items:center;gap:8px;background:var(--orange);color:#fff;border:none;border-radius:12px;padding:10px 16px;font:700 13px 'Inter',sans-serif;cursor:pointer;box-shadow:0 8px 18px -8px rgba(254,80,0,.7);transition:transform .15s,filter .15s;}
   .btn:hover{transform:translateY(-1px);filter:brightness(1.05);}
@@ -201,6 +166,48 @@
   .toast.erro{background:#B42318;}
 
 
+
+  /* ===== Painel de fechamento ===== */
+  .btn.mini{padding:7px 12px;font-size:12px;border-radius:10px;white-space:nowrap;}
+  .fech-card{margin-top:24px;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:24px 26px;box-shadow:0 1px 2px var(--shadow-near),0 14px 30px -20px var(--shadow-col);border-top:4px solid var(--orange);}
+  .fech-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;}
+  .fech-eyebrow{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--orange);}
+  .fech-cab h2{font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;margin:4px 0 0;}
+  .fech-msg{color:var(--ink-soft);font-size:14px;line-height:1.6;max-width:640px;margin:14px 0 18px;}
+  .fech-card .kpis{margin-top:18px;}
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:6px 12px;border-radius:100px;white-space:nowrap;}
+  .status::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;}
+  .status.pend{background:rgba(180,83,9,.12);color:#B45309;}
+  .status.pronto{background:rgba(0,26,114,.1);color:#2E4596;}
+  .status.ok{background:rgba(31,138,82,.13);color:#1F8A52;}
+  body.theme-dark .status.pronto{background:rgba(142,162,255,.15);color:#A9B8FF;}
+  body.theme-dark .status.pend{color:#F59E0B;}
+  body.theme-dark .status.ok{color:#4ADE80;}
+  .passos-tit{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin:24px 0 10px;}
+  .passos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+  .passo{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--chip-bg);}
+  .passo-n{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;background:var(--surface);border:2px solid var(--line);color:var(--ink-soft);}
+  .passo.ok .passo-n{background:#1F8A52;border-color:#1F8A52;color:#fff;}
+  .passo.pend .passo-n{background:#B45309;border-color:#B45309;color:#fff;}
+  .passo-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .passo-txt strong{font-size:13.5px;}
+  .passo-txt span{font-size:12.5px;color:var(--ink-soft);line-height:1.45;}
+  .graf-wrap{overflow-x:auto;padding:4px 20px 18px;color:var(--ink);}
+  .tab tr.clicavel{cursor:pointer;}
+  .tab tr.clicavel:hover td{background:var(--chip-bg);}
+  .fech-atalho{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:16px 0 0;padding:12px 16px;border:1px dashed var(--line);border-radius:14px;font-size:13px;color:var(--ink-soft);}
+
+  /* ===== Importar QRY410 ===== */
+  .dropzone.grande{margin-top:24px;padding:30px 28px;}
+  .dropzone.grande strong{font-size:16px;}
+  .imp-topo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:stretch;margin-top:24px;}
+  .imp-topo .dropzone.grande{margin-top:0;flex-direction:column;justify-content:center;text-align:center;}
+  .imp-topo .painel{margin-top:0;}
+  .guia-lista{margin:0;padding:0 20px 20px 40px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.55;color:var(--ink-soft);}
+  .guia-lista strong{color:var(--ink);}
+  .tab td.arqs{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  @media(max-width:1100px){ .imp-topo{grid-template-columns:1fr;} }
+  @media(max-width:760px){ .passo{flex-wrap:wrap;} .passo-txt{flex:1 1 calc(100% - 44px);} .passo .btn{margin-left:42px;} .fech-card{padding:20px 18px;} }
   /* ===== Relatório da controladoria ===== */
   .rel-prev{position:relative;overflow:hidden;padding:0;margin:0 20px 20px;border:1px solid var(--line);border-radius:12px;}
   .rel-prev-in{width:1200px;transform-origin:0 0;}
@@ -252,14 +259,6 @@
     .sb-nav{display:flex !important;flex-direction:row;overflow-x:auto;width:100%;margin:12px 0 0;gap:6px;}
     .sb-nav-item{width:auto;white-space:nowrap;}
   }
-  @media(max-width:1100px){
-    .hero{grid-template-columns:1fr;padding:32px 28px;}
-    .steps{grid-template-columns:repeat(2,minmax(0,1fr));}
-  }
-  @media(max-width:760px){
-    .compare,.steps{grid-template-columns:1fr;}
-    .hero h2{font-size:25px;}
-  }
   @media(max-width:760px){
     .shell{flex-direction:column;}
     .sidebar{width:100%;flex-direction:row;align-items:center;padding:16px 20px;flex-wrap:wrap;}
@@ -290,8 +289,12 @@
     </a>
     <nav class="sb-nav" id="nav">
       <button class="sb-nav-item active" type="button" data-tab="painel">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-        <span>Apresentação</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        <span>Painel de fechamento</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-tab="importar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Importar QRY410</span>
       </button>
       <button class="sb-nav-item" type="button" data-tab="fechamento">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 15 11 17 15 13"/></svg>
@@ -320,8 +323,8 @@
   <main class="main">
     <div class="topbar">
       <div>
-        <h1 id="tab-title">NET</h1>
-        <p id="tab-subtitle">Gestão automática do indicador de perdas e ganhos do CD.</p>
+        <h1 id="tab-title">Fechamento NET</h1>
+        <p id="tab-subtitle">Valor líquido de perdas e ganhos do CD para a controladoria.</p>
       </div>
       <div class="topbar-actions">
         <span class="cd-badge">CD CAJAMAR</span>
@@ -332,131 +335,24 @@
     </div>
 
     <div class="view" data-view="painel">
-      <section class="hero">
-        <div style="position:relative;z-index:1;">
-          <span class="hero-tag">Indicador de perdas e ganhos</span>
-          <h2>O NET do CD, do arquivo ao relatório da controladoria — <em>no automático.</em></h2>
-          <p>Hoje o relatório do NET é puxado e tratado manualmente antes de ir pra controladoria. Este app vai gerir o indicador de ponta a ponta: importa a base, aplica as regras e entrega o relatório pronto.</p>
-        </div>
-        <svg class="hero-art" viewBox="0 0 520 330" role="img" aria-label="Ilustração: a QRY410 entra no app NET, passa pelas regras automáticas, vira o indicador de perdas e ganhos e sai como relatório pronto para a controladoria.">
-          <defs>
-            <linearGradient id="gO" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF8A4C"/><stop offset="1" stop-color="#FE5000"/></linearGradient>
-            <linearGradient id="gCard" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".14"/><stop offset="1" stop-color="#FFFFFF" stop-opacity=".05"/></linearGradient>
-            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#FE5000"/></marker>
-          </defs>
-          <!-- QRY410 (entrada) -->
-          <g transform="translate(14,38)">
-            <rect width="96" height="118" rx="12" fill="url(#gCard)" stroke="rgba(255,255,255,.25)"/>
-            <path d="M70 0 L96 26 L70 26 Z" fill="rgba(255,255,255,.18)"/>
-            <rect x="14" y="40" width="58" height="6" rx="3" fill="rgba(255,255,255,.55)"/>
-            <rect x="14" y="54" width="68" height="5" rx="2.5" fill="rgba(255,255,255,.25)"/>
-            <rect x="14" y="66" width="50" height="5" rx="2.5" fill="rgba(255,255,255,.25)"/>
-            <rect x="14" y="78" width="62" height="5" rx="2.5" fill="rgba(255,255,255,.25)"/>
-            <rect x="14" y="90" width="44" height="5" rx="2.5" fill="rgba(255,255,255,.25)"/>
-            <text x="48" y="144" text-anchor="middle" font-family="Inter,sans-serif" font-size="13" font-weight="800" fill="#FFFFFF">QRY410</text>
-          </g>
-          <path d="M118 97 C150 97 150 97 176 97" stroke="#FE5000" stroke-width="2.5" fill="none" stroke-dasharray="5 5" marker-end="url(#arr)"/>
-          <!-- Motor NET -->
-          <g transform="translate(186,40)">
-            <rect width="148" height="114" rx="20" fill="url(#gO)"/>
-            <g transform="translate(22,24)" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="24" cy="24" r="8"/>
-              <path d="M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M9.9 38.1l4.2-4.2M33.9 14.1l4.2-4.2"/>
-            </g>
-            <text x="98" y="44" text-anchor="middle" font-family="Poppins,sans-serif" font-size="24" font-weight="800" fill="#FFFFFF">NET</text>
-            <text x="98" y="62" text-anchor="middle" font-family="Inter,sans-serif" font-size="10" font-weight="600" fill="#FFE3D4">automático</text>
-            <rect x="18" y="80" width="112" height="20" rx="10" fill="rgba(0,26,114,.35)"/>
-            <text x="74" y="94" text-anchor="middle" font-family="Inter,sans-serif" font-size="10" font-weight="700" fill="#FFFFFF">regras + legenda</text>
-          </g>
-          <path d="M342 97 C370 97 370 97 394 97" stroke="#FE5000" stroke-width="2.5" fill="none" stroke-dasharray="5 5" marker-end="url(#arr)"/>
-          <!-- Relatório controladoria -->
-          <g transform="translate(404,30)">
-            <rect width="104" height="134" rx="12" fill="#FFFFFF"/>
-            <rect x="12" y="14" width="56" height="7" rx="3.5" fill="#001A72"/>
-            <rect x="12" y="27" width="40" height="5" rx="2.5" fill="#C7CCEA"/>
-            <rect x="16" y="80" width="12" height="28" rx="2" fill="#FE5000"/>
-            <rect x="34" y="66" width="12" height="42" rx="2" fill="#001A72"/>
-            <rect x="52" y="88" width="12" height="20" rx="2" fill="#FE5000"/>
-            <rect x="70" y="58" width="12" height="50" rx="2" fill="#001A72"/>
-            <line x1="12" y1="110" x2="92" y2="110" stroke="#DCE1F0" stroke-width="2"/>
-            <circle cx="92" cy="14" r="15" fill="#1F8A52" stroke="#FFFFFF" stroke-width="3"/>
-            <polyline points="85,14 90,19 99,9" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            <text x="52" y="126" text-anchor="middle" font-family="Inter,sans-serif" font-size="9" font-weight="800" fill="#001A72">CONTROLADORIA</text>
-          </g>
-          <!-- Indicador -->
-          <g transform="translate(110,200)">
-            <rect width="300" height="104" rx="18" fill="url(#gCard)" stroke="rgba(255,255,255,.2)"/>
-            <text x="20" y="30" font-family="Inter,sans-serif" font-size="11" font-weight="700" fill="#C7CCEA" letter-spacing="1">INDICADOR NET · MÊS A MÊS</text>
-            <polyline points="22,84 62,70 102,76 142,52 182,60 222,40 262,46 282,34" fill="none" stroke="#FE5000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="282" cy="34" r="5" fill="#FE5000" stroke="#FFFFFF" stroke-width="2"/>
-            <line x1="22" y1="90" x2="282" y2="90" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
-          </g>
-          <path d="M260 160 L260 192" stroke="#FE5000" stroke-width="2.5" fill="none" stroke-dasharray="4 4" marker-end="url(#arr)"/>
-        </svg>
-      </section>
+      <div id="painel-corpo"></div>
+    </div>
 
-      <h3 class="sec-title">Hoje x com o app NET</h3>
-      <p class="sec-sub">O que muda na rotina de fechamento do indicador.</p>
-      <div class="compare">
-        <div class="cmp hoje">
-          <h3><span class="dot"></span>Hoje — manual</h3>
-          <ul>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA1BD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg><span>Puxar a QRY410 do WMS e abrir no Excel.</span></li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA1BD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg><span>Filtrar e tratar linha a linha: motivos, lógicas, depósitos.</span></li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA1BD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg><span>Montar as tabelas e somas do mês na mão.</span></li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA1BD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg><span>Formatar e enviar o relatório para a controladoria.</span></li>
-          </ul>
-        </div>
-        <div class="cmp net">
-          <h3><span class="dot"></span>Com o app NET — automático</h3>
-          <ul>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FE5000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Importa o arquivo e confere a base sozinho.</span></li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FE5000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Regras de tratamento aplicadas sempre do mesmo jeito.</span></li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FE5000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Indicador do mês e do ano calculado na hora, com histórico.</span></li>
-            <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FE5000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Relatório da controladoria gerado com um clique.</span></li>
-          </ul>
-        </div>
+    <div class="view" data-view="importar" hidden>
+      <div class="imp-topo">
+      <label class="dropzone grande" id="dropzone" tabindex="0" for="fileInput">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsb,.csv" multiple hidden>
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div><strong>Arraste a QRY410 aqui ou clique para escolher</strong><span>Um arquivo com as lógicas 301 e 302 ou um de cada. O app separa por mês, junta com o que já existe e não duplica lançamento.</span></div>
+      </label>
+      <div id="imp-guia"></div>
       </div>
-
-      <h3 class="sec-title">Como vai funcionar</h3>
-      <p class="sec-sub">Quatro etapas, do arquivo ao relatório.</p>
-      <div class="steps">
-        <div class="step" style="--accent:#001A72;">
-          <span class="step-n">01</span>
-          <div class="step-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-          <h4>Importa a QRY410</h4>
-          <p>Você só joga o arquivo exportado do WMS. O app lê e confere as colunas sozinho.</p>
-        </div>
-        <div class="step" style="--accent:#FE5000;">
-          <span class="step-n">02</span>
-          <div class="step-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
-          <h4>Trata automaticamente</h4>
-          <p>Aplica as regras que hoje são feitas na mão: motivos que entram ou não no NET, lógicas e depósitos considerados.</p>
-        </div>
-        <div class="step" style="--accent:#1F8A52;">
-          <span class="step-n">03</span>
-          <div class="step-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
-          <h4>Gere o indicador</h4>
-          <p>Perdas, ganhos e NET do mês e do ano, com os maiores ofensores por item, motivo e departamento.</p>
-        </div>
-        <div class="step" style="--accent:#7C3AED;">
-          <span class="step-n">04</span>
-          <div class="step-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="9 15 11 17 15 13"/></svg></div>
-          <h4>Relatório pronto</h4>
-          <p>Gera o relatório no formato da controladoria, pronto pra enviar, sem montar planilha manualmente.</p>
-        </div>
-      </div>
-
-      <button class="btn cta" type="button" data-goto="fechamento">Começar o fechamento do mês →</button>
+      <div id="imp-corpo"></div>
     </div>
 
     <div class="view" data-view="fechamento" hidden>
       <div class="mes-barra"><span class="mes-rot">Mês:</span><div class="mes-chips" data-meses></div></div>
-      <label class="dropzone" id="dropzone" tabindex="0" for="fileInput">
-        <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsb,.csv" multiple hidden>
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <div><strong>Importar QRY410</strong><span>Arraste aqui ou clique para escolher. Pode ser um arquivo só ou um da 301 e outro da 302 — o app junta, separa por mês e não duplica lançamento.</span></div>
-      </label>
+      <div class="fech-atalho"><span>A base do mês vem da QRY410.</span><button class="btn sec mini" type="button" data-goto="importar">⬆ Importar / atualizar QRY410</button></div>
       <div id="fech-corpo"></div>
     </div>
 
@@ -541,7 +437,8 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
 (function(){
   var TAB_LABELS = {
-    painel: ['NET', 'Gestão automática do indicador de perdas e ganhos do CD.'],
+    painel: ['Fechamento NET', 'Valor líquido de perdas e ganhos do CD para a controladoria.'],
+    importar: ['Importar QRY410', 'Base de perdas e ganhos do CD — Lógicas 301 e 302.'],
     fechamento: ['Fechamento do mês', 'Importa a QRY410, aplica a legenda e gera a planilha da controladoria.'],
     relatorio: ['Relatório da controladoria', 'Boletim de 1 página e apresentação do fechamento, gerados a partir do mês importado.'],
     l301: ['Lógica 301 · Perda por Inventário', 'Todas as saídas da QRY410 no mês, com prefixo e se entram no NET.'],
