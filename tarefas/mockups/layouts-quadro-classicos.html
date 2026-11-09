@@ -11,8 +11,8 @@
   --bg:#F3F4F8; --fg:#121633; --suave:#646A8C; --linha:#E1E3EE; --sup:#FFFFFF; --sup2:#F8F9FC;
   --f:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0A0D1F;--fg:#E8EAF6;--suave:#9AA0C2;--linha:#232848;--sup:#121633;--sup2:#171B3D;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0A0D1F;--fg:#E8EAF6;--suave:#9AA0C2;--linha:#232848;--sup:#121633;--sup2:#171B3D;color-scheme:dark}
+/* Sempre no modo claro, mesmo com o sistema em tema escuro. */
+:root{color-scheme:light}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--f);font-size:14px}
 button,input{font-family:inherit}

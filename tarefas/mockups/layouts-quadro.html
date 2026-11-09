@@ -14,8 +14,8 @@
   --f-texto:"Barlow",system-ui,sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--chrome-bg:#070B22;--chrome-fg:#ECEEFA;--chrome-suave:#9AA1CC;--chrome-linha:#1F2650;--chrome-card:#0E1438;color-scheme:dark}}
-:root[data-theme="dark"]{--chrome-bg:#070B22;--chrome-fg:#ECEEFA;--chrome-suave:#9AA1CC;--chrome-linha:#1F2650;--chrome-card:#0E1438;color-scheme:dark}
+/* Sempre no modo claro, mesmo com o sistema em tema escuro. */
+:root{color-scheme:light}
 
 *{box-sizing:border-box}
 body{background:var(--chrome-bg);color:var(--chrome-fg);font-family:var(--f-texto);font-size:15px}
