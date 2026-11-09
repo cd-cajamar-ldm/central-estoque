@@ -315,6 +315,15 @@ button{ font-family:inherit; cursor:pointer; }
 /* Filtros da tabela "NET — Detalhe por Lógica" — 5 selects, encolhe em telas
    estreitas em vez de vazar pro lado (mesma ideia do theme-picker-grid). */
 .gi-tabela td{ white-space:nowrap; }
+/* Locais desconsiderados (Gestão de Inventário): cabe na largura da tela,
+   sem rolagem lateral. Números e códigos ficam sempre inteiros numa linha;
+   endereço, usuário, data e justificativa quebram quando falta espaço. */
+table.gi-excl{ width:100%; }
+table.gi-excl th, table.gi-excl td{ white-space:nowrap; padding-left:8px; padding-right:8px; }
+table.gi-excl th{ font-size:11px; }
+table.gi-excl .gi-excl-txt{ white-space:normal; }
+table.gi-excl .gi-excl-just{ white-space:normal; width:100%; min-width:140px; }
+table.gi-excl .num{ text-align:right; }
 .gi-tabela td.gi-just{ max-width:360px; overflow:hidden; text-overflow:ellipsis; }
 .export-erro{ color:var(--danger); font-weight:700; }
 .net-det-filtros{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
