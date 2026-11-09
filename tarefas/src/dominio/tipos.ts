@@ -1,6 +1,11 @@
 export type Papel = 'admin' | 'editor' | 'leitor';
 export type Prioridade = 'baixa' | 'media' | 'alta' | 'critica';
-export type StatusTarefa = 'pendente' | 'em_andamento' | 'concluida' | 'bloqueada';
+export type StatusTarefa = 'pendente' | 'em_andamento' | 'concluida' | 'bloqueada' | 'cancelada';
+
+/* Situacoes que encerram a tarefa: nao contam como atrasada nem como
+   trabalho em aberto. Cancelada e diferente de concluida — a tarefa saiu
+   da fila sem ser feita. */
+export const STATUS_ENCERRADOS: StatusTarefa[] = ['concluida', 'cancelada'];
 
 export interface Pessoa {
   id: string;
@@ -53,7 +58,7 @@ export const rotuloPrioridade: Record<Prioridade, string> = {
 };
 
 export const rotuloStatus: Record<StatusTarefa, string> = {
-  pendente: 'Pendente', em_andamento: 'Em andamento', concluida: 'Concluída', bloqueada: 'Bloqueada',
+  pendente: 'Pendente', em_andamento: 'Em andamento', concluida: 'Concluída', bloqueada: 'Bloqueada', cancelada: 'Cancelada',
 };
 
 export const rotuloPapel: Record<Papel, string> = {
@@ -68,7 +73,7 @@ export const explicacaoDoPapel: Record<Papel, string> = {
 };
 
 export const PRIORIDADES: Prioridade[] = ['baixa', 'media', 'alta', 'critica'];
-export const STATUS_TAREFA: StatusTarefa[] = ['pendente', 'em_andamento', 'concluida', 'bloqueada'];
+export const STATUS_TAREFA: StatusTarefa[] = ['pendente', 'em_andamento', 'concluida', 'bloqueada', 'cancelada'];
 
 /* Paleta de cores para escolher ao criar um quadro ou um grupo — poucas
    opcoes, para a lista de quadros continuar legivel por cor. */

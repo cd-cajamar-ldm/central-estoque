@@ -7,6 +7,9 @@ export const coresStatus = {
   em_andamento: '#2F6FE0',
   concluida: '#1F8A52',
   bloqueada: '#D2453A',
+  /* Marrom-acinzentado apagado: encerrada sem ser feita, sem competir
+     com o vermelho de bloqueada nem com o verde de concluida. */
+  cancelada: '#8C7B70',
 } as const;
 
 /* "Alta" usa o laranja oficial da marca (FE5000, igual à sidebar e ao

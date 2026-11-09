@@ -10,10 +10,10 @@
 -- a situacao do kanban foi aproximada:
 --   Mapeamento diario -> em_andamento
 --   Pendente, Backlog -> pendente
---   Cancelado         -> concluida (fora do trabalho ativo)
+--   Cancelado         -> cancelada (migration 003)
 --
--- Rodar no SQL Editor do Supabase (projeto Estoque Project), DEPOIS das
--- migrations 001 e 002. Pode rodar mais de uma vez: se o quadro ja
+-- Rodar no SQL Editor do Supabase (projeto Estoque Project), DEPOIS da
+-- migration 003 (situacao cancelada). Pode rodar mais de uma vez: se o quadro ja
 -- existir, nada e inserido de novo.
 do $$
 declare
@@ -45,10 +45,10 @@ begin
   insert into tarefas.grupos (quadro_id, nome, cor, ordem) values
     (v_quadro, 'Backlog', '#C79212', 2) returning id into g_back;
   insert into tarefas.grupos (quadro_id, nome, cor, ordem) values
-    (v_quadro, 'Cancelado', '#D2453A', 3) returning id into g_canc;
+    (v_quadro, 'Cancelado', '#8C7B70', 3) returning id into g_canc;
 
   insert into tarefas.tarefas (quadro_id, grupo_id, titulo, status, ordem, criado_por) values
-    (v_quadro, g_canc,   'Criação de 3D Resumo de inventari',     'concluida',    1,  v_dono),
+    (v_quadro, g_canc,   'Criação de 3D Resumo de inventari',     'cancelada',    1,  v_dono),
     (v_quadro, g_back,   'Criar uma Analise de Perda/Ganho',      'pendente',     2,  v_dono),
     (v_quadro, g_pend,   'Ajuste Cadastro Compressores',          'pendente',     3,  v_dono),
     (v_quadro, g_diario, 'Report Ciclo Inventário',               'em_andamento', 4,  v_dono),

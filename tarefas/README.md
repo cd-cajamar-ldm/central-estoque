@@ -45,7 +45,9 @@ um quadro de equipe de uso geral).
 As migrations ficam em `supabase/migrations/` — **ainda não foram
 aplicadas ao banco**. Para o módulo funcionar, alguém com acesso ao
 SQL Editor do projeto Supabase precisa rodar, nesta ordem:
-`001_schema_inicial.sql` e depois `002_rls_e_gatilhos.sql`. A segunda
+`001_schema_inicial.sql`, `002_rls_e_gatilhos.sql` e
+`003_status_cancelada.sql` (este sozinho: `alter type ... add value`
+não pode dividir a transação com quem usa o valor novo). A segunda
 já cadastra `danilolima@lojadomecanico.com.br` como administrador do
 módulo (usando a conta que já existe no mesmo projeto Supabase, criada
 pelo módulo de Projetos), então o primeiro login já entra com acesso
@@ -58,3 +60,10 @@ editor criam e organizam qualquer quadro, grupo ou tarefa; quem só lê
 também pode mudar a situação das tarefas das quais é responsável — ser
 apontado como responsável já é a permissão. Só administrador, ou quem
 criou aquele quadro, renomeia ou exclui o quadro em si.
+
+## Importações
+
+`supabase/importacoes/` guarda scripts de carga pontual, rodados à mão
+no SQL Editor depois das migrations — por exemplo, as tarefas trazidas
+do ClickUp. Cada script registra o criador das tarefas pelo e-mail e
+não duplica nada se rodar de novo.
