@@ -146,7 +146,7 @@ button{ font-family:inherit; cursor:pointer; }
    cortados no meio da palavra e o ícone continuava encostado na esquerda. Aqui o
    texto some de fato e sobra o ícone, centralizado. */
 .sidebar.collapsed .nav-item span,
-.sidebar.collapsed .theme-toggle span{ display:none; }
+.sidebar.collapsed .theme-toggle #themeToggleLabel{ display:none; }
 .sidebar.collapsed .nav-item{ justify-content:center; gap:0; padding:10px 0; border-left-width:2px; }
 .sidebar.collapsed .theme-toggle{ justify-content:center; padding:7px 0; }
 .sidebar.collapsed .sidebar-footer{ padding:10px 8px; }
@@ -171,6 +171,9 @@ button{ font-family:inherit; cursor:pointer; }
 .nav-section-label{ font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.4); padding:14px 16px 4px; white-space:nowrap; }
 .sidebar-footer{ padding:10px 16px; border-top:1px solid rgba(255,255,255,.12); flex-shrink:0; }
 .theme-toggle{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.08); border:none; color:#fff; padding:7px 10px; border-radius:6px; width:100%; font-size:12px; }
+.theme-switch-track{ position:relative; width:40px; height:22px; border-radius:999px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); flex-shrink:0; }
+.theme-knob{ position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; color:var(--orange); transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
+.theme-toggle.on .theme-switch-track .theme-knob{ left:22px; background:var(--orange); color:#fff; }
 
 .content{ flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--paper); }
 /* Barra em degradê da marca. A faixa branca antes emendava mal com o menu azul
