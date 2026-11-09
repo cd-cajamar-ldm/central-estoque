@@ -34,7 +34,7 @@ const PAGINAS: Record<Pagina, { titulo: string; subtitulo: string }> = {
   },
 };
 
-function Icone({ nome }: { nome: Pagina | 'tema' | 'menu' | 'voltar' }) {
+function Icone({ nome }: { nome: Pagina | 'menu' | 'voltar' }) {
   const comum = {
     width: 15,
     height: 15,
@@ -115,6 +115,7 @@ export default function App() {
   } = useDados();
   const [pagina, setPagina] = useState<Pagina>('geral');
   const [recolhido, setRecolhido] = useState(false);
+  const [mobileAberto, setMobileAberto] = useState(false);
   /* Abre no claro. O escuro entra so quando a pessoa clica: seguir a
      preferencia do sistema fazia o painel abrir escuro em maquina
      configurada assim, sem ninguem ter pedido. */
@@ -232,10 +233,14 @@ export default function App() {
 
   return (
     <div className="shell">
-      <aside className={`sidebar ${recolhido ? 'collapsed' : ''}`}>
+      <aside className={`sidebar ${recolhido ? 'collapsed' : ''} ${mobileAberto ? 'mobile-open' : ''}`}>
         <div className="brand">
-          <div className="brand-logo-chip">
-            <img src={LOGO_HORIZONTAL} alt="Loja do Mecânico" className="brand-logo-img" />
+          <button className="brand-logo" type="button" aria-label="Loja do Mecânico">
+            <img src="./brand/Logo_LDM_icon.png" alt="" />
+          </button>
+          <div className="brand-text">
+            <div className="brand-name">OFICINA LDM</div>
+            <div className="brand-sub">lugar de quem faz</div>
           </div>
           <button
             className="sidebar-toggle"
@@ -247,13 +252,10 @@ export default function App() {
             <Icone nome="menu" />
           </button>
         </div>
-
-        {/* Nome do sistema abaixo do logo: com a marca maior nao sobra
-            largura para os dois na mesma linha. */}
-        <div className="eq-marca-nome">
-          <strong>Equalização de Elevadores</strong>
-          <span>CD Cajamar</span>
-        </div>
+        <a className="brand-back" href="../">
+          <Icone nome="voltar" />
+          <span>Voltar para a Central</span>
+        </a>
 
         <nav className="sidebar-nav">
           {itens.map((it) => (
@@ -261,7 +263,7 @@ export default function App() {
               {it.secao && <div className="nav-section-label">{it.secao}</div>}
               <button
                 className={`nav-item ${paginaAtual === it.id ? 'active' : ''}`}
-                onClick={() => irPara(it.id)}
+                onClick={() => { irPara(it.id); setMobileAberto(false); }}
                 disabled={semDados && it.id !== 'importacao'}
                 style={semDados && it.id !== 'importacao' ? { opacity: 0.35 } : undefined}
                 title={it.rotulo}
@@ -274,23 +276,7 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
-          {/* Volta para a Central, no mesmo lugar em que o Inventario
-              coloca a dele: rodape do menu, acima do tema.
-
-              O link existia so no index.html gerado, onde qualquer
-              publicacao apagava. Aqui ele nasce do codigo e sobrevive
-              ao build - e sai do canto superior direito, onde ficava
-              por cima do selo de contexto. */}
-          <a className="theme-toggle" href="../" title="Voltar para a Central">
-            <Icone nome="voltar" />
-            <span>Voltar para a Central</span>
-          </a>
-          {/* Com o menu recolhido sobra so o icone: o title e o que diz
-              para que serve o botao. */}
-          <button className="theme-toggle" onClick={alternarTema} title="Alternar tema">
-            <Icone nome="tema" />
-            <span>Alternar tema</span>
-          </button>
+          Loja do Mecânico &middot; CD Cajamar
           {/* Carimbo do build: e por ele que se sabe, sem abrir o
               inspetor, se o navegador esta servindo a versao nova ou
               uma guardada em cache. */}
@@ -299,9 +285,18 @@ export default function App() {
           </div>
         </div>
       </aside>
+      <div className="sidebar-backdrop" onClick={() => setMobileAberto(false)} />
 
       <main className="content">
         <div className="topbar">
+          <button
+            className="mobile-menu-btn"
+            onClick={() => setMobileAberto(true)}
+            title="Abrir menu"
+            aria-label="Abrir menu"
+          >
+            <Icone nome="menu" />
+          </button>
           <div>
             <h1>{cabecalho.titulo}</h1>
             <p>{cabecalho.subtitulo}</p>
@@ -335,6 +330,16 @@ export default function App() {
                 : `${dados.arquivo}${dados.semPersistencia ? ' · só nesta sessão' : ''}`}
             </div>
           )}
+
+          <button
+            className={`theme-switch ${tema === 'escuro' ? 'on' : ''}`}
+            onClick={alternarTema}
+            type="button"
+            aria-label="Alternar tema claro/escuro"
+            style={!dados ? { marginLeft: 'auto' } : undefined}
+          >
+            <span className="theme-knob" />
+          </button>
         </div>
 
         {/* Na apresentacao o menu sai de cena e a marca iria junto, entao
