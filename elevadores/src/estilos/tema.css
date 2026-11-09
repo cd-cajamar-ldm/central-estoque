@@ -5,7 +5,8 @@
    ============================================================ */
 :root{
   --blue:#001A72; --blue-light:#E8ECF7; --blue-soft:#33488E;
-  --orange:#FA4616; --orange-light:#FFEDE7;
+  /* Laranja oficial da marca (Oficina LDM), antes FA4616. */
+  --orange:#FE5000; --orange-light:#FFEDE7;
   --gray-900:#1D1F2A; --gray-700:#3A3D4D; --gray-500:#6B7280; --gray-300:#D5D8E0; --gray-100:#F4F5F7;
   --white:#FFFFFF;
   --success:#1F8A52; --success-light:rgba(31,138,82,.10);
@@ -18,14 +19,14 @@
 :root[data-theme="dark"]{
   --paper:#12141C; --surface:#1A1D28; --surface2:#20232F;
   --ink:#EEEDF5; --ink-soft:#9AA1B4; --line:#2C3040;
-  --blue-light:rgba(0,26,114,.35); --orange-light:rgba(250,70,22,.16);
+  --blue-light:rgba(0,26,114,.35); --orange-light:rgba(254,80,0,.16);
   --success-light:rgba(31,138,82,.18); --danger-light:rgba(200,56,18,.18);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --paper:#12141C; --surface:#1A1D28; --surface2:#20232F;
     --ink:#EEEDF5; --ink-soft:#9AA1B4; --line:#2C3040;
-    --blue-light:rgba(0,26,114,.35); --orange-light:rgba(250,70,22,.16);
+    --blue-light:rgba(0,26,114,.35); --orange-light:rgba(254,80,0,.16);
     --success-light:rgba(31,138,82,.18); --danger-light:rgba(200,56,18,.18);
   }
 }
@@ -45,49 +46,89 @@ button{ font-family:inherit; cursor:pointer; }
 /* ---------- SHELL ---------- */
 .shell{ display:flex; height:100vh; overflow:hidden; }
 .sidebar{
-  width:230px; flex-shrink:0; background:var(--blue); color:#fff;
+  /* Azul-marinho da sidebar da Oficina LDM (Painel raiz), não o var(--blue)
+     de marca usado no restante do app — só o menu lateral alinha a esse
+     padrão. */
+  width:230px; flex-shrink:0; background:#0B1230; color:#fff;
   display:flex; flex-direction:column; transition:width .18s;
   overflow:hidden;
 }
-.sidebar.collapsed{ width:62px; }
-.sidebar .brand{ display:flex; align-items:center; gap:10px; padding:14px; border-bottom:1px solid rgba(255,255,255,.12); flex-shrink:0; }
-.brand-logo-chip{ background:#fff; border-radius:8px; padding:6px 9px; display:flex; align-items:center; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,.15); }
-.brand-logo-img{ height:32px; width:auto; display:block; }
-.sidebar .brand-name{ font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; color:rgba(255,255,255,.9); }
-.sidebar .brand-sub{ font-size:10px; color:rgba(255,255,255,.6); white-space:nowrap; }
-.sidebar.collapsed .brand-logo-chip{ display:none; }
+.sidebar.collapsed{ width:56px; }
+.sidebar .brand{ display:flex; align-items:center; gap:10px; padding:16px 14px; border-bottom:1px solid rgba(255,255,255,.12); flex-shrink:0; }
+.brand-text{ min-width:0; flex:1; }
+.sidebar.collapsed .brand-text{ display:none; }
+/* Logo em selo redondo laranja, igual ao da sidebar da Oficina LDM. */
+.brand-logo{
+  position:relative; width:44px; height:44px; border-radius:14px; flex-shrink:0; padding:0; border:none; overflow:hidden;
+  background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  box-shadow:0 10px 22px -6px rgba(254,80,0,.6), inset 0 1px 0 rgba(255,255,255,.35);
+  transition:transform .25s;
+}
+.brand-logo:hover{ transform:translateY(-2px) scale(1.045); }
+.brand-logo::before{ content:''; position:absolute; top:-50%; left:-70%; width:55%; height:220%; background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent); transform:rotate(18deg); animation:eq-shine 5s ease-in-out infinite; }
+@keyframes eq-shine{ 0%{ left:-70%; } 38%{ left:150%; } 100%{ left:150%; } }
+.brand-logo img{ position:relative; z-index:1; width:70%; height:70%; object-fit:contain; filter:drop-shadow(0 2px 3px rgba(0,0,0,.3)); pointer-events:none; }
+.brand-logo:hover img{ animation:eq-wiggle 1s ease-in-out infinite; }
+@keyframes eq-wiggle{ 0%,100%{ transform:rotate(0deg); } 25%{ transform:rotate(-9deg); } 75%{ transform:rotate(9deg); } }
+.sidebar.collapsed .brand-logo{ margin:0 auto; }
+.sidebar .brand-name{ font-weight:800; font-size:15px; line-height:1.2; white-space:normal; overflow-wrap:break-word; color:#fff; min-width:0; }
+.sidebar .brand-sub{ font-size:10.5px; color:#8891C4; margin-top:2px; white-space:nowrap; }
+/* Link de volta pro hub, no mesmo lugar e estilo que os demais apps da Oficina. */
+.brand-back{ display:flex; align-items:center; gap:8px; margin:0 14px 8px; padding:7px 10px; border-radius:9px; color:#9BA2CC; text-decoration:none; font-size:12px; font-weight:600; transition:background .2s, color .2s; flex-shrink:0; background:none; border:none; width:calc(100% - 28px); text-align:left; }
+.brand-back:hover{ background:rgba(255,255,255,.06); color:#fff; }
+.sidebar.collapsed .brand-back{ display:none; }
+
+.sidebar.collapsed .nav-item span{ display:none; }
+.sidebar.collapsed .nav-item{ justify-content:center; gap:0; padding:10px 0; }
+.sidebar.collapsed .sidebar-nav{ padding-left:0; padding-right:0; }
+.sidebar.collapsed .sidebar-footer{ display:none; }
+.sidebar.collapsed .brand{ flex-direction:column; justify-content:center; gap:8px; padding:12px 0 10px; }
+.sidebar.collapsed .sidebar-toggle{ margin:0; }
+.sidebar.collapsed .nav-section-label{
+  height:0; padding:0; margin:10px 14px; overflow:hidden;
+  border-top:1px solid rgba(255,255,255,.16);
+}
 .sidebar-toggle{ background:none; border:none; color:#fff; opacity:.7; padding:4px; margin-left:auto; }
 .sidebar-toggle:hover{ opacity:1; }
 /* overflow-x explicito: so com overflow-y o navegador liga a barra
    horizontal sozinho e ela aparecia no pe do menu recolhido. */
-.sidebar-nav{ flex:1; overflow-y:auto; overflow-x:hidden; padding:8px 0; }
+.sidebar-nav{ flex:1; overflow-y:auto; overflow-x:hidden; padding:4px 14px 20px; }
 .nav-item{
-  display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:none;
-  color:rgba(255,255,255,.72); padding:9px 16px; font-size:12.5px; border-left:3px solid transparent;
-  white-space:nowrap; overflow:hidden;
+  display:flex; align-items:center; gap:11px; width:100%; text-align:left; background:none; border:none;
+  border-radius:11px; color:#9BA2CC; padding:10px 12px; font-size:13px; font-weight:600;
+  white-space:nowrap; overflow:hidden; transition:background .2s, color .2s;
 }
 .nav-item:hover{ background:rgba(255,255,255,.06); color:#fff; }
-.nav-item.active{ background:rgba(250,70,22,.18); color:#fff; border-left-color:var(--orange); font-weight:600; }
-.nav-item svg{ flex-shrink:0; opacity:.85; }
-.nav-section-label{ font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.4); padding:14px 16px 4px; white-space:nowrap; }
-.sidebar-footer{ padding:10px 16px; border-top:1px solid rgba(255,255,255,.12); flex-shrink:0; }
-.theme-toggle{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.08); border:none; color:#fff; padding:7px 10px; border-radius:6px; width:100%; font-size:12px; }
+.nav-item.active{ background:rgba(254,80,0,.16); color:#fff; }
+.nav-item svg{ flex-shrink:0; opacity:.85; transition:opacity .2s, color .2s; }
+.nav-item.active svg{ color:var(--orange); opacity:1; }
+.nav-section-label{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6B74A8; padding:14px 12px 6px; white-space:nowrap; }
+.sidebar-footer{ padding:16px 16px 18px; margin-top:auto; border-top:1px solid rgba(255,255,255,.08); flex-shrink:0; font-size:11px; color:#6B74A8; }
 
 .content{ flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--paper); }
+/* Sem faixa de cor: o topbar fica no mesmo fundo do conteudo, igual ao
+   Painel raiz da Oficina LDM. */
 .topbar{
-  display:flex; align-items:center; gap:14px; padding:12px 22px; background:var(--surface);
-  border-bottom:1px solid var(--line); flex-shrink:0; flex-wrap:wrap;
+  display:flex; align-items:center; gap:14px; padding:16px 24px;
+  border-bottom:3px solid var(--orange);
+  flex-shrink:0; flex-wrap:wrap;
 }
-.topbar h1{ font-size:17px; font-weight:700; color:var(--ink); }
+.topbar h1{ font-family:'Poppins',sans-serif; font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-.01em; }
 .topbar p{ font-size:11px; color:var(--ink-soft); margin-top:1px; }
+.mobile-menu-btn{ display:none; background:none; border:none; color:var(--ink); padding:6px; margin-right:2px; align-self:center; }
+/* Switch de tema igual ao da Oficina LDM. */
+.theme-switch{ position:relative; width:46px; height:24px; border-radius:999px; background:var(--surface2); border:1px solid var(--line); cursor:pointer; flex-shrink:0; padding:0; }
+.theme-knob{ position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .3s cubic-bezier(.2,.8,.2,1); box-shadow:0 2px 6px rgba(0,0,0,.25); }
+.theme-switch.on .theme-knob{ left:24px; background:var(--orange); }
 .cycle-badge{
   display:inline-flex; align-items:center; gap:6px; background:var(--blue-light); color:var(--blue);
-  padding:5px 12px; border-radius:100px; font-size:11.5px; font-weight:600; margin-left:auto;
+  padding:5px 12px; border-radius:100px; font-size:11.5px; font-weight:600;
 }
 :root[data-theme="dark"] .cycle-badge{ color:#AEBBEA; }
 #cycleFilterSelect{ background:transparent; border:none; color:inherit; font-size:11.5px; font-weight:600; font-family:inherit; cursor:pointer; }
 #cycleFilterSelect:focus{ outline:none; }
-.global-search{ border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-size:12.5px; background:var(--paper); color:var(--ink); min-width:220px; }
+.global-search{ border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-size:12.5px; background:var(--surface); color:var(--ink); min-width:220px; margin-left:auto; }
 .zoom-ctrl{ display:flex; align-items:center; gap:2px; background:var(--paper); border:1px solid var(--line); border-radius:100px; padding:3px; }
 .zoom-ctrl button{ width:24px; height:24px; border-radius:50%; border:none; background:var(--surface); color:var(--ink); font-size:15px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; }
 .zoom-ctrl button:hover{ background:var(--blue-light); color:var(--blue); }
@@ -95,15 +136,18 @@ button{ font-family:inherit; cursor:pointer; }
 .zoom-ctrl-float{ position:fixed; right:16px; bottom:16px; z-index:70; box-shadow:0 6px 18px rgba(0,0,0,.18); }
 .page-scroll{ flex:1; overflow-y:auto; padding:20px 24px; }
 
+.sidebar-backdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:39; }
+/* Breakpoint do proprio app (topbar com busca + selo de ciclo precisa de
+   mais largura antes de virar celular) — so aqui o menu vira overlay de
+   verdade: fechado some (width:0), aberto cobre o conteudo com fundo
+   escurecido atras, igual aos demais apps da Oficina. */
 @media(max-width:820px){
-  /* O menu nao pode zerar a largura: o botao de recolher mora dentro
-     dele e sumia junto, sem jeito de trazer o menu de volta. Em tela
-     estreita ele fica no trilho de icones, e quando a pessoa abre vira
-     uma gaveta por cima do conteudo, para nao espremer a pagina. */
-  .sidebar:not(.collapsed){ position:fixed; z-index:40; height:100%; width:230px;
-    box-shadow:6px 0 24px rgba(0,0,0,.28); }
+  .sidebar{ position:fixed; z-index:40; height:100%; width:0 !important; box-shadow:0 0 0 rgba(0,0,0,0); transition:width .18s, box-shadow .18s; }
+  .sidebar.mobile-open{ width:230px !important; box-shadow:6px 0 24px rgba(0,0,0,.28); }
   .content{ min-width:0; }
   .page-scroll{ padding:14px; }
+  .mobile-menu-btn{ display:flex; align-items:center; justify-content:center; }
+  .sidebar.mobile-open ~ .sidebar-backdrop{ display:block; }
 }
 
 /* ---------- BUTTONS ---------- */
@@ -746,12 +790,6 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .eq-gantt-regua-faixa .eq-gantt-hoje-rotulo{ color:var(--orange); font-weight:800;
   background:var(--surface); padding:0 3px; border-radius:3px; }
 
-/* Logo com mais presenca na barra lateral. */
-.sidebar .brand{ padding:16px 14px; }
-.brand-logo-chip{ padding:8px 11px; border-radius:9px; box-shadow:0 3px 10px rgba(0,0,0,.22); }
-.brand-logo-img{ height:38px; }
-.sidebar.collapsed .brand{ padding:14px 8px; }
-
 /* Faixa de marca durante a apresentacao, no lugar do menu lateral. */
 .eq-marca-apresentacao{
   display:flex; align-items:center; gap:16px; padding:14px 34px;
@@ -763,44 +801,6 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .eq-marca-apresentacao strong{ color:#fff; font-size:19px; font-weight:800; }
 .eq-marca-apresentacao span{ color:#B9C0E6; font-size:12.5px; }
 .eq-marca-apresentacao time{ margin-left:auto; color:#B9C0E6; font-size:13px; font-weight:600; }
-
-/* Nome do sistema abaixo do logo, na barra lateral. */
-.eq-marca-nome{ padding:0 16px 12px; border-bottom:1px solid rgba(255,255,255,.12); }
-.eq-marca-nome strong{ display:block; color:#fff; font-size:13px; font-weight:700; line-height:1.3; }
-.eq-marca-nome span{ display:block; color:rgba(255,255,255,.6); font-size:10.5px; margin-top:1px; }
-.sidebar.collapsed .eq-marca-nome{ display:none; }
-.sidebar .brand{ justify-content:space-between; }
-.brand-logo-img{ height:34px; }
-
-/* ---------- MENU RECOLHIDO (trilho de icones) ----------
-   Recolher nao e so estreitar: os rotulos precisam sair de cena. Antes
-   eles continuavam ali e ficavam cortados no meio da palavra ("Co",
-   "Da", "Sta"). Agora fica so o icone, centralizado, e o nome da tela
-   aparece no title ao passar o cursor. */
-.sidebar.collapsed .brand{ justify-content:center; }
-.sidebar.collapsed .sidebar-toggle{ margin-left:0; }
-.sidebar.collapsed .nav-item{
-  justify-content:center; gap:0; padding:11px 0 11px 3px; font-size:0;
-}
-.sidebar.collapsed .nav-item span{ display:none; }
-/* Sem o rotulo ao lado, o icone sozinho precisa de mais corpo. */
-.sidebar.collapsed .nav-item svg,
-.sidebar.collapsed .theme-toggle svg{ width:18px; height:18px; }
-.sidebar.collapsed .nav-item svg{ opacity:.95; }
-.sidebar.collapsed .nav-item.active svg{ opacity:1; }
-/* O rotulo da secao ("VISÃO GERAL") nao cabe no trilho: vira um risco
-   fino, que e o que ele faz de util aqui, separar os grupos. */
-.sidebar.collapsed .nav-section-label{
-  font-size:0; padding:0; height:0; margin:9px 14px;
-  border-top:1px solid rgba(255,255,255,.14);
-}
-.sidebar.collapsed .sidebar-nav > div:first-child .nav-section-label{
-  margin-top:0; border-top:none;
-}
-.sidebar.collapsed .sidebar-footer{ padding:10px 0; }
-.sidebar.collapsed .theme-toggle{ justify-content:center; gap:0; padding:8px 0; font-size:0;
-  width:38px; margin:0 auto; border-radius:8px; }
-.sidebar.collapsed .theme-toggle span{ display:none; }
 
 /* Os tres numeros da rosca cabem na mesma linha. */
 .eq-rosca-numeros{ gap:14px; }
