@@ -236,6 +236,7 @@ async function baixarBoletim(M, T){
     a.download = 'Boletim_NET_'+nomeMes(M.mes)+'_'+M.mes.slice(0,4)+'.png';
     a.href = cv.toDataURL('image/png');
     document.body.appendChild(a); a.click(); a.remove();
+    if(API.marcarEntrega) API.marcarEntrega(M.mes,'boletim');
     API.toast('✓ Boletim de '+mesAno(M.mes)+' gerado.');
   } catch(e){ API.toast('Erro ao gerar o boletim: '+e.message, true); }
   finally { host.remove(); }
@@ -457,6 +458,7 @@ async function baixarPPTX(M, P, T){
   s7.addText('Controle de Estoque · CD Cajamar',{x:0,y:7.05,w:W,h:0.25,fontFace:FONTE,fontSize:8,color:'8E96B8',align:'center',charSpacing:2,margin:0});
 
   await pptx.writeFile({fileName:'Fechamento_NET_'+nomeMes(M.mes)+'_'+M.mes.slice(0,4)+'.pptx'});
+  if(API.marcarEntrega) API.marcarEntrega(M.mes,'pptx');
   API.toast('✓ Apresentação de '+mesAno(M.mes)+' gerada.');
 }
 

@@ -1,0 +1,271 @@
+<title>Quadros LDM em 5 estilos</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: barra de escolha no topo + palco que troca de identidade inteira a cada conceito.
+   Paleta da marca LDM (laranja 021 C, azul 2747 C, branco) + cores semânticas das 5 situações. */
+:root{
+  --laranja:#FE5000; --laranja-claro:#FF8A4C; --azul:#001A72; --azul-noite:#000B33; --branco:#FFFFFF;
+  --st-pendente:#6A6F94; --st-andamento:#2F6FE0; --st-concluida:#1F8A52; --st-bloqueada:#D2453A; --st-cancelada:#8C7B70;
+  --chrome-bg:#F2F3F8; --chrome-fg:#0E1438; --chrome-suave:#5C6290; --chrome-linha:#DCDFEE; --chrome-card:#FFFFFF;
+  --f-display:"Archivo Black","Arial Black",Impact,sans-serif;
+  --f-cond:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-texto:"Barlow",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+/* Sempre no modo claro, mesmo com o sistema em tema escuro. */
+:root{color-scheme:light}
+
+*{box-sizing:border-box}
+body{background:var(--chrome-bg);color:var(--chrome-fg);font-family:var(--f-texto);font-size:15px}
+.topo{padding-block:20px 12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:14px}
+.marca{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.selo{width:40px;height:40px;border-radius:12px;background:linear-gradient(145deg,var(--laranja-claro),var(--laranja) 55%,#C83812);display:grid;place-items:center;color:#fff;font-family:var(--f-display);font-size:15px;box-shadow:0 8px 18px -8px rgba(254,80,0,.7)}
+.marca h1{margin:0;font-family:var(--f-cond);font-weight:800;font-size:26px;letter-spacing:.01em;text-wrap:balance}
+.marca p{margin:0;color:var(--chrome-suave);font-size:13px}
+.abas{display:flex;gap:8px;flex-wrap:wrap}
+.aba{font:600 14px var(--f-cond);letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;border-radius:999px;border:1.5px solid var(--chrome-linha);background:var(--chrome-card);color:var(--chrome-fg);cursor:pointer;display:flex;gap:8px;align-items:center;transition:transform .15s,border-color .15s,background .15s}
+.aba b{font-family:var(--f-mono);font-size:11px;color:var(--chrome-suave);font-weight:600}
+.aba:hover{transform:translateY(-2px);border-color:var(--laranja)}
+.aba[aria-selected="true"]{background:var(--laranja);border-color:var(--laranja);color:#fff}
+.aba[aria-selected="true"] b{color:#fff}
+.aba:focus-visible,button:focus-visible{outline:3px solid var(--laranja-claro);outline-offset:2px}
+.conceito{display:flex;gap:10px 18px;flex-wrap:wrap;align-items:baseline;color:var(--chrome-suave);font-size:14px;max-width:110ch}
+.conceito strong{color:var(--chrome-fg);font-family:var(--f-cond);font-size:18px;font-weight:700}
+.dica{font-size:12px;color:var(--chrome-suave)}
+.palco-wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:4px 32px}
+.palco{border-radius:20px;overflow:hidden;position:relative;min-height:520px;box-shadow:0 30px 60px -40px rgba(0,26,114,.55)}
+.rolagem{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.quadro{display:flex;gap:16px;padding:24px;min-width:max-content;align-items:flex-start}
+.btn-mover{border:0;background:none;cursor:pointer;font:700 11px var(--f-cond);letter-spacing:.08em;text-transform:uppercase;padding:4px 6px;border-radius:6px}
+.vazio{font-size:12px;text-align:center;padding:16px 8px}
+.card{cursor:grab;user-select:none;-webkit-user-select:none}
+.card.arrastando{opacity:.45}
+.col.alvo{outline:3px dashed var(--laranja);outline-offset:4px}
+
+/* ============ 1 · PAINEL DE FERRAMENTAS (pegboard) ============ */
+.v-painel{background-color:#E9E4DC;background-image:radial-gradient(circle,#B9B0A3 2.2px,transparent 2.6px);background-size:26px 26px;color:#1B1B1B}
+.v-painel .col{width:250px;display:flex;flex-direction:column;gap:18px;padding-bottom:12px}
+.v-painel .placa{position:relative;background:linear-gradient(180deg,#0A2A8C,var(--azul));color:#fff;border-radius:6px;padding:12px 16px 12px 30px;font:800 17px var(--f-cond);letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;justify-content:space-between;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 6px 0 #00104A,0 12px 18px -8px rgba(0,0,0,.4)}
+.v-painel .placa::before{content:"";position:absolute;top:50%;width:7px;height:7px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff,#9AA3C8);transform:translateY(-50%)}
+.v-painel .placa::before{left:11px}
+.v-painel .placa .n{font-family:var(--f-mono);font-size:14px;background:var(--laranja);padding:2px 8px;border-radius:4px}
+.v-painel .faixa{height:5px;border-radius:3px;margin-top:-10px}
+.v-painel .card{position:relative;margin-top:14px;background:#FFFDF8;border-radius:4px 4px 10px 10px;padding:22px 14px 12px;box-shadow:0 10px 16px -10px rgba(0,0,0,.45);transform-origin:50% -14px;animation:pendura .8s cubic-bezier(.3,1.6,.5,1) both;animation-delay:calc(var(--i)*70ms)}
+.v-painel .card::before{content:"";position:absolute;top:-16px;left:50%;width:2px;height:22px;background:#6B6256;transform:translateX(-50%)}
+.v-painel .card::after{content:"";position:absolute;top:6px;left:50%;width:12px;height:12px;border-radius:50%;background:#E9E4DC;border:2px solid #C9BFB0;transform:translateX(-50%)}
+.v-painel .card:hover{animation:balanca 1.2s ease-in-out infinite}
+.v-painel .card h3{margin:0 0 8px;font:700 16px/1.25 var(--f-texto);text-wrap:balance}
+.v-painel .chip{display:inline-block;font:700 11px var(--f-cond);letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:3px;color:#fff}
+.v-painel .rodape{display:flex;justify-content:space-between;align-items:center;margin-top:10px;border-top:1px dashed #D8D0C2;padding-top:8px}
+.v-painel .btn-mover{color:var(--laranja)}
+.v-painel .vazio{border:2px dashed #B9B0A3;border-radius:8px;color:#7A7064;background:rgba(255,255,255,.35)}
+@keyframes pendura{0%{opacity:0;transform:translateY(-40px) rotate(-8deg)}60%{opacity:1}100%{transform:none}}
+@keyframes balanca{0%,100%{transform:rotate(0)}25%{transform:rotate(3.5deg)}75%{transform:rotate(-3.5deg)}}
+
+/* ============ 2 · ORDEM DE SERVIÇO ============ */
+.v-os{background-color:#F7F8FC;background-image:linear-gradient(rgba(0,26,114,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(0,26,114,.07) 1px,transparent 1px);background-size:22px 22px;color:var(--azul)}
+.v-os .col{width:262px;background:#C9A779;background-image:linear-gradient(135deg,rgba(255,255,255,.12),rgba(0,0,0,.08));border-radius:10px;padding:34px 12px 14px;position:relative;box-shadow:0 14px 24px -14px rgba(60,40,10,.6)}
+.v-os .col::before{content:"";position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:96px;height:30px;border-radius:6px 6px 10px 10px;background:linear-gradient(180deg,#D7DBE8,#8E95B0);box-shadow:inset 0 -3px 0 rgba(0,0,0,.2),0 3px 6px rgba(0,0,0,.25)}
+.v-os .cab{background:#fff;border-radius:4px;padding:10px 12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;border-left:6px solid var(--cor)}
+.v-os .cab span{font:700 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase}
+.v-os .cab .n{font-size:20px;color:var(--laranja)}
+.v-os .lista{display:flex;flex-direction:column;gap:10px}
+.v-os .card{position:relative;background:#fff;padding:12px 12px 10px 22px;border-radius:2px;font-family:var(--f-mono);overflow:hidden;
+  -webkit-mask:radial-gradient(circle 5px at 0 50%,transparent 98%,#000) 0 0/100% 14px;mask:radial-gradient(circle 5px at 0 50%,transparent 98%,#000) 0 0/100% 14px;
+  box-shadow:0 2px 0 rgba(0,0,0,.05);animation:imprime .55s ease-out both;animation-delay:calc(var(--i)*60ms);transition:transform .2s}
+.v-os .card:hover{transform:translateX(4px) rotate(-.6deg)}
+.v-os .os-n{min-height:22px;font-size:10px;font-weight:700;color:var(--laranja);letter-spacing:.12em}
+.v-os .card h3{margin:4px 0 8px;padding-top:2px;font:600 13px/1.4 var(--f-mono);color:#0E1438}
+.v-os .linha{border-top:1.5px dashed #C7CCE0;padding-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#5C6290;text-transform:uppercase;letter-spacing:.06em}
+.v-os .btn-mover{color:var(--azul);font-family:var(--f-mono);font-size:10px}
+.v-os .carimbo{position:absolute;right:10px;top:8px;border:2.5px solid currentColor;border-radius:4px;padding:2px 7px;font:800 13px var(--f-cond);letter-spacing:.14em;transform:rotate(-12deg);opacity:.85;animation:carimba .45s cubic-bezier(.2,1.4,.4,1) both;animation-delay:calc(var(--i)*60ms + 300ms)}
+.v-os .vazio{background:rgba(255,255,255,.55);border:2px dashed rgba(255,255,255,.9);color:#5A4426;font-family:var(--f-mono);font-size:11px;border-radius:4px}
+@keyframes imprime{from{clip-path:inset(0 0 100% 0);transform:translateY(-6px)}to{clip-path:inset(0);transform:none}}
+@keyframes carimba{0%{opacity:0;transform:scale(2.6) rotate(-30deg)}100%{opacity:.85;transform:scale(1) rotate(-12deg)}}
+
+/* ============ 3 · LINHA DE MONTAGEM ============ */
+.v-linha{background:#14161F;color:#E9EAF2}
+.v-linha .quadro{flex-direction:column;gap:14px}
+.v-linha .col{display:grid;grid-template-columns:170px minmax(560px,1fr);align-items:stretch;min-height:118px;border-radius:12px;overflow:hidden;background:#1C1F2B;width:100%}
+.v-linha .estacao{background:var(--cor);padding:14px;display:flex;flex-direction:column;justify-content:space-between;position:relative;color:#fff}
+.v-linha .estacao small{font:700 11px var(--f-mono);letter-spacing:.14em;opacity:.85}
+.v-linha .estacao strong{font:800 22px/1 var(--f-cond);text-transform:uppercase;letter-spacing:.04em}
+.v-linha .estacao .n{font:700 34px/1 var(--f-display)}
+.v-linha .esteira{position:relative;display:flex;gap:12px;align-items:center;padding:16px 16px 26px}
+.v-linha .esteira::after{content:"";position:absolute;left:0;right:0;bottom:8px;height:12px;background:repeating-linear-gradient(90deg,#2C3042 0 18px,#3A3F55 18px 22px);border-top:2px solid #4A506A;border-bottom:2px solid #0B0C12;animation:esteira 1.4s linear infinite}
+.v-linha .card{position:relative;z-index:1;width:200px;flex:none;background:#262A3A;border:2px solid #3A3F55;border-radius:8px;padding:12px;transition:transform .2s,border-color .2s;animation:chega .7s cubic-bezier(.2,.9,.3,1.2) both;animation-delay:calc(var(--i)*90ms)}
+.v-linha .card::before{content:"";position:absolute;inset:6px auto auto 6px;width:22px;height:4px;border-radius:2px;background:var(--cor)}
+.v-linha .card:hover{transform:translateY(-6px);border-color:var(--laranja)}
+.v-linha .card h3{margin:10px 0 10px;font:600 14px/1.3 var(--f-texto)}
+.v-linha .rodape{display:flex;justify-content:space-between;align-items:center;font:600 11px var(--f-mono);color:#9AA0BC}
+.v-linha .btn-mover{color:var(--laranja-claro)}
+.v-linha .vazio{position:relative;z-index:1;color:#7D839E;font-family:var(--f-mono);border:2px dashed #3A3F55;border-radius:8px;width:200px}
+.v-linha .col.alvo .esteira::after{animation-duration:.35s}
+@keyframes esteira{from{background-position:0 0}to{background-position:22px 0}}
+@keyframes chega{from{opacity:0;transform:translateX(-120px)}to{opacity:1;transform:none}}
+
+/* ============ 4 · TORRE DE CONTROLE ============ */
+.v-torre{background:radial-gradient(1200px 500px at 20% -10%,#0A2A9E 0%,transparent 60%),linear-gradient(180deg,var(--azul) 0%,var(--azul-noite) 100%);color:#DDE3FF}
+.v-torre .col{width:252px;position:relative;border-radius:16px;padding:16px 12px 14px;background:rgba(255,255,255,.04);border:1px solid rgba(160,180,255,.16);overflow:hidden}
+.v-torre .col::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:var(--cor);box-shadow:0 0 18px 2px var(--cor)}
+.v-torre .col::after{content:"";position:absolute;left:-40%;top:0;width:40%;height:100%;background:linear-gradient(90deg,transparent,rgba(160,190,255,.08),transparent);animation:varre 5s ease-in-out infinite;animation-delay:calc(var(--c)*.7s);pointer-events:none}
+.v-torre .cab{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px}
+.v-torre .cab span{font:700 13px var(--f-cond);letter-spacing:.16em;text-transform:uppercase;color:#AFC0FF}
+.v-torre .cab .n{font:800 40px/1 var(--f-cond);color:#fff;font-variant-numeric:tabular-nums;text-shadow:0 0 18px var(--cor)}
+.v-torre .lista{display:flex;flex-direction:column;gap:10px;position:relative;z-index:1}
+.v-torre .card{background:rgba(6,14,60,.75);border:1px solid rgba(160,180,255,.18);border-radius:12px;padding:12px 12px 10px 28px;position:relative;transition:transform .2s,border-color .2s,box-shadow .2s;animation:acende .6s ease-out both;animation-delay:calc(var(--i)*80ms)}
+.v-torre .card::before{content:"";position:absolute;left:12px;top:17px;width:8px;height:8px;border-radius:50%;background:var(--cor);box-shadow:0 0 10px var(--cor)}
+.v-torre .card.ativo::before{animation:pulsa 1.6s ease-in-out infinite}
+.v-torre .card:hover{transform:translateY(-3px);border-color:var(--laranja);box-shadow:0 10px 30px -12px rgba(254,80,0,.6)}
+.v-torre .card h3{margin:0 0 8px;font:600 14px/1.35 var(--f-texto);color:#fff}
+.v-torre .rodape{display:flex;justify-content:space-between;align-items:center;font:600 10.5px var(--f-mono);color:#8D9BD6;letter-spacing:.06em;text-transform:uppercase}
+.v-torre .btn-mover{color:var(--laranja-claro)}
+.v-torre .vazio{border:1px dashed rgba(160,180,255,.3);border-radius:12px;color:#8D9BD6;font-family:var(--f-mono);font-size:11px}
+@keyframes varre{0%,60%{left:-40%}100%{left:110%}}
+@keyframes pulsa{0%,100%{box-shadow:0 0 0 0 var(--cor)}50%{box-shadow:0 0 0 7px transparent}}
+@keyframes acende{from{opacity:0;filter:blur(6px);transform:scale(.96)}to{opacity:1;filter:none;transform:none}}
+
+/* ============ 5 · FAIXA LARANJA (bold) ============ */
+.v-faixa{background:#FFFFFF;color:var(--azul)}
+.v-faixa .col{width:262px;display:flex;flex-direction:column;gap:12px}
+.v-faixa .cab{position:relative;background:var(--cor);color:#fff;border:3px solid var(--azul);border-radius:4px;padding:10px 12px 8px;box-shadow:6px 6px 0 var(--azul);overflow:hidden}
+.v-faixa .cab span{font:800 16px var(--f-cond);letter-spacing:.12em;text-transform:uppercase;position:relative}
+.v-faixa .cab .n{display:block;font:400 54px/0.95 var(--f-display);position:relative}
+.v-faixa .col[data-st="bloqueada"] .cab::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(-45deg,rgba(0,0,0,.22) 0 12px,transparent 12px 24px);background-size:34px 34px;animation:alerta 1s linear infinite}
+.v-faixa .card{background:#fff;border:3px solid var(--azul);border-radius:4px;padding:12px;box-shadow:4px 4px 0 var(--azul);transition:transform .15s,box-shadow .15s;animation:salta .5s cubic-bezier(.3,1.7,.5,1) both;animation-delay:calc(var(--i)*60ms)}
+.v-faixa .card:hover{transform:translate(-3px,-3px) rotate(-1deg);box-shadow:8px 8px 0 var(--laranja)}
+.v-faixa .card h3{margin:0 0 10px;font:700 16px/1.25 var(--f-texto);text-wrap:balance}
+.v-faixa .chip{display:inline-block;font:800 11px var(--f-cond);letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border:2px solid var(--azul);border-radius:2px}
+.v-faixa .rodape{display:flex;justify-content:space-between;align-items:center}
+.v-faixa .btn-mover{background:var(--laranja);color:#fff;border:2px solid var(--azul);padding:4px 8px;border-radius:2px}
+.v-faixa .vazio{border:3px dashed #C2C8E2;color:#6A6F94;font-weight:600;border-radius:4px}
+.v-faixa .cancelada h3{text-decoration:line-through;text-decoration-color:var(--laranja);text-decoration-thickness:3px}
+@keyframes alerta{from{background-position:0 0}to{background-position:34px 0}}
+@keyframes salta{from{opacity:0;transform:translateY(24px) scale(.9)}to{opacity:1;transform:none}}
+.confete{position:fixed;width:9px;height:14px;pointer-events:none;z-index:99;border-radius:2px;animation:confete 1.1s cubic-bezier(.2,.6,.4,1) forwards}
+@keyframes confete{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
+
+/* Celebração comum: cartão que cai em Concluída dá um pulo */
+.card.chegou{animation:chegou .6s cubic-bezier(.3,1.8,.5,1) both!important}
+@keyframes chegou{0%{transform:scale(.7)}100%{transform:none}}
+
+@media (max-width:640px){.quadro{padding:16px;gap:12px}.v-linha .col{grid-template-columns:120px minmax(460px,1fr)}.v-linha .estacao strong{font-size:17px}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<header class="topo">
+  <div class="marca">
+    <div class="selo" aria-hidden="true">LDM</div>
+    <div>
+      <h1>Gerenciador de Tarefas · 5 identidades para o quadro</h1>
+      <p>Mesmas tarefas e mesmas 5 situações. Arraste os cartões entre as colunas ou use "mover →".</p>
+    </div>
+  </div>
+  <div class="abas" role="tablist" id="abas"></div>
+  <div class="conceito" id="conceito"></div>
+</header>
+<main class="palco-wrap">
+  <div class="palco" id="palco"><div class="rolagem"><div class="quadro" id="quadro"></div></div></div>
+</main>
+
+<script>
+const STATUS=[
+  {id:'pendente',rotulo:'Pendente',cor:'var(--st-pendente)'},
+  {id:'em_andamento',rotulo:'Em andamento',cor:'var(--st-andamento)'},
+  {id:'concluida',rotulo:'Concluída',cor:'var(--st-concluida)'},
+  {id:'bloqueada',rotulo:'Bloqueada',cor:'var(--st-bloqueada)'},
+  {id:'cancelada',rotulo:'Cancelada',cor:'var(--st-cancelada)'},
+];
+/* As 10 tarefas reais importadas do ClickUp (grupo = situação de origem lá). */
+const TAREFAS=[
+  {id:1,t:'Criação de 3D Resumo de inventari',s:'cancelada',g:'Cancelado'},
+  {id:2,t:'Criar uma Analise de Perda/Ganho',s:'pendente',g:'Backlog'},
+  {id:3,t:'Ajuste Cadastro Compressores',s:'pendente',g:'Pendente'},
+  {id:4,t:'Report Ciclo Inventário',s:'em_andamento',g:'Mapeamento diário'},
+  {id:5,t:'Report Transitórios',s:'em_andamento',g:'Mapeamento diário'},
+  {id:6,t:'Reunião Gustavo - BASES',s:'pendente',g:'Backlog'},
+  {id:7,t:'Relatorio Grot',s:'pendente',g:'Pendente'},
+  {id:8,t:'Relatorio de nota pendente de entrada',s:'pendente',g:'Pendente'},
+  {id:9,t:'Apresentação Projetos',s:'pendente',g:'Pendente'},
+  {id:10,t:'Atualização POP',s:'pendente',g:'Backlog'},
+];
+const CONCEITOS=[
+  {id:'painel',nome:'Painel de Ferramentas',sub:'Parede perfurada da oficina: cada tarefa é uma etiqueta pendurada no gancho e balança ao passar o mouse. Colunas são placas de metal rebitadas.'},
+  {id:'os',nome:'Ordem de Serviço',sub:'Cada tarefa vira uma OS numerada, impressa em papel picotado e presa na prancheta. Concluída e Cancelada ganham carimbo.'},
+  {id:'linha',nome:'Linha de Montagem',sub:'As situações são estações em sequência; os cartões chegam pela esteira, que acelera quando você arrasta algo para ela.'},
+  {id:'torre',nome:'Torre de Controle',sub:'Modo noturno no azul LDM: contadores grandes, luz da situação brilhando no topo e LED pulsando nas tarefas em andamento.'},
+  {id:'faixa',nome:'Faixa Laranja',sub:'Visual de chão de fábrica: blocos grossos, sombra dura, Bloqueada com fita zebrada animada e confete ao concluir.'},
+];
+let atual='painel', arrastado=null, recemChegou=null;
+const $=s=>document.querySelector(s);
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const proxima=s=>STATUS[(STATUS.findIndex(x=>x.id===s)+1)%STATUS.length];
+const osN=id=>'OS-'+String(id).padStart(4,'0');
+
+function card(t,i,st){
+  const cor=st.cor, mov=`<button class="btn-mover" data-mover="${t.id}" title="Mover para ${proxima(t.s).rotulo}">mover →</button>`;
+  const base=`class="card ${t.s==='em_andamento'?'ativo':''} ${t.s} ${recemChegou===t.id?'chegou':''}" draggable="true" data-id="${t.id}" style="--i:${i};--cor:${cor}"`;
+  switch(atual){
+    case 'painel': return `<div ${base}><h3>${esc(t.t)}</h3><span class="chip" style="background:${cor}">${esc(t.g)}</span><div class="rodape"><small>#${t.id}</small>${mov}</div></div>`;
+    case 'os': {
+      const car=t.s==='concluida'?`<span class="carimbo" style="color:var(--st-concluida);--i:${i}">FEITO</span>`:t.s==='cancelada'?`<span class="carimbo" style="color:var(--st-bloqueada);--i:${i}">CANCELADA</span>`:'';
+      return `<div ${base}>${car}<div class="os-n">${osN(t.id)}</div><h3>${esc(t.t)}</h3><div class="linha"><span>${esc(t.g)}</span>${mov}</div></div>`;}
+    case 'linha': return `<div ${base}><h3>${esc(t.t)}</h3><div class="rodape"><span>${osN(t.id)} · ${esc(t.g)}</span>${mov}</div></div>`;
+    case 'torre': return `<div ${base}><h3>${esc(t.t)}</h3><div class="rodape"><span>${esc(t.g)}</span>${mov}</div></div>`;
+    case 'faixa': return `<div ${base}><h3>${esc(t.t)}</h3><div class="rodape"><span class="chip">${esc(t.g)}</span>${mov}</div></div>`;
+  }
+}
+function coluna(st,c){
+  const itens=TAREFAS.filter(t=>t.s===st.id), n=itens.length;
+  const cards=itens.map((t,i)=>card(t,i,st)).join('')||`<div class="vazio">Arraste um cartão para cá</div>`;
+  const attr=`class="col" data-st="${st.id}" style="--cor:${st.cor};--c:${c}"`;
+  switch(atual){
+    case 'painel': return `<section ${attr}><div class="placa"><span>${st.rotulo}</span><span class="n">${n}</span></div><div class="faixa" style="background:${st.cor}"></div>${cards}</section>`;
+    case 'os': return `<section ${attr}><div class="cab"><span>${st.rotulo}</span><span class="n">${n}</span></div><div class="lista">${cards}</div></section>`;
+    case 'linha': return `<section ${attr}><div class="estacao"><small>ESTAÇÃO ${String(c+1).padStart(2,'0')}</small><strong>${st.rotulo}</strong><span class="n">${n}</span></div><div class="esteira">${cards}</div></section>`;
+    case 'torre': return `<section ${attr}><div class="cab"><span>${st.rotulo}</span><span class="n" data-alvo="${n}">${n}</span></div><div class="lista">${cards}</div></section>`;
+    case 'faixa': return `<section ${attr}><div class="cab"><span>${st.rotulo}</span><span class="n">${n}</span></div>${cards}</section>`;
+  }
+}
+function desenhar(){
+  const c=CONCEITOS.find(x=>x.id===atual);
+  $('#palco').className='palco v-'+atual;
+  $('#conceito').innerHTML=`<strong>${c.nome}</strong><span>${c.sub}</span>`;
+  $('#quadro').innerHTML=STATUS.map(coluna).join('');
+  document.querySelectorAll('.aba').forEach(a=>a.setAttribute('aria-selected',a.dataset.id===atual));
+  if(atual==='torre') contar();
+  recemChegou=null;
+}
+function contar(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.querySelectorAll('.v-torre .n').forEach(el=>{const alvo=+el.dataset.alvo;let v=0;el.textContent='0';
+    const passo=()=>{if(v<alvo){v++;el.textContent=v;setTimeout(passo,120)}};setTimeout(passo,200);});
+}
+function mover(id,para,ev){
+  const t=TAREFAS.find(x=>x.id===id); if(!t||t.s===para) return;
+  t.s=para; if(para==='concluida'){recemChegou=id; if(atual==='faixa') confete(ev);} desenhar();
+}
+function confete(ev){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const x=ev?.clientX??innerWidth/2, y=ev?.clientY??innerHeight/2, cores=['#FE5000','#001A72','#FF8A4C','#1F8A52'];
+  for(let i=0;i<28;i++){const d=document.createElement('span');d.className='confete';d.style.left=x+'px';d.style.top=y+'px';
+    d.style.background=cores[i%4];d.style.setProperty('--dx',(Math.random()*260-130)+'px');d.style.setProperty('--dy',(Math.random()*-220-40)+'px');
+    d.style.setProperty('--r',(Math.random()*720-360)+'deg');document.body.appendChild(d);setTimeout(()=>d.remove(),1200);}
+}
+/* abas + rota no endereço (#painel, #os, …) */
+$('#abas').innerHTML=CONCEITOS.map((c,i)=>`<button class="aba" role="tab" data-id="${c.id}"><b>${i+1}</b>${c.nome}</button>`).join('');
+$('#abas').addEventListener('click',e=>{const b=e.target.closest('.aba');if(b){location.hash=b.dataset.id}});
+function lerHash(){const h=location.hash.slice(1);atual=CONCEITOS.some(c=>c.id===h)?h:'painel';desenhar();}
+addEventListener('hashchange',lerHash);
+/* arrastar e soltar */
+const q=$('#quadro');
+q.addEventListener('dragstart',e=>{const c=e.target.closest('.card');if(!c)return;arrastado=+c.dataset.id;c.classList.add('arrastando');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',c.dataset.id)}catch{}});
+q.addEventListener('dragend',()=>{arrastado=null;document.querySelectorAll('.alvo,.arrastando').forEach(el=>el.classList.remove('alvo','arrastando'))});
+q.addEventListener('dragover',e=>{const col=e.target.closest('.col');if(!col||arrastado==null)return;e.preventDefault();
+  document.querySelectorAll('.col.alvo').forEach(x=>x!==col&&x.classList.remove('alvo'));col.classList.add('alvo')});
+q.addEventListener('drop',e=>{const col=e.target.closest('.col');if(!col||arrastado==null)return;e.preventDefault();mover(arrastado,col.dataset.st,e)});
+q.addEventListener('click',e=>{const b=e.target.closest('[data-mover]');if(!b)return;const t=TAREFAS.find(x=>x.id===+b.dataset.mover);mover(t.id,proxima(t.s).id,e)});
+lerHash();
+</script>

@@ -16,6 +16,9 @@ export default {
         tinta: { DEFAULT: '#161933', suave: '#6A6F94' },
         linha: '#E7E8F5',
         papel: '#F3F4FB',
+        /* Azul oficial da marca (Pantone 2747 C): faixa atras do topo do
+           kanban. Diferente de "azul", que e o azul de "em andamento". */
+        marca: { DEFAULT: '#001A72' },
         azul: '#2F6FE0',
         ambar: '#C79212',
         vermelho: '#D2453A',
@@ -25,6 +28,15 @@ export default {
       boxShadow: {
         card: '0 1px 3px rgba(20,24,60,.08), 0 1px 2px rgba(20,24,60,.04)',
         alto: '0 14px 30px -20px rgba(20,24,60,.35)',
+        coluna: '0 6px 18px -12px rgba(0,26,114,.5)',
+      },
+      keyframes: {
+        entra: { from: { opacity: '0', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'none' } },
+        pula: { '50%': { transform: 'scale(1.3)' } },
+      },
+      animation: {
+        entra: 'entra .35s ease backwards',
+        pula: 'pula .4s ease',
       },
     },
   },

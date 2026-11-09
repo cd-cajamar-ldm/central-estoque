@@ -36,3 +36,8 @@
   .zoom-ctrl span { @apply min-w-[34px] text-center font-mono text-[11px] text-tinta-suave; }
   .zoom-ctrl-float { @apply fixed bottom-4 right-4 z-[70] shadow-card; }
 }
+
+/* Quem pede menos movimento no sistema não vê as animações do quadro. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-entra, .animate-pula { animation: none; }
+}
