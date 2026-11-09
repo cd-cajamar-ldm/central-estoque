@@ -374,71 +374,217 @@ function renderLegenda(){
 }
 
 /* ---------- planilha da controladoria ---------- */
-function exporta(){
-  if(typeof XLSX==='undefined'){ toast('Leitor de planilhas não carregou.', true); return; }
+/* Gerada com ExcelJS (carregado só na hora de baixar) para ter o visual da
+   Oficina LDM: azul-marinho + laranja, cabeçalhos coloridos, linhas zebradas,
+   valores positivos/negativos coloridos, filtros, painel congelado e abas
+   coloridas. Os dados e as abas são os mesmos de antes. */
+var EXCELJS_URL='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+function carregaScript(url){
+  return new Promise(function(res,rej){
+    var s=document.createElement('script'); s.src=url; s.onload=res; s.onerror=function(){ rej(new Error('não foi possível carregar '+url)); };
+    document.head.appendChild(s);
+  });
+}
+var XL = {
+  navy:'FF0B1230', azul:'FF001A72', laranja:'FFFE5000', laranjaClaro:'FFFFF1E8', zebra:'FFF5F6FA', borda:'FFE3E6EF',
+  verde:'FF1F8A52', verdeClaro:'FFE8F5EE', vermelho:'FFD83C1E', vermelhoClaro:'FFFDECEA', texto:'FF14172B', cinza:'FF6B7190', lilas:'FFC7CCEA', branco:'FFFFFFFF'
+};
+var FMT = {moeda:'#,##0.00;-#,##0.00', rs:'"R$ "#,##0.00;"R$ "-#,##0.00', inteiro:'#,##0;-#,##0', id:'0'};
+function xlFill(c){ return {type:'pattern', pattern:'solid', fgColor:{argb:c}}; }
+var xlBorda = {bottom:{style:'thin', color:{argb:XL.borda}}};
+
+async function exporta(){
+  if(typeof ExcelJS==='undefined'){
+    try { toast('Preparando a planilha…'); await carregaScript(EXCELJS_URL); }
+    catch(e){ toast('Gerador de planilha não carregou. Verifique a internet e recarregue.', true); return; }
+  }
   var F=fechamento(), L=linhasMes(), mes=S.mesSel;
   var nomeMes=MESES[parseInt(mes.slice(5,7),10)-1], ano=mes.slice(0,4);
-  var wb=XLSX.utils.book_new();
-  var cab=COLUNAS.map(function(c){return c.t;});
-  var MOEDA='#,##0.00;[Red]-#,##0.00';
+  var wb=new ExcelJS.Workbook();
+  wb.creator='Oficina LDM · App NET'; wb.created=new Date();
 
-  function linhaBruta(r, positivo){
-    return COLUNAS.map(function(c){
-      if(c.k==='vlmov') return positivo?Math.abs(r.vl):r.vl;
-      if(c.k==='quantidade') return positivo?Math.abs(r.qtd):r.qtd;
-      var v=r[c.k]; return v==null?'':v;
-    });
-  }
-  function fmtColuna(ws, colIdx, nLinhas, inicio){
-    for(var i=inicio;i<inicio+nLinhas;i++){ var ref=XLSX.utils.encode_cell({r:i,c:colIdx}); if(ws[ref] && typeof ws[ref].v==='number') ws[ref].z=MOEDA; }
-  }
-  var iVl=COLUNAS.findIndex(function(c){return c.k==='vlmov';});
+  /* ===== 1) RESUMO NET (equivale à aba DINAMICA) ===== */
+  var wr=wb.addWorksheet('RESUMO NET',{properties:{tabColor:{argb:XL.laranja}}, views:[{showGridLines:false}]});
+  wr.columns=[{width:3},{width:12},{width:30},{width:28},{width:28},{width:22},{width:3}];
+  for(var r=1;r<=3;r++){ for(var c=1;c<=7;c++) wr.getCell(r,c).fill=xlFill(XL.navy); }
+  wr.getRow(1).height=10; wr.getRow(2).height=30; wr.getRow(3).height=22;
+  wr.mergeCells('B2:F2'); wr.getCell('B2').value='NET CD CAJAMAR · '+nomeMes+'/'+ano;
+  wr.getCell('B2').font={name:'Calibri', size:20, bold:true, color:{argb:XL.branco}}; wr.getCell('B2').alignment={vertical:'middle'};
+  wr.mergeCells('B3:F3'); wr.getCell('B3').value='BOLETIM · FECHAMENTO MENSAL   ·   Consolidado de ajustes de estoque · gerado em '+new Date().toLocaleString('pt-BR');
+  wr.getCell('B3').font={name:'Calibri', size:10, bold:true, color:{argb:XL.laranja}}; wr.getCell('B3').alignment={vertical:'top'};
+  wr.getRow(4).height=4; for(c=1;c<=7;c++) wr.getCell(4,c).fill=xlFill(XL.laranja);
 
-  // 1) RESUMO (equivale à aba DINAMICA)
-  var res=[
-    ['NET CD CAJAMAR — '+nomeMes+'/'+ano],
-    ['Gerado pelo app NET (Oficina LDM) em '+new Date().toLocaleString('pt-BR')],
-    ['Regras: só Lógica 301/302 · fora do NET: depósito(s) '+CFG.depositosFora.join(', ')+' e prefixos com “Considerar NET = NÃO” na legenda'],
-    [],
-    ['Obs','Legenda','Perda por Inventario (301)','Localização Inventário (WMS) (302)','Total Geral']
-  ];
-  F.linhas.forEach(function(o){ res.push([o.prefixo,o.legenda,o.np?o.p:'',o.ng?o.g:'',o.net]); });
-  res.push(['Total Geral','',F.t.p,F.t.g,F.net]);
-  res.push([]); res.push(['Fora do NET (conferência)']); res.push(['Motivo','Prefixos','Linhas','Perda (301)','Ganho (302)']);
-  F.fora.forEach(function(f){ res.push([f.motivo,Object.keys(f.pref).join(', '),f.n,f.p,f.g]); });
-  var wsR=XLSX.utils.aoa_to_sheet(res);
-  var fimResumo=5+F.linhas.length+1; // linhas do resumo + Total Geral
-  for(var c=2;c<=4;c++) fmtColuna(wsR,c,fimResumo-5,5);
-  for(c=3;c<=4;c++) fmtColuna(wsR,c,res.length-fimResumo,fimResumo);
-  wsR['!cols']=[{wch:30},{wch:28},{wch:26},{wch:30},{wch:16}];
-  XLSX.utils.book_append_sheet(wb,wsR,'RESUMO NET');
-
-  // 2) PERDA (301) e 3) GANHO (302) — como vêm da QRY410 (valores positivos) + classificação
-  [['301','PERDA CAJAMAR (301)'],['302','GANHO CAJAMAR (302)']].forEach(function(par){
-    var aoa=[cab.concat(['OBS','Legenda','Considerar NET?','Motivo fora'])];
-    L.filter(function(r){return r.logica===+par[0];}).forEach(function(r){
-      var a=avalia(r); aoa.push(linhaBruta(r,true).concat([a.prefixo,a.legenda,a.noNet?'SIM':'NÃO',a.motivoFora||'']));
-    });
-    var ws=XLSX.utils.aoa_to_sheet(aoa); fmtColuna(ws,iVl,aoa.length,1);
-    ws['!cols']=cab.map(function(t){return {wch:Math.max(10,t.length+2)};}); ws['!cols'][3]={wch:44}; ws['!cols'][21]={wch:44};
-    ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:aoa.length-1,c:aoa[0].length-1}})};
-    XLSX.utils.book_append_sheet(wb,ws,par[1]);
+  // KPIs
+  wr.getRow(6).height=18; wr.getRow(7).height=30;
+  var kpis=[['B6:C6','B7:C7','PERDA · LÓGICA 301',F.t.p,XL.vermelho,false],['D6:D6','D7:D7','GANHO · LÓGICA 302',F.t.g,XL.verde,false],['E6:F6','E7:F7','NET DO MÊS',F.net,F.net<0?XL.vermelho:XL.verde,true]];
+  kpis.forEach(function(k){
+    if(k[0].split(':')[0]!==k[0].split(':')[1]) wr.mergeCells(k[0]);
+    if(k[1].split(':')[0]!==k[1].split(':')[1]) wr.mergeCells(k[1]);
+    var l=wr.getCell(k[0].split(':')[0]), v=wr.getCell(k[1].split(':')[0]);
+    l.value=k[2]; l.font={name:'Calibri', size:9, bold:true, color:{argb:k[5]?XL.laranja:XL.cinza}};
+    v.value=k[3]; v.numFmt=FMT.rs; v.font={name:'Calibri', size:18, bold:true, color:{argb:k[4]}};
+    l.alignment={vertical:'bottom', horizontal:'left', indent:1}; v.alignment={vertical:'middle', horizontal:'left', indent:1};
+    var cols=k[0].replace(/\d/g,'').split(':');
+    for(var cc=cols[0].charCodeAt(0); cc<=cols[1].charCodeAt(0); cc++){
+      var L1=String.fromCharCode(cc);
+      [6,7].forEach(function(rr){
+        var cel=wr.getCell(L1+rr); cel.fill=xlFill(k[5]?XL.laranjaClaro:XL.zebra);
+        var cor=k[5]?XL.laranja:XL.borda, b={};
+        if(rr===6) b.top={style:k[5]?'medium':'thin',color:{argb:cor}};
+        if(rr===7) b.bottom={style:k[5]?'medium':'thin',color:{argb:cor}};
+        if(cc===cols[0].charCodeAt(0)) b.left={style:k[5]?'medium':'thin',color:{argb:cor}};
+        if(cc===cols[1].charCodeAt(0)) b.right={style:k[5]?'medium':'thin',color:{argb:cor}};
+        cel.border=b;
+      });
+    }
   });
 
-  // 4) CONSOLIDADO — 301 + 302 com sinal (saída negativa) + OBS/Motivo/Setor
-  var con=[cab.concat(['OBS','Motivo','Setor','Considerar NET?'])];
-  L.forEach(function(r){ var a=avalia(r); con.push(linhaBruta(r,false).concat([a.prefixo,a.legenda,a.setor,a.noNet?'SIM':'NÃO'])); });
-  var wsC=XLSX.utils.aoa_to_sheet(con); fmtColuna(wsC,iVl,con.length,1);
-  wsC['!cols']=cab.map(function(t){return {wch:Math.max(10,t.length+2)};}); wsC['!cols'][3]={wch:44}; wsC['!cols'][21]={wch:44};
-  wsC['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:con.length-1,c:con[0].length-1}})};
-  XLSX.utils.book_append_sheet(wb,wsC,'CONSOLIDADO');
+  function secao(row, txt){
+    wr.getRow(row).height=22;
+    var c=wr.getCell('B'+row); c.value=txt; c.font={name:'Calibri', size:12, bold:true, color:{argb:XL.azul}}; c.alignment={vertical:'bottom'};
+  }
+  function cabecalho(row, titulos, cor){
+    wr.getRow(row).height=24;
+    titulos.forEach(function(t,i){
+      var c=wr.getCell(row,2+i); c.value=t; c.fill=xlFill(cor||XL.azul);
+      c.font={name:'Calibri', size:10, bold:true, color:{argb:XL.branco}};
+      c.alignment={vertical:'middle', horizontal:i>=2?'right':'left', indent:1, wrapText:true};
+    });
+  }
+  function valor(c, v, cor, negrito){
+    if(v===''||v==null){ c.value='–'; c.alignment={horizontal:'right', indent:1}; c.font={name:'Calibri', size:10, color:{argb:XL.cinza}}; return; }
+    c.value=v; c.numFmt=FMT.rs; c.alignment={horizontal:'right', indent:1, vertical:'middle'};
+    c.font={name:'Calibri', size:10, bold:!!negrito, color:{argb:cor||(v<0?XL.vermelho:(v>0?XL.verde:XL.texto))}};
+  }
 
-  // 5) LEGENDA
-  var leg=[['ID','Legenda','Setor','MOTIVO','DESCRIÇÃO','CONSIDERAR NET?']].concat(CFG.legenda.map(function(l){return [l.id,l.legenda,l.setor,l.motivo,l.descricao,l.net?'SIM':'NÃO'];}));
-  var wsL=XLSX.utils.aoa_to_sheet(leg); wsL['!cols']=[{wch:10},{wch:26},{wch:10},{wch:50},{wch:70},{wch:16}];
-  XLSX.utils.book_append_sheet(wb,wsL,'LEGENDA');
+  secao(9,'RESUMO POR PREFIXO · mesma visão da tabela dinâmica');
+  cabecalho(10,['Obs','Legenda','Perda por Inventário (301)','Localização Inventário (302)','NET']);
+  var row=11;
+  F.linhas.forEach(function(o,i){
+    var R=wr.getRow(row); R.height=20;
+    var fundo=i%2?XL.zebra:XL.branco;
+    for(var c=2;c<=6;c++){ wr.getCell(row,c).fill=xlFill(fundo); wr.getCell(row,c).border=xlBorda; }
+    var a=wr.getCell(row,2); a.value=o.prefixo; a.font={name:'Calibri', size:10, bold:true, color:{argb:XL.laranja}}; a.alignment={indent:1, vertical:'middle'};
+    var b=wr.getCell(row,3); b.value=o.legenda; b.font={name:'Calibri', size:10, color:{argb:XL.texto}}; b.alignment={indent:1, vertical:'middle'};
+    valor(wr.getCell(row,4), o.np?o.p:'', XL.vermelho);
+    valor(wr.getCell(row,5), o.ng?o.g:'', XL.verde);
+    valor(wr.getCell(row,6), o.net, null, true);
+    row++;
+  });
+  wr.getRow(row).height=24;
+  for(c=2;c<=6;c++){ var t=wr.getCell(row,c); t.fill=xlFill(XL.navy); t.font={name:'Calibri', size:11, bold:true, color:{argb:XL.branco}}; t.alignment={vertical:'middle', horizontal:c>=4?'right':'left', indent:1}; }
+  wr.getCell(row,2).value='Total Geral';
+  [[4,F.t.p],[5,F.t.g],[6,F.net]].forEach(function(p){ var t=wr.getCell(row,p[0]); t.value=p[1]; t.numFmt=FMT.rs; });
+  wr.getCell(row,6).font={name:'Calibri', size:11, bold:true, color:{argb:F.net<0?'FFFF8A6B':'FF6EE7A0'}};
+  row+=2;
 
-  XLSX.writeFile(wb,'CONSOLIDADO - NET CDS - '+ano+' '+nomeMes+'.xlsx');
+  secao(row,'FORA DO NET · conferência (nada some sem explicação)'); row++;
+  cabecalho(row,['Linhas','Motivo','Prefixos','Perda (301)','Ganho (302)'],XL.cinza); row++;
+  if(!F.fora.length){ wr.getCell(row,2).value='Nada ficou fora do NET.'; wr.getCell(row,2).font={italic:true, color:{argb:XL.cinza}}; row++; }
+  F.fora.forEach(function(f,i){
+    var fundo=i%2?XL.zebra:XL.branco;
+    for(var c=2;c<=6;c++){ wr.getCell(row,c).fill=xlFill(fundo); wr.getCell(row,c).border=xlBorda; }
+    var n=wr.getCell(row,2); n.value=f.n; n.numFmt=FMT.inteiro; n.alignment={horizontal:'left', indent:1}; n.font={name:'Calibri', size:10, bold:true, color:{argb:XL.texto}};
+    var m=wr.getCell(row,3); m.value=f.motivo; m.font={name:'Calibri', size:10, color:{argb:XL.texto}}; m.alignment={indent:1};
+    var pp=wr.getCell(row,4); pp.value=Object.keys(f.pref).join(', '); pp.font={name:'Calibri', size:10, bold:true, color:{argb:XL.laranja}}; pp.alignment={horizontal:'right', indent:1};
+    valor(wr.getCell(row,5), f.p, XL.vermelho); valor(wr.getCell(row,6), f.g, XL.verde);
+    wr.getRow(row).height=20; row++;
+  });
+  row++;
+  wr.mergeCells('B'+row+':F'+row);
+  var nota=wr.getCell('B'+row);
+  nota.value='Regras: só Lógica 301 e 302 · fora do NET: depósito(s) '+(CFG.depositosFora.join(', ')||'nenhum')+' e prefixos com "Considerar NET = NÃO" na legenda · NET = Ganho (302) + Perda (301).';
+  nota.font={name:'Calibri', size:9, italic:true, color:{argb:XL.cinza}}; nota.alignment={wrapText:true, vertical:'top'}; wr.getRow(row).height=28;
+
+  /* ===== 2..4) abas de dados ===== */
+  var LARG = {cia:8, filial:7, item:10, nome:46, codigoterceiro:14, iddepto:9, nomedepto:28, idfornec:16, nomeforncedor:34, codfornec:14,
+    dtmov:11, logica:8, 'nome#2':26, quantidade:11, sentido:9, referencia:11, vlmov:14, iddeposito:10, nomedeposito:18, numdoc:10,
+    observacao:12, observacaowms:46, usuario:18, datahora:18, movimentoerp:14};
+  var CENTRO = {cia:1, filial:1, iddepto:1, logica:1, iddeposito:1, sentido:1, dtmov:1};
+  var IDS = {cia:1, filial:1, item:1, iddepto:1, idfornec:1, logica:1, referencia:1, iddeposito:1, numdoc:1, movimentoerp:1};
+
+  function abaDados(nome, corAba, linhas, positivo, extras){
+    var ws=wb.addWorksheet(nome,{properties:{tabColor:{argb:corAba}}, views:[{state:'frozen', xSplit:4, ySplit:1, showGridLines:false}]});
+    var cols=COLUNAS.map(function(c){ return {header:c.t, key:c.k, width:LARG[c.k]||12}; })
+      .concat(extras.map(function(e){ return {header:e.t, key:'x_'+e.k, width:e.w}; }));
+    ws.columns=cols;
+    var nRaw=COLUNAS.length, iVl=COLUNAS.findIndex(function(c){return c.k==='vlmov';})+1, iQt=COLUNAS.findIndex(function(c){return c.k==='quantidade';})+1;
+    var H=ws.getRow(1); H.height=30;
+    H.eachCell(function(c,i){
+      c.fill=xlFill(i>nRaw?XL.laranja:XL.azul);
+      c.font={name:'Calibri', size:10, bold:true, color:{argb:XL.branco}};
+      c.alignment={vertical:'middle', horizontal:'center', wrapText:true};
+      c.border={right:{style:'thin', color:{argb:'FF2A3A8E'}}};
+    });
+    linhas.forEach(function(r, idx){
+      var a=avalia(r), obj={};
+      COLUNAS.forEach(function(c){
+        var v = c.k==='vlmov' ? (positivo?Math.abs(r.vl):r.vl) : c.k==='quantidade' ? (positivo?Math.abs(r.qtd):r.qtd) : r[c.k];
+        if(IDS[c.k] && typeof v==='string' && /^\d+$/.test(v.trim()) && v.length<16) v=+v;
+        obj[c.k] = v==null ? null : v;
+      });
+      extras.forEach(function(e){ obj['x_'+e.k]=e.v(a,r); });
+      var R=ws.addRow(obj);
+      var fundo=idx%2?XL.zebra:null;
+      R.eachCell({includeEmpty:true}, function(c,i){
+        if(fundo) c.fill=xlFill(fundo);
+        c.font={name:'Calibri', size:10, color:{argb:XL.texto}};
+        c.border=xlBorda;
+        var k = i<=nRaw ? COLUNAS[i-1].k : null;
+        if(k && IDS[k] && typeof c.value==='number') c.numFmt=FMT.id;
+        if(k && CENTRO[k]) c.alignment={horizontal:'center'};
+      });
+      var vl=R.getCell(iVl); vl.numFmt=FMT.moeda; vl.font={name:'Calibri', size:10, bold:true, color:{argb:r.vl<0?XL.vermelho:XL.verde}};
+      R.getCell(iQt).numFmt=FMT.inteiro;
+      extras.forEach(function(e,j){
+        var c=R.getCell(nRaw+1+j);
+        if(e.k==='obs'){ c.font={name:'Calibri', size:10, bold:true, color:{argb:XL.laranja}}; c.alignment={horizontal:'center'}; }
+        if(e.k==='net'){
+          var sim=c.value==='SIM';
+          c.fill=xlFill(sim?XL.verdeClaro:XL.vermelhoClaro);
+          c.font={name:'Calibri', size:10, bold:true, color:{argb:sim?XL.verde:XL.vermelho}}; c.alignment={horizontal:'center'};
+        }
+        if(e.k==='fora' && c.value){ c.font={name:'Calibri', size:10, italic:true, color:{argb:XL.cinza}}; }
+      });
+    });
+    ws.autoFilter={from:{row:1,column:1}, to:{row:1, column:cols.length}};
+    return ws;
+  }
+  var EXTRA_LOG=[
+    {k:'obs', t:'OBS', w:9, v:function(a){return a.prefixo;}},
+    {k:'leg', t:'Legenda', w:24, v:function(a){return a.legenda;}},
+    {k:'net', t:'Considerar NET?', w:13, v:function(a){return a.noNet?'SIM':'NÃO';}},
+    {k:'fora', t:'Motivo fora do NET', w:32, v:function(a){return a.motivoFora||'';}}
+  ];
+  abaDados('PERDA CAJAMAR (301)', XL.vermelho, L.filter(function(r){return r.logica===301;}), true, EXTRA_LOG);
+  abaDados('GANHO CAJAMAR (302)', XL.verde, L.filter(function(r){return r.logica===302;}), true, EXTRA_LOG);
+  abaDados('CONSOLIDADO', XL.azul, L, false, [
+    {k:'obs', t:'OBS', w:9, v:function(a){return a.prefixo;}},
+    {k:'leg', t:'Motivo', w:24, v:function(a){return a.legenda;}},
+    {k:'set', t:'Setor', w:11, v:function(a){return a.setor;}},
+    {k:'net', t:'Considerar NET?', w:13, v:function(a){return a.noNet?'SIM':'NÃO';}}
+  ]);
+
+  /* ===== 5) LEGENDA ===== */
+  var wl=wb.addWorksheet('LEGENDA',{properties:{tabColor:{argb:XL.cinza}}, views:[{state:'frozen', ySplit:1, showGridLines:false}]});
+  wl.columns=[{header:'ID',width:10},{header:'Legenda',width:26},{header:'Setor',width:11},{header:'MOTIVO',width:46},{header:'DESCRIÇÃO',width:70},{header:'CONSIDERAR NET?',width:17}];
+  wl.getRow(1).height=26;
+  wl.getRow(1).eachCell(function(c){ c.fill=xlFill(XL.azul); c.font={name:'Calibri', size:10, bold:true, color:{argb:XL.branco}}; c.alignment={vertical:'middle', horizontal:'center'}; });
+  CFG.legenda.forEach(function(l,i){
+    var R=wl.addRow([l.id,l.legenda,l.setor,l.motivo,l.descricao,l.net?'SIM':'NÃO']);
+    R.eachCell({includeEmpty:true},function(c,j){
+      if(i%2) c.fill=xlFill(XL.zebra);
+      c.font={name:'Calibri', size:10, color:{argb:XL.texto}}; c.border=xlBorda; c.alignment={vertical:'middle', wrapText:j>=4&&j<=5};
+    });
+    R.getCell(1).font={name:'Calibri', size:10, bold:true, color:{argb:XL.laranja}};
+    var n=R.getCell(6); n.fill=xlFill(l.net?XL.verdeClaro:XL.vermelhoClaro); n.font={name:'Calibri', size:10, bold:true, color:{argb:l.net?XL.verde:XL.vermelho}}; n.alignment={horizontal:'center', vertical:'middle'};
+  });
+  wl.autoFilter={from:{row:1,column:1}, to:{row:1,column:6}};
+
+  var buf=await wb.xlsx.writeBuffer();
+  var blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='CONSOLIDADO - NET CDS - '+ano+' '+nomeMes+'.xlsx';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
   toast('✓ Planilha de '+nomeMes+'/'+ano+' gerada.');
 }
 
@@ -454,7 +600,7 @@ document.addEventListener('click', async function(e){
   var b;
   if((b=e.target.closest('.mes-chip'))){ S.mesSel=b.dataset.mes; render(); return; }
   if((b=e.target.closest('[data-goto]')) && b.tagName==='A'){ e.preventDefault(); if(window.netSwitchTab) window.netSwitchTab(b.dataset.goto); return; }
-  if(e.target.id==='btnExportar'){ exporta(); return; }
+  if(e.target.id==='btnExportar'){ var bt=e.target; bt.disabled=true; exporta().catch(function(err){ toast('Erro ao gerar a planilha: '+err.message, true); }).finally(function(){ bt.disabled=false; }); return; }
   if(e.target.id==='btnLimparMes'){
     if(!confirm('Remover os dados de '+mesLabel(S.mesSel)+' deste navegador? (Dá pra importar de novo depois.)')) return;
     var m=S.mesSel; delete S.meses[m]; S.mesSel=null;
