@@ -332,13 +332,20 @@ function irSetAppTheme(theme){
   localStorage.setItem('ir-app-theme', theme);
   irRenderView();
 }
+const IR_SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+const IR_MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 function irUpdateThemeLabel(){
   const cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
   // Antes um texto ("Modo claro"/"Modo escuro") no botão da sidebar; agora o
   // controle é o switch do topbar, igual ao da Oficina LDM — só liga a classe
-  // que desloca a bolinha.
+  // que desloca a bolinha. O sol/lua dentro da bolinha é o mesmo ícone do
+  // switch do Painel raiz, pra reconhecer de cara qual lado é qual.
   const btn = document.getElementById('themeSwitchBtn');
-  if(btn) btn.classList.toggle('on', cur==='dark');
+  if(!btn) return;
+  const escuro = cur==='dark';
+  btn.classList.toggle('on', escuro);
+  const knob = btn.querySelector('.theme-knob');
+  if(knob) knob.innerHTML = escuro ? IR_MOON : IR_SUN;
 }
 const IR_ZOOM_MIN = 70, IR_ZOOM_MAX = 150, IR_ZOOM_STEP = 10;
 function irApplyZoom(pct){

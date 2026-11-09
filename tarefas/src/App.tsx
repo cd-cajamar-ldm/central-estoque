@@ -4,6 +4,7 @@ import ListaQuadros from '@/paginas/ListaQuadros';
 import DetalheQuadro from '@/paginas/DetalheQuadro';
 import Pessoas from '@/paginas/Pessoas';
 import Sidebar from '@/componentes/Sidebar';
+import ZoomCtrl from '@/componentes/ZoomCtrl';
 import { Aviso, Carregando } from '@/componentes/ui';
 import { useQuadros } from '@/estado/dados';
 import { ContextoPermissoes, permissoesDe, sair, useSessao } from '@/estado/sessao';
@@ -77,7 +78,7 @@ export default function App() {
 
   return (
     <ContextoPermissoes.Provider value={permissoes}>
-    <div className="flex h-screen overflow-hidden bg-papel">
+    <div className="flex overflow-hidden bg-papel" style={{ height: 'calc(100vh / var(--zoom, 1))' }}>
       <Sidebar
         aba={aba} onNavigate={(a) => ir({ aba: a, quadroId: null })}
         mobileOpen={mobileAberto} onFecharMobile={() => setMobileAberto(false)}
@@ -126,6 +127,8 @@ export default function App() {
           Central de Estoque · Loja do Mecânico · versão {__VERSAO__}
         </footer>
       </div>
+
+      <ZoomCtrl />
     </div>
     </ContextoPermissoes.Provider>
   );
