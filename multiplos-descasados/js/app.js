@@ -150,8 +150,11 @@ function irToggleTheme(){
   irUpdateThemeLabel();
 }
 function irUpdateThemeLabel(){
-  const el = document.getElementById('themeToggleLabel');
-  if(el) el.textContent = document.documentElement.getAttribute('data-theme')==='light' ? 'Modo escuro' : 'Modo claro';
+  // Antes um texto ("Modo claro"/"Modo escuro") no botão da sidebar; agora o
+  // controle é o switch do topbar, igual ao da Oficina LDM — só liga a classe
+  // que desloca a bolinha.
+  const btn = document.getElementById('themeSwitchBtn');
+  if(btn) btn.classList.toggle('on', document.documentElement.getAttribute('data-theme')==='dark');
 }
 /* No celular o menu é um overlay (classe mobile-open, largura 0 -> 230px); no
    computador ele encolhe pra faixa de ícones (collapsed). São classes
