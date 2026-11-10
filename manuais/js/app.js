@@ -121,7 +121,7 @@
       (p.instrucoes || []).forEach(function (t) { olha(t, onde + ' (o que fazer)'); });
       (p.valores || []).forEach(function (v) { olha(v.valor, onde + ' (valor “' + (v.rotulo || '') + '”)'); });
       olha(p.observacao, onde + ' (observação)');
-      (p.acoes || []).forEach(function (a, k) { olha(a.texto, onde + ' (ação ' + (k + 1) + ')'); olha(a.balao, onde + ' (ação ' + (k + 1) + ')'); olha(a.legenda, onde + ' (ação ' + (k + 1) + ')'); });
+      (p.acoes || []).forEach(function (a, k) { olha(a.texto, onde + ' (ação ' + (k + 1) + ')'); olha(a.detalhe, onde + ' (ação ' + (k + 1) + ')'); olha(a.balao, onde + ' (ação ' + (k + 1) + ')'); olha(a.legenda, onde + ' (ação ' + (k + 1) + ')'); });
     });
     return achados.filter(function (v, i, a) { return a.indexOf(v) === i; });
   }
@@ -362,12 +362,34 @@
       mudou();
     });
   });
+  /* fundo atrás do print */
+  var BG_NOME = { bancada: 'Bancada (azul pontilhado)', claro: 'Claro', branco: 'Branco', laranja: 'Laranja LDM', grafite: 'Grafite', nenhum: 'Sem fundo', cor: 'Cor escolhida' };
+  function renderFundo() {
+    var f = BG_NOME[atual.fundo] ? atual.fundo : 'bancada';
+    $$('#bgPick [data-bg]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-bg') === f); });
+    if (atual.fundoCor) $('#bgCor').value = atual.fundoCor;
+    $('#bgPick .bg-cor').style.background = f === 'cor' && atual.fundoCor ? atual.fundoCor : '';
+    $('#bgNome').textContent = BG_NOME[f] + (f === 'cor' && atual.fundoCor ? ' ' + atual.fundoCor.toUpperCase() : '');
+    var w = $('.canvas-wrap');
+    Object.keys(BG_NOME).forEach(function (k) { w.classList.remove('bg-' + k); });
+    w.classList.add('bg-' + f);
+    w.style.backgroundColor = f === 'cor' && atual.fundoCor ? atual.fundoCor : '';
+  }
+  $('#bgPick').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-bg]'); if (!b) return;
+    if (e.target.tagName === 'INPUT') return;
+    atual.fundo = b.getAttribute('data-bg');
+    if (atual.fundo === 'cor' && !atual.fundoCor) atual.fundoCor = $('#bgCor').value;
+    renderFundo(); mudou();
+  });
+  $('#bgCor').addEventListener('input', function (e) { atual.fundo = 'cor'; atual.fundoCor = e.target.value; renderFundo(); mudou(); });
+
   $('#btnPreview').onclick = function () { assistir(atual, 0); };
   $('#btnTestStep').onclick = function () { assistir(atual, sIdx); };
   $('#btnExpHtml').onclick = function () { exportarHtml(atual); };
   $('#btnExpJson').onclick = function () { exportarJson(atual); };
 
-  function renderTudo() { renderEtapas(); renderPasso(); checarSenha(); }
+  function renderTudo() { renderEtapas(); renderPasso(); renderFundo(); checarSenha(); }
 
   /* lista de etapas */
   function renderEtapas() {
@@ -555,7 +577,8 @@
           h += (atual.imagens[a.img] ? '<img class="athumb" src="' + atual.imagens[a.img] + '" alt="">' : '') +
             '<button class="btn sm" type="button" data-troca>Trocar print</button>';
         }
-        h += '<label class="f">Legenda (aparece embaixo da tela)<input type="text" data-af="legenda" value="' + esc(a.legenda) + '" placeholder="Ex.: Clique em Save"></label>';
+        h += '<label class="f">Legenda (frase curta embaixo da tela)<input type="text" data-af="legenda" value="' + esc(a.legenda) + '" placeholder="Ex.: Clique em Save"></label>';
+        h += '<label class="f">Explicação detalhada (opcional)<textarea data-af="detalhe" rows="3" placeholder="Por que fazer isso, o que cada opção significa, cuidados…">' + esc(a.detalhe) + '</textarea></label>';
         if (a.tipo === 'digitar') h += '<label class="f">Texto digitado<input type="text" data-af="texto" value="' + esc(a.texto) + '" spellcheck="false" placeholder="Ex.: 2222 ou {{pasta}}"></label>';
         if (a.tipo !== 'tela') {
           h += '<label class="f">Etiqueta (opcional)<input type="text" data-af="balao" value="' + esc(a.balao) + '" placeholder="Ex.: SSH ✓"></label>';
