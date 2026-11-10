@@ -36,6 +36,13 @@ export interface Grupo {
   ordem: number;
 }
 
+/* Item de checklist guardado dentro da propria tarefa (coluna jsonb). */
+export interface ItemChecklist {
+  id: string;
+  texto: string;
+  feito: boolean;
+}
+
 export interface Tarefa {
   id: string;
   quadro_id: string;
@@ -45,8 +52,12 @@ export interface Tarefa {
   responsavel_id: string | null;
   status: StatusTarefa;
   prioridade: Prioridade;
+  /* Datas em AAAA-MM-DD. inicio e prazo (fim previsto) sao digitados;
+     concluida_em e preenchida sozinha ao concluir e pode ser corrigida. */
+  inicio: string | null;
   prazo: string | null;
   concluida_em: string | null;
+  checklist: ItemChecklist[];
   ordem: number | null;
   criado_por: string | null;
   criado_em: string;
