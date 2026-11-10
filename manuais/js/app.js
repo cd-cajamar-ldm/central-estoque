@@ -121,7 +121,7 @@
       (p.instrucoes || []).forEach(function (t) { olha(t, onde + ' (o que fazer)'); });
       (p.valores || []).forEach(function (v) { olha(v.valor, onde + ' (valor “' + (v.rotulo || '') + '”)'); });
       olha(p.observacao, onde + ' (observação)');
-      (p.acoes || []).forEach(function (a, k) { olha(a.texto, onde + ' (ação ' + (k + 1) + ')'); olha(a.balao, onde + ' (ação ' + (k + 1) + ')'); olha(a.legenda, onde + ' (ação ' + (k + 1) + ')'); });
+      (p.acoes || []).forEach(function (a, k) { olha(a.texto, onde + ' (ação ' + (k + 1) + ')'); olha(a.detalhe, onde + ' (ação ' + (k + 1) + ')'); olha(a.escolhida, onde + ' (ação ' + (k + 1) + ')'); olha(a.balao, onde + ' (ação ' + (k + 1) + ')'); olha(a.legenda, onde + ' (ação ' + (k + 1) + ')'); });
     });
     return achados.filter(function (v, i, a) { return a.indexOf(v) === i; });
   }
@@ -362,12 +362,34 @@
       mudou();
     });
   });
+  /* fundo atrás do print */
+  var BG_NOME = { bancada: 'Bancada (azul pontilhado)', claro: 'Claro', branco: 'Branco', laranja: 'Laranja LDM', grafite: 'Grafite', nenhum: 'Sem fundo', cor: 'Cor escolhida' };
+  function renderFundo() {
+    var f = BG_NOME[atual.fundo] ? atual.fundo : 'bancada';
+    $$('#bgPick [data-bg]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-bg') === f); });
+    if (atual.fundoCor) $('#bgCor').value = atual.fundoCor;
+    $('#bgPick .bg-cor').style.background = f === 'cor' && atual.fundoCor ? atual.fundoCor : '';
+    $('#bgNome').textContent = BG_NOME[f] + (f === 'cor' && atual.fundoCor ? ' ' + atual.fundoCor.toUpperCase() : '');
+    var w = $('.canvas-wrap');
+    Object.keys(BG_NOME).forEach(function (k) { w.classList.remove('bg-' + k); });
+    w.classList.add('bg-' + f);
+    w.style.backgroundColor = f === 'cor' && atual.fundoCor ? atual.fundoCor : '';
+  }
+  $('#bgPick').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-bg]'); if (!b) return;
+    if (e.target.tagName === 'INPUT') return;
+    atual.fundo = b.getAttribute('data-bg');
+    if (atual.fundo === 'cor' && !atual.fundoCor) atual.fundoCor = $('#bgCor').value;
+    renderFundo(); mudou();
+  });
+  $('#bgCor').addEventListener('input', function (e) { atual.fundo = 'cor'; atual.fundoCor = e.target.value; renderFundo(); mudou(); });
+
   $('#btnPreview').onclick = function () { assistir(atual, 0); };
   $('#btnTestStep').onclick = function () { assistir(atual, sIdx); };
   $('#btnExpHtml').onclick = function () { exportarHtml(atual); };
   $('#btnExpJson').onclick = function () { exportarJson(atual); };
 
-  function renderTudo() { renderEtapas(); renderPasso(); checarSenha(); }
+  function renderTudo() { renderEtapas(); renderPasso(); renderFundo(); checarSenha(); }
 
   /* lista de etapas */
   function renderEtapas() {
@@ -459,13 +481,15 @@
     tela: { nome: 'Tela', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="21 15 16 10 5 21"/></svg>' },
     clique: { nome: 'Clique', ic: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>' },
     digitar: { nome: 'Digitar', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>' },
-    destacar: { nome: 'Destacar', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 3"/></svg>' }
+    destacar: { nome: 'Destacar', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 3"/></svg>' },
+    escolher: { nome: 'Lista suspensa', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1"/><path d="M15 6.5l1.5 1.5L18 6.5M5 14h10M5 18h7"/></svg>' }
   };
   var HINT = {
     'clique': 'Clique (ou arraste) sobre o botão/campo que o leitor deve clicar.',
     'clique-dir': 'Clique (ou arraste) sobre o item do clique com o botão direito.',
     'digitar': 'Arraste um retângulo exatamente sobre o campo onde o texto será digitado.',
     'destacar': 'Arraste um retângulo em volta da área que quer destacar.',
+    'escolher': 'Arraste um retângulo sobre a caixa da lista suspensa (o campo fechado, com a setinha).',
     'reposicionar': 'Desenhe de novo a área da ação selecionada.'
   };
   function setTool(t) {
@@ -485,14 +509,11 @@
     if (e.key === 'Escape' && tool && preview.hidden) setTool(null);
   });
 
-  /* tela vigente para a ação selecionada (ou para o fim da etapa) */
+  /* tela vigente para a ação selecionada (ou para o fim da etapa). Só olha
+     a própria etapa: etapa nova começa com o espaço do print vazio. */
   function telaVigente(idx) {
     var ac = passo().acoes, ate = idx == null ? (aIdx >= 0 ? aIdx : ac.length - 1) : idx;
     for (var j = ate; j >= 0; j--) if (ac[j] && ac[j].tipo === 'tela') return { img: ac[j].img, idx: j };
-    for (var k = sIdx - 1; k >= 0; k--) {
-      var a2 = atual.passos[k].acoes || [];
-      for (var j2 = a2.length - 1; j2 >= 0; j2--) if (a2[j2].tipo === 'tela') return { img: a2[j2].img, idx: -1, herdada: k };
-    }
     return null;
   }
   function inserirAcao(a) {
@@ -537,7 +558,7 @@
 
   function resumo(a) {
     if (a.tipo === 'tela') return a.legenda ? '<i>' + esc(a.legenda) + '</i>' : '<i>troca o print</i>';
-    var extra = a.tipo === 'digitar' && a.texto ? ' “' + esc(a.texto) + '”' : '';
+    var extra = a.tipo === 'digitar' && a.texto ? ' “' + esc(a.texto) + '”' : a.tipo === 'escolher' && a.escolhida ? ' → “' + esc(a.escolhida) + '”' : '';
     return (a.legenda ? esc(a.legenda) : '<i>sem legenda</i>') + extra;
   }
   function renderAcoes() {
@@ -555,13 +576,20 @@
           h += (atual.imagens[a.img] ? '<img class="athumb" src="' + atual.imagens[a.img] + '" alt="">' : '') +
             '<button class="btn sm" type="button" data-troca>Trocar print</button>';
         }
-        h += '<label class="f">Legenda (aparece embaixo da tela)<input type="text" data-af="legenda" value="' + esc(a.legenda) + '" placeholder="Ex.: Clique em Save"></label>';
+        h += '<label class="f">Legenda (frase curta embaixo da tela)<input type="text" data-af="legenda" value="' + esc(a.legenda) + '" placeholder="Ex.: Clique em Save"></label>';
+        h += '<label class="f">Explicação detalhada (opcional)<textarea data-af="detalhe" rows="3" placeholder="Por que fazer isso, o que cada opção significa, cuidados…">' + esc(a.detalhe) + '</textarea></label>';
         if (a.tipo === 'digitar') h += '<label class="f">Texto digitado<input type="text" data-af="texto" value="' + esc(a.texto) + '" spellcheck="false" placeholder="Ex.: 2222 ou {{pasta}}"></label>';
+        if (a.tipo === 'escolher') {
+          h += '<label class="f">Opções da lista (uma por linha, na ordem da tela)<textarea data-af="opcoes" rows="4" spellcheck="false" placeholder="Por Item\nPor Item e Local\nPor Local">' + esc(a.opcoes) + '</textarea></label>';
+          h += '<label class="f">Opção escolhida (aparece no campo depois)<input type="text" data-af="escolhida" value="' + esc(a.escolhida) + '" spellcheck="false" placeholder="Ex.: Por Item e Local"></label>';
+        }
         if (a.tipo !== 'tela') {
           h += '<label class="f">Etiqueta (opcional)<input type="text" data-af="balao" value="' + esc(a.balao) + '" placeholder="Ex.: SSH ✓"></label>';
           h += '<div class="ackrow">';
-          if (a.tipo === 'clique') h += '<label><input type="checkbox" data-ak="realce"' + (a.realce ? ' checked' : '') + '> Destacar depois do clique</label><label><input type="checkbox" data-ak="dir"' + (a.dir ? ' checked' : '') + '> Botão direito</label>';
-          h += '</div><button class="btn sm" type="button" data-repos>Redesenhar área</button>';
+          if (a.tipo === 'clique') h += '<label><input type="checkbox" data-ak="marcar"' + (a.marcar ? ' checked' : '') + '> Mostrar caixa marcada ✓ depois</label><label><input type="checkbox" data-ak="realce"' + (a.realce ? ' checked' : '') + '> Destacar depois do clique</label><label><input type="checkbox" data-ak="dir"' + (a.dir ? ' checked' : '') + '> Botão direito</label>';
+          h += '</div><div class="arow"><button class="btn sm" type="button" data-repos>Redesenhar área</button>' +
+            '<button class="btn sm" type="button" data-depois title="Cole/envie o print de como a tela fica depois desta ação">+ Print do depois</button></div>' +
+            '<p class="help" style="margin:0">“Print do depois” coloca, logo após esta ação, o print da tela já alterada (ex.: lista aberta, tela seguinte).</p>';
         }
         h += '</div>';
       }
@@ -582,6 +610,7 @@
     }
     if (e.target.closest('[data-troca]')) { pedirTela = i; $('#fileTela').click(); return; }
     if (e.target.closest('[data-repos]')) { setTool('reposicionar'); return; }
+    if (e.target.closest('[data-depois]')) { aIdx = i; pedirTela = null; $('#fileTela').click(); return; }
     if (e.target.closest('[data-pick]')) { aIdx = aIdx === i ? -1 : i; setTool(null); renderAcoes(); }
   });
   $('#actionList').addEventListener('input', function (e) {
@@ -618,7 +647,7 @@
       boxes += '<div class="abox t-' + a.tipo + (k === aIdx ? ' sel' : '') + '" data-box="' + k + '" style="left:' + a.area[0] + '%;top:' + a.area[1] + '%;width:' + a.area[2] + '%;height:' + a.area[3] + '%"><span>' + (k + 1) + '</span></div>';
     }
     cv.innerHTML = '<img src="' + atual.imagens[t.img] + '" alt="">' + boxes;
-    $('#canvasInfo').textContent = t.herdada != null ? 'Print herdado da etapa ' + (t.herdada + 1) + ' — cole outro se a tela mudou.' : 'Print da ação ' + (t.idx + 1);
+    $('#canvasInfo').textContent = 'Print da ação ' + (t.idx + 1);
   }
 
   /* desenhar área no print */
@@ -655,8 +684,9 @@
     var x = Math.min(d.x, p[0]), y = Math.min(d.y, p[1]), w = Math.abs(p[0] - d.x), h = Math.abs(p[1] - d.y);
     if (w < 1.2 && h < 1.2) {
       /* clique simples: área pequena centrada no ponto (campo de texto mais largo) */
-      var dw = tool === 'digitar' ? 22 : 5, dh = tool === 'digitar' ? 4.5 : 4;
-      x = Math.max(0, d.x - (tool === 'digitar' ? 2 : dw / 2)); y = Math.max(0, d.y - dh / 2); w = dw; h = dh;
+      var largo = tool === 'digitar' || tool === 'escolher';
+      var dw = tool === 'digitar' ? 22 : tool === 'escolher' ? 16 : 5, dh = largo ? 4.5 : 4;
+      x = Math.max(0, d.x - (largo ? 2 : dw / 2)); y = Math.max(0, d.y - dh / 2); w = dw; h = dh;
     }
     var area = [x, y, w, h].map(function (v) { return Math.round(v * 100) / 100; });
     if (tool === 'reposicionar') {
@@ -666,10 +696,11 @@
     var nova;
     if (tool === 'digitar') nova = { tipo: 'digitar', area: area, texto: '', legenda: '', balao: '' };
     else if (tool === 'destacar') nova = { tipo: 'destacar', area: area, legenda: '', balao: '' };
+    else if (tool === 'escolher') nova = { tipo: 'escolher', area: area, opcoes: '', escolhida: '', legenda: '', balao: '' };
     else nova = { tipo: 'clique', area: area, dir: tool === 'clique-dir', realce: false, legenda: '', balao: '' };
     setTool(null);
     inserirAcao(nova);
-    var foco = $('#actionList .aitem.sel [data-af="' + (nova.tipo === 'digitar' ? 'texto' : 'legenda') + '"]');
+    var foco = $('#actionList .aitem.sel [data-af="' + (nova.tipo === 'digitar' ? 'texto' : nova.tipo === 'escolher' ? 'opcoes' : 'legenda') + '"]');
     if (foco) foco.focus();
   });
 

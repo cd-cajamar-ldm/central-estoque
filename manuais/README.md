@@ -5,7 +5,9 @@ App da Oficina LDM para montar manuais de configuração no estilo "assista e re
 - **Biblioteca** (`index.html`): lista os manuais guardados neste navegador (IndexedDB).
 - **Editor**: cada etapa tem prints reais (Ctrl+V, arrastar ou "Nova tela") e um roteiro de
   ações marcadas sobre o print — *Clique*, *Botão direito*, *Digitar* e *Destacar* — com a
-  legenda que aparece embaixo da tela. Também tem "o que fazer", valores para copiar,
+  legenda que aparece embaixo da tela e uma explicação detalhada opcional (a animação espera o
+  tempo de leitura). Em "Dados do manual" dá para escolher o fundo atrás do print (bancada,
+  claro, branco, laranja, grafite, sem fundo ou uma cor). Também tem "o que fazer", valores para copiar,
   observação e um campo opcional que o leitor preenche (`{{chave}}`).
 - **Exportar manual (.html)**: gera um arquivo único, com player e prints embutidos, que abre
   offline e pode ir por Teams/e-mail. **Salvar projeto (.json)** guarda o projeto para editar em
