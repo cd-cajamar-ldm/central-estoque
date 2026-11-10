@@ -1,0 +1,188 @@
+<title>Lista de Quadros LDM</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: uma página corrida com as 10 propostas empilhadas, cada uma repetindo o topo
+   "Quadros + Novo quadro" do app, para comparar lado a lado. Sempre modo claro.
+   Fontes e cores iguais às do app (Poppins nos títulos, Inter no texto, laranja e azul LDM). */
+:root{
+  color-scheme:light;
+  --laranja:#FE5000; --laranja-esc:#C83812; --marca:#001A72;
+  --tinta:#161933; --suave:#6A6F94; --linha:#E7E8F5; --papel:#F3F4FB; --branco:#FFFFFF;
+  --st-pendente:#6A6F94; --st-andamento:#2F6FE0; --st-concluida:#1F8A52; --st-bloqueada:#D2453A; --st-cancelada:#8C7B70;
+  --titulo:"Poppins","Segoe UI",sans-serif; --texto:"Inter",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --sombra:0 1px 3px rgba(20,24,60,.08),0 1px 2px rgba(20,24,60,.04);
+  --sombra-alta:0 16px 32px -18px rgba(0,26,114,.45);
+}
+*{box-sizing:border-box}
+body{background:var(--papel);color:var(--tinta);font-family:var(--texto);font-size:14px}
+.pagina{padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));max-width:1240px;margin:0 auto;display:grid;gap:28px}
+.intro h1{margin:0;font-family:var(--titulo);font-size:22px;font-weight:800;text-wrap:balance}
+.intro p{margin:6px 0 0;color:var(--suave);max-width:80ch;line-height:1.5}
+.indice{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.indice a{font-size:12.5px;font-weight:600;color:var(--marca);text-decoration:none;background:var(--branco);border:1px solid var(--linha);border-radius:99px;padding:5px 11px}
+.indice a:hover{border-color:var(--laranja);color:var(--laranja-esc)}
+.proposta{background:var(--branco);border:1px solid var(--linha);border-radius:18px;overflow:hidden;scroll-margin-top:16px}
+.proposta>header{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--linha)}
+.proposta>header .num{font-family:var(--mono);font-size:12px;color:var(--laranja);font-weight:600}
+.proposta>header h2{margin:0;font-family:var(--titulo);font-size:16px;font-weight:700}
+.proposta>header p{margin:0;color:var(--suave);font-size:13px;flex:1 1 320px}
+.dado{font-size:11px;font-weight:700;color:var(--laranja-esc);background:#FFF1EA;border:1px solid #FFD3BF;border-radius:6px;padding:2px 7px;white-space:nowrap}
+.tela{background:var(--papel);padding:20px 18px 22px}
+.barra{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px}
+.barra h3{margin:0;font-family:var(--titulo);font-size:17px;font-weight:800}
+.novo{border:0;background:var(--laranja);color:#fff;font-weight:700;font-size:13px;border-radius:9px;padding:9px 14px;cursor:pointer;font-family:inherit}
+.novo:hover{background:var(--laranja-esc)}
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.q{all:unset;box-sizing:border-box;display:block;cursor:pointer;position:relative;min-width:0;animation:entra .45s ease backwards;animation-delay:calc(var(--i)*70ms)}
+.q:focus-visible{outline:3px solid var(--laranja);outline-offset:3px;border-radius:14px}
+.q h4{margin:0;font-family:var(--titulo);font-size:15.5px;font-weight:700;color:var(--tinta);text-wrap:balance}
+.q p{margin:4px 0 0;color:var(--suave);font-size:13px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.q .vazio-desc{font-style:italic;opacity:.75}
+@keyframes entra{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* 1 · Faixa azul */
+.p1 .q{background:var(--branco);border-radius:14px;overflow:hidden;box-shadow:var(--sombra);border:1px solid var(--linha);transition:transform .2s,box-shadow .2s}
+.p1 .q .topo{background:var(--marca);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px}
+.p1 .q .topo i{width:10px;height:10px;border-radius:50%;background:var(--cor);box-shadow:0 0 0 3px rgba(255,255,255,.18)}
+.p1 .q .topo h4{color:#fff}
+.p1 .q .corpo{padding:12px 16px 14px}
+.p1 .q .abrir{margin-top:10px;font-size:12px;font-weight:700;color:var(--laranja);opacity:0;transform:translateX(-4px);transition:.2s}
+.p1 .q:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
+.p1 .q:hover .abrir{opacity:1;transform:none}
+
+/* 2 · Tingido */
+.p2 .q{border-radius:14px;padding:16px;background:color-mix(in srgb,var(--cor) 13%,white);border:1px solid color-mix(in srgb,var(--cor) 38%,white);transition:transform .2s,box-shadow .2s}
+.p2 .q h4{color:color-mix(in srgb,var(--cor) 55%,#161933)}
+.p2 .q .rod{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+.p2 .q .rod span{font-size:11.5px;font-weight:700;color:color-mix(in srgb,var(--cor) 60%,#161933);background:rgba(255,255,255,.7);border-radius:99px;padding:3px 9px}
+.p2 .q .rod b{width:28px;height:28px;border-radius:50%;background:var(--cor);color:#fff;display:grid;place-items:center;font-size:14px;transition:transform .2s}
+.p2 .q:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
+.p2 .q:hover .rod b{transform:translateX(4px)}
+
+/* 3 · Barra lateral */
+.p3 .q{background:var(--branco);border-radius:12px;border:1px solid var(--linha);border-left:6px solid var(--cor);padding:16px 44px 16px 16px;box-shadow:var(--sombra);transition:border-color .2s,box-shadow .2s}
+.p3 .q::after{content:"→";position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--suave);transition:.2s}
+.p3 .q:hover{border-color:var(--laranja);border-left-color:var(--cor);box-shadow:var(--sombra-alta)}
+.p3 .q:hover::after{color:var(--laranja);right:12px}
+
+/* 4 · Monograma */
+.p4 .q{background:var(--branco);border-radius:14px;border:1px solid var(--linha);padding:16px;display:grid;grid-template-columns:52px 1fr;gap:14px;align-items:center;box-shadow:var(--sombra);transition:transform .2s,box-shadow .2s}
+.p4 .q .mono{width:52px;height:52px;border-radius:14px;background:var(--cor);color:#fff;display:grid;place-items:center;font-family:var(--titulo);font-weight:800;font-size:18px;transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+.p4 .q:hover{transform:translateY(-2px);box-shadow:var(--sombra-alta)}
+.p4 .q:hover .mono{transform:rotate(-8deg) scale(1.06)}
+
+/* 5 · Capa */
+.p5 .q{background:var(--branco);border-radius:16px;overflow:hidden;border:1px solid var(--linha);box-shadow:var(--sombra);transition:transform .2s,box-shadow .2s}
+.p5 .q .capa{height:78px;background:linear-gradient(135deg,var(--cor),color-mix(in srgb,var(--cor) 55%,var(--marca)));position:relative;overflow:hidden}
+.p5 .q .capa::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(-45deg,rgba(255,255,255,.12) 0 2px,transparent 2px 14px);transition:transform .6s}
+.p5 .q .ini{position:absolute;left:16px;top:58px;z-index:1;width:40px;height:40px;border-radius:12px;background:var(--branco);color:var(--cor);display:grid;place-items:center;font-family:var(--titulo);font-weight:800;box-shadow:var(--sombra)}
+.p5 .q .corpo{padding:26px 16px 16px}
+.p5 .q:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
+.p5 .q:hover .capa::before{transform:translateX(28px)}
+
+/* 6 · Lista */
+.p6 .lista{background:var(--branco);border:1px solid var(--linha);border-radius:14px;overflow:hidden}
+.p6 .q{width:100%;display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 16px;border-top:1px solid var(--linha);transition:background .15s}
+.p6 .q:first-child{border-top:0}
+.p6 .q i{width:12px;height:12px;border-radius:4px;background:var(--cor)}
+.p6 .q .t{display:flex;gap:4px 12px;align-items:baseline;flex-wrap:wrap;min-width:0}
+.p6 .q p{margin:0}
+.p6 .q .abrir{font-size:12.5px;font-weight:700;color:var(--marca);border:1px solid var(--linha);border-radius:8px;padding:6px 10px;transition:.15s}
+.p6 .q:hover{background:#FAFAFE}
+.p6 .q:hover .abrir{background:var(--laranja);border-color:var(--laranja);color:#fff}
+
+/* 7 · Com andamento */
+.p7 .q{background:var(--branco);border-radius:14px;border:1px solid var(--linha);padding:16px;box-shadow:var(--sombra);transition:transform .2s,box-shadow .2s}
+.p7 .q .cab{display:flex;align-items:center;gap:8px}
+.p7 .q .cab i{width:9px;height:9px;border-radius:50%;background:var(--cor)}
+.p7 .q .seg{display:flex;height:8px;border-radius:99px;overflow:hidden;background:var(--linha);margin-top:14px;gap:2px}
+.p7 .q .seg span{display:block;height:100%;transform-origin:left;animation:cresce .8s ease backwards;animation-delay:calc(var(--i)*70ms + 200ms)}
+.p7 .q .leg{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:11.5px;color:var(--suave)}
+.p7 .q .leg b{font-family:var(--mono);color:var(--tinta)}
+.p7 .q:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
+@keyframes cresce{from{transform:scaleX(0)}to{transform:none}}
+
+/* 8 · Pasta */
+.p8 .grade{row-gap:24px}
+.p8 .q{margin-top:12px;background:var(--branco);border-radius:0 14px 14px 14px;border:1px solid var(--linha);border-top:4px solid var(--cor);padding:16px;box-shadow:var(--sombra);transition:transform .2s,box-shadow .2s}
+.p8 .q::before{content:"";position:absolute;left:-1px;top:-16px;width:96px;height:16px;background:var(--cor);border-radius:8px 14px 0 0}
+.p8 .q .meta{margin-top:12px;font-size:11.5px;color:var(--suave);font-family:var(--mono)}
+.p8 .q:hover{transform:translateY(-3px) rotate(-.5deg);box-shadow:var(--sombra-alta)}
+
+/* 9 · Blocos compactos */
+.p9 .grade{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.p9 .q{background:var(--branco);border:1px solid var(--linha);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;transition:border-color .15s,background .15s}
+.p9 .q i{flex:none;width:30px;height:30px;border-radius:9px;background:color-mix(in srgb,var(--cor) 15%,white);border:2px solid var(--cor)}
+.p9 .q h4{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.p9 .q:hover{border-color:var(--laranja);background:#FFF8F4}
+
+/* 10 · Painel com número */
+.p10 .q{background:var(--branco);border-radius:16px;border:1px solid var(--linha);padding:16px 16px 14px;box-shadow:var(--sombra);transition:transform .2s,box-shadow .2s,border-color .2s;overflow:hidden}
+.p10 .q::before{content:"";position:absolute;right:-30px;top:-30px;width:110px;height:110px;border-radius:50%;background:color-mix(in srgb,var(--cor) 14%,white);transition:transform .4s}
+.p10 .q>*{position:relative}
+.p10 .q .grande{display:flex;align-items:baseline;gap:8px;margin-top:14px}
+.p10 .q .grande b{font-family:var(--titulo);font-size:34px;font-weight:800;line-height:1;color:var(--marca)}
+.p10 .q .grande span{font-size:12px;color:var(--suave)}
+.p10 .q .atras{font-size:11.5px;font-weight:700;color:var(--st-bloqueada);margin-top:4px}
+.p10 .q:hover{transform:translateY(-3px);border-color:var(--laranja);box-shadow:var(--sombra-alta)}
+.p10 .q:hover::before{transform:scale(1.25)}
+</style>
+
+<main class="pagina">
+  <section class="intro">
+    <h1>Tela de Quadros · 10 propostas</h1>
+    <p>Todas usam os mesmos três quadros: os dois que já existem no app e o "Importado do ClickUp". As propostas marcadas com <span class="dado">precisa contar tarefas</span> mostram números que hoje a tela não carrega; os números delas são exemplos, menos os do quadro do ClickUp.</p>
+    <nav class="indice" id="indice"></nav>
+  </section>
+  <div id="propostas" style="display:grid;gap:28px"></div>
+</main>
+
+<script>
+const QUADROS=[
+  {nome:'Projetos',desc:'',cor:'#16A34A',st:{pendente:4,em_andamento:3,concluida:6,bloqueada:1,cancelada:0},atrasadas:1},
+  {nome:'Controle Estoque',desc:'Demandas diárias',cor:'#16A34A',st:{pendente:5,em_andamento:2,concluida:9,bloqueada:0,cancelada:1},atrasadas:2},
+  {nome:'Importado do ClickUp',desc:'Tarefas trazidas da lista do ClickUp (2ky55r7z-493).',cor:'#FA4616',st:{pendente:7,em_andamento:2,concluida:0,bloqueada:0,cancelada:1},atrasadas:0},
+];
+const ST=[['pendente','pendente','var(--st-pendente)'],['em_andamento','em andamento','var(--st-andamento)'],['concluida','concluída','var(--st-concluida)'],['bloqueada','bloqueada','var(--st-bloqueada)'],['cancelada','cancelada','var(--st-cancelada)']];
+const plural=(n,r)=>n>1&&r!=='em andamento'?r+'s':r;
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ini=n=>n.split(/\s+/).slice(0,2).map(p=>p[0]).join('').toUpperCase();
+const desc=q=>q.desc?`<p>${esc(q.desc)}</p>`:`<p class="vazio-desc">Sem descrição.</p>`;
+const total=q=>Object.values(q.st).reduce((a,b)=>a+b,0);
+const abertas=q=>q.st.pendente+q.st.em_andamento+q.st.bloqueada;
+
+const P=[
+ {nome:'Faixa azul',sub:'Cabeçalho do cartão no azul da marca com o ponto de cor do quadro. Conversa direto com o kanban Azul LDM.',
+  card:q=>`<div class="topo"><i></i><h4>${esc(q.nome)}</h4></div><div class="corpo">${desc(q)}<div class="abrir">Abrir quadro →</div></div>`},
+ {nome:'Tingido',sub:'O cartão inteiro no tom da cor do quadro, igual às colunas do kanban. Dá para reconhecer o quadro pela cor de longe.',
+  card:q=>`<h4>${esc(q.nome)}</h4>${desc(q)}<div class="rod"><span>Quadro</span><b>→</b></div>`},
+ {nome:'Barra lateral',sub:'Cartão branco limpo com a cor do quadro numa barra grossa à esquerda e seta que anda ao passar o mouse.',
+  card:q=>`<h4>${esc(q.nome)}</h4>${desc(q)}`},
+ {nome:'Monograma',sub:'Selo quadrado com as iniciais na cor do quadro, como um ícone de app. Bom quando a lista crescer.',
+  card:q=>`<div class="mono">${ini(q.nome)}</div><div style="min-width:0"><h4>${esc(q.nome)}</h4>${desc(q)}</div>`},
+ {nome:'Capa',sub:'Faixa de capa com degradê da cor do quadro para o azul LDM e iniciais sobrepostas. É a mais "vitrine".',
+  card:q=>`<div class="capa"></div><div class="ini">${ini(q.nome)}</div><div class="corpo"><h4>${esc(q.nome)}</h4>${desc(q)}</div>`},
+ {nome:'Lista',sub:'Uma linha por quadro, com botão "Abrir" que fica laranja ao passar o mouse. Cabe muitos quadros sem rolar.',lista:true,
+  card:q=>`<i></i><div class="t"><h4>${esc(q.nome)}</h4>${desc(q)}</div><span class="abrir">Abrir</span>`},
+ {nome:'Com andamento',sub:'Barra com a divisão das tarefas por situação e legenda com os números. Mostra o estado do quadro sem abrir.',dado:true,
+  card:q=>`<div class="cab"><i></i><h4>${esc(q.nome)}</h4></div>${desc(q)}<div class="seg">${ST.filter(([k])=>q.st[k]).map(([k,,c])=>`<span style="flex:${q.st[k]};background:${c}"></span>`).join('')}</div><div class="leg">${ST.filter(([k])=>q.st[k]).map(([k,r])=>`<span><b>${q.st[k]}</b> ${plural(q.st[k],r)}</span>`).join('')}</div>`},
+ {nome:'Pasta',sub:'Cada quadro como uma pasta de arquivo com a aba na cor do quadro, no espírito do escritório do CD.',dado:true,
+  card:q=>`<h4>${esc(q.nome)}</h4>${desc(q)}<div class="meta">${total(q)} tarefas · ${abertas(q)} em aberto</div>`},
+ {nome:'Blocos compactos',sub:'Só nome e cor, em blocos pequenos. Para quando houver muitos quadros e a descrição não importar.',
+  card:q=>`<i></i><h4>${esc(q.nome)}</h4>`},
+ {nome:'Painel com número',sub:'Número grande de tarefas em aberto e alerta de atrasadas. O cartão vira um mini indicador.',dado:true,
+  card:q=>`<h4>${esc(q.nome)}</h4>${desc(q)}<div class="grande"><b>${abertas(q)}</b><span>tarefas em aberto</span></div>${q.atrasadas?`<div class="atras">${q.atrasadas} atrasada${q.atrasadas>1?'s':''}</div>`:'<div class="atras" style="color:var(--st-concluida)">Nada atrasado</div>'}`},
+];
+
+document.getElementById('indice').innerHTML=P.map((p,i)=>`<a href="#p${i+1}">${i+1}. ${p.nome}</a>`).join('');
+document.getElementById('propostas').innerHTML=P.map((p,i)=>{
+  const cards=QUADROS.map((q,j)=>`<button class="q" type="button" style="--cor:${q.cor};--i:${j}" aria-label="Abrir ${esc(q.nome)}">${p.card(q)}</button>`).join('');
+  return `<section class="proposta p${i+1}" id="p${i+1}">
+    <header><span class="num">${String(i+1).padStart(2,'0')}</span><h2>${p.nome}</h2><p>${p.sub}</p>${p.dado?'<span class="dado">precisa contar tarefas</span>':''}</header>
+    <div class="tela"><div class="barra"><h3>Quadros</h3><button class="novo" type="button">+ Novo quadro</button></div>
+      ${p.lista?`<div class="lista">${cards}</div>`:`<div class="grade">${cards}</div>`}</div>
+  </section>`}).join('');
+</script>

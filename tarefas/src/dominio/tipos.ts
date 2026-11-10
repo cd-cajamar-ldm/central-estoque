@@ -75,6 +75,12 @@ export const explicacaoDoPapel: Record<Papel, string> = {
 export const PRIORIDADES: Prioridade[] = ['baixa', 'media', 'alta', 'critica'];
 export const STATUS_TAREFA: StatusTarefa[] = ['pendente', 'em_andamento', 'concluida', 'bloqueada', 'cancelada'];
 
-/* Paleta de cores para escolher ao criar um quadro ou um grupo — poucas
-   opcoes, para a lista de quadros continuar legivel por cor. */
-export const CORES_QUADRO = ['#16A34A', '#2F6FE0', '#FA4616', '#7C3AED', '#C79212', '#D2453A', '#0E9488', '#6A6F94'];
+/* Paleta de cores para escolher ao criar um quadro. Comeca pelas cores
+   da marca (laranja e azul LDM) e segue por tons que ficam legiveis com
+   texto e ilustracao brancos na capa do quadro. Fora da paleta, o
+   formulario ainda deixa escolher qualquer cor. */
+export const CORES_QUADRO = [
+  '#FE5000', '#001A72', '#16A34A', '#2F6FE0', '#FA4616', '#7C3AED',
+  '#C79212', '#D2453A', '#0E9488', '#6A6F94', '#DB2777', '#0891B2',
+  '#65A30D', '#9333EA', '#B45309', '#475569', '#1E3A8A', '#BE123C',
+];
