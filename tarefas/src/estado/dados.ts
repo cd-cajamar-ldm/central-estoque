@@ -204,29 +204,3 @@ export function useDetalheQuadro(quadroId: string | null): DetalheQuadro {
   return { grupos, tarefas, carregando, erro, recarregar };
 }
 
-/* Todas as tarefas de todos os quadros, para o Resumo. A leitura ja e
-   liberada a qualquer pessoa ativa, entao nao ha regra nova. */
-export function useTodasTarefas(): { tarefas: Tarefa[]; carregando: boolean; erro: string | null; recarregar: () => Promise<void> } {
-  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-
-  const recarregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const { data, error } = await supabase.from('tarefas').select('*').order('criado_em');
-      if (error) throw error;
-      /* Antes da migration 004 as colunas novas nao existem: o Resumo
-         segue funcionando, so sem inicio e checklist. */
-      setTarefas(((data ?? []) as Tarefa[]).map((t) => ({ ...t, inicio: t.inicio ?? null, checklist: t.checklist ?? [] })));
-      setErro(null);
-    } catch (e) {
-      setErro(mensagemDeErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, []);
-
-  useEffect(() => { void recarregar(); }, [recarregar]);
-  return { tarefas, carregando, erro, recarregar };
-}

@@ -6,9 +6,7 @@ prazo — alternando entre visão **Quadro** (kanban, arrastar e soltar) e
 visão **Tabela** (agrupada por grupo, com criação rápida de tarefa).
 
 Cada tarefa tem datas de **início**, **fim (prazo)** e **conclusão** e um
-**checklist**. A tela **Resumo** faz o balanço do dia, semana, mês ou ano:
-entregas no prazo e com atraso, novas tarefas, atrasadas hoje, quebra por
-responsável e por quadro, lista de entregas e botão para copiar o texto.
+**checklist**.
 
 Como o módulo de Projetos, os dados **não** ficam no navegador: são
 compartilhados por toda a equipe em um banco Supabase, e o acesso exige

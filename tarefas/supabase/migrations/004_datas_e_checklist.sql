@@ -1,6 +1,6 @@
 -- Datas de inicio e conclusao editaveis, e checklist dentro da tarefa.
 --
--- Para o Resumo (balanco do dia, semana, mes ou ano) a tarefa precisa
+-- Para medir entregas (no prazo ou com atraso) a tarefa precisa
 -- dizer quando comecou, quando devia acabar (prazo, que ja existe) e
 -- quando acabou de fato. A conclusao ja era gravada sozinha ao mudar a
 -- situacao para "concluida"; agora ela tambem pode ser corrigida a mao

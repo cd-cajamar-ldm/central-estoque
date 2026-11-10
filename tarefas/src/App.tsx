@@ -3,7 +3,6 @@ import Acesso from '@/paginas/Acesso';
 import ListaQuadros from '@/paginas/ListaQuadros';
 import DetalheQuadro from '@/paginas/DetalheQuadro';
 import Pessoas from '@/paginas/Pessoas';
-import Resumo from '@/paginas/Resumo';
 import Sidebar from '@/componentes/Sidebar';
 import ZoomCtrl from '@/componentes/ZoomCtrl';
 import { Aviso, Carregando } from '@/componentes/ui';
@@ -18,7 +17,6 @@ declare const __VERSAO__: string;
 
 const TITULOS: Record<Aba, { titulo: string; sub: string }> = {
   quadros: { titulo: 'Quadros', sub: 'Quadros de tarefas da equipe.' },
-  resumo: { titulo: 'Resumo', sub: 'Como foi o dia, a semana, o mês ou o ano — com os números e as entregas.' },
   pessoas: { titulo: 'Pessoas', sub: 'Cadastro e controle de acesso ao módulo.' },
 };
 
@@ -120,7 +118,6 @@ export default function App() {
               {aba === 'quadros' && (
                 <ListaQuadros quadros={carteira.quadros} aoAbrir={abrirQuadro} recarregar={carteira.recarregar} />
               )}
-              {aba === 'resumo' && <Resumo quadros={carteira.quadros} pessoas={carteira.pessoas} />}
               {aba === 'pessoas' && <Pessoas pessoas={carteira.pessoas} recarregar={carteira.recarregar} />}
             </>
           )}
