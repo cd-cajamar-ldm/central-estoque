@@ -80,6 +80,18 @@
           <label class="f">Autor / setor<input type="text" data-m="autor" placeholder="Ex.: Estoque CD Cajamar"></label>
           <label class="f wide">Descrição (aparece no topo)<textarea data-m="descricao" rows="2"></textarea></label>
           <label class="f wide">Mensagem final (tela de concluído)<textarea data-m="conclusao" rows="2"></textarea></label>
+          <div class="f full">Fundo atrás do print
+            <div class="bg-pick" id="bgPick">
+              <button type="button" class="bg-opt bg-bancada" data-bg="bancada" title="Bancada (azul pontilhado)"></button>
+              <button type="button" class="bg-opt bg-claro" data-bg="claro" title="Claro"></button>
+              <button type="button" class="bg-opt bg-branco" data-bg="branco" title="Branco"></button>
+              <button type="button" class="bg-opt bg-laranja" data-bg="laranja" title="Laranja LDM"></button>
+              <button type="button" class="bg-opt bg-grafite" data-bg="grafite" title="Grafite"></button>
+              <button type="button" class="bg-opt bg-nenhum" data-bg="nenhum" title="Sem fundo (print ocupa tudo)"></button>
+              <label class="bg-opt bg-cor" data-bg="cor" title="Escolher uma cor"><input type="color" id="bgCor" value="#001A72"></label>
+            </div>
+            <span class="hint" id="bgNome">Bancada</span>
+          </div>
         </div>
       </div>
 

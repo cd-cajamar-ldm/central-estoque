@@ -95,7 +95,7 @@
               '</div></div>' +
             '</div>' +
             '<div class="mp-ctrl">' +
-              '<div class="mp-now"><span class="mp-now-ic">' + IC.wrench + '</span><span class="mp-now-txt" data-r="say" aria-live="polite">Preparando…</span></div>' +
+              '<div class="mp-now"><span class="mp-now-ic">' + IC.wrench + '</span><span class="mp-now-box"><span class="mp-now-txt" data-r="say" aria-live="polite">Preparando…</span><span class="mp-now-det" data-r="det" hidden></span></span></div>' +
               '<div class="mp-btns">' +
                 '<button class="mp-btn" type="button" data-r="prev" aria-label="Etapa anterior">' + IC.prev + '</button>' +
                 '<button class="mp-btn pri" type="button" data-r="play"><span data-r="playIco">' + IC.pause + '</span><span data-r="playTxt">Pausar</span></button>' +
@@ -127,6 +127,7 @@
     if (manual.ambiente) chips.push('<span class="mp-chip">Ambiente ' + esc(manual.ambiente) + '</span>');
     chips.push('<span class="mp-chip">' + passos.length + ' etapa' + (passos.length === 1 ? '' : 's') + '</span>');
     R.chips.innerHTML = chips.join('');
+    aplicarFundo(R.stage, manual);
     R.title.textContent = manual.titulo || 'Manual sem título';
     R.desc.textContent = manual.descricao || '';
     R.desc.hidden = !manual.descricao;
@@ -210,14 +211,19 @@
       R.tag.style.top = (below ? a[1] + a[3] : a[1]) + '%';
       R.tag.classList.remove('on'); void R.tag.offsetWidth; R.tag.classList.add('on');
     }
-    function say(t) {
+    /* Legenda curta + explicação detalhada opcional. Com explicação, a
+       animação espera o tempo de leitura (aprox. 35 ms por letra). */
+    function say(t, det) {
       spot(null); tag(null);
-      if (!t) return check();
+      if (!t && !det) return check();
       sayN++;
-      R.say.textContent = t;
+      R.say.textContent = t || '';
       R.say.classList.remove('pop'); void R.say.offsetWidth; R.say.classList.add('pop');
+      det = resolve(det || '', true).trim();
+      R.det.textContent = det;
+      R.det.hidden = !det;
       paintRegua();
-      return wait(480);
+      return wait(480 + (det ? Math.min(7000, 900 + det.length * 35) : 0));
     }
 
     /* ---------- tela (print) ---------- */
@@ -257,9 +263,9 @@
       var a = acao.area;
       switch (acao.tipo) {
         case 'tela':
-          return say(acao.legenda).then(function () { setTela(acao.img); return wait(650); });
+          return say(acao.legenda, acao.detalhe).then(function () { setTela(acao.img); return wait(650); });
         case 'clique':
-          return say(acao.legenda).then(function () {
+          return say(acao.legenda, acao.detalhe).then(function () {
             var c = center(a, acao.dir ? .25 : .5);
             return moveTo(c[0], c[1]);
           }).then(function () { blurTypes(); return click(acao.dir); }).then(function () {
@@ -268,7 +274,7 @@
           });
         case 'digitar':
           var txt = resolve(acao.texto, true), box;
-          return say(acao.legenda).then(function () {
+          return say(acao.legenda, acao.detalhe).then(function () {
             var c = center(a, .3);
             return moveTo(c[0], c[1]);
           }).then(function () { blurTypes(); return click(); }).then(function () {
@@ -287,7 +293,7 @@
             return wait(300);
           });
         case 'destacar':
-          return say(acao.legenda).then(function () {
+          return say(acao.legenda, acao.detalhe).then(function () {
             blurTypes(); spot(a); tag(a, resolve(acao.balao, true));
             return wait(1500);
           });
@@ -404,22 +410,22 @@
       RUN++;
       current = i; sayN = 0;
       var acoes = passos[i].acoes || [];
-      sayTotal = acoes.filter(function (a) { return a.legenda; }).length || 1;
+      sayTotal = acoes.filter(function (a) { return a.legenda || a.detalhe; }).length || 1;
       var t = resetStage(i);
       renderInfo(); paintRegua();
       var inicio = t ? t.skip : 0;
       var p = intro(i);
-      if (inicio && acoes[0].legenda) p = p.then(function () { return say(acoes[0].legenda); });
+      if (inicio && (acoes[0].legenda || acoes[0].detalhe)) p = p.then(function () { return say(acoes[0].legenda, acoes[0].detalhe); });
       acoes.slice(inicio).forEach(function (a) { p = p.then(function () { return run(a); }); });
       p.then(function () {
         spot(null); tag(null);
         if (i < passos.length - 1) {
-          R.say.textContent = 'Indo para a próxima etapa…';
+          R.say.textContent = 'Indo para a próxima etapa…'; R.det.hidden = true;
           return wait(1000).then(function () { playStep(i + 1); });
         }
         current = passos.length; paintRegua(); current = i;
         R.steps.querySelectorAll('.mp-step').forEach(function (b) { b.classList.add('done'); b.classList.remove('on'); });
-        R.say.textContent = 'Manual concluído.';
+        R.say.textContent = 'Manual concluído.'; R.det.hidden = true;
         R.done.classList.add('on');
       }).catch(function (e) { if (e !== CANCEL) console.error(e); });
     }
@@ -470,5 +476,15 @@
     };
   }
 
-  global.LDMPlayer = { mount: mount, esc: esc };
+  /* Fundo atrás do print: bancada (padrão), claro, branco, laranja,
+     grafite, sem fundo ou uma cor escolhida (manual.fundoCor). */
+  var FUNDOS = ['bancada', 'claro', 'branco', 'laranja', 'grafite', 'nenhum', 'cor'];
+  function aplicarFundo(el, manual) {
+    var f = FUNDOS.indexOf(manual.fundo) >= 0 ? manual.fundo : 'bancada';
+    FUNDOS.forEach(function (x) { el.classList.remove('mp-bg-' + x); });
+    el.classList.add('mp-bg-' + f);
+    el.style.backgroundColor = f === 'cor' && /^#[0-9a-f]{6}$/i.test(manual.fundoCor || '') ? manual.fundoCor : '';
+  }
+
+  global.LDMPlayer = { mount: mount, esc: esc, aplicarFundo: aplicarFundo };
 })(window);

@@ -118,6 +118,16 @@
 .mp-tag.below{transform:translate(-50%,0) translateY(12px) rotate(2deg) scale(.6);}
 .mp-tag.below.on{transform:translate(-50%,0) translateY(12px) rotate(2deg) scale(1);}
 
+/* Opções de fundo atrás do print (manual.fundo) */
+.mp-stage.mp-bg-claro{background-color:#E9EDF5;background-image:radial-gradient(rgba(16,22,60,.12) 1.6px,transparent 1.8px);}
+.mp-stage.mp-bg-branco{background:#fff;box-shadow:inset 0 0 0 1px var(--line);}
+.mp-stage.mp-bg-laranja{background-color:#FE5000;background-image:radial-gradient(rgba(255,255,255,.18) 1.6px,transparent 1.8px);}
+.mp-stage.mp-bg-grafite{background-color:#2A2D34;background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:24px 24px;}
+.mp-stage.mp-bg-cor{background-image:none;}
+.mp-stage.mp-bg-nenhum{background:none;padding:0;}
+.mp-stage.mp-bg-nenhum .mp-frame{box-shadow:0 0 0 1px var(--line);border-radius:10px;}
+.mp-dark .mp-stage.mp-bg-branco{background:#1A1F3A;}
+
 /* Porta de enrolar: abertura de cada etapa */
 .mp-door{position:absolute;inset:0;z-index:8;pointer-events:none;transform:translateY(-101%);transition:transform .6s cubic-bezier(.7,0,.25,1);
   background:repeating-linear-gradient(180deg,#1A2350 0 20px,#0F1638 20px 23px,#222C5E 23px 24px);display:flex;align-items:center;justify-content:center;}
@@ -146,7 +156,9 @@
 .mp-ctrl{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 6px 2px;}
 .mp-now{flex:1 1 300px;min-width:0;display:flex;align-items:center;gap:10px;}
 .mp-now-ic{width:30px;height:30px;border-radius:9px;background:var(--orange-soft);color:var(--orange);display:grid;place-items:center;flex:none;}
+.mp-now-box{display:flex;flex-direction:column;gap:3px;min-width:0;}
 .mp-now-txt{font-weight:600;font-size:14.5px;line-height:1.4;}
+.mp-now-det{font-size:13px;color:var(--ink-soft);line-height:1.5;white-space:pre-line;animation:mp-pop .35s ease;}
 .mp-now-txt.pop{animation:mp-pop .35s ease;}
 @keyframes mp-pop{from{opacity:0;transform:translateY(5px);}}
 .mp-btns{display:flex;gap:8px;flex-wrap:wrap;}
