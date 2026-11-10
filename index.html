@@ -222,26 +222,40 @@
   /* CONFIGURAÇÕES */
   .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:720px;margin-top:24px;}
 
-  /* CONFIGURAÇÕES — gestão de acesso por app */
-  .access-list{position:relative;z-index:2;margin-top:14px;display:flex;flex-direction:column;gap:10px;max-width:720px;}
-  .access-app{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
-  .access-app-head{display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;padding:14px 18px;cursor:pointer;text-align:left;font-family:'Inter',sans-serif;}
-  .access-app-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
-  .access-app-icon svg{width:15px;height:15px;}
-  .access-app-name{font-weight:700;font-size:13.5px;color:var(--ink);}
-  .access-count{margin-left:auto;font-size:11.5px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
+  /* CONFIGURAÇÕES — gestão de acesso por app (login + admin, Supabase) */
+  .access-login-form{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  .access-login-input{flex:1;min-width:160px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:9px 12px;}
+  .access-login-msg{margin:12px 0 0;font-size:12.5px;color:#C83812;}
+
+  .access-admin{position:relative;z-index:2;margin-top:20px;max-width:760px;}
+  .access-admin-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  .access-busca{flex:1;min-width:200px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:9px 16px;}
+  .access-filtro-semapp{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
+  .access-nova-pessoa-btn{margin-bottom:12px;}
+  .access-nova-pessoa{display:flex;gap:8px;flex-wrap:wrap;background:var(--chip-bg);border-radius:14px;padding:14px;margin-bottom:14px;}
+  .access-admin-msg{font-size:12.5px;color:#C83812;margin:0 0 12px;}
+
+  .access-people-admin{display:flex;flex-direction:column;gap:10px;}
+  .access-person-admin{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
+  .access-person-admin.inativo{opacity:.55;}
+  .access-person-head{display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;padding:14px 18px;cursor:pointer;text-align:left;font-family:'Inter',sans-serif;}
+  .access-person-dot{width:8px;height:8px;border-radius:50%;background:#1F8A52;flex-shrink:0;}
+  .access-person-admin.inativo .access-person-dot{background:var(--ink-soft);}
+  .access-person-info{display:flex;flex-direction:column;min-width:0;}
+  .access-person-nome{font-weight:700;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .access-person-email2{font-size:11.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .access-admin-badge{background:rgba(254,80,0,.14);color:var(--orange);font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;flex-shrink:0;}
+  .access-count{margin-left:auto;font-size:11.5px;color:var(--ink-soft);font-weight:600;white-space:nowrap;flex-shrink:0;}
   .access-chevron{transition:transform .2s;color:var(--ink-soft);flex-shrink:0;}
-  .access-app.open .access-chevron{transform:rotate(180deg);}
-  .access-app-body{padding:0 18px 16px;border-top:1px solid var(--line);}
-  .access-add-row{display:flex;gap:8px;margin:14px 0 12px;flex-wrap:wrap;}
-  .access-add-row input{flex:1;min-width:140px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:8px 12px;}
-  .access-people{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
-  .access-person{display:flex;align-items:center;gap:10px;background:var(--chip-bg);border-radius:10px;padding:8px 12px;font-size:12.5px;}
-  .access-person-name{font-weight:700;color:var(--ink);}
-  .access-person-email{color:var(--ink-soft);}
-  .access-remove{margin-left:auto;background:none;border:none;color:var(--ink-soft);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px;}
-  .access-remove:hover{color:#C83812;background:rgba(200,56,18,.1);}
-  .access-empty{color:var(--ink-soft);font-size:12.5px;font-style:italic;margin:4px 0 12px;}
+  .access-person-admin.open .access-chevron{transform:rotate(180deg);}
+  .access-person-body{padding:4px 18px 18px;border-top:1px solid var(--line);}
+  .access-toggle{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink);margin:14px 0 0;}
+  .access-apps-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+  .access-app-chip{display:flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);border-radius:999px;padding:6px 12px 6px 6px;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;}
+  .access-app-chip.marcado{background:rgba(254,80,0,.1);border-color:rgba(254,80,0,.35);color:var(--ink);}
+  .access-app-chip-icon{width:20px;height:20px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-app-chip-icon svg{width:11px;height:11px;}
+  .access-empty{color:var(--ink-soft);font-size:12.5px;font-style:italic;}
 
   /* MODAL DE EDIÇÃO */
   .modal-overlay{position:fixed;inset:0;background:rgba(8,10,24,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
@@ -501,10 +515,37 @@
     </div>
 
     <section class="view" id="view-config" hidden>
-      <div class="config-placeholder">
-        <p>Defina quem pode acessar cada aplicativo da Oficina LDM. Clique num app pra adicionar ou remover pessoas pelo nome e e-mail — sem ninguém na lista, o acesso segue livre como hoje.</p>
+      <div class="config-placeholder" id="accessLogin">
+        <p>Entre com sua conta de administrador para gerenciar quem acessa cada aplicativo da Oficina LDM.</p>
+        <form class="access-login-form" id="accessLoginForm">
+          <input type="email" id="accessLoginEmail" class="access-login-input" placeholder="E-mail" autocomplete="username" required>
+          <input type="password" id="accessLoginSenha" class="access-login-input" placeholder="Senha" autocomplete="current-password" required minlength="6">
+          <button type="submit" class="btn-primary">Entrar</button>
+        </form>
+        <p class="access-login-msg" id="accessLoginMsg" hidden></p>
       </div>
-      <div class="access-list" id="accessList"></div>
+
+      <div class="config-placeholder" id="accessDenied" hidden>
+        <p>Sua conta (<strong id="accessDeniedEmail"></strong>) não tem permissão de administrador pra gerenciar acessos.</p>
+        <button type="button" class="btn-secondary" id="accessLogoutBtnNegado">Sair</button>
+      </div>
+
+      <div class="access-admin" id="accessAdmin" hidden>
+        <div class="access-admin-head">
+          <input type="text" id="accessBusca" class="access-busca" placeholder="Buscar por nome ou e-mail...">
+          <label class="access-filtro-semapp"><input type="checkbox" id="accessFiltroSemApp"> Só sem nenhum app liberado</label>
+          <button type="button" class="btn-secondary" id="accessLogoutBtn">Sair</button>
+        </div>
+        <button type="button" class="btn-primary access-nova-pessoa-btn" id="accessNovaPessoaBtn">+ Nova pessoa</button>
+        <div class="access-nova-pessoa" id="accessNovaPessoaForm" hidden>
+          <input type="text" id="accessNovoNome" class="access-login-input" placeholder="Nome completo">
+          <input type="email" id="accessNovoEmail" class="access-login-input" placeholder="E-mail corporativo">
+          <button type="button" class="btn-primary" id="accessNovaPessoaSalvar">Cadastrar</button>
+          <button type="button" class="btn-secondary" id="accessNovaPessoaCancelar">Cancelar</button>
+        </div>
+        <p class="access-admin-msg" id="accessAdminMsg" hidden></p>
+        <div class="access-people-admin" id="accessPeopleAdmin"></div>
+      </div>
     </section>
   </main>
 </div>
@@ -555,6 +596,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
   var APP_VERSION = '0.0.0.1';
   (function(){
@@ -1551,100 +1593,206 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
   document.addEventListener('click', function(){ closeAllMenus(); });
 
-  /* Gestão de acesso (Configurações) — quem pode acessar cada app. Guarda
-     só os nomes/e-mails; nada aqui bloqueia de verdade, cada app continua
-     responsável pelo próprio login — é só o registro de quem pode usar o quê. */
-  var ACCESS_KEY = 'ldm-acessos';
-  function getAcessos(){
-    try { return JSON.parse(localStorage.getItem(ACCESS_KEY) || '{}'); } catch(e){ return {}; }
+  /* Gestão de acesso (Configurações) — admin de verdade, via Supabase.
+     Mesmo projeto já usado por Tarefas/Projetos ("Estoque Project"), schema
+     próprio "acessos" (ver supabase-acessos/). RLS no banco garante que só
+     quem está com papel=admin em acessos.pessoas lê/escreve a lista de
+     quem pode acessar o quê — nunca o navegador sozinho. */
+  var SUPA_URL = 'https://jfvnswafpeshyfweoadg.supabase.co';
+  var SUPA_ANON = 'sb_publishable_x1ioDmPDsDZdTgcq6SOCGw_PlJeIw_m';
+  var sbAcessos = (window.supabase && window.supabase.createClient)
+    ? window.supabase.createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: true, autoRefreshToken: true } })
+    : null;
+
+  function accessEmPortugues(msg){
+    var m = String(msg || '').toLowerCase();
+    if(m.indexOf('invalid login credentials') !== -1) return 'E-mail ou senha incorretos.';
+    if(m.indexOf('email not confirmed') !== -1) return 'Confirme o e-mail pelo link que o Supabase enviou e tente de novo.';
+    if(m.indexOf('rate limit') !== -1 || m.indexOf('too many') !== -1) return 'Muitas tentativas seguidas. Espere alguns minutos.';
+    return msg || 'Não consegui completar a operação.';
   }
-  function setAcessos(obj){
-    try { localStorage.setItem(ACCESS_KEY, JSON.stringify(obj)); } catch(e){}
+
+  var accessLoginBox = document.getElementById('accessLogin');
+  var accessDeniedBox = document.getElementById('accessDenied');
+  var accessAdminBox = document.getElementById('accessAdmin');
+  var accessLoginForm = document.getElementById('accessLoginForm');
+  var accessLoginMsg = document.getElementById('accessLoginMsg');
+  var accessAdminMsg = document.getElementById('accessAdminMsg');
+  var accessPeopleEl = document.getElementById('accessPeopleAdmin');
+  var accessBuscaEl = document.getElementById('accessBusca');
+  var accessFiltroSemAppEl = document.getElementById('accessFiltroSemApp');
+  var accessNovaPessoaBtn = document.getElementById('accessNovaPessoaBtn');
+  var accessNovaPessoaForm = document.getElementById('accessNovaPessoaForm');
+
+  var accessPessoasCache = [];
+  var accessPermissoesCache = {};
+  var accessAbertas = {};
+
+  function accessMostrar(estado){
+    accessLoginBox.hidden = estado !== 'login';
+    accessDeniedBox.hidden = estado !== 'negado';
+    accessAdminBox.hidden = estado !== 'admin';
   }
-  var accessOpen = {};
-  var accessListEl = document.getElementById('accessList');
-  function renderAccessList(){
-    if(!accessListEl) return;
-    var acessos = getAcessos();
-    accessListEl.innerHTML = getAllApps().map(function(a){
-      var pessoas = acessos[a.key] || [];
-      var aberto = !!accessOpen[a.key];
+
+  function accessMsg(texto){
+    if(!texto){ accessAdminMsg.hidden = true; return; }
+    accessAdminMsg.textContent = texto;
+    accessAdminMsg.hidden = false;
+  }
+
+  async function accessCarregarTudo(){
+    var [{ data: pessoas, error: errP }, { data: permissoes, error: errPerm }] = await Promise.all([
+      sbAcessos.schema('acessos').from('pessoas').select('*').order('nome'),
+      sbAcessos.schema('acessos').from('permissoes').select('*')
+    ]);
+    if(errP || errPerm){ accessMsg(accessEmPortugues((errP || errPerm).message)); return; }
+    accessPessoasCache = pessoas || [];
+    accessPermissoesCache = {};
+    (permissoes || []).forEach(function(p){
+      if(!accessPermissoesCache[p.pessoa_id]) accessPermissoesCache[p.pessoa_id] = {};
+      accessPermissoesCache[p.pessoa_id][p.app_key] = true;
+    });
+    accessRenderPessoas();
+  }
+
+  function accessRenderPessoas(){
+    var q = (accessBuscaEl.value || '').trim().toLowerCase();
+    var soSemApp = accessFiltroSemAppEl.checked;
+    var apps = getAllApps();
+    var lista = accessPessoasCache.filter(function(p){
+      if(q && p.nome.toLowerCase().indexOf(q) === -1 && p.email.toLowerCase().indexOf(q) === -1) return false;
+      var marcados = accessPermissoesCache[p.id] || {};
+      var qtd = Object.keys(marcados).length;
+      if(soSemApp && qtd > 0) return false;
+      return true;
+    });
+    accessPeopleEl.innerHTML = lista.map(function(p){
+      var marcados = accessPermissoesCache[p.id] || {};
+      var qtd = Object.keys(marcados).length;
+      var aberto = !!accessAbertas[p.id];
       return ''
-        + '<div class="access-app' + (aberto ? ' open' : '') + '" data-key="' + a.key + '">'
-        +   '<button type="button" class="access-app-head">'
-        +     '<span class="access-app-icon" style="--accent:' + a.color + ';">' + a.icon + '</span>'
-        +     '<span class="access-app-name">' + esc(a.name) + '</span>'
-        +     '<span class="access-count">' + (pessoas.length ? pessoas.length + (pessoas.length === 1 ? ' pessoa' : ' pessoas') : 'Acesso livre') + '</span>'
+        + '<div class="access-person-admin' + (aberto ? ' open' : '') + (p.ativo ? '' : ' inativo') + '" data-id="' + p.id + '">'
+        +   '<button type="button" class="access-person-head">'
+        +     '<span class="access-person-dot"></span>'
+        +     '<span class="access-person-info"><span class="access-person-nome">' + esc(p.nome) + '</span><span class="access-person-email2">' + esc(p.email) + '</span></span>'
+        +     (p.papel === 'admin' ? '<span class="access-admin-badge">Admin</span>' : '')
+        +     '<span class="access-count">' + (qtd ? qtd + (qtd === 1 ? ' app' : ' apps') : 'Sem acesso') + '</span>'
         +     '<svg class="access-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
         +   '</button>'
-        +   '<div class="access-app-body"' + (aberto ? '' : ' hidden') + '>'
-        +     '<div class="access-add-row">'
-        +       '<input type="text" class="access-input-nome" placeholder="Nome">'
-        +       '<input type="text" class="access-input-email" placeholder="E-mail">'
-        +       '<button type="button" class="btn-secondary access-add-btn">Adicionar</button>'
-        +     '</div>'
-        +     (pessoas.length
-            ? '<ul class="access-people">' + pessoas.map(function(p, i){
-                return '<li class="access-person"><span class="access-person-name">' + esc(p.nome) + '</span>'
-                  + (p.email ? '<span class="access-person-email">' + esc(p.email) + '</span>' : '')
-                  + '<button type="button" class="access-remove" data-idx="' + i + '" aria-label="Remover ' + esc(p.nome) + '">&times;</button></li>';
-              }).join('') + '</ul>'
-            : '<p class="access-empty">Ninguém adicionado ainda — acesso livre.</p>')
+        +   '<div class="access-person-body"' + (aberto ? '' : ' hidden') + '>'
+        +     '<label class="access-toggle"><input type="checkbox" class="access-cb-ativo" ' + (p.ativo ? 'checked' : '') + '> Ativo</label>'
+        +     '<label class="access-toggle"><input type="checkbox" class="access-cb-admin" ' + (p.papel === 'admin' ? 'checked' : '') + '> Administrador</label>'
+        +     '<div class="access-apps-grid">' + apps.map(function(a){
+                var marcado = !!marcados[a.key];
+                return '<label class="access-app-chip' + (marcado ? ' marcado' : '') + '"><input type="checkbox" class="access-cb-app" data-app="' + a.key + '" ' + (marcado ? 'checked' : '') + '><span class="access-app-chip-icon" style="--accent:' + a.color + ';">' + a.icon + '</span>' + esc(a.name) + '</label>';
+              }).join('') + '</div>'
         +   '</div>'
         + '</div>';
-    }).join('');
+    }).join('') || '<p class="access-empty">Nenhuma pessoa encontrada.</p>';
   }
-  window.renderAccessList = renderAccessList;
 
-  if(accessListEl){
-    accessListEl.addEventListener('click', function(e){
-      var head = e.target.closest('.access-app-head');
-      if(head){
-        var key = head.closest('.access-app').dataset.key;
-        accessOpen[key] = !accessOpen[key];
-        renderAccessList();
-        return;
-      }
-      var addBtn = e.target.closest('.access-add-btn');
-      if(addBtn){
-        var appEl = addBtn.closest('.access-app');
-        var addKey = appEl.dataset.key;
-        var nomeInput = appEl.querySelector('.access-input-nome');
-        var emailInput = appEl.querySelector('.access-input-email');
-        var nome = nomeInput.value.trim();
-        var email = emailInput.value.trim();
-        if(!nome){ nomeInput.focus(); return; }
-        var acessos = getAcessos();
-        if(!acessos[addKey]) acessos[addKey] = [];
-        acessos[addKey].push({nome: nome, email: email});
-        setAcessos(acessos);
-        accessOpen[addKey] = true;
-        renderAccessList();
-        showToast('Pessoa adicionada.');
-        return;
-      }
-      var removeBtn = e.target.closest('.access-remove');
-      if(removeBtn){
-        var remAppEl = removeBtn.closest('.access-app');
-        var remKey = remAppEl.dataset.key;
-        var idx = Number(removeBtn.dataset.idx);
-        var acessosRem = getAcessos();
-        if(acessosRem[remKey]) acessosRem[remKey].splice(idx, 1);
-        setAcessos(acessosRem);
-        accessOpen[remKey] = true;
-        renderAccessList();
-        showToast('Pessoa removida.');
-        return;
-      }
-    });
-    accessListEl.addEventListener('keydown', function(e){
-      if(e.key !== 'Enter') return;
-      var row = e.target.closest('.access-add-row');
-      if(!row) return;
+  async function accessVerificarSessao(){
+    if(!sbAcessos) return;
+    accessMsg(null);
+    var { data: { session } } = await sbAcessos.auth.getSession();
+    if(!session){ accessMostrar('login'); return; }
+    var { data: pessoa } = await sbAcessos.schema('acessos').from('pessoas')
+      .select('papel,ativo').eq('user_id', session.user.id).maybeSingle();
+    if(!pessoa || !pessoa.ativo || pessoa.papel !== 'admin'){
+      document.getElementById('accessDeniedEmail').textContent = session.user.email;
+      accessMostrar('negado');
+      return;
+    }
+    accessMostrar('admin');
+    accessCarregarTudo();
+  }
+  window.renderAccessList = accessVerificarSessao;
+
+  if(accessLoginForm){
+    accessLoginForm.addEventListener('submit', async function(e){
       e.preventDefault();
-      row.querySelector('.access-add-btn').click();
+      accessLoginMsg.hidden = true;
+      var email = document.getElementById('accessLoginEmail').value.trim().toLowerCase();
+      var senha = document.getElementById('accessLoginSenha').value;
+      var { error } = await sbAcessos.auth.signInWithPassword({ email: email, password: senha });
+      if(error){ accessLoginMsg.textContent = accessEmPortugues(error.message); accessLoginMsg.hidden = false; return; }
+      accessVerificarSessao();
     });
   }
+  ['accessLogoutBtn', 'accessLogoutBtnNegado'].forEach(function(id){
+    var btn = document.getElementById(id);
+    if(btn) btn.addEventListener('click', function(){ sbAcessos.auth.signOut().then(accessVerificarSessao); });
+  });
+  if(accessBuscaEl) accessBuscaEl.addEventListener('input', accessRenderPessoas);
+  if(accessFiltroSemAppEl) accessFiltroSemAppEl.addEventListener('change', accessRenderPessoas);
+
+  if(accessNovaPessoaBtn){
+    accessNovaPessoaBtn.addEventListener('click', function(){
+      accessNovaPessoaForm.hidden = !accessNovaPessoaForm.hidden;
+    });
+    document.getElementById('accessNovaPessoaCancelar').addEventListener('click', function(){
+      accessNovaPessoaForm.hidden = true;
+    });
+    document.getElementById('accessNovaPessoaSalvar').addEventListener('click', async function(){
+      var nomeEl = document.getElementById('accessNovoNome');
+      var emailEl = document.getElementById('accessNovoEmail');
+      var nome = nomeEl.value.trim();
+      var email = emailEl.value.trim().toLowerCase();
+      if(!nome || !email){ accessMsg('Preencha nome e e-mail.'); return; }
+      var { error } = await sbAcessos.schema('acessos').from('pessoas').insert({ nome: nome, email: email });
+      if(error){ accessMsg(accessEmPortugues(error.message)); return; }
+      nomeEl.value = ''; emailEl.value = ''; accessNovaPessoaForm.hidden = true;
+      accessMsg(null);
+      showToast('Pessoa cadastrada.');
+      accessCarregarTudo();
+    });
+  }
+
+  if(accessPeopleEl){
+    accessPeopleEl.addEventListener('click', async function(e){
+      var head = e.target.closest('.access-person-head');
+      if(head){
+        var id = head.closest('.access-person-admin').dataset.id;
+        accessAbertas[id] = !accessAbertas[id];
+        accessRenderPessoas();
+        return;
+      }
+    });
+    accessPeopleEl.addEventListener('change', async function(e){
+      var pessoaEl = e.target.closest('.access-person-admin');
+      if(!pessoaEl) return;
+      var id = pessoaEl.dataset.id;
+
+      if(e.target.classList.contains('access-cb-ativo')){
+        var { error } = await sbAcessos.schema('acessos').from('pessoas').update({ ativo: e.target.checked }).eq('id', id);
+        if(error){ accessMsg(accessEmPortugues(error.message)); e.target.checked = !e.target.checked; return; }
+        accessCarregarTudo();
+        return;
+      }
+      if(e.target.classList.contains('access-cb-admin')){
+        var novoPapel = e.target.checked ? 'admin' : 'colaborador';
+        var { error: errPapel } = await sbAcessos.schema('acessos').from('pessoas').update({ papel: novoPapel }).eq('id', id);
+        if(errPapel){ accessMsg(accessEmPortugues(errPapel.message)); e.target.checked = !e.target.checked; return; }
+        accessCarregarTudo();
+        return;
+      }
+      if(e.target.classList.contains('access-cb-app')){
+        var appKey = e.target.dataset.app;
+        if(e.target.checked){
+          var { error: errIns } = await sbAcessos.schema('acessos').from('permissoes').insert({ pessoa_id: id, app_key: appKey });
+          if(errIns){ accessMsg(accessEmPortugues(errIns.message)); e.target.checked = false; return; }
+        } else {
+          var { error: errDel } = await sbAcessos.schema('acessos').from('permissoes').delete().eq('pessoa_id', id).eq('app_key', appKey);
+          if(errDel){ accessMsg(accessEmPortugues(errDel.message)); e.target.checked = true; return; }
+        }
+        accessAbertas[id] = true;
+        accessCarregarTudo();
+        return;
+      }
+    });
+  }
+
+  if(sbAcessos) sbAcessos.auth.onAuthStateChange(function(){ accessVerificarSessao(); });
 
   renderCards();
   renderSidebarFavorites();
