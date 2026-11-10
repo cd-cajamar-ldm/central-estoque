@@ -220,7 +220,28 @@
   .tv-sim-fs-back:hover{background:rgba(255,255,255,.16);}
 
   /* CONFIGURAÇÕES */
-  .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:520px;margin-top:24px;}
+  .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:720px;margin-top:24px;}
+
+  /* CONFIGURAÇÕES — gestão de acesso por app */
+  .access-list{position:relative;z-index:2;margin-top:14px;display:flex;flex-direction:column;gap:10px;max-width:720px;}
+  .access-app{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
+  .access-app-head{display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;padding:14px 18px;cursor:pointer;text-align:left;font-family:'Inter',sans-serif;}
+  .access-app-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-app-icon svg{width:15px;height:15px;}
+  .access-app-name{font-weight:700;font-size:13.5px;color:var(--ink);}
+  .access-count{margin-left:auto;font-size:11.5px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
+  .access-chevron{transition:transform .2s;color:var(--ink-soft);flex-shrink:0;}
+  .access-app.open .access-chevron{transform:rotate(180deg);}
+  .access-app-body{padding:0 18px 16px;border-top:1px solid var(--line);}
+  .access-add-row{display:flex;gap:8px;margin:14px 0 12px;flex-wrap:wrap;}
+  .access-add-row input{flex:1;min-width:140px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:8px 12px;}
+  .access-people{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+  .access-person{display:flex;align-items:center;gap:10px;background:var(--chip-bg);border-radius:10px;padding:8px 12px;font-size:12.5px;}
+  .access-person-name{font-weight:700;color:var(--ink);}
+  .access-person-email{color:var(--ink-soft);}
+  .access-remove{margin-left:auto;background:none;border:none;color:var(--ink-soft);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px;}
+  .access-remove:hover{color:#C83812;background:rgba(200,56,18,.1);}
+  .access-empty{color:var(--ink-soft);font-size:12.5px;font-style:italic;margin:4px 0 12px;}
 
   /* MODAL DE EDIÇÃO */
   .modal-overlay{position:fixed;inset:0;background:rgba(8,10,24,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
@@ -304,7 +325,7 @@
       </button>
       <button class="sb-nav-item" type="button" data-view="tv">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        <span>TV LDM</span>
+        <span>Tv Ldm</span>
       </button>
       <button class="sb-nav-item" type="button" data-view="config">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -481,8 +502,9 @@
 
     <section class="view" id="view-config" hidden>
       <div class="config-placeholder">
-        <p>Em breve: controle de acessos, permissões e histórico de alterações para todos os apps da Oficina LDM.</p>
+        <p>Defina quem pode acessar cada aplicativo da Oficina LDM. Clique num app pra adicionar ou remover pessoas pelo nome e e-mail — sem ninguém na lista, o acesso segue livre como hoje.</p>
       </div>
+      <div class="access-list" id="accessList"></div>
     </section>
   </main>
 </div>
@@ -593,7 +615,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var VIEW_META = {
     painel: {title:'Painel', sub:'Dados, indicadores e operação do CD conectados em um único ambiente.'},
     gestao: {title:'Gestão de App', sub:'Gerencie nome, cor, status e vínculo de TV de cada aplicação.'},
-    tv: {title:'TV LDM', sub:'Gerencie a sequência, o tempo de exibição e o idioma de cada app na TV.'},
+    tv: {title:'Tv Ldm', sub:'Gerencie a sequência, o tempo de exibição e o idioma de cada app na TV.'},
     config: {title:'Configurações', sub:'Preferências gerais da Oficina LDM.'}
   };
   var navButtons = Array.prototype.slice.call(document.querySelectorAll('.sb-nav-item'));
@@ -613,6 +635,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       viewTitle.textContent = VIEW_META[v].title;
       viewSubtitle.textContent = VIEW_META[v].sub;
       if(v === 'gestao' && window.renderManageTable) window.renderManageTable();
+      if(v === 'config' && window.renderAccessList) window.renderAccessList();
       if(v === 'tv'){
         if(window.renderTvTable) window.renderTvTable();
         if(window.renderTvSim) window.renderTvSim();
@@ -1307,7 +1330,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       emptyMsg.hidden = true;
       if(!iframe){
         iframe = document.createElement('iframe');
-        iframe.setAttribute('title', 'Simulação da TV LDM');
+        iframe.setAttribute('title', 'Simulação da Tv Ldm');
         frameBox.appendChild(iframe);
       } else if(iframe.parentElement !== frameBox){
         frameBox.appendChild(iframe);
@@ -1527,6 +1550,101 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   });
 
   document.addEventListener('click', function(){ closeAllMenus(); });
+
+  /* Gestão de acesso (Configurações) — quem pode acessar cada app. Guarda
+     só os nomes/e-mails; nada aqui bloqueia de verdade, cada app continua
+     responsável pelo próprio login — é só o registro de quem pode usar o quê. */
+  var ACCESS_KEY = 'ldm-acessos';
+  function getAcessos(){
+    try { return JSON.parse(localStorage.getItem(ACCESS_KEY) || '{}'); } catch(e){ return {}; }
+  }
+  function setAcessos(obj){
+    try { localStorage.setItem(ACCESS_KEY, JSON.stringify(obj)); } catch(e){}
+  }
+  var accessOpen = {};
+  var accessListEl = document.getElementById('accessList');
+  function renderAccessList(){
+    if(!accessListEl) return;
+    var acessos = getAcessos();
+    accessListEl.innerHTML = getAllApps().map(function(a){
+      var pessoas = acessos[a.key] || [];
+      var aberto = !!accessOpen[a.key];
+      return ''
+        + '<div class="access-app' + (aberto ? ' open' : '') + '" data-key="' + a.key + '">'
+        +   '<button type="button" class="access-app-head">'
+        +     '<span class="access-app-icon" style="--accent:' + a.color + ';">' + a.icon + '</span>'
+        +     '<span class="access-app-name">' + esc(a.name) + '</span>'
+        +     '<span class="access-count">' + (pessoas.length ? pessoas.length + (pessoas.length === 1 ? ' pessoa' : ' pessoas') : 'Acesso livre') + '</span>'
+        +     '<svg class="access-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+        +   '</button>'
+        +   '<div class="access-app-body"' + (aberto ? '' : ' hidden') + '>'
+        +     '<div class="access-add-row">'
+        +       '<input type="text" class="access-input-nome" placeholder="Nome">'
+        +       '<input type="text" class="access-input-email" placeholder="E-mail">'
+        +       '<button type="button" class="btn-secondary access-add-btn">Adicionar</button>'
+        +     '</div>'
+        +     (pessoas.length
+            ? '<ul class="access-people">' + pessoas.map(function(p, i){
+                return '<li class="access-person"><span class="access-person-name">' + esc(p.nome) + '</span>'
+                  + (p.email ? '<span class="access-person-email">' + esc(p.email) + '</span>' : '')
+                  + '<button type="button" class="access-remove" data-idx="' + i + '" aria-label="Remover ' + esc(p.nome) + '">&times;</button></li>';
+              }).join('') + '</ul>'
+            : '<p class="access-empty">Ninguém adicionado ainda — acesso livre.</p>')
+        +   '</div>'
+        + '</div>';
+    }).join('');
+  }
+  window.renderAccessList = renderAccessList;
+
+  if(accessListEl){
+    accessListEl.addEventListener('click', function(e){
+      var head = e.target.closest('.access-app-head');
+      if(head){
+        var key = head.closest('.access-app').dataset.key;
+        accessOpen[key] = !accessOpen[key];
+        renderAccessList();
+        return;
+      }
+      var addBtn = e.target.closest('.access-add-btn');
+      if(addBtn){
+        var appEl = addBtn.closest('.access-app');
+        var addKey = appEl.dataset.key;
+        var nomeInput = appEl.querySelector('.access-input-nome');
+        var emailInput = appEl.querySelector('.access-input-email');
+        var nome = nomeInput.value.trim();
+        var email = emailInput.value.trim();
+        if(!nome){ nomeInput.focus(); return; }
+        var acessos = getAcessos();
+        if(!acessos[addKey]) acessos[addKey] = [];
+        acessos[addKey].push({nome: nome, email: email});
+        setAcessos(acessos);
+        accessOpen[addKey] = true;
+        renderAccessList();
+        showToast('Pessoa adicionada.');
+        return;
+      }
+      var removeBtn = e.target.closest('.access-remove');
+      if(removeBtn){
+        var remAppEl = removeBtn.closest('.access-app');
+        var remKey = remAppEl.dataset.key;
+        var idx = Number(removeBtn.dataset.idx);
+        var acessosRem = getAcessos();
+        if(acessosRem[remKey]) acessosRem[remKey].splice(idx, 1);
+        setAcessos(acessosRem);
+        accessOpen[remKey] = true;
+        renderAccessList();
+        showToast('Pessoa removida.');
+        return;
+      }
+    });
+    accessListEl.addEventListener('keydown', function(e){
+      if(e.key !== 'Enter') return;
+      var row = e.target.closest('.access-add-row');
+      if(!row) return;
+      e.preventDefault();
+      row.querySelector('.access-add-btn').click();
+    });
+  }
 
   renderCards();
   renderSidebarFavorites();
