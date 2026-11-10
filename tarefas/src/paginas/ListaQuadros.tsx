@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Aviso, Campo, Modal, Vazio } from '@/componentes/ui';
 import { excluirQuadro, mensagemDeErro, salvarQuadro } from '@/estado/dados';
 import { usePermissoes } from '@/estado/sessao';
@@ -110,6 +110,14 @@ function FormularioQuadro({ quadro, aoFechar, recarregar, aoExcluir }: {
   const [cor, setCor] = useState(CORES_QUADRO[0]);
   const atual = quadro === 'novo' ? null : quadro;
 
+  /* A cor escolhida e o estado do formulario: ao abrir, comeca na cor
+     atual do quadro (ou na primeira da paleta, num quadro novo). Antes
+     a edicao sempre gravava a cor antiga e ignorava o clique. */
+  useEffect(() => {
+    if (quadro) setCor(atual?.cor ?? CORES_QUADRO[0]);
+    setErro(null);
+  }, [quadro]);
+
   async function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -117,7 +125,7 @@ function FormularioQuadro({ quadro, aoFechar, recarregar, aoExcluir }: {
       await salvarQuadro({
         nome: String(f.get('nome')),
         descricao: String(f.get('descricao')) || null,
-        cor: atual?.cor ?? cor,
+        cor,
       }, atual?.id);
       await recarregar();
       aoFechar();
@@ -136,16 +144,39 @@ function FormularioQuadro({ quadro, aoFechar, recarregar, aoExcluir }: {
           <textarea name="descricao" defaultValue={atual?.descricao ?? ''} className="campo" rows={2} />
         </Campo>
         <Campo rotulo="Cor">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {CORES_QUADRO.map((c) => (
               <button
                 type="button" key={c} onClick={() => setCor(c)}
-                className={`h-7 w-7 rounded-full border-2 ${(atual?.cor ?? cor) === c ? 'border-tinta' : 'border-transparent'}`}
+                className={`h-7 w-7 rounded-full transition hover:scale-110 ${
+                  cor.toLowerCase() === c.toLowerCase() ? 'ring-2 ring-tinta ring-offset-2' : ''
+                }`}
                 style={{ backgroundColor: c }}
                 aria-label={`Cor ${c}`}
+                aria-pressed={cor.toLowerCase() === c.toLowerCase()}
               />
             ))}
+            {/* Qualquer outra cor, pelo seletor do proprio navegador. */}
+            <label
+              className={`relative flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-linha bg-white pl-1 pr-2.5 text-xs font-bold text-tinta-suave hover:border-laranja ${
+                CORES_QUADRO.some((c) => c.toLowerCase() === cor.toLowerCase()) ? '' : 'ring-2 ring-tinta ring-offset-2'
+              }`}
+              title="Escolher outra cor"
+            >
+              <span className="h-5 w-5 rounded-full bg-[conic-gradient(#FE5000,#C79212,#16A34A,#0891B2,#2F6FE0,#7C3AED,#DB2777,#FE5000)]" />
+              Outra
+              <input
+                type="color" value={cor} onChange={(e) => setCor(e.target.value.toUpperCase())}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label="Escolher outra cor"
+              />
+            </label>
           </div>
+          {/* Previa: a capa do cartao com a cor escolhida. */}
+          <div
+            className="mt-3 flex h-10 items-center rounded-lg px-3 text-xs font-bold text-white"
+            style={{ backgroundImage: `linear-gradient(135deg, ${cor}, color-mix(in srgb, ${cor} 55%, #001A72))` }}
+          >Prévia da capa · {cor}</div>
         </Campo>
         {erro && <Aviso>{erro}</Aviso>}
         <div className="flex items-center justify-between gap-2">
