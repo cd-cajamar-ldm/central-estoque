@@ -9,6 +9,9 @@
      {tipo:'clique',   area, dir, realce, balao, legenda}
      {tipo:'digitar',  area, texto, balao, legenda}
      {tipo:'destacar', area, balao, legenda}
+     {tipo:'escolher', area, opcoes, escolhida, balao, legenda}  (lista suspensa)
+   Toda ação aceita 'detalhe' (explicação longa). 'clique' aceita
+   'marcar' (desenha a caixa marcada depois do clique).
    Textos aceitam {{chave}} — trocado pelo que o leitor preencheu no
    campo da etapa (ou pelo exemplo, na animação).
    ============================================================= */
@@ -55,7 +58,9 @@
     var imgs = manual.imagens || {};
     var leitor = {};           // valores que o leitor digitou nos campos
     var marcados = {};         // checklist: { 'passo:item': true }
-    var speed = 1, paused = false, RUN = 0, current = 0, sayN = 0, sayTotal = 1;
+    var speed = 1, paused = false, RUN = 0, current = 0;
+    var T = 0;              // tempo do manual já decorrido na etapa atual (ms a 1x)
+    var DUR = [], BASE = [], TOTAL = 1;
     var CANCEL = {};
     var reduce = global.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     var temaKey = 'ldm-theme';
@@ -70,7 +75,6 @@
           '<div class="mp-side-label"><span>Ordem de serviço</span><span data-r="count"></span></div>' +
           '<ol class="mp-steps" data-r="steps"></ol>' +
           '<div class="mp-side-foot">' +
-            '<div class="mp-speed">Velocidade <button type="button" data-sp="1" class="on">1x</button><button type="button" data-sp="1.5">1,5x</button><button type="button" data-sp="2">2x</button></div>' +
             '<div>Loja do Mecânico &middot; Lugar de quem faz</div>' +
           '</div>' +
         '</aside>' +
@@ -96,6 +100,11 @@
             '</div>' +
             '<div class="mp-ctrl">' +
               '<div class="mp-now"><span class="mp-now-ic">' + IC.wrench + '</span><span class="mp-now-box"><span class="mp-now-txt" data-r="say" aria-live="polite">Preparando…</span><span class="mp-now-det" data-r="det" hidden></span></span></div>' +
+              '<div class="mp-speed" role="group" aria-label="Velocidade"><span>Velocidade</span>' +
+                [['0.5', '0,5x'], ['0.75', '0,75x'], ['1', '1x'], ['1.5', '1,5x'], ['2', '2x']].map(function (v) {
+                  return '<button type="button" data-sp="' + v[0] + '"' + (v[0] === '1' ? ' class="on"' : '') + '>' + v[1] + '</button>';
+                }).join('') + '</div>' +
+              '<span class="mp-time" data-r="time">0:00 / 0:00</span>' +
               '<div class="mp-btns">' +
                 '<button class="mp-btn" type="button" data-r="prev" aria-label="Etapa anterior">' + IC.prev + '</button>' +
                 '<button class="mp-btn pri" type="button" data-r="play"><span data-r="playIco">' + IC.pause + '</span><span data-r="playTxt">Pausar</span></button>' +
@@ -164,14 +173,18 @@
     }
 
     /* ---------- motor de tempo ---------- */
+    /* Cada wait(ms) consome ms de "tempo do manual" (medido a 1x). A
+       velocidade só muda quão rápido esse tempo passa; é por ele que a
+       régua anda, então ela acompanha a animação exatamente. */
     function wait(ms) {
       var id = RUN;
       return new Promise(function (res, rej) {
-        var left = ms / speed, last = performance.now();
+        var left = ms, last = performance.now();
         (function f(now) {
           if (id !== RUN) return rej(CANCEL);
-          if (!paused) left -= now - last;
+          if (!paused) { var d = Math.min(left, (now - last) * speed); left -= d; T += d; }
           last = now;
+          paintRegua();
           if (left <= 0) return res();
           requestAnimationFrame(f);
         })(last);
@@ -216,21 +229,64 @@
     function say(t, det) {
       spot(null); tag(null);
       if (!t && !det) return check();
-      sayN++;
       R.say.textContent = t || '';
       R.say.classList.remove('pop'); void R.say.offsetWidth; R.say.classList.add('pop');
       det = resolve(det || '', true).trim();
       R.det.textContent = det;
       R.det.hidden = !det;
-      paintRegua();
-      return wait(480 + (det ? Math.min(7000, 900 + det.length * 35) : 0));
+      return wait(custoSay(t, det));
     }
+
+    /* ---------- duração de cada ação (mesmos números das animações) ---------- */
+    var MV = reduce ? 250 : 760, CL = 340;
+    function custoSay(t, det) {
+      if (!t && !det) return 0;
+      det = resolve(det || '', true).trim();
+      return 480 + (det ? Math.min(7000, 900 + det.length * 35) : 0);
+    }
+    function opcoesDe(acao) {
+      var ops = Array.isArray(acao.opcoes) ? acao.opcoes.slice() : String(acao.opcoes || '').split('\n');
+      ops = ops.map(function (o) { return String(o).trim(); }).filter(Boolean);
+      var esc0 = String(acao.escolhida || '').trim() || ops[0] || '';
+      var idx = ops.indexOf(esc0);
+      if (idx < 0 && esc0) { ops.push(esc0); idx = ops.length - 1; }
+      return { ops: ops, idx: Math.max(0, idx), valor: esc0 };
+    }
+    function custo(acao) {
+      var s = custoSay(acao.legenda, acao.detalhe);
+      switch (acao.tipo) {
+        case 'tela': return s + 650;
+        case 'clique': return s + MV + CL + ((acao.realce || acao.balao || acao.marcar) ? (acao.balao ? 1300 : 900) : 250);
+        case 'digitar':
+          var txt = resolve(acao.texto, true);
+          return s + MV + CL + txt.length * (txt.length > 30 ? 26 : 55) + 350 + (acao.balao ? 1300 : 300);
+        case 'destacar': return s + 1500;
+        case 'escolher': return s + MV + CL + 350 + (opcoesDe(acao).idx + 1) * 220 + 300 + MV + CL + (acao.balao ? 1300 : 600);
+        default: return 0;
+      }
+    }
+    function custoPasso(i) {
+      var acoes = passos[i].acoes || [], t = primeiraTela(i), ini = t ? t.skip : 0;
+      var total = reduce ? 250 : 2400;
+      if (ini) total += custoSay(acoes[0].legenda, acoes[0].detalhe);
+      acoes.slice(ini).forEach(function (a) { total += custo(a); });
+      if (i < passos.length - 1) total += 1000;
+      return total;
+    }
+    function medir() {
+      var acc = 0;
+      DUR = passos.map(function (_, i) { return custoPasso(i); });
+      BASE = DUR.map(function (d) { var b = acc; acc += d; return b; });
+      TOTAL = acc || 1;
+      R.marks.querySelectorAll('span').forEach(function (s, i) { s.style.flex = DUR[i] + ' 1 0'; });
+    }
+    function mmss(ms) { var s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 
     /* ---------- tela (print) ---------- */
     var imgEl = null;
     function setTela(id, instant) {
       var src = imgs[id];
-      R.ov.querySelectorAll('.mp-type').forEach(function (e) { e.remove(); });
+      R.ov.querySelectorAll('.mp-fx').forEach(function (e) { e.remove(); });
       if (!src) return;
       var novo = new Image();
       novo.alt = '';
@@ -249,12 +305,25 @@
       }
     }
     function blurTypes() { R.ov.querySelectorAll('.mp-type').forEach(function (e) { e.classList.add('blur'); }); }
-    function typeBox(a) {
+    /* Elementos que "transformam" o print (texto digitado, caixa marcada,
+       lista aberta, opção escolhida). data-h/data-k guardam a altura (%) e o
+       fator da fonte, para recalcular quando a janela muda de tamanho. */
+    function fx(cls, a, k) {
       var el = document.createElement('div');
-      el.className = 'mp-type';
+      el.className = 'mp-fx ' + cls;
+      el.setAttribute('data-h', a[3]); el.setAttribute('data-k', k);
+      el.style.fontSize = Math.max(8, R.frame.clientHeight * a[3] / 100 * k) + 'px';
+      R.ov.insertBefore(el, R.spot);
+      return el;
+    }
+    function typeBox(a) {
+      var el = fx('mp-type', a, .6);
       el.style.left = a[0] + '%'; el.style.top = a[1] + '%'; el.style.width = a[2] + '%'; el.style.height = a[3] + '%';
-      el.style.fontSize = Math.max(8, R.frame.clientHeight * a[3] / 100 * .6) + 'px';
-      R.ov.insertBefore(el, R.cursor);
+      return el;
+    }
+    function checkBox(a) {
+      var el = fx('mp-chk', a, .62);
+      el.style.left = (a[0] + .15) + '%'; el.style.top = (a[1] + a[3] / 2) + '%';
       return el;
     }
 
@@ -269,8 +338,41 @@
             var c = center(a, acao.dir ? .25 : .5);
             return moveTo(c[0], c[1]);
           }).then(function () { blurTypes(); return click(acao.dir); }).then(function () {
-            if (acao.realce || acao.balao) { spot(a); tag(a, resolve(acao.balao, true)); return wait(acao.balao ? 1300 : 900); }
+            if (acao.marcar) checkBox(a);
+            if (acao.realce || acao.balao || acao.marcar) { spot(a); tag(a, resolve(acao.balao, true)); return wait(acao.balao ? 1300 : 900); }
             return wait(250);
+          });
+        case 'escolher':
+          var op = opcoesDe(acao), lista, ih = a[3] * .9;
+          var acima = a[1] + a[3] + op.ops.length * ih > 98;
+          var topo = acima ? a[1] - op.ops.length * ih : a[1] + a[3];
+          return say(acao.legenda, acao.detalhe).then(function () {
+            var c = center(a, .9);
+            return moveTo(c[0], c[1]);
+          }).then(function () { blurTypes(); return click(); }).then(function () {
+            lista = fx('mp-ddl', a, .55);
+            lista.style.left = a[0] + '%'; lista.style.top = topo + '%';
+            lista.style.width = a[2] + '%'; lista.style.height = (op.ops.length * ih) + '%';
+            lista.innerHTML = op.ops.map(function (o) { return '<div>' + esc(o) + '</div>'; }).join('');
+            return wait(350);
+          }).then(function () {
+            var itens = lista.children, k = 0;
+            function passo() {
+              if (k > op.idx) return wait(300);
+              for (var j = 0; j < itens.length; j++) itens[j].classList.toggle('hi', j === k);
+              k++;
+              return wait(220).then(passo);
+            }
+            return passo();
+          }).then(function () {
+            return moveTo(a[0] + a[2] * .4, topo + (op.idx + .5) * ih);
+          }).then(function () { return click(); }).then(function () {
+            lista.remove();
+            var box = typeBox(a);
+            box.classList.add('blur', 'mp-sel');
+            box.innerHTML = '<span>' + esc(op.valor) + '</span><i>▾</i>';
+            spot(a); tag(a, resolve(acao.balao, true));
+            return wait(acao.balao ? 1300 : 600);
           });
         case 'digitar':
           var txt = resolve(acao.texto, true), box;
@@ -304,11 +406,10 @@
 
     /* ---------- painéis ---------- */
     function paintRegua() {
-      var total = passos.length;
-      var parcial = sayTotal ? Math.min(1, sayN / sayTotal) : 1;
-      var pct = ((current + (current >= total ? 0 : parcial)) / total) * 100;
-      R.fill.style.width = Math.min(100, pct) + '%';
-      R.marks.querySelectorAll('span').forEach(function (s, i) { s.classList.toggle('on', i < current || (i === current && parcial >= 1)); });
+      var feito = current >= passos.length ? TOTAL : (BASE[current] || 0) + Math.min(T, DUR[current] || 0);
+      R.fill.style.width = Math.min(100, feito / TOTAL * 100) + '%';
+      R.marks.querySelectorAll('span').forEach(function (s, i) { s.classList.toggle('on', BASE[i] + DUR[i] <= feito + 1); });
+      R.time.textContent = mmss(feito / speed) + ' / ' + mmss(TOTAL / speed);
     }
     function renderVals() {
       var s = passos[current];
@@ -408,9 +509,9 @@
     }
     function playStep(i) {
       RUN++;
-      current = i; sayN = 0;
+      current = i; T = 0;
       var acoes = passos[i].acoes || [];
-      sayTotal = acoes.filter(function (a) { return a.legenda || a.detalhe; }).length || 1;
+      medir();
       var t = resetStage(i);
       renderInfo(); paintRegua();
       var inicio = t ? t.skip : 0;
@@ -423,7 +524,7 @@
           R.say.textContent = 'Indo para a próxima etapa…'; R.det.hidden = true;
           return wait(1000).then(function () { playStep(i + 1); });
         }
-        current = passos.length; paintRegua(); current = i;
+        T = DUR[i]; current = passos.length; paintRegua(); current = i;
         R.steps.querySelectorAll('.mp-step').forEach(function (b) { b.classList.add('done'); b.classList.remove('on'); });
         R.say.textContent = 'Manual concluído.'; R.det.hidden = true;
         R.done.classList.add('on');
@@ -448,6 +549,7 @@
       b.onclick = function () {
         speed = +b.getAttribute('data-sp');
         root.querySelectorAll('[data-sp]').forEach(function (x) { x.classList.toggle('on', x === b); });
+        paintRegua();
       };
     });
     function onKey(e) {
@@ -458,8 +560,8 @@
     }
     document.addEventListener('keydown', onKey);
     function onResize() {
-      R.ov.querySelectorAll('.mp-type').forEach(function (el) {
-        el.style.fontSize = Math.max(8, R.frame.clientHeight * parseFloat(el.style.height) / 100 * .6) + 'px';
+      R.ov.querySelectorAll('[data-h]').forEach(function (el) {
+        el.style.fontSize = Math.max(8, R.frame.clientHeight * parseFloat(el.getAttribute('data-h')) / 100 * parseFloat(el.getAttribute('data-k'))) + 'px';
       });
     }
     global.addEventListener('resize', onResize);

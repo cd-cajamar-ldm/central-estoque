@@ -181,6 +181,10 @@ body.theme-dark .alert{color:#FF9C85;}
 .abox.sel{border-width:3px;box-shadow:0 0 0 3px rgba(255,255,255,.85),0 0 0 6px rgba(254,80,0,.45);background:rgba(254,80,0,.18);}
 .abox span{position:absolute;left:-10px;top:-10px;min-width:20px;height:20px;padding:0 5px;border-radius:99px;background:var(--orange);color:#fff;font:800 11px/20px 'Poppins',sans-serif;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.35);}
 .abox.t-digitar span{background:#2D7BFF;}
+.abox.t-escolher{border-color:#7C3AED;background:rgba(124,58,237,.12);}
+.abox.t-escolher span{background:#7C3AED;}
+.aic.escolher{background:rgba(124,58,237,.14);color:#7C3AED;}
+.arow{display:flex;gap:6px;flex-wrap:wrap;}
 .rubber{position:absolute;border:2px dashed var(--orange);background:rgba(254,80,0,.12);pointer-events:none;}
 .canvas-note{font-size:11.5px;color:#9BA2CC;margin-top:8px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;}
 
