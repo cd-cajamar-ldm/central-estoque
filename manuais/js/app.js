@@ -229,6 +229,19 @@
       return urlToDataURL(v).then(function (d) { m.imagens[id] = d; });
     })).then(function () { return m; });
   }
+  /* Manuais oficiais da Central: vêm sempre do site (pasta exemplos/), nunca
+     ficam guardados no navegador — por isso estão sempre na versão mais nova
+     para todo mundo. Para mudar um, a pessoa duplica e edita a cópia. */
+  var OFICIAIS_ARQ = ['exemplos/putty-stg.json'];
+  var oficiais = [];
+  function carregarOficiais() {
+    return Promise.all(OFICIAIS_ARQ.map(function (arq) {
+      return fetch(arq, { cache: 'no-cache' }).then(function (r) { return r.json(); }).then(function (m) {
+        m.imagens = Object.keys(m.imagens).reduce(function (o, k) { o[k] = 'exemplos/' + m.imagens[k].replace(/^exemplos\//, ''); return o; }, {});
+        return embutirImagens(m);
+      }).then(function (m) { m = normalizar(m); m.oficial = true; return m; }).catch(function () { return null; });
+    })).then(function (ms) { oficiais = ms.filter(Boolean); });
+  }
   function carregarExemplo() {
     return fetch('exemplos/putty-stg.json').then(function (r) { return r.json(); }).then(function (m) {
       m.imagens = Object.keys(m.imagens).reduce(function (o, k) { o[k] = 'exemplos/' + m.imagens[k].replace(/^exemplos\//, ''); return o; }, {});
@@ -265,7 +278,7 @@
   }
   function renderBiblioteca() {
     return store.all().then(function (ms) {
-      lista = (ms || []).sort(function (a, b) { return (b.atualizadoEm || 0) - (a.atualizadoEm || 0); });
+      lista = oficiais.concat((ms || []).filter(function (m) { return !m.oficial; }).sort(function (a, b) { return (b.atualizadoEm || 0) - (a.atualizadoEm || 0); }));
       var q = $('#libSearch').value.trim().toLowerCase();
       var vis = lista.filter(function (m) { return !q || [m.titulo, m.sistema, m.ambiente, m.autor].join(' ').toLowerCase().indexOf(q) >= 0; });
       $('#libEmpty').hidden = vis.length > 0;
@@ -276,10 +289,14 @@
         return '<article class="card mcard" data-id="' + esc(m.id) + '"><i class="rivet tl"></i><i class="rivet tr"></i>' +
           '<button class="mcard-thumb" type="button" data-act="ver" aria-label="Assistir">' + (img ? '<img src="' + img + '" alt="">' : '<span class="mcard-empty">sem prints ainda</span>') +
           '<span class="play"><svg width="14" height="14" viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z" fill="currentColor"/></svg></span></button>' +
-          '<div class="mcard-body"><div class="mcard-chips">' + (m.sistema ? '<span class="chip hot">' + esc(m.sistema) + '</span>' : '') + (m.ambiente ? '<span class="chip">' + esc(m.ambiente) + '</span>' : '') + '<span class="chip">' + n + ' etapa' + (n === 1 ? '' : 's') + '</span></div>' +
+          '<div class="mcard-body"><div class="mcard-chips">' + (m.oficial ? '<span class="chip oficial">★ Oficial da Central</span>' : '') + (m.sistema ? '<span class="chip hot">' + esc(m.sistema) + '</span>' : '') + (m.ambiente ? '<span class="chip">' + esc(m.ambiente) + '</span>' : '') + '<span class="chip">' + n + ' etapa' + (n === 1 ? '' : 's') + '</span></div>' +
           '<h3>' + esc(m.titulo || 'Sem título') + '</h3><p>' + esc(m.descricao || '') + '</p>' +
-          '<div class="mcard-foot"><button class="btn sm pri" type="button" data-act="editar">Editar</button><button class="btn sm" type="button" data-act="html">Exportar</button><button class="btn sm" type="button" data-act="dup">Duplicar</button><span class="grow"></span><button class="btn sm icon danger" type="button" data-act="del" title="Excluir">✕</button></div>' +
-          '<small style="font-size:10.5px;color:var(--ink-soft)">Atualizado em ' + dt + '</small></div></article>';
+          (m.oficial
+            ? '<div class="mcard-foot"><button class="btn sm pri" type="button" data-act="treinar">🎯 Treinar</button><button class="btn sm" type="button" data-act="html">Exportar</button><button class="btn sm" type="button" data-act="dup" title="Cria uma cópia sua para editar">Duplicar p/ editar</button></div>' +
+              '<small style="font-size:10.5px;color:var(--ink-soft)">Sempre na versão mais nova' + ((m.quiz || []).length ? ' · com quiz de ' + m.quiz.length + ' perguntas' : '') + '</small>'
+            : '<div class="mcard-foot"><button class="btn sm pri" type="button" data-act="editar">Editar</button><button class="btn sm" type="button" data-act="treinar" title="Treinar">🎯</button><button class="btn sm" type="button" data-act="html">Exportar</button><button class="btn sm" type="button" data-act="dup">Duplicar</button><span class="grow"></span><button class="btn sm icon danger" type="button" data-act="del" title="Excluir">✕</button></div>' +
+              '<small style="font-size:10.5px;color:var(--ink-soft)">Atualizado em ' + dt + '</small>') +
+          '</div></article>';
       }).join('');
     });
   }
@@ -290,18 +307,20 @@
     var m = lista.filter(function (x) { return x.id === id; })[0]; if (!m) return;
     var act = b.getAttribute('data-act');
     if (act === 'ver') assistir(m);
+    else if (act === 'treinar') assistir(m, 0, 'treinar');
     else if (act === 'editar') abrirEditor(m);
     else if (act === 'html') exportarHtml(m);
-    else if (act === 'dup') { var c = clone(m); c.id = uid('m'); c.titulo = (m.titulo || '') + ' (cópia)'; c.atualizadoEm = Date.now(); store.put(c).then(renderBiblioteca); }
+    else if (act === 'dup') {
+      var c = clone(m); c.id = uid('m'); c.titulo = (m.titulo || '') + ' (cópia)'; delete c.oficial; delete c.versaoExemplo;
+      c.criadoEm = c.atualizadoEm = Date.now();
+      store.put(c).then(function () { if (m.oficial) abrirEditor(c); else renderBiblioteca(); });
+    }
     else if (act === 'del') {
       if (!confirm('Excluir o manual "' + (m.titulo || '') + '"? Isso não pode ser desfeito (a não ser que você tenha o .json).')) return;
       store.del(id).then(function () { if (atual && atual.id === id) { atual = null; syncNav(); } renderBiblioteca(); toast('Manual excluído.'); });
     }
   };
   $('#btnNovo').onclick = function () { var m = novoManual(); store.put(m).then(function () { abrirEditor(m); }); };
-  $('#btnExemplo').onclick = function () {
-    carregarExemplo().then(function () { renderBiblioteca(); toast('Exemplo do PuTTY STG restaurado.'); }).catch(function () { toast('Não consegui carregar o exemplo.', true); });
-  };
   $('#btnImportar').onclick = function () { $('#fileImportar').click(); };
   $('#fileImportar').onchange = function (e) {
     var f = e.target.files[0]; e.target.value = '';
@@ -797,15 +816,16 @@
   /* O manual do PuTTY STG já vem na biblioteca. Quando sai uma versão nova
      dele (EXEMPLO_V), atualiza sozinho — a não ser que a pessoa tenha
      editado o exemplo (aí fica como está; "Restaurar exemplo" traz o novo). */
-  var EXEMPLO_V = 2;
-  store.all().then(function (ms) {
-    var vista = 0;
-    try { vista = parseInt(localStorage.getItem('ldm-manuais-exemplo-v'), 10) || 0; } catch (e) {}
-    if (vista >= EXEMPLO_V) return;
-    try { localStorage.setItem('ldm-manuais-exemplo-v', String(EXEMPLO_V)); } catch (e) {}
+  /* A cópia antiga do PuTTY que ficava guardada no navegador some (agora ele é
+     oficial e vem do site). Se a pessoa tinha editado, vira "minha versão". */
+  carregarOficiais().then(function () { return store.all(); }).then(function (ms) {
     var ex = (ms || []).filter(function (m) { return m.id === 'exemplo-putty-stg'; })[0];
-    var intocado = ex && ex.criadoEm === ex.atualizadoEm;
-    if (!ex || (intocado && (ex.versaoExemplo || 1) < EXEMPLO_V)) return carregarExemplo().catch(function () {});
+    if (!ex) return;
+    if (ex.criadoEm === ex.atualizadoEm) return store.del(ex.id);
+    return store.del(ex.id).then(function () {
+      ex.id = uid('m'); ex.titulo = (ex.titulo || '') + ' (minha versão)'; delete ex.versaoExemplo;
+      return store.put(ex);
+    });
   }).then(renderBiblioteca).catch(function () {
     toast('Este navegador bloqueou o armazenamento local — os manuais não serão guardados.', true);
   });
