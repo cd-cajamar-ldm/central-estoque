@@ -482,6 +482,8 @@
     clique: { nome: 'Clique', ic: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>' },
     digitar: { nome: 'Digitar', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>' },
     destacar: { nome: 'Destacar', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 3"/></svg>' },
+    tecla: { nome: 'Tecla', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M17 10v3H8M10 11l-2 2 2 2"/></svg>' },
+    cena: { nome: 'Cena', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="7" height="7" rx="1"/><rect x="13" y="8" width="7" height="7" rx="1"/><path d="M2 19h20"/></svg>' },
     escolher: { nome: 'Lista suspensa', ic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1"/><path d="M15 6.5l1.5 1.5L18 6.5M5 14h10M5 18h7"/></svg>' }
   };
   var HINT = {
@@ -502,6 +504,8 @@
     var b = e.target.closest('[data-tool]'); if (!b) return;
     var t = b.getAttribute('data-tool');
     if (t === 'tela') { pedirTela = null; $('#fileTela').click(); return; }
+    if (t === 'tecla') { setTool(null); inserirAcao({ tipo: 'tecla', tecla: 'ENTER', legenda: 'Aperte ENTER', balao: '' }); return; }
+    if (t === 'cena') { setTool(null); inserirAcao({ tipo: 'cena', modelo: 'separar', skus: 'SKU A\nSKU B\nSKU C', caixas: 3, legenda: 'Separe as caixas do palete por SKU' }); return; }
     if (!telaVigente()) { toast('Primeiro coloque um print: Ctrl+V ou "Nova tela".'); return; }
     setTool(tool === t ? null : t);
   };
@@ -513,7 +517,10 @@
      a própria etapa: etapa nova começa com o espaço do print vazio. */
   function telaVigente(idx) {
     var ac = passo().acoes, ate = idx == null ? (aIdx >= 0 ? aIdx : ac.length - 1) : idx;
-    for (var j = ate; j >= 0; j--) if (ac[j] && ac[j].tipo === 'tela') return { img: ac[j].img, idx: j };
+    for (var j = ate; j >= 0; j--) {
+      if (ac[j] && ac[j].tipo === 'tela') return { img: ac[j].img, idx: j };
+      if (ac[j] && ac[j].tipo === 'cena') return { cena: ac[j], idx: j };
+    }
     return null;
   }
   function inserirAcao(a) {
@@ -558,8 +565,15 @@
 
   function resumo(a) {
     if (a.tipo === 'tela') return a.legenda ? '<i>' + esc(a.legenda) + '</i>' : '<i>troca o print</i>';
+    if (a.tipo === 'tecla') return '<b>' + esc(a.tecla || 'ENTER') + '</b>' + (a.legenda ? ' · ' + esc(a.legenda) : '');
+    if (a.tipo === 'cena') return (CENA_NOME[a.modelo] || CENA_NOME.separar) + (a.legenda ? ' · ' + esc(a.legenda) : '');
     var extra = a.tipo === 'digitar' && a.texto ? ' “' + esc(a.texto) + '”' : a.tipo === 'escolher' && a.escolhida ? ' → “' + esc(a.escolhida) + '”' : '';
     return (a.legenda ? esc(a.legenda) : '<i>sem legenda</i>') + extra;
+  }
+  var CENA_NOME = { separar: 'Separar palete por SKU', bipar: 'Bipar unidade por unidade', conferir: 'Conferir físico x bipado' };
+  var CENA_LEGENDA = { separar: 'Separe as caixas do palete por SKU', bipar: 'Bipe unidade por unidade', conferir: 'Confira: quantidade física x bipada' };
+  function campoAcao(rotulo, k, v, tipo, extra) {
+    return '<label class="f">' + rotulo + '<input type="' + (tipo || 'text') + '" data-af="' + k + '" value="' + esc(v == null ? '' : v) + '" spellcheck="false"' + (extra || '') + '></label>';
   }
   function renderAcoes() {
     var ac = passo().acoes;
@@ -579,11 +593,27 @@
         h += '<label class="f">Legenda (frase curta embaixo da tela)<input type="text" data-af="legenda" value="' + esc(a.legenda) + '" placeholder="Ex.: Clique em Save"></label>';
         h += '<label class="f">Explicação detalhada (opcional)<textarea data-af="detalhe" rows="3" placeholder="Por que fazer isso, o que cada opção significa, cuidados…">' + esc(a.detalhe) + '</textarea></label>';
         if (a.tipo === 'digitar') h += '<label class="f">Texto digitado<input type="text" data-af="texto" value="' + esc(a.texto) + '" spellcheck="false" placeholder="Ex.: 2222 ou {{pasta}}"></label>';
+        if (a.tipo === 'tecla') {
+          h += campoAcao('Tecla(s) — use + para combinação', 'tecla', a.tecla, 'text', ' placeholder="ENTER, F4, Ctrl+V"');
+          h += '<div class="arow">' + ['ENTER', 'TAB', 'F4', 'F2', 'ESC', 'Ctrl+V'].map(function (k) { return '<button class="btn sm" type="button" data-key="' + k + '">' + k + '</button>'; }).join('') + '</div>';
+          h += '<p class="help" style="margin:0">Opcional: “Redesenhar área” marca o campo onde a tecla é apertada.</p>';
+        }
+        if (a.tipo === 'cena') {
+          h += '<label class="f">Modelo da cena<select data-af="modelo">' + Object.keys(CENA_NOME).map(function (k) { return '<option value="' + k + '"' + (a.modelo === k ? ' selected' : '') + '>' + CENA_NOME[k] + '</option>'; }).join('') + '</select></label>';
+          if (a.modelo === 'bipar') {
+            h += campoAcao('SKU', 'sku', a.sku, 'text', ' placeholder="Ex.: 123456"') + campoAcao('Quantidade (1 a 30)', 'qtd', a.qtd == null ? 6 : a.qtd, 'number', ' min="1" max="30"') + campoAcao('Local (opcional, aparece no coletor)', 'local', a.local, 'text', ' placeholder="Ex.: PPP 001 066 00"');
+          } else if (a.modelo === 'conferir') {
+            h += campoAcao('Quantidade física (contada)', 'fisico', a.fisico == null ? 6 : a.fisico, 'number', ' min="0"') + campoAcao('Quantidade bipada no coletor', 'bipado', a.bipado == null ? 6 : a.bipado, 'number', ' min="0"');
+            h += '<p class="help" style="margin:0">Se os números forem diferentes, a cena mostra a divergência e pede recontagem.</p>';
+          } else {
+            h += '<label class="f">SKUs no palete (um por linha, até 4)<textarea data-af="skus" rows="3" spellcheck="false">' + esc(a.skus) + '</textarea></label>' + campoAcao('Caixas por SKU (1 a 4)', 'caixas', a.caixas == null ? 3 : a.caixas, 'number', ' min="1" max="4"');
+          }
+        }
         if (a.tipo === 'escolher') {
           h += '<label class="f">Opções da lista (uma por linha, na ordem da tela)<textarea data-af="opcoes" rows="4" spellcheck="false" placeholder="Por Item\nPor Item e Local\nPor Local">' + esc(a.opcoes) + '</textarea></label>';
           h += '<label class="f">Opção escolhida (aparece no campo depois)<input type="text" data-af="escolhida" value="' + esc(a.escolhida) + '" spellcheck="false" placeholder="Ex.: Por Item e Local"></label>';
         }
-        if (a.tipo !== 'tela') {
+        if (a.tipo !== 'tela' && a.tipo !== 'cena') {
           h += '<label class="f">Etiqueta (opcional)<input type="text" data-af="balao" value="' + esc(a.balao) + '" placeholder="Ex.: SSH ✓"></label>';
           h += '<div class="ackrow">';
           if (a.tipo === 'clique') h += '<label><input type="checkbox" data-ak="marcar"' + (a.marcar ? ' checked' : '') + '> Mostrar caixa marcada ✓ depois</label><label><input type="checkbox" data-ak="realce"' + (a.realce ? ' checked' : '') + '> Destacar depois do clique</label><label><input type="checkbox" data-ak="dir"' + (a.dir ? ' checked' : '') + '> Botão direito</label>';
@@ -610,6 +640,8 @@
     }
     if (e.target.closest('[data-troca]')) { pedirTela = i; $('#fileTela').click(); return; }
     if (e.target.closest('[data-repos]')) { setTool('reposicionar'); return; }
+    var kb = e.target.closest('[data-key]');
+    if (kb) { ac[i].tecla = kb.getAttribute('data-key'); ac[i].legenda = 'Aperte ' + ac[i].tecla; renderAcoes(); mudou(); return; }
     if (e.target.closest('[data-depois]')) { aIdx = i; pedirTela = null; $('#fileTela').click(); return; }
     if (e.target.closest('[data-pick]')) { aIdx = aIdx === i ? -1 : i; setTool(null); renderAcoes(); }
   });
@@ -619,7 +651,14 @@
     var f = e.target.getAttribute('data-af');
     if (f) {
       a[f] = e.target.value;
+      if (f === 'modelo') {
+        /* legenda padrão acompanha o modelo (se a pessoa ainda não escreveu outra) */
+        var padroes = Object.keys(CENA_LEGENDA).map(function (k) { return CENA_LEGENDA[k]; });
+        if (!a.legenda || padroes.indexOf(a.legenda) >= 0) a.legenda = CENA_LEGENDA[a.modelo] || '';
+        renderAcoes(); mudou(); return;
+      }
       var t = li.querySelector('.atxt'); if (t) t.innerHTML = '<b>' + (a.tipo === 'clique' && a.dir ? 'Botão direito' : TIPOS[a.tipo].nome) + '</b> · ' + resumo(a);
+      if (a.tipo === 'cena') renderCanvas();
       mudou();
     }
   });
@@ -633,6 +672,12 @@
   function renderCanvas() {
     var t = telaVigente();
     var ac = passo().acoes;
+    if (t && t.cena) {
+      cv.innerHTML = '<div class="canvas-cena"><div></div></div>';
+      LDMPlayer.cenaEstatica(cv.querySelector('.canvas-cena > div'), t.cena);
+      $('#canvasInfo').textContent = 'Prévia da cena (ação ' + (t.idx + 1) + ') — estado final';
+      return;
+    }
     if (!t || !atual.imagens[t.img]) {
       cv.innerHTML = '<div class="canvas-empty"><b>Cole aqui o print da tela</b><span>Tire o print (Win+Shift+S), volte aqui e aperte <b>Ctrl+V</b>.<br>Ou arraste uma imagem, ou clique em <b>Nova tela</b>.</span></div>';
       $('#canvasInfo').textContent = '';
@@ -640,7 +685,7 @@
     }
     /* caixas das ações que acontecem sobre este print */
     var fim = ac.length;
-    for (var j = t.idx + 1; j < ac.length; j++) if (ac[j].tipo === 'tela') { fim = j; break; }
+    for (var j = t.idx + 1; j < ac.length; j++) if (ac[j].tipo === 'tela' || ac[j].tipo === 'cena') { fim = j; break; }
     var boxes = '';
     for (var k = Math.max(0, t.idx + 1); k < fim; k++) {
       var a = ac[k]; if (!a.area) continue;
@@ -657,7 +702,7 @@
     return [Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100)), Math.min(100, Math.max(0, (e.clientY - r.top) / r.height * 100))];
   }
   cv.addEventListener('pointerdown', function (e) {
-    if (!cv.querySelector('img')) return;
+    if (!cv.querySelector('img, .canvas-cena')) return;
     if (!tool) {
       var b = e.target.closest('[data-box]');
       if (b) { aIdx = +b.getAttribute('data-box'); renderAcoes(); }
