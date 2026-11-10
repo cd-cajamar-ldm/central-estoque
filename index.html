@@ -807,7 +807,16 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
   function renderCards(){
     var favoritos = getFavoritos();
-    cardsGrid.innerHTML = getAllApps().map(function(a){
+    /* Favoritado sobe pro topo: ordena pelos favoritos primeiro (o mais
+       recente à frente), depois o resto na ordem do catálogo. */
+    var apps = getAllApps().slice().sort(function(a, b){
+      var ia = favoritos.indexOf(a.key), ib = favoritos.indexOf(b.key);
+      var fa = ia !== -1, fb = ib !== -1;
+      if(fa && fb) return ia - ib;
+      if(fa !== fb) return fa ? -1 : 1;
+      return 0;
+    });
+    cardsGrid.innerHTML = apps.map(function(a){
       return cardHTML(a, favoritos.indexOf(a.key) !== -1);
     }).join('');
     applySearchFilter();
@@ -1484,11 +1493,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       var list = getFavoritos();
       var idx = list.indexOf(key);
       var nowFav;
-      if(idx === -1){ list.push(key); nowFav = true; } else { list.splice(idx, 1); nowFav = false; }
+      if(idx === -1){ list.unshift(key); nowFav = true; } else { list.splice(idx, 1); nowFav = false; }
       setFavoritos(list);
-      card.classList.toggle('is-favorite', nowFav);
-      favBtn.classList.toggle('is-active', nowFav);
-      favBtn.querySelector('.fav-label').textContent = nowFav ? 'Remover dos favoritos' : 'Favoritar';
+      renderCards();
       renderSidebarFavorites();
       closeAllMenus();
       showToast(nowFav ? 'Adicionado aos favoritos.' : 'Removido dos favoritos.');
