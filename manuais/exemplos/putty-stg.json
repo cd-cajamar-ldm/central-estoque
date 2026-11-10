@@ -4,7 +4,7 @@
  "sistema": "BSeller",
  "ambiente": "STG",
  "descricao": "Siga a animação de cada etapa e repita no seu computador. Dá para pausar, voltar e copiar os valores no painel ao lado.",
- "conclusao": "Pronto! Dê dois cliques no atalho putty STG para abrir o BSeller de testes.",
+ "conclusao": "Pronto! Dê dois cliques no atalho putty STG para abrir o BSeller de testes. Depois faça o quiz para fixar.",
  "autor": "CD Cajamar",
  "versao": 1,
  "imagens": {
@@ -645,6 +645,75 @@
      "dir": false
     }
    ]
+  }
+ ],
+ "versaoExemplo": 2,
+ "quiz": [
+  {
+   "pergunta": "Qual porta usar na sessão do PuTTY STG?",
+   "opcoes": [
+    "22",
+    "2222",
+    "8080",
+    "443"
+   ],
+   "correta": 1,
+   "explicacao": "No campo Port, troque o 22 por 2222."
+  },
+  {
+   "pergunta": "Qual tipo de conexão deve ficar marcado?",
+   "opcoes": [
+    "Telnet",
+    "Raw",
+    "SSH",
+    "Serial"
+   ],
+   "correta": 2,
+   "explicacao": "Connection type: SSH."
+  },
+  {
+   "pergunta": "Com que nome a sessão é salva em Saved Sessions?",
+   "opcoes": [
+    "PRD",
+    "Default Settings",
+    "BSELLER",
+    "STG"
+   ],
+   "correta": 3,
+   "explicacao": "Digite STG em Saved Sessions e clique em Save."
+  },
+  {
+   "pergunta": "Em Terminal › Keyboard, qual opção marcar em \"The Function keys and keypad\"?",
+   "opcoes": [
+    "ESC[n~",
+    "VT100+",
+    "Linux",
+    "SCO"
+   ],
+   "correta": 1,
+   "explicacao": "Marque VT100+."
+  },
+  {
+   "pergunta": "Qual \"Remote character set\" escolher em Window › Translation?",
+   "opcoes": [
+    "UTF-8",
+    "CP437",
+    "ISO-8859-1:1998 (Latin-1, West Europe)",
+    "Win1252 (Western)"
+   ],
+   "correta": 2,
+   "explicacao": "Latin-1 (ISO-8859-1) para os acentos aparecerem certos."
+  },
+  {
+   "pergunta": "No Destino do atalho, o que fazer com SENHA_STG?",
+   "opcoes": [
+    "Deixar assim mesmo",
+    "Trocar pela senha do STG informada pelo responsável",
+    "Apagar o -pw",
+    "Colocar a senha da sua rede"
+   ],
+   "correta": 1,
+   "explicacao": "Por segurança a senha não fica no manual: troque SENHA_STG pela senha do ambiente STG passada pelo responsável."
   }
  ]
 }
