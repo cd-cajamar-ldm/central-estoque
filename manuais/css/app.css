@@ -277,3 +277,6 @@ body.theme-dark .alert{color:#FF9C85;}
 .qz-op input[type=text]{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 9px;width:100%;}
 .qz-op.ok input[type=text]{border-color:#1F8A52;}
 @media (max-width:760px){.qz-list{grid-template-columns:1fr;}}
+
+.chip.oficial{background:#001A72;border-color:#001A72;color:#fff;}
+body.theme-dark .chip.oficial{background:#2D3A8C;border-color:#2D3A8C;}
