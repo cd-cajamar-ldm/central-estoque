@@ -1,0 +1,650 @@
+{
+ "id": "exemplo-putty-stg",
+ "titulo": "Configurando o PuTTY STG",
+ "sistema": "BSeller",
+ "ambiente": "STG",
+ "descricao": "Siga a animação de cada etapa e repita no seu computador. Dá para pausar, voltar e copiar os valores no painel ao lado.",
+ "conclusao": "Pronto! Dê dois cliques no atalho putty STG para abrir o BSeller de testes.",
+ "autor": "CD Cajamar",
+ "versao": 1,
+ "imagens": {
+  "s01": "exemplos/putty-stg/01-session-vazio.webp",
+  "s02": "exemplos/putty-stg/02-session-preenchido.webp",
+  "s03": "exemplos/putty-stg/03-logging.webp",
+  "s04": "exemplos/putty-stg/04-logging-browse.webp",
+  "s05": "exemplos/putty-stg/05-logging-ok.webp",
+  "s06": "exemplos/putty-stg/06-keyboard.webp",
+  "s07": "exemplos/putty-stg/07-keyboard-ok.webp",
+  "s08": "exemplos/putty-stg/08-translation.webp",
+  "s09": "exemplos/putty-stg/09-translation-lista.webp",
+  "s10": "exemplos/putty-stg/10-translation-ok.webp",
+  "s11": "exemplos/putty-stg/11-session-final.webp",
+  "s12": "exemplos/putty-stg/12-pasta.webp",
+  "s13": "exemplos/putty-stg/13-pasta-menu.webp",
+  "s14": "exemplos/putty-stg/14-propriedades.webp",
+  "s15": "exemplos/putty-stg/15-propriedades-ok.webp"
+ },
+ "passos": [
+  {
+   "titulo": "Dados da sessão",
+   "caminho": [
+    "Session"
+   ],
+   "instrucoes": [
+    "Em **Host Name (or IP address)** digite `bs-meca@coletorSTG.bseller.com.br`",
+    "Em **Port** digite `2222`",
+    "Em **Connection type** deixe marcado **SSH**",
+    "Em **Saved Sessions** digite `STG` e clique em **Save**",
+    "Em **Close window on exit** marque **Only on clean exit**"
+   ],
+   "valores": [
+    {
+     "rotulo": "Host Name (or IP address)",
+     "valor": "bs-meca@coletorSTG.bseller.com.br"
+    },
+    {
+     "rotulo": "Port",
+     "valor": "2222"
+    },
+    {
+     "rotulo": "Saved Sessions",
+     "valor": "STG"
+    }
+   ],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "s01",
+     "legenda": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      41.84,
+      28.75,
+      26.32,
+      4.2
+     ],
+     "texto": "bs-meca@coletorSTG.bseller.com.br",
+     "legenda": "Clique em Host Name e digite o endereço do coletor STG",
+     "balao": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      69.21,
+      28.75,
+      8.16,
+      4.2
+     ],
+     "texto": "2222",
+     "legenda": "No campo Port, troque 22 por 2222",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      66.07,
+      37.79,
+      5.57,
+      3.24
+     ],
+     "legenda": "Confira se Connection type está em SSH",
+     "balao": "SSH ✓"
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      41.84,
+      57.34,
+      25.79,
+      4.2
+     ],
+     "texto": "STG",
+     "legenda": "Em Saved Sessions, escreva STG",
+     "balao": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      68.68,
+      68.54,
+      8.68,
+      4.6
+     ],
+     "legenda": "Clique em Save para gravar a sessão",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s02",
+     "legenda": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      41.84,
+      62.34,
+      25.79,
+      16
+     ],
+     "legenda": "A sessão STG aparece na lista",
+     "balao": "Sessão salva ✓"
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      59.54,
+      87.18,
+      15.68,
+      3.24
+     ],
+     "legenda": "Em Close window on exit, marque Only on clean exit",
+     "balao": "Only on clean exit ✓",
+     "realce": true,
+     "dir": false
+    }
+   ]
+  },
+  {
+   "titulo": "Arquivo de log",
+   "caminho": [
+    "Session",
+    "Logging"
+   ],
+   "instrucoes": [
+    "No menu da esquerda, clique em **Logging** (dentro de Session)",
+    "Ao lado de **Log file name**, clique em **Browse...**",
+    "Na pasta do BSeller, selecione `puttyconfigprd.exe` e confirme"
+   ],
+   "valores": [
+    {
+     "rotulo": "Arquivo a selecionar",
+     "valor": "puttyconfigprd.exe"
+    }
+   ],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "s02",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      26.05,
+      17.82,
+      6.85,
+      3.24
+     ],
+     "legenda": "No menu Category, clique em Logging",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s03",
+     "legenda": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      41.84,
+      51.74,
+      25.17,
+      4.2
+     ],
+     "legenda": "Este é o campo Log file name",
+     "balao": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      68.07,
+      51.54,
+      9.3,
+      4.6
+     ],
+     "legenda": "Clique em Browse...",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s04",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      55,
+      56.91,
+      23.82,
+      4.04
+     ],
+     "legenda": "Selecione o arquivo puttyconfigprd.exe",
+     "balao": "",
+     "realce": true,
+     "dir": false
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      60.58,
+      77.2,
+      8.68,
+      4.6
+     ],
+     "legenda": "Clique em Salvar para confirmar",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s05",
+     "legenda": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      41.84,
+      51.74,
+      25.17,
+      4.2
+     ],
+     "legenda": "O caminho do arquivo aparece no campo",
+     "balao": "...\\Bseller\\puttyconfigprd.exe"
+    }
+   ]
+  },
+  {
+   "titulo": "Teclado",
+   "caminho": [
+    "Terminal",
+    "Keyboard"
+   ],
+   "instrucoes": [
+    "No menu da esquerda, clique em **Keyboard** (dentro de Terminal)",
+    "Em **The Function keys and keypad**, marque **VT100+**"
+   ],
+   "valores": [
+    {
+     "rotulo": "Function keys and keypad",
+     "valor": "VT100+"
+    }
+   ],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "s05",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      26.05,
+      24.22,
+      7.92,
+      3.24
+     ],
+     "legenda": "No menu Category, clique em Keyboard",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s06",
+     "legenda": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      40.66,
+      43.26,
+      37.89,
+      14.11
+     ],
+     "legenda": "Procure o grupo The Function keys and keypad",
+     "balao": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      54.21,
+      52.34,
+      10.79,
+      3.24
+     ],
+     "legenda": "Marque a opção VT100+",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s07",
+     "legenda": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      54.21,
+      52.34,
+      10.79,
+      3.24
+     ],
+     "legenda": "",
+     "balao": "VT100+ ✓"
+    }
+   ]
+  },
+  {
+   "titulo": "Conjunto de caracteres",
+   "caminho": [
+    "Window",
+    "Translation"
+   ],
+   "instrucoes": [
+    "No menu da esquerda, clique em **Translation** (dentro de Window)",
+    "Em **Remote character set**, escolha **ISO-8859-1:1998 (Latin-1, West Europe)**"
+   ],
+   "valores": [
+    {
+     "rotulo": "Remote character set",
+     "valor": "ISO-8859-1:1998 (Latin-1, West Europe)"
+    }
+   ],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "s07",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      26.05,
+      43.42,
+      9.02,
+      3.24
+     ],
+     "legenda": "No menu Category, clique em Translation",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s08",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      41.84,
+      28.75,
+      35.53,
+      4.2
+     ],
+     "legenda": "Abra a lista Remote character set",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s09",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      41.97,
+      36.99,
+      35.26,
+      3.64
+     ],
+     "legenda": "Escolha ISO-8859-1:1998 (Latin-1, West Europe)",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s10",
+     "legenda": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      41.84,
+      28.75,
+      35.53,
+      4.2
+     ],
+     "legenda": "",
+     "balao": "Latin-1 ✓"
+    }
+   ]
+  },
+  {
+   "titulo": "Salvar e fechar",
+   "caminho": [
+    "Session"
+   ],
+   "instrucoes": [
+    "Volte em **Session**",
+    "Selecione **STG** na lista e clique em **Save**",
+    "Feche a janela do PuTTY"
+   ],
+   "valores": [],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "s10",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      23.95,
+      14.62,
+      6.65,
+      3.24
+     ],
+     "legenda": "Volte para Session, no topo do menu",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s11",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      42.37,
+      66.18,
+      24.74,
+      3.24
+     ],
+     "legenda": "Selecione a sessão STG na lista",
+     "balao": "",
+     "realce": true,
+     "dir": false
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      68.68,
+      68.54,
+      8.68,
+      4.6
+     ],
+     "legenda": "Clique em Save para gravar todas as alterações",
+     "balao": "Configuração salva ✓",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      74.08,
+      3.4,
+      5.79,
+      6
+     ],
+     "legenda": "Feche a janela do PuTTY",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    }
+   ]
+  },
+  {
+   "titulo": "Atalho putty STG",
+   "caminho": [
+    "Pasta do BSeller",
+    "Propriedades"
+   ],
+   "instrucoes": [
+    "Abra a pasta onde **você guardou** os arquivos do BSeller, clique na barra de endereço e copie o caminho (Ctrl+C)",
+    "Clique com o botão direito em **putty STG** e vá em **Propriedades**",
+    "Em **Iniciar em**, cole o caminho da sua pasta",
+    "Em **Destino**, cole o mesmo caminho e complete com `\\puttyconfig.exe` e os parâmetros",
+    "Clique em **Aplicar** e depois em **OK**"
+   ],
+   "campo": {
+    "chave": "pasta",
+    "rotulo": "Cole aqui o caminho da pasta onde você guardou os arquivos",
+    "exemplo": "D:\\Sistemas\\Bseller",
+    "marcador": "CAMINHO_DA_SUA_PASTA"
+   },
+   "valores": [
+    {
+     "rotulo": "Iniciar em",
+     "valor": "{{pasta}}"
+    },
+    {
+     "rotulo": "Destino",
+     "valor": "{{pasta}}\\puttyconfig.exe -load \"STG\" -pw SENHA_STG -P 2222"
+    }
+   ],
+   "observacao": "O caminho muda de pessoa para pessoa: é a pasta onde você guardou os arquivos do BSeller. Pela política de segurança da LDM, a senha não fica gravada no manual: troque **SENHA_STG** pela senha do ambiente STG, informada pelo responsável.",
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "s12",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      11.04,
+      16.2,
+      52.25,
+      4.8
+     ],
+     "legenda": "Abra a pasta do BSeller e clique na barra de endereço",
+     "balao": "Ctrl+C · este é o caminho da SUA pasta",
+     "realce": true,
+     "dir": false
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      4.61,
+      68.38,
+      31.32,
+      3.24
+     ],
+     "legenda": "Clique com o botão direito em putty STG",
+     "balao": "",
+     "realce": false,
+     "dir": true
+    },
+    {
+     "tipo": "tela",
+     "img": "s13",
+     "legenda": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      17.76,
+      92.4,
+      26.58,
+      5
+     ],
+     "legenda": "No menu, clique em Propriedades",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "s14",
+     "legenda": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      66.05,
+      47.75,
+      28.95,
+      4.2
+     ],
+     "texto": "{{pasta}}",
+     "legenda": "Em Iniciar em, cole o caminho da sua pasta (Ctrl+V)",
+     "balao": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      66.05,
+      41.75,
+      28.95,
+      4.2
+     ],
+     "texto": "{{pasta}}\\puttyconfig.exe -load \"STG\" -pw SENHA_STG -P 2222",
+     "legenda": "Em Destino, cole o caminho e complete com o executável e os parâmetros",
+     "balao": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      88.03,
+      90.24,
+      8.68,
+      4.6
+     ],
+     "legenda": "Clique em Aplicar",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      68.21,
+      90.24,
+      8.68,
+      4.6
+     ],
+     "legenda": "E depois em OK",
+     "balao": "",
+     "realce": false,
+     "dir": false
+    }
+   ]
+  }
+ ]
+}

@@ -1,9 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Aviso, Campo, Modal, Vazio } from '@/componentes/ui';
 import { excluirQuadro, mensagemDeErro, salvarQuadro } from '@/estado/dados';
 import { usePermissoes } from '@/estado/sessao';
 import { CORES_QUADRO } from '@/dominio/tipos';
+import IlustracaoQuadro, { temaDoQuadro } from '@/componentes/IlustracaoQuadro';
 import type { Quadro } from '@/dominio/tipos';
+
+/* Ate duas iniciais do nome, para o selo branco sobre a capa. Pula
+   "de", "da", "do"...: "Relatorios da Controladoria" vira RC, nao RD. */
+const MIUDAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+function iniciais(nome: string): string {
+  return nome.trim().split(/\s+/)
+    .filter((p) => !MIUDAS.has(p.toLowerCase()))
+    .slice(0, 2).map((p) => p[0] ?? '').join('').toUpperCase();
+}
 
 interface Props {
   quadros: Quadro[];
@@ -30,14 +40,35 @@ export default function ListaQuadros({ quadros, aoAbrir, recarregar }: Props) {
 
       {visiveis.length ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visiveis.map((q) => (
-            <div key={q.id} className="cartao group relative overflow-hidden">
-              <div className="h-1.5" style={{ backgroundColor: q.cor }} />
-              <button className="w-full p-4 text-left" onClick={() => aoAbrir(q)}>
-                <h3 className="font-titulo text-base font-extrabold">{q.nome}</h3>
-                <p className="mt-1 line-clamp-2 min-h-[2.5em] text-sm text-tinta-suave">
-                  {q.descricao || 'Sem descrição.'}
-                </p>
+          {visiveis.map((q, i) => (
+            <div
+              key={q.id}
+              style={{ animationDelay: `${i * 70}ms` }}
+              className="cartao group relative animate-entra overflow-hidden transition hover:-translate-y-1 hover:shadow-alto"
+            >
+              <button className="block w-full text-left" onClick={() => aoAbrir(q)}>
+                {/* Capa: degrade da cor do quadro para o azul da marca, listras
+                    finas e uma ilustracao do assunto do quadro. */}
+                <div
+                  className="relative h-24 overflow-hidden"
+                  style={{ backgroundImage: `linear-gradient(135deg, ${q.cor}, color-mix(in srgb, ${q.cor} 55%, #001A72))` }}
+                >
+                  <div className="absolute inset-0 bg-[repeating-linear-gradient(-45deg,rgba(255,255,255,.10)_0_2px,transparent_2px_14px)] transition-transform duration-700 group-hover:translate-x-7" />
+                  <IlustracaoQuadro
+                    tema={temaDoQuadro(q.nome, q.descricao)}
+                    className="absolute -bottom-1 right-3 h-[92px] w-auto opacity-90 transition-transform duration-500 group-hover:-translate-y-1 group-hover:scale-105"
+                  />
+                </div>
+                <span
+                  className="absolute left-4 top-[74px] z-[1] grid h-11 w-11 place-items-center rounded-xl bg-white font-titulo text-sm font-extrabold shadow-card"
+                  style={{ color: q.cor }}
+                >{iniciais(q.nome)}</span>
+                <div className="px-4 pb-4 pt-7">
+                  <h3 className="font-titulo text-base font-extrabold">{q.nome}</h3>
+                  <p className={`mt-1 line-clamp-2 min-h-[2.5em] text-sm text-tinta-suave ${q.descricao ? '' : 'italic opacity-75'}`}>
+                    {q.descricao || 'Sem descrição.'}
+                  </p>
+                </div>
               </button>
               {permissoes.podeEditarQuadro(q) && (
                 <div className="absolute right-3 top-3 hidden gap-2 group-hover:flex">
@@ -79,6 +110,14 @@ function FormularioQuadro({ quadro, aoFechar, recarregar, aoExcluir }: {
   const [cor, setCor] = useState(CORES_QUADRO[0]);
   const atual = quadro === 'novo' ? null : quadro;
 
+  /* A cor escolhida e o estado do formulario: ao abrir, comeca na cor
+     atual do quadro (ou na primeira da paleta, num quadro novo). Antes
+     a edicao sempre gravava a cor antiga e ignorava o clique. */
+  useEffect(() => {
+    if (quadro) setCor(atual?.cor ?? CORES_QUADRO[0]);
+    setErro(null);
+  }, [quadro]);
+
   async function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -86,7 +125,7 @@ function FormularioQuadro({ quadro, aoFechar, recarregar, aoExcluir }: {
       await salvarQuadro({
         nome: String(f.get('nome')),
         descricao: String(f.get('descricao')) || null,
-        cor: atual?.cor ?? cor,
+        cor,
       }, atual?.id);
       await recarregar();
       aoFechar();
@@ -105,16 +144,39 @@ function FormularioQuadro({ quadro, aoFechar, recarregar, aoExcluir }: {
           <textarea name="descricao" defaultValue={atual?.descricao ?? ''} className="campo" rows={2} />
         </Campo>
         <Campo rotulo="Cor">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {CORES_QUADRO.map((c) => (
               <button
                 type="button" key={c} onClick={() => setCor(c)}
-                className={`h-7 w-7 rounded-full border-2 ${(atual?.cor ?? cor) === c ? 'border-tinta' : 'border-transparent'}`}
+                className={`h-7 w-7 rounded-full transition hover:scale-110 ${
+                  cor.toLowerCase() === c.toLowerCase() ? 'ring-2 ring-tinta ring-offset-2' : ''
+                }`}
                 style={{ backgroundColor: c }}
                 aria-label={`Cor ${c}`}
+                aria-pressed={cor.toLowerCase() === c.toLowerCase()}
               />
             ))}
+            {/* Qualquer outra cor, pelo seletor do proprio navegador. */}
+            <label
+              className={`relative flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-linha bg-white pl-1 pr-2.5 text-xs font-bold text-tinta-suave hover:border-laranja ${
+                CORES_QUADRO.some((c) => c.toLowerCase() === cor.toLowerCase()) ? '' : 'ring-2 ring-tinta ring-offset-2'
+              }`}
+              title="Escolher outra cor"
+            >
+              <span className="h-5 w-5 rounded-full bg-[conic-gradient(#FE5000,#C79212,#16A34A,#0891B2,#2F6FE0,#7C3AED,#DB2777,#FE5000)]" />
+              Outra
+              <input
+                type="color" value={cor} onChange={(e) => setCor(e.target.value.toUpperCase())}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label="Escolher outra cor"
+              />
+            </label>
           </div>
+          {/* Previa: a capa do cartao com a cor escolhida. */}
+          <div
+            className="mt-3 flex h-10 items-center rounded-lg px-3 text-xs font-bold text-white"
+            style={{ backgroundImage: `linear-gradient(135deg, ${cor}, color-mix(in srgb, ${cor} 55%, #001A72))` }}
+          >Prévia da capa · {cor}</div>
         </Campo>
         {erro && <Aviso>{erro}</Aviso>}
         <div className="flex items-center justify-between gap-2">

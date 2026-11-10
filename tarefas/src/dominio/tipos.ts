@@ -36,6 +36,13 @@ export interface Grupo {
   ordem: number;
 }
 
+/* Item de checklist guardado dentro da propria tarefa (coluna jsonb). */
+export interface ItemChecklist {
+  id: string;
+  texto: string;
+  feito: boolean;
+}
+
 export interface Tarefa {
   id: string;
   quadro_id: string;
@@ -45,8 +52,12 @@ export interface Tarefa {
   responsavel_id: string | null;
   status: StatusTarefa;
   prioridade: Prioridade;
+  /* Datas em AAAA-MM-DD. inicio e prazo (fim previsto) sao digitados;
+     concluida_em e preenchida sozinha ao concluir e pode ser corrigida. */
+  inicio: string | null;
   prazo: string | null;
   concluida_em: string | null;
+  checklist: ItemChecklist[];
   ordem: number | null;
   criado_por: string | null;
   criado_em: string;
@@ -75,6 +86,12 @@ export const explicacaoDoPapel: Record<Papel, string> = {
 export const PRIORIDADES: Prioridade[] = ['baixa', 'media', 'alta', 'critica'];
 export const STATUS_TAREFA: StatusTarefa[] = ['pendente', 'em_andamento', 'concluida', 'bloqueada', 'cancelada'];
 
-/* Paleta de cores para escolher ao criar um quadro ou um grupo — poucas
-   opcoes, para a lista de quadros continuar legivel por cor. */
-export const CORES_QUADRO = ['#16A34A', '#2F6FE0', '#FA4616', '#7C3AED', '#C79212', '#D2453A', '#0E9488', '#6A6F94'];
+/* Paleta de cores para escolher ao criar um quadro. Comeca pelas cores
+   da marca (laranja e azul LDM) e segue por tons que ficam legiveis com
+   texto e ilustracao brancos na capa do quadro. Fora da paleta, o
+   formulario ainda deixa escolher qualquer cor. */
+export const CORES_QUADRO = [
+  '#FE5000', '#001A72', '#16A34A', '#2F6FE0', '#FA4616', '#7C3AED',
+  '#C79212', '#D2453A', '#0E9488', '#6A6F94', '#DB2777', '#0891B2',
+  '#65A30D', '#9333EA', '#B45309', '#475569', '#1E3A8A', '#BE123C',
+];

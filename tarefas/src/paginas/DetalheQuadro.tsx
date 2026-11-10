@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Quadro from '@/componentes/Quadro';
 import type { CartaoDoQuadro, ColunaDoQuadro } from '@/componentes/Quadro';
 import { Aviso, Campo, Carregando, Modal, SeloPrioridade, SeloStatus, Vazio } from '@/componentes/ui';
@@ -11,7 +11,9 @@ import { usePermissoes } from '@/estado/sessao';
 import {
   PRIORIDADES, STATUS_ENCERRADOS, STATUS_TAREFA, rotuloPrioridade, rotuloStatus,
 } from '@/dominio/tipos';
-import type { Grupo, Pessoa, Prioridade, Quadro as TipoQuadro, StatusTarefa, Tarefa } from '@/dominio/tipos';
+import type { Grupo, ItemChecklist, Pessoa, Prioridade, Quadro as TipoQuadro, StatusTarefa, Tarefa } from '@/dominio/tipos';
+import { formatarData, hojeIso } from '@/lib/datas';
+import Checklist, { progressoDoChecklist } from '@/componentes/Checklist';
 
 type Visao = 'quadro' | 'tabela';
 const CHAVE_VISAO = 'tarefas.visao';
@@ -141,9 +143,14 @@ function QuadroKanban({ tarefas, grupos, pessoaPorId, aoAbrir, aoMover, aoReorde
                 </span>
               )}
             </div>
-            <div className="flex items-center justify-between text-[11px] text-tinta-suave">
-              <span>{responsavel?.nome ?? 'Sem responsável'}</span>
-              {t.prazo && <span className={atrasada ? 'font-bold text-vermelho' : ''}>{formatarData(t.prazo)}</span>}
+            <div className="flex items-center justify-between gap-2 text-[11px] text-tinta-suave">
+              <span className="min-w-0 truncate">{responsavel?.nome ?? 'Sem responsável'}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <SeloChecklist itens={t.checklist} />
+                {t.status === 'concluida' && t.concluida_em ? (
+                  <span className="font-bold text-sucesso" title="Concluída em">✓ {formatarData(t.concluida_em)}</span>
+                ) : t.prazo && <span className={atrasada ? 'font-bold text-vermelho' : ''}>{formatarData(t.prazo)}</span>}
+              </span>
             </div>
           </div>
         );
@@ -189,7 +196,9 @@ function TabelaDeTarefas({
                   const atrasada = !!t.prazo && !STATUS_ENCERRADOS.includes(t.status) && t.prazo < new Date().toISOString().slice(0, 10);
                   return (
                     <tr key={t.id} className="cursor-pointer border-t border-linha hover:bg-papel" onClick={() => aoAbrir(t)}>
-                      <td className="px-4 py-2 font-semibold">{t.titulo}</td>
+                      <td className="px-4 py-2 font-semibold">
+                        <span className="flex items-center gap-2">{t.titulo} <SeloChecklist itens={t.checklist} /></span>
+                      </td>
                       <td className="px-4 py-2 text-tinta-suave">{responsavel?.nome ?? '—'}</td>
                       <td className="px-4 py-2"><SeloStatus status={t.status} /></td>
                       <td className="px-4 py-2"><SeloPrioridade prioridade={t.prioridade} /></td>
@@ -247,11 +256,6 @@ function LinhaNovaTarefa({ aoCriar }: { aoCriar: (titulo: string) => void }) {
   );
 }
 
-function formatarData(iso: string) {
-  const [ano, mes, dia] = iso.split('-');
-  return `${dia}/${mes}/${ano.slice(2)}`;
-}
-
 function FormularioTarefa({ tarefa, quadroId, grupos, pessoas, aoFechar, recarregar }: {
   tarefa: Tarefa | 'nova' | null; quadroId: string; grupos: Grupo[]; pessoas: Pessoa[];
   aoFechar: () => void; recarregar: () => Promise<void>;
@@ -261,11 +265,30 @@ function FormularioTarefa({ tarefa, quadroId, grupos, pessoas, aoFechar, recarre
   const permissoes = usePermissoes();
   const responsavelAtual = atual?.responsavel_id ? pessoas.find((p) => p.id === atual.responsavel_id) : undefined;
   const podeEditar = !atual || permissoes.podeEditarTarefa(atual, responsavelAtual);
+  /* Situacao e checklist ficam em estado: a data de conclusao so faz
+     sentido com a situacao "Concluida", e os itens mudam sem salvar. */
+  const [status, setStatus] = useState<StatusTarefa>('pendente');
+  const [itens, setItens] = useState<ItemChecklist[]>([]);
+  useEffect(() => {
+    if (!tarefa) return;
+    setStatus(atual?.status ?? 'pendente');
+    setItens(atual?.checklist ?? []);
+    setErro(null);
+  }, [tarefa]);
 
   async function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const texto = (campo: string) => { const v = f.get(campo); return v ? String(v) : null; };
+    const inicio = texto('inicio');
+    const prazo = texto('prazo');
+    if (inicio && prazo && prazo < inicio) {
+      setErro('A data de fim não pode ser antes da data de início.');
+      return;
+    }
+    /* Itens sem texto nao vao para o banco. */
+    const checklist = itens.map((i) => ({ ...i, texto: i.texto.trim() })).filter((i) => i.texto);
+    const concluidaEm = status === 'concluida' ? texto('concluida_em') : null;
     try {
       /* Campo desabilitado nao entra no FormData: quem so pode mudar a
          situacao (responsavel sem papel de editor) manda so a situacao,
@@ -277,11 +300,16 @@ function FormularioTarefa({ tarefa, quadroId, grupos, pessoas, aoFechar, recarre
             descricao: texto('descricao'),
             grupo_id: texto('grupo_id'),
             responsavel_id: texto('responsavel_id'),
-            status: f.get('status') as StatusTarefa,
+            status,
             prioridade: texto('prioridade') as Prioridade,
-            prazo: texto('prazo'),
+            inicio,
+            prazo,
+            concluida_em: concluidaEm,
+            checklist,
           }
-        : { quadro_id: quadroId, titulo: atual!.titulo, status: f.get('status') as StatusTarefa };
+        /* O responsavel sem papel de editor tambem marca o checklist e
+           corrige a data de conclusao da propria tarefa. */
+        : { quadro_id: quadroId, titulo: atual!.titulo, status, concluida_em: concluidaEm, checklist };
       await salvarTarefa(dados, atual?.id);
       await recarregar();
       aoFechar();
@@ -291,7 +319,7 @@ function FormularioTarefa({ tarefa, quadroId, grupos, pessoas, aoFechar, recarre
   }
 
   return (
-    <Modal aberto={!!tarefa} aoFechar={aoFechar} titulo={atual ? 'Tarefa' : 'Nova tarefa'} largura="max-w-lg">
+    <Modal aberto={!!tarefa} aoFechar={aoFechar} titulo={atual ? 'Tarefa' : 'Nova tarefa'} largura="max-w-2xl">
       <form key={atual?.id ?? 'nova'} onSubmit={enviar} className="space-y-3">
         <Campo rotulo="Título *">
           <input name="titulo" required defaultValue={atual?.titulo ?? ''} className="campo" disabled={!podeEditar} />
@@ -313,7 +341,7 @@ function FormularioTarefa({ tarefa, quadroId, grupos, pessoas, aoFechar, recarre
             </select>
           </Campo>
           <Campo rotulo="Situação">
-            <select name="status" defaultValue={atual?.status ?? 'pendente'} className="campo">
+            <select name="status" value={status} onChange={(e) => setStatus(e.target.value as StatusTarefa)} className="campo">
               {STATUS_TAREFA.map((s) => <option key={s} value={s}>{rotuloStatus[s]}</option>)}
             </select>
           </Campo>
@@ -322,10 +350,28 @@ function FormularioTarefa({ tarefa, quadroId, grupos, pessoas, aoFechar, recarre
               {PRIORIDADES.map((p) => <option key={p} value={p}>{rotuloPrioridade[p]}</option>)}
             </select>
           </Campo>
-          <Campo rotulo="Prazo">
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Campo rotulo="Início">
+            <input type="date" name="inicio" defaultValue={atual?.inicio ?? ''} className="campo" disabled={!podeEditar} />
+          </Campo>
+          <Campo rotulo="Fim (prazo)">
             <input type="date" name="prazo" defaultValue={atual?.prazo ?? ''} className="campo" disabled={!podeEditar} />
           </Campo>
+          <Campo rotulo="Conclusão">
+            <input
+              type="date" name="concluida_em"
+              /* key: ao concluir agora, o campo ja aparece com a data de hoje */
+              key={status === 'concluida' ? 'on' : 'off'}
+              defaultValue={status === 'concluida' ? (atual?.concluida_em ?? hojeIso()) : ''}
+              className="campo" disabled={status !== 'concluida'}
+              title={status === 'concluida' ? 'Corrija se a tarefa foi feita em outro dia' : 'Preenchida ao mudar a situação para Concluída'}
+            />
+          </Campo>
         </div>
+        <Campo rotulo="Checklist">
+          <Checklist itens={itens} aoMudar={setItens} podeEditarTexto={podeEditar} />
+        </Campo>
         {!podeEditar && (
           <Aviso tipo="atencao">
             Você só pode mudar a situação desta tarefa — ela é de outro responsável.
@@ -350,5 +396,21 @@ function FormularioTarefa({ tarefa, quadroId, grupos, pessoas, aoFechar, recarre
         </div>
       </form>
     </Modal>
+  );
+}
+
+/* "2/5" com um quadradinho de checklist; verde quando tudo esta feito. */
+function SeloChecklist({ itens }: { itens: ItemChecklist[] | null | undefined }) {
+  const { feitos, total } = progressoDoChecklist(itens);
+  if (!total) return null;
+  const completo = feitos === total;
+  return (
+    <span
+      title={`Checklist: ${feitos} de ${total} itens feitos`}
+      className={`inline-flex items-center gap-1 rounded px-1 text-[10.5px] font-bold tabular-nums ${completo ? 'bg-sucesso-suave text-sucesso' : 'bg-papel text-tinta-suave'}`}
+    >
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/></svg>
+      {feitos}/{total}
+    </span>
   );
 }
