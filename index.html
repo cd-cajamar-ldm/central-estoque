@@ -255,7 +255,8 @@
   .access-person-body{padding:4px 18px 18px;border-top:1px solid var(--line);}
   .access-toggle{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink);margin:14px 0 0;}
   .access-apps-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
-  .access-app-chip{display:flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);border-radius:999px;padding:6px 12px 6px 6px;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;}
+  .access-app-chip{display:flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);border-radius:14px;padding:6px 12px 6px 6px;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;}
+  .access-app-chip-freq{display:block;font-size:10.5px;font-weight:500;color:var(--ink-soft);}
   .access-app-chip.marcado{background:rgba(254,80,0,.1);border-color:rgba(254,80,0,.35);color:var(--ink);}
   .access-app-chip-icon{width:20px;height:20px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
   .access-app-chip-icon svg{width:11px;height:11px;}
@@ -1661,6 +1662,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
   var accessPessoasCache = [];
   var accessPermissoesCache = {};
+  var accessLogCache = {};
   var accessAbertas = {};
 
   function accessMostrar(estado){
@@ -1676,9 +1678,10 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   }
 
   async function accessCarregarTudo(){
-    var [{ data: pessoas, error: errP }, { data: permissoes, error: errPerm }] = await Promise.all([
+    var [{ data: pessoas, error: errP }, { data: permissoes, error: errPerm }, { data: log, error: errLog }] = await Promise.all([
       sbAcessos.schema('acessos').from('pessoas').select('*').order('nome'),
-      sbAcessos.schema('acessos').from('permissoes').select('*')
+      sbAcessos.schema('acessos').from('permissoes').select('*'),
+      sbAcessos.schema('acessos').from('log').select('pessoa_id,app_key,acessado_em')
     ]);
     if(errP || errPerm){ accessMsg(accessEmPortugues((errP || errPerm).message)); return; }
     accessPessoasCache = pessoas || [];
@@ -1687,6 +1690,19 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       if(!accessPermissoesCache[p.pessoa_id]) accessPermissoesCache[p.pessoa_id] = {};
       accessPermissoesCache[p.pessoa_id][p.app_key] = true;
     });
+    /* Frequência: quantos acessos e qual o mais recente, por pessoa+app.
+       A tabela de log é nova — se ainda não existir (migração não rodada),
+       só não mostra frequência, sem travar o resto do painel. */
+    accessLogCache = {};
+    if(!errLog){
+      (log || []).forEach(function(l){
+        if(!accessLogCache[l.pessoa_id]) accessLogCache[l.pessoa_id] = {};
+        var atual = accessLogCache[l.pessoa_id][l.app_key];
+        if(!atual) atual = accessLogCache[l.pessoa_id][l.app_key] = { total: 0, ultimo: null };
+        atual.total++;
+        if(!atual.ultimo || l.acessado_em > atual.ultimo) atual.ultimo = l.acessado_em;
+      });
+    }
     accessRenderPessoas();
   }
 
@@ -1719,7 +1735,11 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         +     '<label class="access-toggle"><input type="checkbox" class="access-cb-admin" ' + (p.papel === 'admin' ? 'checked' : '') + '> Administrador</label>'
         +     '<div class="access-apps-grid">' + apps.map(function(a){
                 var marcado = !!marcados[a.key];
-                return '<label class="access-app-chip' + (marcado ? ' marcado' : '') + '"><input type="checkbox" class="access-cb-app" data-app="' + a.key + '" ' + (marcado ? 'checked' : '') + '><span class="access-app-chip-icon" style="--accent:' + a.color + ';">' + a.icon + '</span>' + esc(a.name) + '</label>';
+                var freq = marcado && accessLogCache[p.id] ? accessLogCache[p.id][a.key] : null;
+                var freqTxt = freq
+                  ? ' · ' + freq.total + (freq.total === 1 ? ' acesso' : ' acessos') + ' · último em ' + new Date(freq.ultimo).toLocaleDateString('pt-BR')
+                  : (marcado ? ' · nunca acessou' : '');
+                return '<label class="access-app-chip' + (marcado ? ' marcado' : '') + '"><input type="checkbox" class="access-cb-app" data-app="' + a.key + '" ' + (marcado ? 'checked' : '') + '><span class="access-app-chip-icon" style="--accent:' + a.color + ';">' + a.icon + '</span><span>' + esc(a.name) + '<span class="access-app-chip-freq">' + esc(freqTxt) + '</span></span></label>';
               }).join('') + '</div>'
         +   '</div>'
         + '</div>';

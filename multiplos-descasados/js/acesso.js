@@ -118,7 +118,13 @@ function mdAcessoEmPortugues(msg){
       return;
     }
     telaAcesso.classList.add('escondida');
-    if(!appIniciado){ appIniciado = true; irInit(); }
+    if(!appIniciado){
+      appIniciado = true;
+      /* Registra a visita pra contar na frequência (Configurações do hub).
+         Não bloqueia o app por causa disso — se falhar, só não conta. */
+      mdSupa.rpc('ldm_registrar_acesso', { p_app_key: MD_APP_KEY }).catch(function(){});
+      irInit();
+    }
   }
 
   mdSupa.auth.onAuthStateChange(function(){ mdVerificarAcesso(); });
