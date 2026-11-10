@@ -123,6 +123,10 @@
       olha(p.observacao, onde + ' (observação)');
       (p.acoes || []).forEach(function (a, k) { olha(a.texto, onde + ' (ação ' + (k + 1) + ')'); olha(a.detalhe, onde + ' (ação ' + (k + 1) + ')'); olha(a.escolhida, onde + ' (ação ' + (k + 1) + ')'); olha(a.balao, onde + ' (ação ' + (k + 1) + ')'); olha(a.legenda, onde + ' (ação ' + (k + 1) + ')'); });
     });
+    (m.quiz || []).forEach(function (q, i) {
+      var onde = 'Quiz — pergunta ' + (i + 1);
+      olha(q.pergunta, onde); olha(q.explicacao, onde); (q.opcoes || []).forEach(function (o) { olha(o, onde); });
+    });
     return achados.filter(function (v, i, a) { return a.indexOf(v) === i; });
   }
 
@@ -147,7 +151,7 @@
       var dados = soImagensUsadas(m);
       delete dados.criadoEm;
       var json = JSON.stringify(dados).replace(/</g, '\\u003c');
-      var cfg = JSON.stringify({ logo: A.logo, inicio: opts.inicio || 0 }).replace(/</g, '\\u003c');
+      var cfg = JSON.stringify({ logo: A.logo, inicio: opts.inicio || 0, modo: opts.modo || 'assistir' }).replace(/</g, '\\u003c');
       return '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
         '<title>' + esc(m.titulo || 'Manual') + '</title>\n<meta name="generator" content="Oficina LDM · Manuais">\n<meta name="theme-color" content="#0B1230">\n' +
         '<link rel="preconnect" href="https://fonts.googleapis.com">\n<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">\n' +
@@ -186,8 +190,8 @@
 
   /* ---------- pré-visualização ---------- */
   var preview = $('#preview'), frame = $('#previewFrame');
-  function assistir(m, inicio) {
-    montarHtml(m, { inicio: inicio || 0 }).then(function (h) {
+  function assistir(m, inicio, modo) {
+    montarHtml(m, { inicio: inicio || 0, modo: modo }).then(function (h) {
       $('#previewTitle').textContent = m.titulo || 'Pré-visualização';
       frame.srcdoc = h;
       preview.hidden = false;
@@ -385,11 +389,51 @@
   $('#bgCor').addEventListener('input', function (e) { atual.fundo = 'cor'; atual.fundoCor = e.target.value; renderFundo(); mudou(); });
 
   $('#btnPreview').onclick = function () { assistir(atual, 0); };
+  $('#btnTreinar').onclick = function () { assistir(atual, 0, 'treinar'); };
+
+  /* ---------- quiz final ---------- */
+  function renderQuiz() {
+    var qs = atual.quiz || (atual.quiz = []);
+    $('#quizList').innerHTML = qs.map(function (q, i) {
+      var ops = q.opcoes || (q.opcoes = ['', '', '', '']);
+      return '<div class="qz" data-q="' + i + '"><div class="qz-h"><b>Pergunta ' + (i + 1) + '</b><span class="grow"></span>' +
+        '<button class="btn sm icon danger" type="button" data-qdel title="Remover pergunta">✕</button></div>' +
+        '<label class="f">Pergunta<input type="text" data-qf="pergunta" value="' + esc(q.pergunta) + '" placeholder="Ex.: Depois de digitar a quantidade, o que você faz?"></label>' +
+        '<div class="qz-ops">' + [0, 1, 2, 3].map(function (k) {
+          return '<label class="qz-op' + (+q.correta === k ? ' ok' : '') + '"><input type="radio" name="qz-' + i + '" data-qc="' + k + '"' + (+q.correta === k ? ' checked' : '') + ' title="Marcar como certa"><span>' + 'ABCD'[k] + '</span>' +
+            '<input type="text" data-qo="' + k + '" value="' + esc(ops[k]) + '" placeholder="Opção ' + 'ABCD'[k] + (k > 1 ? ' (opcional)' : '') + '"></label>';
+        }).join('') + '</div>' +
+        '<label class="f">Explicação (aparece depois de responder)<input type="text" data-qf="explicacao" value="' + esc(q.explicacao) + '"></label></div>';
+    }).join('') || '<p class="help" style="margin:0">Sem perguntas. O quiz aparece no fim do manual e no menu lateral quando houver pelo menos uma.</p>';
+  }
+  $('#btnAddQ').onclick = function () {
+    (atual.quiz = atual.quiz || []).push({ pergunta: '', opcoes: ['', '', '', ''], correta: 0, explicacao: '' });
+    renderQuiz(); mudou();
+    var ins = $$('#quizList [data-qf="pergunta"]'); if (ins.length) ins[ins.length - 1].focus();
+  };
+  $('#quizList').addEventListener('input', function (e) {
+    var box = e.target.closest('[data-q]'); if (!box) return;
+    var q = atual.quiz[+box.getAttribute('data-q')];
+    if (e.target.hasAttribute('data-qf')) q[e.target.getAttribute('data-qf')] = e.target.value;
+    else if (e.target.hasAttribute('data-qo')) q.opcoes[+e.target.getAttribute('data-qo')] = e.target.value;
+    mudou();
+  });
+  $('#quizList').addEventListener('change', function (e) {
+    if (!e.target.hasAttribute('data-qc')) return;
+    var box = e.target.closest('[data-q]');
+    atual.quiz[+box.getAttribute('data-q')].correta = +e.target.getAttribute('data-qc');
+    renderQuiz(); mudou();
+  });
+  $('#quizList').addEventListener('click', function (e) {
+    if (!e.target.closest('[data-qdel]')) return;
+    var i = +e.target.closest('[data-q]').getAttribute('data-q');
+    atual.quiz.splice(i, 1); renderQuiz(); mudou();
+  });
   $('#btnTestStep').onclick = function () { assistir(atual, sIdx); };
   $('#btnExpHtml').onclick = function () { exportarHtml(atual); };
   $('#btnExpJson').onclick = function () { exportarJson(atual); };
 
-  function renderTudo() { renderEtapas(); renderPasso(); renderFundo(); checarSenha(); }
+  function renderTudo() { renderEtapas(); renderPasso(); renderFundo(); renderQuiz(); checarSenha(); }
 
   /* lista de etapas */
   function renderEtapas() {

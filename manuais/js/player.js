@@ -62,6 +62,7 @@
     var marcados = {};         // checklist: { 'passo:item': true }
     var speed = 1, paused = false, RUN = 0, current = 0;
     var T = 0;              // tempo do manual já decorrido na etapa atual (ms a 1x)
+    var modo = opts.modo === 'treinar' ? 'treinar' : 'assistir';
     var DUR = [], BASE = [], TOTAL = 1;
     var CANCEL = {};
     var reduce = global.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -76,6 +77,7 @@
           (opts.voltar ? '<a class="mp-back" href="' + esc(opts.voltar) + '">' + IC.back + '<span>' + esc(opts.voltarTexto || 'Voltar') + '</span></a>' : '') +
           '<div class="mp-side-label"><span>Ordem de serviço</span><span data-r="count"></span></div>' +
           '<ol class="mp-steps" data-r="steps"></ol>' +
+          '<button class="mp-quiz-side" type="button" data-r="quizSide" hidden><span>🧠</span><b>Quiz final</b></button>' +
           '<div class="mp-side-foot">' +
             '<div>Loja do Mecânico &middot; Lugar de quem faz</div>' +
           '</div>' +
@@ -91,17 +93,23 @@
             '<div class="mp-stage" data-r="stage" title="Clique para pausar ou continuar">' +
               '<div class="mp-frame" data-r="frame">' +
                 '<div class="mp-ov" data-r="ov"><div class="mp-spot" data-r="spot"></div><div class="mp-tag" data-r="tag"></div><div class="mp-cursor" data-r="cursor">' + IC.cursor + '</div></div>' +
+                '<div class="mp-hit" data-r="hit"></div>' +
               '</div>' +
+              '<div class="mp-sua" data-r="sua">🎯 Sua vez!</div>' +
+              '<div class="mp-fb" data-r="fb"></div>' +
+              '<div class="mp-quiz" data-r="quiz"><div class="mp-quiz-card" data-r="quizCard"></div></div>' +
               '<div class="mp-door reset" data-r="door"><div class="mp-plate">' + rivets() + '<small>ETAPA</small><strong data-r="dn">01</strong><span data-r="dt"></span><em data-r="dp"></em></div></div>' +
               '<div class="mp-paused">PAUSADO · clique para continuar</div>' +
               '<div class="mp-done" data-r="done"><div class="mp-done-card">' +
                 '<svg viewBox="0 0 74 74"><circle cx="37" cy="37" r="37" fill="#1F8A52"/><path d="M22 38 L33 49 L53 27" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-                '<h4>Serviço concluído!</h4><p data-r="doneMsg"></p>' +
-                '<button class="mp-btn pri" type="button" data-r="again">' + IC.again + 'Ver de novo</button>' +
+                '<h4>Serviço concluído!</h4><p data-r="doneMsg"></p><p class="mp-score" data-r="score" hidden></p>' +
+                '<div class="mp-qbtns"><button class="mp-btn pri" type="button" data-r="toQuiz" hidden>🧠 Fazer o quiz</button>' +
+                '<button class="mp-btn" type="button" data-r="again">' + IC.again + 'Ver de novo</button></div>' +
               '</div></div>' +
             '</div>' +
             '<div class="mp-ctrl">' +
               '<div class="mp-now"><span class="mp-now-ic">' + IC.wrench + '</span><span class="mp-now-box"><span class="mp-now-txt" data-r="say" aria-live="polite">Preparando…</span><span class="mp-now-det" data-r="det" hidden></span></span></div>' +
+              '<div class="mp-mode" role="group" aria-label="Modo"><button type="button" data-modo="assistir">▶ Assistir</button><button type="button" data-modo="treinar">🎯 Treinar</button></div>' +
               '<div class="mp-speed" role="group" aria-label="Velocidade"><span>Velocidade</span>' +
                 [['0.5', '0,5x'], ['0.75', '0,75x'], ['1', '1x'], ['1.5', '1,5x'], ['2', '2x']].map(function (v) {
                   return '<button type="button" data-sp="' + v[0] + '"' + (v[0] === '1' ? ' class="on"' : '') + '>' + v[1] + '</button>';
@@ -321,9 +329,31 @@
       R.ov.insertBefore(el, R.spot);
       return el;
     }
+    /* Cor do campo no print (amostra alguns pontos da área): o texto
+       digitado aparece com o mesmo fundo — branco no Windows, cinza ou
+       preto na tela do coletor. */
+    var corCv = null;
+    function corFundo(a) {
+      if (!imgEl || !imgEl.naturalWidth) return null;
+      try {
+        corCv = corCv || document.createElement('canvas'); corCv.width = corCv.height = 1;
+        var ctx = corCv.getContext('2d', { willReadFrequently: true }), cont = {}, melhor = null;
+        [[.02, .2], [.5, .15], [.98, .2], [.02, .85], [.98, .85], [.75, .5]].forEach(function (f) {
+          var sx = (a[0] + a[2] * f[0]) / 100 * imgEl.naturalWidth, sy = (a[1] + a[3] * f[1]) / 100 * imgEl.naturalHeight;
+          ctx.clearRect(0, 0, 1, 1); ctx.drawImage(imgEl, sx, sy, 1, 1, 0, 0, 1, 1);
+          var d = ctx.getImageData(0, 0, 1, 1).data, k = [d[0] >> 4, d[1] >> 4, d[2] >> 4].join(',');
+          cont[k] = (cont[k] || 0) + 1;
+          if (!melhor || cont[k] > cont[melhor.k]) melhor = { k: k, rgb: [d[0], d[1], d[2]] };
+        });
+        var c = melhor.rgb, lum = .299 * c[0] + .587 * c[1] + .114 * c[2];
+        return { bg: 'rgb(' + c.join(',') + ')', fg: lum < 140 ? '#fff' : '#000', escuro: lum < 70 };
+      } catch (e) { return null; }
+    }
     function typeBox(a) {
       var el = fx('mp-type', a, .6);
       el.style.left = a[0] + '%'; el.style.top = a[1] + '%'; el.style.width = a[2] + '%'; el.style.height = a[3] + '%';
+      var cor = corFundo(a);
+      if (cor) { el.style.background = cor.bg; el.style.color = cor.fg; if (cor.escuro) el.classList.add('mp-term'); }
       return el;
     }
     function checkBox(a) {
@@ -334,6 +364,7 @@
 
     /* ---------- ações ---------- */
     function run(acao) {
+      if (modo === 'treinar' && INTERATIVO[acao.tipo]) return treinar(acao);
       var a = acao.area;
       switch (acao.tipo) {
         case 'tela':
@@ -580,6 +611,9 @@
         T = DUR[i]; current = passos.length; paintRegua(); current = i;
         R.steps.querySelectorAll('.mp-step').forEach(function (b) { b.classList.add('done'); b.classList.remove('on'); });
         R.say.textContent = 'Manual concluído.'; R.det.hidden = true;
+        R.score.hidden = !(modo === 'treinar' && placar.total);
+        R.score.innerHTML = 'Treino: <b>' + placar.certas + ' de ' + placar.total + '</b> ações certas de primeira.';
+        R.toQuiz.hidden = !quiz.length;
         R.done.classList.add('on');
       }).catch(function (e) { if (e !== CANCEL) console.error(e); });
     }
@@ -592,12 +626,251 @@
       R.playTxt.textContent = p ? 'Continuar' : 'Pausar';
     }
     R.play.onclick = function () { setPaused(!paused); };
-    R.stage.onclick = function (e) { if (e.target.closest('.mp-done')) return; setPaused(!paused); };
+    R.stage.onclick = function (e) { if (aguardando || Date.now() - engole < 700 || e.target.closest('.mp-done, .mp-quiz, .mp-hit')) return; setPaused(!paused); };
     R.prev.onclick = function () { setPaused(false); playStep(Math.max(0, current - 1)); };
     R.next.onclick = function () { setPaused(false); playStep(Math.min(passos.length - 1, current + 1)); };
     R.replay.onclick = function () { setPaused(false); playStep(current); };
-    R.again.onclick = function (e) { e.stopPropagation(); setPaused(false); playStep(0); };
-    R.steps.onclick = function (e) { var b = e.target.closest('.mp-step'); if (b) { setPaused(false); playStep(+b.getAttribute('data-i')); } };
+    R.again.onclick = function (e) { e.stopPropagation(); setPaused(false); placar = { certas: 0, total: 0 }; playStep(0); };
+    R.steps.onclick = function (e) { var b = e.target.closest('.mp-step'); if (b) { fecharQuiz(); setPaused(false); playStep(+b.getAttribute('data-i')); } };
+    ['prev', 'next', 'replay'].forEach(function (k) { var f = R[k].onclick; R[k].onclick = function () { fecharQuiz(); f(); }; });
+
+    /* =============================================================
+       MODO TREINAMENTO ("faça você"): nas ações de clique, lista,
+       digitação e tecla a animação para e espera a pessoa fazer.
+       Erros dão aviso; no 2º erro aparece a dica. Conta acertos de
+       primeira para mostrar no fim.
+       ============================================================= */
+    var placar = { certas: 0, total: 0 }, aguardando = false, fbT = null, engole = 0, enterPendente = false;
+    var INTERATIVO = { clique: 1, digitar: 1, escolher: 1, tecla: 1 };
+    function feedback(txt, tipo) {
+      R.fb.textContent = txt;
+      R.fb.className = 'mp-fb on ' + (tipo || 'erro');
+      clearTimeout(fbT);
+      fbT = setTimeout(function () { R.fb.className = 'mp-fb'; }, tipo === 'ok' ? 900 : 2200);
+    }
+    function esperar(setup) {
+      var id = RUN;
+      return new Promise(function (res, rej) {
+        var fim = false, limpa = null;
+        function encerra() { fim = true; if (limpa) limpa(); aguardando = false; R.hit.classList.remove('on'); R.hit.innerHTML = ''; R.sua.classList.remove('on'); }
+        limpa = setup(function (v) { if (fim) return; encerra(); res(v); });
+        aguardando = true; R.sua.classList.add('on');
+        (function vigia() { if (fim) return; if (id !== RUN) { encerra(); return rej(CANCEL); } requestAnimationFrame(vigia); })();
+      });
+    }
+    function pctEv(e) { var r = R.frame.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 100, (e.clientY - r.top) / r.height * 100]; }
+    function dentro(a, p) { return p[0] >= a[0] - 1 && p[0] <= a[0] + a[2] + 1 && p[1] >= a[1] - 1.5 && p[1] <= a[1] + a[3] + 1.5; }
+    function marcaPonto(p, cls) {
+      var rp = document.createElement('div');
+      rp.className = 'mp-rip ' + (cls || '');
+      rp.style.left = p[0] + '%'; rp.style.top = p[1] + '%';
+      R.ov.appendChild(rp); setTimeout(function () { rp.remove(); }, 700);
+    }
+    function esperarClique(a) {
+      return esperar(function (ok) {
+        var n = 0;
+        R.hit.classList.add('on');
+        function h(e) {
+          e.stopPropagation(); engole = Date.now();
+          var p = pctEv(e);
+          if (dentro(a, p)) { marcaPonto(p); ok(n); return; }
+          n++; marcaPonto(p, 'erro');
+          feedback(n >= 2 ? 'Dica: clique na área destacada.' : 'Não é aí. Tente de novo.');
+          if (n >= 2) spot(a);
+        }
+        function nada(e) { e.preventDefault(); }
+        R.hit.addEventListener('pointerdown', h);
+        R.hit.addEventListener('contextmenu', nada);
+        return function () { R.hit.removeEventListener('pointerdown', h); R.hit.removeEventListener('contextmenu', nada); };
+      });
+    }
+    function norm(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+    function esperarTexto(a, esperado, livre) {
+      return esperar(function (ok) {
+        var n = 0;
+        R.hit.classList.add('on');
+        var inp = document.createElement('input');
+        inp.type = 'text'; inp.className = 'mp-tin'; inp.spellcheck = false; inp.autocomplete = 'off';
+        inp.placeholder = 'digite e aperte ENTER';
+        inp.style.left = a[0] + '%'; inp.style.top = a[1] + '%'; inp.style.width = a[2] + '%'; inp.style.height = a[3] + '%';
+        inp.style.fontSize = Math.max(11, R.frame.clientHeight * a[3] / 100 * .6) + 'px';
+        var cor = corFundo(a); if (cor) { inp.style.background = cor.bg; inp.style.color = cor.fg; }
+        R.hit.appendChild(inp);
+        setTimeout(function () { inp.focus(); }, 30);
+        inp.addEventListener('pointerdown', function (e) { e.stopPropagation(); engole = Date.now(); });
+        inp.addEventListener('keydown', function (e) {
+          e.stopPropagation();
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          var v = inp.value;
+          if (livre ? v.trim() : norm(v) === norm(esperado)) { enterPendente = true; ok({ n: n, v: v }); return; }
+          n++;
+          inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+          feedback(n >= 2 ? 'Dica: digite ' + esperado : 'Não confere. Confira e tente de novo.');
+          if (n >= 2) inp.placeholder = esperado;
+        });
+        return null;
+      });
+    }
+    var TECLA_NOME = { Enter: 'ENTER', Escape: 'ESC', Tab: 'TAB', ' ': 'ESPAÇO', Backspace: 'BACKSPACE', Delete: 'DEL', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
+    var ALIAS = { CONTROL: 'CTRL', ESCAPE: 'ESC', RETURN: 'ENTER', SPACE: 'ESPAÇO', DELETE: 'DEL' };
+    function normCombo(s) { return String(s || 'ENTER').split('+').map(function (p) { p = p.trim().toUpperCase(); return ALIAS[p] || p; }).filter(Boolean).sort().join('+'); }
+    function comboDe(e) {
+      var k = TECLA_NOME[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key.toUpperCase());
+      var p = [];
+      if (e.ctrlKey) p.push('CTRL');
+      if (e.shiftKey) p.push('SHIFT');
+      if (e.altKey) p.push('ALT');
+      p.push(k);
+      return p.sort().join('+');
+    }
+    function esperarTecla(acao, a) {
+      var alvo = normCombo(acao.tecla);
+      var rotulo = String(acao.tecla || 'ENTER').toUpperCase();
+      return esperar(function (ok) {
+        var n = 0;
+        R.hit.classList.add('on');
+        var kb = document.createElement('button');
+        kb.type = 'button'; kb.className = 'mp-keys mp-keys-btn';
+        var ka = a || [40, 68, 20, 8];
+        kb.style.left = Math.min(85, Math.max(15, ka[0] + ka[2] / 2)) + '%';
+        kb.style.top = (a ? (ka[1] + ka[3] + 14 < 98 ? ka[1] + ka[3] + 2 : ka[1] - 13) : 72) + '%';
+        kb.style.fontSize = Math.max(10, R.frame.clientHeight * .042) + 'px';
+        kb.innerHTML = String(acao.tecla || 'ENTER').split('+').map(function (t) { return '<kbd>' + esc(t.trim()) + '</kbd>'; }).join('<b>+</b>') + '<em>aperte no teclado ou toque aqui</em>';
+        R.hit.appendChild(kb);
+        setTimeout(function () { try { kb.focus({ preventScroll: true }); } catch (e) {} }, 30);
+        kb.addEventListener('pointerdown', function (e) { e.stopPropagation(); engole = Date.now(); });
+        kb.addEventListener('click', function (e) { e.stopPropagation(); ok(n); });
+        function tecla(e) {
+          if (/^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key) || e.repeat) return;
+          e.preventDefault(); e.stopPropagation();
+          var c = comboDe(e);
+          if (c === alvo) { kb.classList.add('down'); bip(900, .03); ok(n); return; }
+          n++;
+          feedback(n >= 2 ? 'Dica: aperte ' + rotulo : 'Você apertou ' + c.split('+').join(' + ') + '. Não é essa tecla.');
+        }
+        document.addEventListener('keydown', tecla, true);
+        return function () { document.removeEventListener('keydown', tecla, true); };
+      });
+    }
+    function treinar(acao) {
+      var a = acao.area, base = custoSay(acao.legenda, acao.detalhe), erros = 0;
+      /* O ENTER que confirmou o texto digitado já vale para a ação "Tecla ENTER" logo em seguida. */
+      var jaApertou = enterPendente && acao.tipo === 'tecla' && normCombo(acao.tecla) === 'ENTER';
+      enterPendente = false;
+      var p = say(acao.legenda, acao.detalhe).then(function () { blurTypes(); });
+      if (acao.tipo === 'clique') {
+        p = p.then(function () { return esperarClique(a); }).then(function (n) {
+          erros = n;
+          if (acao.marcar) checkBox(a);
+          if (acao.realce || acao.balao || acao.marcar) { spot(a); tag(a, resolve(acao.balao, true)); }
+        });
+      } else if (acao.tipo === 'escolher') {
+        var op = opcoesDe(acao), ih = a[3] * .9, acima = a[1] + a[3] + op.ops.length * ih > 98;
+        var topo = acima ? a[1] - op.ops.length * ih : a[1] + a[3], lista;
+        p = p.then(function () { return esperarClique(a); }).then(function (n) {
+          erros = n;
+          lista = fx('mp-ddl', a, .55);
+          lista.style.left = a[0] + '%'; lista.style.top = topo + '%';
+          lista.style.width = a[2] + '%'; lista.style.height = (op.ops.length * ih) + '%';
+          lista.innerHTML = op.ops.map(function (o) { return '<div>' + esc(o) + '</div>'; }).join('');
+          R.say.textContent = 'Agora escolha: ' + op.valor;
+          return esperarClique([a[0], topo + op.idx * ih, a[2], ih]);
+        }).then(function (n) {
+          erros += n; lista.remove();
+          var box = typeBox(a); box.classList.add('blur', 'mp-sel');
+          box.innerHTML = '<span>' + esc(op.valor) + '</span><i>▾</i>';
+          spot(a); tag(a, resolve(acao.balao, true));
+        });
+      } else if (acao.tipo === 'digitar') {
+        var livre = /\{\{/.test(acao.texto || '');
+        p = p.then(function () { spot(a); return esperarTexto(a, resolve(acao.texto, true), livre); }).then(function (r) {
+          erros = r.n;
+          var box = typeBox(a); box.classList.add('blur'); box.textContent = r.v;
+          if (acao.balao) tag(a, resolve(acao.balao, true));
+        });
+      } else if (acao.tipo === 'tecla') {
+        p = p.then(function () {
+          if (jaApertou) { feedback('ENTER ✓ (você já apertou ao confirmar)', 'ok'); return 0; }
+          if (a) spot(a); return esperarTecla(acao, a);
+        }).then(function (n) { erros = n; });
+      }
+      return p.then(function () {
+        placar.total++;
+        if (!erros) placar.certas++;
+        feedback(erros ? 'Certo ✓' : 'Isso! ✓', 'ok');
+        T += Math.max(0, custo(acao) - base - 500);
+        return wait(500);
+      });
+    }
+    function setModo(m) {
+      modo = m;
+      root.querySelectorAll('[data-modo]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-modo') === m); });
+      mp.classList.toggle('mp-treino', m === 'treinar');
+      placar = { certas: 0, total: 0 };
+    }
+    root.querySelectorAll('[data-modo]').forEach(function (b) {
+      b.onclick = function () { setModo(b.getAttribute('data-modo')); fecharQuiz(); setPaused(false); playStep(modo === 'treinar' ? 0 : current); };
+    });
+
+    /* =============================================================
+       QUIZ FINAL: perguntas de múltipla escolha com explicação.
+       ============================================================= */
+    var quiz = (manual.quiz || []).filter(function (q) { return q && q.pergunta && (q.opcoes || []).filter(function (o) { return String(o || '').trim(); }).length >= 2; });
+    var qi = 0, qAcertos = 0, qRespondida = false;
+    R.quizSide.hidden = !quiz.length;
+    function abrirQuiz() {
+      RUN++; setPaused(false);
+      R.done.classList.remove('on');
+      qi = 0; qAcertos = 0;
+      R.quiz.classList.add('on');
+      R.say.textContent = 'Quiz final'; R.det.hidden = true;
+      renderQ();
+    }
+    function fecharQuiz() { R.quiz.classList.remove('on'); }
+    function renderQ() {
+      var c = R.quizCard;
+      if (qi >= quiz.length) {
+        var pct = Math.round(qAcertos / quiz.length * 100);
+        c.innerHTML = '<small>Resultado do quiz</small><div class="mp-qscore ' + (pct >= 70 ? 'ok' : 'baixo') + '">' + qAcertos + '<span>/' + quiz.length + '</span></div>' +
+          '<p>' + (pct >= 70 ? 'Mandou bem! Você está pronto para a operação.' : 'Revise o manual e tente de novo.') + '</p>' +
+          '<div class="mp-qbtns"><button class="mp-btn pri" type="button" data-q="refazer">Refazer o quiz</button><button class="mp-btn" type="button" data-q="manual">Voltar ao manual</button></div>';
+        return;
+      }
+      var q = quiz[qi];
+      qRespondida = false;
+      c.innerHTML = '<small>Pergunta ' + (qi + 1) + ' de ' + quiz.length + '</small><h4>' + inline(q.pergunta) + '</h4><div class="mp-qops">' +
+        (q.opcoes || []).map(function (o, k) { return String(o || '').trim() ? '<button type="button" class="mp-qop" data-k="' + k + '"><i>' + 'ABCD'[k] + '</i><span>' + inline(o) + '</span></button>' : ''; }).join('') +
+        '</div><p class="mp-qexp" hidden></p><div class="mp-qbtns"><button class="mp-btn pri" type="button" data-q="prox" hidden>' + (qi + 1 < quiz.length ? 'Próxima' : 'Ver resultado') + '</button></div>';
+    }
+    R.quiz.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var op = e.target.closest('.mp-qop');
+      if (op && !qRespondida) {
+        qRespondida = true;
+        var q = quiz[qi], k = +op.getAttribute('data-k'), certa = +q.correta || 0;
+        if (k === certa) { qAcertos++; bip(1800, .08); }
+        R.quizCard.querySelectorAll('.mp-qop').forEach(function (b) {
+          var kk = +b.getAttribute('data-k');
+          b.classList.add(kk === certa ? 'certa' : kk === k ? 'errada' : 'apagada');
+          b.disabled = true;
+        });
+        var ex = R.quizCard.querySelector('.mp-qexp');
+        ex.innerHTML = (k === certa ? '<b>Certo!</b> ' : '<b>Não é essa.</b> ') + (q.explicacao ? inline(q.explicacao) : 'Resposta certa: ' + inline(q.opcoes[certa]));
+        ex.hidden = false;
+        R.quizCard.querySelector('[data-q="prox"]').hidden = false;
+        return;
+      }
+      var b = e.target.closest('[data-q]'); if (!b) return;
+      var acao = b.getAttribute('data-q');
+      if (acao === 'prox') { qi++; renderQ(); }
+      else if (acao === 'refazer') { qi = 0; qAcertos = 0; renderQ(); }
+      else if (acao === 'manual') { fecharQuiz(); playStep(0); }
+    });
+    R.quizSide.onclick = abrirQuiz;
+    R.toQuiz.onclick = function (e) { e.stopPropagation(); abrirQuiz(); };
+
+    setModo(modo);
     root.querySelectorAll('[data-sp]').forEach(function (b) {
       b.onclick = function () {
         speed = +b.getAttribute('data-sp');
@@ -606,7 +879,7 @@
       };
     });
     function onKey(e) {
-      if (/INPUT|TEXTAREA/.test((e.target || {}).tagName || '')) return;
+      if (aguardando || /INPUT|TEXTAREA/.test((e.target || {}).tagName || '')) return;
       if (e.key === ' ') { e.preventDefault(); setPaused(!paused); }
       else if (e.key === 'ArrowRight') R.next.click();
       else if (e.key === 'ArrowLeft') R.prev.click();

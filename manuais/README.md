@@ -11,6 +11,9 @@ App da Oficina LDM para montar manuais de configuração no estilo "assista e re
   observação e um campo opcional que o leitor preenche (`{{chave}}`).
 - **Tecla** (ENTER, F4, Ctrl+V…) e **Cena do físico** — animações sem print para treinamento:
   separar o palete por SKU, bipar unidade por unidade (com contador e bip) e conferir físico x bipado.
+- **Modo treinamento** (🎯 Treinar no player): a pessoa faz cada clique, digitação, escolha e tecla;
+  erro mostra aviso e, no 2º erro, a dica. No fim mostra quantas acertou de primeira.
+- **Quiz final**: perguntas de múltipla escolha cadastradas no editor, com explicação e nota.
 - **Exportar manual (.html)**: gera um arquivo único, com player e prints embutidos, que abre
   offline e pode ir por Teams/e-mail. **Salvar projeto (.json)** guarda o projeto para editar em
   outro computador (Importar projeto).

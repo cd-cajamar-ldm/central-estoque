@@ -71,6 +71,7 @@
           <span class="grow"></span>
           <span class="save-state" id="saveState">Salvo</span>
           <button class="btn" type="button" id="btnPreview"><svg viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z" fill="currentColor"/></svg>Assistir</button>
+          <button class="btn" type="button" id="btnTreinar" title="Testar o modo treinamento: a pessoa faz cada ação">🎯 Treinar</button>
           <button class="btn" type="button" id="btnExpJson">Salvar projeto (.json)</button>
           <button class="btn pri" type="button" id="btnExpHtml"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar manual (.html)</button>
         </div>
@@ -170,6 +171,12 @@
           </div>
         </section>
       </div>
+
+      <section class="card quiz-card"><i class="rivet tl"></i><i class="rivet tr"></i><i class="rivet bl"></i><i class="rivet br"></i>
+        <p class="card-h">Quiz final (opcional) <span class="grow"></span><button class="btn sm" type="button" id="btnAddQ">+ Pergunta</button></p>
+        <p class="help" style="margin:0 0 12px">Perguntas de múltipla escolha para fixar o treinamento. Marque a bolinha da opção certa.</p>
+        <div id="quizList" class="qz-list"></div>
+      </section>
     </section>
   </main>
 </div>
