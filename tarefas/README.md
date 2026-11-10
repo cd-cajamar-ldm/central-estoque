@@ -5,6 +5,11 @@ tem grupos (seções) e tarefas, com responsável, situação, prioridade e
 prazo — alternando entre visão **Quadro** (kanban, arrastar e soltar) e
 visão **Tabela** (agrupada por grupo, com criação rápida de tarefa).
 
+Cada tarefa tem datas de **início**, **fim (prazo)** e **conclusão** e um
+**checklist**. A tela **Resumo** faz o balanço do dia, semana, mês ou ano:
+entregas no prazo e com atraso, novas tarefas, atrasadas hoje, quebra por
+responsável e por quadro, lista de entregas e botão para copiar o texto.
+
 Como o módulo de Projetos, os dados **não** ficam no navegador: são
 compartilhados por toda a equipe em um banco Supabase, e o acesso exige
 login (e-mail e senha), com papel (admin, editor, leitor) definido no
@@ -13,7 +18,7 @@ de Projetos, mesmo usando o mesmo login.
 
 - Fonte: `tarefas/` (React + Vite + TypeScript + Tailwind)
 - Publicado em: `gerenciador-tarefas/` (servido pelo GitHub Pages)
-- Endereço: https://danilolimamts.github.io/central-estoque/gerenciador-tarefas/
+- Endereço: https://cd-cajamar-ldm.github.io/central-estoque/gerenciador-tarefas/
 
 ## Comandos
 
@@ -47,7 +52,9 @@ aplicadas ao banco**. Para o módulo funcionar, alguém com acesso ao
 SQL Editor do projeto Supabase precisa rodar, nesta ordem:
 `001_schema_inicial.sql`, `002_rls_e_gatilhos.sql` e
 `003_status_cancelada.sql` (este sozinho: `alter type ... add value`
-não pode dividir a transação com quem usa o valor novo). A segunda
+não pode dividir a transação com quem usa o valor novo) e
+`004_datas_e_checklist.sql` (datas de início e conclusão editáveis e
+checklist na tarefa; sem ela, salvar uma tarefa dá erro de coluna). A segunda
 já cadastra `danilolima@lojadomecanico.com.br` como administrador do
 módulo (usando a conta que já existe no mesmo projeto Supabase, criada
 pelo módulo de Projetos), então o primeiro login já entra com acesso

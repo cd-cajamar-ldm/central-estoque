@@ -15,6 +15,11 @@ export function mensagemDeErro(erro: unknown): string {
     return 'Sem permissão: administrador e editor organizam qualquer quadro; quem só lê mexe no que é responsável.';
   }
   if (e.code === '23505') return 'Já existe um registro com este e-mail.';
+  /* Coluna nova que o banco ainda nao tem: o app foi publicado antes da
+     migration correspondente rodar no Supabase. */
+  if (e.code === 'PGRST204' || /column .*(inicio|checklist)/.test(e.message ?? '')) {
+    return 'O banco ainda não tem os campos de início e checklist. Peça para rodar a migration 004_datas_e_checklist.sql no Supabase.';
+  }
   return e.message ?? 'Erro ao falar com o servidor.';
 }
 
@@ -184,7 +189,8 @@ export function useDetalheQuadro(quadroId: string | null): DetalheQuadro {
       const falha = g.error ?? t.error;
       if (falha) throw falha;
       setGrupos((g.data ?? []) as Grupo[]);
-      setTarefas((t.data ?? []) as Tarefa[]);
+      /* checklist/inicio ausentes antes da migration 004 viram vazio. */
+      setTarefas(((t.data ?? []) as Tarefa[]).map((x) => ({ ...x, inicio: x.inicio ?? null, checklist: x.checklist ?? [] })));
       setErro(null);
     } catch (e) {
       setErro(mensagemDeErro(e));
@@ -196,4 +202,31 @@ export function useDetalheQuadro(quadroId: string | null): DetalheQuadro {
   useEffect(() => { void recarregar(); }, [recarregar]);
 
   return { grupos, tarefas, carregando, erro, recarregar };
+}
+
+/* Todas as tarefas de todos os quadros, para o Resumo. A leitura ja e
+   liberada a qualquer pessoa ativa, entao nao ha regra nova. */
+export function useTodasTarefas(): { tarefas: Tarefa[]; carregando: boolean; erro: string | null; recarregar: () => Promise<void> } {
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const recarregar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const { data, error } = await supabase.from('tarefas').select('*').order('criado_em');
+      if (error) throw error;
+      /* Antes da migration 004 as colunas novas nao existem: o Resumo
+         segue funcionando, so sem inicio e checklist. */
+      setTarefas(((data ?? []) as Tarefa[]).map((t) => ({ ...t, inicio: t.inicio ?? null, checklist: t.checklist ?? [] })));
+      setErro(null);
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  useEffect(() => { void recarregar(); }, [recarregar]);
+  return { tarefas, carregando, erro, recarregar };
 }

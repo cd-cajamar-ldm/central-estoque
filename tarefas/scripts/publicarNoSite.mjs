@@ -18,4 +18,4 @@ await cp(ORIGEM, DESTINO, { recursive: true });
 await cp(MARCA, resolve(DESTINO, 'brand'), { recursive: true });
 
 console.log(`publicado em ${DESTINO}`);
-console.log('endereco: https://danilolimamts.github.io/central-estoque/gerenciador-tarefas/');
+console.log('endereco: https://cd-cajamar-ldm.github.io/central-estoque/gerenciador-tarefas/');

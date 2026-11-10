@@ -9,9 +9,9 @@
    Pages: caminho de verdade exigiria servidor que devolvesse o index
    para qualquer rota. */
 
-export type Aba = 'quadros' | 'pessoas';
+export type Aba = 'quadros' | 'resumo' | 'pessoas';
 
-const ABAS: Aba[] = ['quadros', 'pessoas'];
+const ABAS: Aba[] = ['quadros', 'resumo', 'pessoas'];
 
 export interface Rota {
   aba: Aba;
