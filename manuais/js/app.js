@@ -794,13 +794,18 @@
   });
 
   /* ---------- início ---------- */
+  /* O manual do PuTTY STG já vem na biblioteca. Quando sai uma versão nova
+     dele (EXEMPLO_V), atualiza sozinho — a não ser que a pessoa tenha
+     editado o exemplo (aí fica como está; "Restaurar exemplo" traz o novo). */
+  var EXEMPLO_V = 2;
   store.all().then(function (ms) {
-    var jaSemeou = false;
-    try { jaSemeou = localStorage.getItem('ldm-manuais-exemplo') === '1'; } catch (e) {}
-    if ((!ms || !ms.length) && !jaSemeou) {
-      try { localStorage.setItem('ldm-manuais-exemplo', '1'); } catch (e) {}
-      return carregarExemplo().catch(function () {});
-    }
+    var vista = 0;
+    try { vista = parseInt(localStorage.getItem('ldm-manuais-exemplo-v'), 10) || 0; } catch (e) {}
+    if (vista >= EXEMPLO_V) return;
+    try { localStorage.setItem('ldm-manuais-exemplo-v', String(EXEMPLO_V)); } catch (e) {}
+    var ex = (ms || []).filter(function (m) { return m.id === 'exemplo-putty-stg'; })[0];
+    var intocado = ex && ex.criadoEm === ex.atualizadoEm;
+    if (!ex || (intocado && (ex.versaoExemplo || 1) < EXEMPLO_V)) return carregarExemplo().catch(function () {});
   }).then(renderBiblioteca).catch(function () {
     toast('Este navegador bloqueou o armazenamento local — os manuais não serão guardados.', true);
   });
