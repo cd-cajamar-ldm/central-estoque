@@ -15,6 +15,14 @@ function iniciais(nome: string): string {
     .slice(0, 2).map((p) => p[0] ?? '').join('').toUpperCase();
 }
 
+const CHAVE_ORDEM = 'tarefas.ordemQuadros';
+function lerOrdem(): string[] {
+  try {
+    const salvo = JSON.parse(localStorage.getItem(CHAVE_ORDEM) ?? '[]');
+    return Array.isArray(salvo) ? salvo.filter((x) => typeof x === 'string') : [];
+  } catch { return []; }
+}
+
 interface Props {
   quadros: Quadro[];
   aoAbrir: (quadro: Quadro) => void;
@@ -25,7 +33,31 @@ export default function ListaQuadros({ quadros, aoAbrir, recarregar }: Props) {
   const permissoes = usePermissoes();
   const [emEdicao, setEmEdicao] = useState<Quadro | 'novo' | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const visiveis = quadros.filter((q) => !q.arquivado);
+  /* Ordem pessoal dos quadros: guardada neste navegador, so para quem
+     esta usando — cada pessoa poe na frente os quadros que mais usa,
+     sem mudar a lista dos outros. Quadro novo (fora da lista salva)
+     entra no fim, na ordem de sempre. */
+  const [ordem, setOrdem] = useState<string[]>(lerOrdem);
+  const [organizando, setOrganizando] = useState(false);
+  const [arrastado, setArrastado] = useState<string | null>(null);
+  const [alvo, setAlvo] = useState<string | null>(null);
+  const posicao = new Map(ordem.map((id, i) => [id, i]));
+  const visiveis = quadros
+    .filter((q) => !q.arquivado)
+    .map((q, i) => ({ q, i }))
+    .sort((a, b) => (posicao.get(a.q.id) ?? 1e6 + a.i) - (posicao.get(b.q.id) ?? 1e6 + b.i))
+    .map(({ q }) => q);
+
+  function salvarOrdem(ids: string[]) {
+    setOrdem(ids);
+    try { localStorage.setItem(CHAVE_ORDEM, JSON.stringify(ids)); } catch { /* so nao lembra */ }
+  }
+  /* Tira o quadro de onde esta e poe na posicao de destino. */
+  function mover(id: string, destino: number) {
+    const ids = visiveis.map((q) => q.id).filter((x) => x !== id);
+    ids.splice(Math.max(0, Math.min(destino, ids.length)), 0, id);
+    salvarOrdem(ids);
+  }
 
   return (
     <div className="space-y-4">
@@ -33,10 +65,24 @@ export default function ListaQuadros({ quadros, aoAbrir, recarregar }: Props) {
 
       <div className="flex items-center justify-between">
         <h2 className="font-titulo text-lg font-extrabold">Quadros</h2>
-        {permissoes.podeCriar && (
-          <button className="botao-primario" onClick={() => setEmEdicao('novo')}>+ Novo quadro</button>
-        )}
+        <div className="flex items-center gap-2">
+          {visiveis.length > 1 && (
+            <button
+              className={organizando ? 'botao bg-marca text-white hover:bg-marca/90' : 'botao-neutro'}
+              onClick={() => setOrganizando((v) => !v)}
+              title="Mudar a ordem dos quadros (só para você)"
+            >{organizando ? 'Concluir' : '⇅ Organizar'}</button>
+          )}
+          {permissoes.podeCriar && !organizando && (
+            <button className="botao-primario" onClick={() => setEmEdicao('novo')}>+ Novo quadro</button>
+          )}
+        </div>
       </div>
+      {organizando && (
+        <p className="-mt-1 text-sm text-tinta-suave">
+          Arraste os quadros ou use as setas para mudar a ordem. A ordem fica salva só para você, neste navegador.
+        </p>
+      )}
 
       {visiveis.length ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -44,9 +90,41 @@ export default function ListaQuadros({ quadros, aoAbrir, recarregar }: Props) {
             <div
               key={q.id}
               style={{ animationDelay: `${i * 70}ms` }}
-              className="cartao group relative animate-entra overflow-hidden transition hover:-translate-y-1 hover:shadow-alto"
+              draggable={organizando}
+              onDragStart={(e) => { setArrastado(q.id); e.dataTransfer.effectAllowed = 'move'; }}
+              onDragEnd={() => { setArrastado(null); setAlvo(null); }}
+              onDragOver={(e) => { if (!arrastado) return; e.preventDefault(); setAlvo(q.id); }}
+              onDragLeave={() => setAlvo((atual) => (atual === q.id ? null : atual))}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (arrastado && arrastado !== q.id) mover(arrastado, i);
+                setArrastado(null); setAlvo(null);
+              }}
+              className={`cartao group relative animate-entra overflow-hidden transition ${
+                organizando
+                  ? `cursor-grab ring-2 active:cursor-grabbing ${alvo === q.id && arrastado !== q.id ? 'ring-laranja' : 'ring-transparent'} ${arrastado === q.id ? 'opacity-40' : ''}`
+                  : 'hover:-translate-y-1 hover:shadow-alto'
+              }`}
             >
-              <button className="block w-full text-left" onClick={() => aoAbrir(q)}>
+              {organizando && (
+                <div className="absolute inset-x-0 top-0 z-[2] flex items-center justify-between bg-marca/85 px-2 py-1.5 text-white backdrop-blur-sm">
+                  <button
+                    type="button" disabled={i === 0} onClick={() => mover(q.id, i - 1)}
+                    className="rounded-md px-2.5 py-1 text-sm font-bold hover:bg-white/20 disabled:opacity-30"
+                    aria-label={`Mover ${q.nome} para a esquerda`}
+                  >◀</button>
+                  <span className="flex items-center gap-1.5 text-xs font-bold">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>
+                    {i + 1}º · arraste
+                  </span>
+                  <button
+                    type="button" disabled={i === visiveis.length - 1} onClick={() => mover(q.id, i + 1)}
+                    className="rounded-md px-2.5 py-1 text-sm font-bold hover:bg-white/20 disabled:opacity-30"
+                    aria-label={`Mover ${q.nome} para a direita`}
+                  >▶</button>
+                </div>
+              )}
+              <button className="block w-full text-left" onClick={() => { if (!organizando) aoAbrir(q); }}>
                 {/* Capa: degrade da cor do quadro para o azul da marca, listras
                     finas e uma ilustracao do assunto do quadro. */}
                 <div
@@ -70,7 +148,7 @@ export default function ListaQuadros({ quadros, aoAbrir, recarregar }: Props) {
                   </p>
                 </div>
               </button>
-              {permissoes.podeEditarQuadro(q) && (
+              {permissoes.podeEditarQuadro(q) && !organizando && (
                 <div className="absolute right-3 top-3 hidden gap-2 group-hover:flex">
                   <button
                     className="rounded-full bg-white/90 px-2 py-1 text-xs font-bold text-tinta-suave shadow-card hover:text-laranja-escuro"
