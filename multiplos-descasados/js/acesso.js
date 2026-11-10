@@ -104,7 +104,13 @@ function mdAcessoEmPortugues(msg){
       telaAcesso.classList.remove('escondida');
       return;
     }
-    const { data: pode } = await mdSupa.rpc('ldm_pode_acessar', { p_app_key: MD_APP_KEY });
+    const { data: pode, error } = await mdSupa.rpc('ldm_pode_acessar', { p_app_key: MD_APP_KEY });
+    if(error){
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
     if(!pode){
       telaLogin.hidden = true; telaNegado.hidden = false;
       negadoEmailEl.textContent = session.user.email;

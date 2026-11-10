@@ -526,7 +526,7 @@
       </div>
 
       <div class="config-placeholder" id="accessDenied" hidden>
-        <p>Sua conta (<strong id="accessDeniedEmail"></strong>) não tem permissão de administrador pra gerenciar acessos.</p>
+        <p id="accessDeniedTexto">Sua conta (<strong id="accessDeniedEmail"></strong>) não tem permissão de administrador pra gerenciar acessos.</p>
         <button type="button" class="btn-secondary" id="accessLogoutBtnNegado">Sair</button>
       </div>
 
@@ -1696,10 +1696,19 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     accessMsg(null);
     var { data: { session } } = await sbAcessos.auth.getSession();
     if(!session){ accessMostrar('login'); return; }
-    var { data: pessoa } = await sbAcessos.schema('acessos').from('pessoas')
+    var { data: pessoa, error } = await sbAcessos.schema('acessos').from('pessoas')
       .select('papel,ativo').eq('user_id', session.user.id).maybeSingle();
+    var textoEl = document.getElementById('accessDeniedTexto');
+    if(error){
+      /* Erro de verdade (ex.: schema "acessos" ainda não liberado em
+         Settings → Data API → Exposed schemas) — nunca confundir com
+         "sem permissão", senão ninguém descobre o que corrigir. */
+      textoEl.textContent = 'Não consegui checar a permissão: ' + error.message;
+      accessMostrar('negado');
+      return;
+    }
     if(!pessoa || !pessoa.ativo || pessoa.papel !== 'admin'){
-      document.getElementById('accessDeniedEmail').textContent = session.user.email;
+      textoEl.innerHTML = 'Sua conta (<strong>' + esc(session.user.email) + '</strong>) não tem permissão de administrador pra gerenciar acessos.';
       accessMostrar('negado');
       return;
     }
