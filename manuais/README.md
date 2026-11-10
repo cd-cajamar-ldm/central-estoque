@@ -9,6 +9,8 @@ App da Oficina LDM para montar manuais de configuração no estilo "assista e re
   tempo de leitura). Em "Dados do manual" dá para escolher o fundo atrás do print (bancada,
   claro, branco, laranja, grafite, sem fundo ou uma cor). Também tem "o que fazer", valores para copiar,
   observação e um campo opcional que o leitor preenche (`{{chave}}`).
+- **Tecla** (ENTER, F4, Ctrl+V…) e **Cena do físico** — animações sem print para treinamento:
+  separar o palete por SKU, bipar unidade por unidade (com contador e bip) e conferir físico x bipado.
 - **Exportar manual (.html)**: gera um arquivo único, com player e prints embutidos, que abre
   offline e pode ir por Teams/e-mail. **Salvar projeto (.json)** guarda o projeto para editar em
   outro computador (Importar projeto).
