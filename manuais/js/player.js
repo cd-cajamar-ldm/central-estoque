@@ -10,6 +10,8 @@
      {tipo:'digitar',  area, texto, balao, legenda}
      {tipo:'destacar', area, balao, legenda}
      {tipo:'escolher', area, opcoes, escolhida, balao, legenda}  (lista suspensa)
+     {tipo:'tecla',    tecla, area?, balao, legenda}  (ENTER, F4, Ctrl+V…)
+     {tipo:'cena',     modelo: separar|bipar|conferir, …}  (animação sem print)
    Toda ação aceita 'detalhe' (explicação longa). 'clique' aceita
    'marcar' (desenha a caixa marcada depois do clique).
    Textos aceitam {{chave}} — trocado pelo que o leitor preencheu no
@@ -110,6 +112,7 @@
                 '<button class="mp-btn pri" type="button" data-r="play"><span data-r="playIco">' + IC.pause + '</span><span data-r="playTxt">Pausar</span></button>' +
                 '<button class="mp-btn" type="button" data-r="next" aria-label="Próxima etapa">' + IC.next + '</button>' +
                 '<button class="mp-btn" type="button" data-r="replay">' + IC.again + '<span class="mp-lbl">Repetir etapa</span></button>' +
+                '<button class="mp-btn" type="button" data-r="som" title="Som do bip">🔊</button>' +
               '</div>' +
             '</div>' +
           '</section>' +
@@ -262,6 +265,8 @@
           return s + MV + CL + txt.length * (txt.length > 30 ? 26 : 55) + 350 + (acao.balao ? 1300 : 300);
         case 'destacar': return s + 1500;
         case 'escolher': return s + MV + CL + 350 + (opcoesDe(acao).idx + 1) * 220 + 300 + MV + CL + (acao.balao ? 1300 : 600);
+        case 'tecla': return s + 1300 + (acao.balao ? 900 : 0);
+        case 'cena': return s + custoCena(acao);
         default: return 0;
       }
     }
@@ -399,10 +404,53 @@
             blurTypes(); spot(a); tag(a, resolve(acao.balao, true));
             return wait(1500);
           });
+        case 'tecla':
+          var kb, ka = a || [40, 68, 20, 8];
+          return say(acao.legenda, acao.detalhe).then(function () {
+            blurTypes();
+            if (a) spot(a);
+            kb = fx('mp-keys', [0, 0, 0, 7], .6);
+            var embaixo = ka[1] + ka[3] + 14 < 98;
+            kb.style.left = Math.min(85, Math.max(15, ka[0] + ka[2] / 2)) + '%';
+            kb.style.top = (a ? (embaixo ? ka[1] + ka[3] + 2 : ka[1] - 13) : 72) + '%';
+            kb.innerHTML = String(acao.tecla || 'ENTER').split('+').map(function (t) { return '<kbd>' + esc(t.trim()) + '</kbd>'; }).join('<b>+</b>');
+            return wait(350);
+          }).then(function () { kb.classList.add('down'); bip(900, .03); return wait(180); })
+            .then(function () { kb.classList.remove('down'); return wait(170); })
+            .then(function () { return wait(600); })
+            .then(function () {
+              if (acao.balao) { tag(a || [ka[0], 72, ka[2], 8], resolve(acao.balao, true)); return wait(900); }
+            }).then(function () { kb.remove(); });
+        case 'cena':
+          return say(acao.legenda, acao.detalhe).then(function () {
+            blurTypes(); spot(null); tag(null);
+            R.ov.querySelectorAll('.mp-cena').forEach(function (e) { e.remove(); });
+            if (!imgEl) R.frame.style.setProperty('--ar', '1.6');
+            var el = fx('mp-cena', [0, 0, 100, 100], .035);
+            return montarCena(el, acao, wait, bip);
+          });
         default:
           return check();
       }
     }
+
+    /* som do bip (Web Audio). O navegador só libera depois de um clique. */
+    var AC = null, som = true;
+    try { som = localStorage.getItem('ldm-manual-som') !== '0'; } catch (e) {}
+    function audio() {
+      if (!som) return null;
+      try { AC = AC || new (global.AudioContext || global.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); return AC; } catch (e) { return null; }
+    }
+    function bip(freq, dur) {
+      var ac = audio(); if (!ac || ac.state !== 'running') return;
+      var o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square'; o.frequency.value = freq || 2300; g.gain.value = .04;
+      o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + (dur || .07));
+    }
+    function pintaSom() { R.som.textContent = som ? '🔊' : '🔇'; R.som.title = som ? 'Som ligado' : 'Som desligado'; }
+    pintaSom();
+    R.som.onclick = function () { som = !som; try { localStorage.setItem('ldm-manual-som', som ? '1' : '0'); } catch (e) {} pintaSom(); if (som) audio(); };
+    root.addEventListener('pointerdown', function () { audio(); });
 
     /* ---------- painéis ---------- */
     function paintRegua() {
@@ -475,6 +523,7 @@
       /* tela inicial da etapa: a 1ª ação 'tela' dela, senão a última das anteriores */
       var ac0 = passos[i].acoes || [];
       if (ac0[0] && ac0[0].tipo === 'tela') return { id: ac0[0].img, skip: 1 };
+      if (ac0[0] && ac0[0].tipo === 'cena') return { limpar: true, skip: 0 };
       for (var k = i - 1; k >= 0; k--) {
         var ac = passos[k].acoes || [];
         for (var j = ac.length - 1; j >= 0; j--) if (ac[j].tipo === 'tela') return { id: ac[j].img, skip: 0 };
@@ -485,7 +534,11 @@
       spot(null); tag(null);
       R.done.classList.remove('on');
       var t = primeiraTela(i);
-      if (t) setTela(t.id, true);
+      if (t && t.limpar) {
+        R.ov.querySelectorAll('.mp-fx').forEach(function (e) { e.remove(); });
+        if (imgEl) { imgEl.remove(); imgEl = null; }
+        R.frame.style.setProperty('--ar', '1.6');
+      } else if (t) setTela(t.id, true);
       R.cursor.classList.add('jump');
       CX = 92; CY = 92; R.cursor.style.left = CX + '%'; R.cursor.style.top = CY + '%';
       void R.cursor.offsetWidth; R.cursor.classList.remove('jump');
@@ -588,5 +641,121 @@
     el.style.backgroundColor = f === 'cor' && /^#[0-9a-f]{6}$/i.test(manual.fundoCor || '') ? manual.fundoCor : '';
   }
 
-  global.LDMPlayer = { mount: mount, esc: esc, aplicarFundo: aplicarFundo };
+
+  /* =============================================================
+     CENAS ANIMADAS (sem print): treinamento do físico
+       separar  — palete misturado → pilhas por SKU
+       bipar    — coletor bipando unidade por unidade, com contador
+       conferir — físico x bipado, mostra se confere
+     Cada cena recebe W (função de espera do player) e B (bip). Sem W,
+     desenha direto o estado final (prévia no editor).
+     ============================================================= */
+  var CORES = ['#FE5000', '#001A72', '#1F8A52', '#7C3AED'];
+  function inteiro(v, def, min, max) { v = parseInt(v, 10); if (isNaN(v)) v = def; return Math.max(min, Math.min(max, v)); }
+  function listaSkus(a) {
+    var s = String(a.skus || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 4);
+    return s.length ? s : ['SKU A', 'SKU B', 'SKU C'];
+  }
+  function custoCena(a) {
+    if (a.modelo === 'bipar') return 700 + inteiro(a.qtd, 6, 1, 30) * 600 + 800;
+    if (a.modelo === 'conferir') return 3200;
+    return 600 + listaSkus(a).length * inteiro(a.caixas, 3, 1, 4) * 450 + 800;
+  }
+  function pos(el, x, y, w, h) { el.style.left = x + '%'; el.style.top = y + '%'; if (w != null) { el.style.width = w + '%'; el.style.height = h + '%'; } }
+  function div(cls, html) { var d = document.createElement('div'); d.className = cls; if (html != null) d.innerHTML = html; return d; }
+
+  function cenaSeparar(el, a, W) {
+    var skus = listaSkus(a), por = inteiro(a.caixas, 3, 1, 4), k = skus.length;
+    var bw = 8, bh = 12.8, chao = 80;
+    el.appendChild(div('cn-palete')); el.appendChild(div('cn-rot', 'Palete misturado'));
+    var colW = 46 / k;
+    skus.forEach(function (s, j) {
+      var p = div('cn-placa', esc(s)); p.style.setProperty('--c', CORES[j]);
+      p.style.left = (50 + j * colW + colW / 2) + '%'; el.appendChild(p);
+    });
+    var ordem = [];
+    for (var r = 0; r < por; r++) for (var j = 0; j < k; j++) ordem.push((j + r) % k);
+    var nivel = skus.map(function () { return 0; });
+    var caixas = ordem.map(function (j, i) {
+      var c = div('cn-box', esc(skus[j])); c.style.setProperty('--c', CORES[j]);
+      var col = i % 4, row = Math.floor(i / 4);
+      var x0 = 5.75 + col * (bw + 1.5), y0 = chao - bh * (row + 1);
+      var x1 = 50 + j * colW + (colW - bw) / 2, y1 = chao - bh * (nivel[j]++ + 1);
+      c.dataset.f = x1 + ',' + y1;
+      pos(c, W ? x0 : x1, W ? y0 : y1, bw, bh);
+      el.appendChild(c);
+      return c;
+    });
+    if (!W) return null;
+    var p = W(600);
+    caixas.slice().reverse().forEach(function (c) {
+      p = p.then(function () { var f = c.dataset.f.split(','); c.classList.add('vai'); pos(c, +f[0], +f[1]); return W(450); });
+    });
+    return p.then(function () { el.classList.add('cn-fim'); return W(800); });
+  }
+
+  function cenaBipar(el, a, W, B) {
+    var n = inteiro(a.qtd, 6, 1, 30), cols = n <= 8 ? 4 : n <= 18 ? 6 : 8;
+    var rows = Math.ceil(n / cols), uw = cols === 8 ? 5 : 6.5, uh = uw * 1.6, gx = 1.4, gy = 2.2;
+    var larg = cols * uw + (cols - 1) * gx, alt = rows * uh + (rows - 1) * gy;
+    var x0 = 6 + (50 - larg) / 2, y0 = 14 + (70 - alt) / 2;
+    el.appendChild(div('cn-rot cn-rot-un', 'Unidades do SKU ' + esc(a.sku || '')));
+    var un = [];
+    for (var i = 0; i < n; i++) {
+      var u = div('cn-un', '<span class="cn-v">✓</span>');
+      pos(u, x0 + (i % cols) * (uw + gx), y0 + Math.floor(i / cols) * (uh + gy), uw, uh);
+      el.appendChild(u); un.push(u);
+    }
+    var col = div('cn-col',
+      '<div class="cn-head"></div><div class="cn-tela">' +
+      (a.local ? '<div>LOCAL: ' + esc(a.local) + '</div>' : '') +
+      '<div>SKU: ' + esc(a.sku || '—') + '</div><div>QTD:</div><div class="cn-q">0</div></div>' +
+      '<div class="cn-teclas">' + new Array(13).join('<i></i>') + '</div>');
+    pos(col, 64, 10, 25, 82);
+    el.appendChild(col);
+    var q = col.querySelector('.cn-q'), head = col.querySelector('.cn-head');
+    if (!W) { un.forEach(function (u) { u.classList.add('ok'); }); q.textContent = n; return null; }
+    var p = W(700);
+    un.forEach(function (u, i) {
+      p = p.then(function () { u.classList.add('scan'); head.classList.add('on'); return W(250); })
+        .then(function () { u.classList.remove('scan'); u.classList.add('ok'); head.classList.remove('on'); q.textContent = i + 1; q.classList.remove('pop'); void q.offsetWidth; q.classList.add('pop'); B(2300, .07); return W(350); });
+    });
+    return p.then(function () { return W(800); });
+  }
+
+  function cenaConferir(el, a, W) {
+    var f = inteiro(a.fisico, 6, 0, 9999), b = inteiro(a.bipado, f, 0, 9999), ok = f === b;
+    var c1 = div('cn-card', '<small>Contagem física</small><b data-n="' + f + '">0</b><span>unidades no palete</span>');
+    var c2 = div('cn-card', '<small>Bipado no coletor</small><b data-n="' + b + '">0</b><span>unidades bipadas</span>');
+    pos(c1, 8, 12, 38, 48); pos(c2, 54, 12, 38, 48);
+    var dif = b - f;
+    var res = div('cn-res ' + (ok ? 'ok' : 'erro'), ok ? '✓ Confere — pode seguir' :
+      '✗ Divergência: ' + Math.abs(dif) + (dif > 0 ? ' a mais' : ' a menos') + ' no coletor — conte de novo');
+    pos(res, 8, 68, 84, 18);
+    [c1, c2, res].forEach(function (x) { el.appendChild(x); });
+    var nums = [c1.querySelector('b'), c2.querySelector('b')];
+    if (!W) { nums.forEach(function (x) { x.textContent = x.dataset.n; }); el.classList.add('cn-in', 'cn-fim'); return null; }
+    var p = W(0).then(function () { el.classList.add('cn-in'); return W(600); });
+    for (var s = 1; s <= 10; s++) (function (s) {
+      p = p.then(function () { nums.forEach(function (x) { x.textContent = Math.round(x.dataset.n * s / 10); }); return W(90); });
+    })(s);
+    return p.then(function () { el.classList.add('cn-fim'); return W(600); }).then(function () { return W(1100); });
+  }
+
+  function montarCena(el, a, W, B) {
+    el.innerHTML = '';
+    el.className = (el.className.replace(/\bcn-\S+/g, '') + ' mp-cena cn-' + (a.modelo || 'separar')).trim();
+    B = B || function () {};
+    if (a.modelo === 'bipar') return cenaBipar(el, a, W, B);
+    if (a.modelo === 'conferir') return cenaConferir(el, a, W, B);
+    return cenaSeparar(el, a, W, B);
+  }
+  /* Prévia estática (editor): desenha o estado final dentro de el. */
+  function cenaEstatica(el, a) {
+    montarCena(el, a, null);
+    var ajusta = function () { el.style.fontSize = Math.max(7, el.clientHeight * .035) + 'px'; };
+    ajusta(); requestAnimationFrame(ajusta);
+  }
+
+  global.LDMPlayer = { mount: mount, esc: esc, aplicarFundo: aplicarFundo, cenaEstatica: cenaEstatica };
 })(window);

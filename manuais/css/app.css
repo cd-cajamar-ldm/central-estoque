@@ -257,3 +257,9 @@ body.theme-dark .alert{color:#FF9C85;}
   .toolbar .hint{margin-left:0;width:100%;}
 }
 @media (prefers-reduced-motion:reduce){.tb-gear,.brand-logo::before{animation:none;}}
+
+.canvas-cena{position:relative;width:100%;aspect-ratio:1.6;}
+.canvas-cena > div{position:absolute;inset:0;}
+.aic.tecla{background:rgba(16,22,51,.1);color:var(--ink);}
+.aic.cena{background:rgba(31,138,82,.14);color:#1F8A52;}
+.abody .f select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:9px;padding:6px 9px;}
