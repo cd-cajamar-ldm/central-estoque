@@ -24,6 +24,7 @@ var TABS = {
   painel:['Painel','Visão geral do estoque da reversa e dos RGs.'],
   rgs:['Consulta de RGs','Cada RG é uma peça. Busque, filtre e abra a ficha.'],
   cobertura:['Estoque sem RG','Saldo da reversa que ainda não tem RG, por item e local.'],
+  locais:['Locais 100% RG','Meta: todo local da reversa só com peças identificadas por RG.'],
   produtividade:['Produtividade','RGs gerados por dia e por operador.'],
   classificacao:['Classificação','Como as peças com RG foram classificadas.'],
   tempo:['Tempo parado','Há quanto tempo as peças estão na reversa.'],
@@ -32,7 +33,7 @@ var TABS = {
 
 var S = {
   rgs:[], est:null, tab:'painel',
-  f:{ q:'', classif:'', classe:'', oper:'', sit:'', cobModo:'sem', cobQ:'', cobClasse:'', cobLocal:'', dia:'' },
+  f:{ q:'', classif:'', classe:'', oper:'', sit:'', cobModo:'sem', cobQ:'', cobClasse:'', cobLocal:'', dia:'', locModo:'misto', locQ:'', locClasse:'' },
   sort:{}, lim:{}, D:null, ocupado:''
 };
 
@@ -240,6 +241,24 @@ function deriva(){
     pc.saldo+=c.saldo; pc.comRg+=Math.min(c.saldo,c.rgs); pc.semRg+=c.semRg; pc.rgs+=c.rgs;
     D.cov.push(c);
   });
+  /* Situação de cada local. A meta do módulo é 100% dos locais só com RG:
+       rg    = toda unidade do local tem RG
+       misto = o local tem peça com RG e peça "normal" (sem RG) juntas
+       sem   = nenhuma unidade do local tem RG */
+  var ml=new Map();
+  D.cov.forEach(function(c){
+    var l=ml.get(c.local); if(!l){ l={local:c.local, localDesc:c.localDesc, classe:c.classe, saldo:0, rgs:0, comRg:0, semRg:0, itens:0, itensMistos:0}; ml.set(c.local,l); }
+    l.saldo+=c.saldo; l.rgs+=c.rgs; l.comRg+=Math.min(c.saldo,c.rgs); l.semRg+=c.semRg; l.itens++;
+    if(c.rgs && c.semRg) l.itensMistos++;
+  });
+  D.locais=Array.from(ml.values());
+  D.loc={total:D.locais.length, rg:0, misto:0, sem:0, unMisto:0};
+  D.locais.forEach(function(l){
+    l.st = l.rgs>0 ? (l.semRg>0 ? 'misto' : 'rg') : 'sem';
+    l.pRg = l.saldo>0 ? l.comRg/l.saldo : (l.rgs>0?1:0);
+    D.loc[l.st]++;
+    if(l.st==='misto') D.loc.unMisto+=l.semRg;
+  });
   S.D=D;
 }
 function descItem(r){ return S.D.itemDesc.get(r.item)||''; }
@@ -297,7 +316,7 @@ function tabela(id, cols, linhas, cfg){
   }).join('')+'</tr></thead><tbody>';
   if(!parte.length) h+='<tr><td colspan="'+cols.length+'" style="text-align:center;color:var(--ink-soft);padding:26px">Nada encontrado com esses filtros.</td></tr>';
   parte.forEach(function(r){
-    h+='<tr'+(cfg.rg?' class="rg-click" data-act="ficha" data-rg="'+esc(r.rg)+'"':'')+'>'+cols.map(function(c){
+    h+='<tr'+(cfg.rg?' class="rg-click" data-act="ficha" data-rg="'+esc(r.rg)+'"':cfg.local?' class="rg-click" data-act="ver-local" data-l="'+esc(r.localDesc)+'"':'')+'>'+cols.map(function(c){
       var t = c.fmt ? c.fmt(r) : esc(r[c.k]);
       return '<td'+(c.num?' class="rg-num"':'')+'>'+t+'</td>';
     }).join('')+'</tr>';
@@ -328,6 +347,8 @@ function vPainel(){
     h+=kpi(int(T.saldo),'Estoque na reversa (un)','classes '+CLASSES_REVERSA.join(' + '));
     h+=kpi(pct(T.comRg,T.saldo),'Cobertura de RG', int(T.comRg)+' un com RG', 'good');
     h+=kpi(int(T.semRg),'Unidades sem RG','ainda sem identificação', T.semRg?'warn':'good');
+    h+=kpi(pct(D.loc.rg,D.loc.total),'Locais 100% RG', int(D.loc.rg)+' de '+int(D.loc.total)+' locais · meta 100%', D.loc.rg===D.loc.total?'good':'orange');
+    h+=kpi(int(D.loc.misto),'Locais mistos','RG e item normal juntos', D.loc.misto?'bad':'good');
   }
   h+='</div>';
   if(!S.est) h+='<div class="rg-aviso"><strong>Falta o estoque:</strong> importe a QRY0390 (Estoque por Local) para ver quanto da reversa já tem RG.</div>';
@@ -447,6 +468,50 @@ function vCobertura(){
   return h;
 }
 
+var ST_LOC={ rg:['100% RG','tag-good'], misto:['Misto','tag-bad'], sem:['Sem RG','tag-muted'] };
+function locFiltrados(){
+  var f=S.f, q=norm(f.locQ);
+  return S.D.locais.filter(function(l){
+    if(f.locModo!=='todos' && l.st!==f.locModo) return false;
+    if(f.locClasse && l.classe!==f.locClasse) return false;
+    if(q && norm(l.localDesc+' '+l.local).indexOf(q)<0) return false;
+    return true;
+  });
+}
+var COLS_LOC=[
+  {k:'localDesc',rot:'Local'},
+  {k:'classe',rot:'Classe'},
+  {k:'st',rot:'Situação',fmt:function(r){ return '<span class="tag '+ST_LOC[r.st][1]+'">'+ST_LOC[r.st][0]+'</span>'; }},
+  {k:'itens',rot:'Itens',num:1,fmt:function(r){ return int(r.itens); }},
+  {k:'saldo',rot:'Saldo',num:1,fmt:function(r){ return int(r.saldo); }},
+  {k:'comRg',rot:'Com RG',num:1,fmt:function(r){ return int(r.comRg); }},
+  {k:'semRg',rot:'Sem RG (normal)',num:1,fmt:function(r){ return r.semRg?'<strong>'+int(r.semRg)+'</strong>':'0'; }},
+  {k:'pRg',rot:'% com RG',num:1,fmt:function(r){ return pct(r.comRg,r.saldo); }}
+];
+function vLocais(){
+  if(!S.est) return vazio('Falta o estoque por local','Importe a <strong>QRY0390 (Estoque por Local)</strong> do Bseller para ver a situação de cada local da reversa.');
+  var D=S.D, L=D.loc, f=S.f, lista=locFiltrados();
+  if(!S.sort.loc) S.sort.loc={k:'semRg',dir:-1};
+  var p=function(n){ return L.total ? n/L.total*100 : 0; };
+  var h='<div class="kpi-grid">'+
+    kpi(pct(L.rg,L.total),'Locais 100% RG', int(L.rg)+' de '+int(L.total)+' locais · meta 100%', L.rg===L.total?'good':'orange')+
+    kpi(int(L.misto),'Locais mistos','RG e item normal juntos · '+pct(L.misto,L.total), L.misto?'bad':'good')+
+    kpi(int(L.unMisto),'Unidades sem RG em locais mistos','falta gerar RG para fechar esses locais', L.unMisto?'warn':'good')+
+    kpi(int(L.sem),'Locais sem nenhum RG', pct(L.sem,L.total)+' dos locais')+
+    '</div>';
+  h+='<div class="panel"><h3>Situação dos locais da reversa</h3><div class="panel-sub">A meta é a barra inteira verde: todo local só com peças identificadas por RG.</div>'+
+    '<div class="rg-cob"><span class="c-ok" style="width:'+p(L.rg).toFixed(2)+'%"></span><span style="background:var(--danger);width:'+p(L.misto).toFixed(2)+'%"></span><span style="background:var(--line);width:'+p(L.sem).toFixed(2)+'%"></span></div>'+
+    '<div class="rg-leg"><span><i style="background:var(--success)"></i>100% RG: <strong>'+int(L.rg)+'</strong> ('+pct(L.rg,L.total)+')</span><span><i style="background:var(--danger)"></i>Mistos: <strong>'+int(L.misto)+'</strong> ('+pct(L.misto,L.total)+')</span><span><i style="background:var(--line)"></i>Sem RG: <strong>'+int(L.sem)+'</strong> ('+pct(L.sem,L.total)+')</span></div></div>'+avisoParcial();
+  var chip=function(m,rot,n){ return '<button class="chip'+(f.locModo===m?' active':'')+'" data-act="loc-modo" data-m="'+m+'">'+rot+' ('+int(n)+')</button>'; };
+  h+='<div class="panel"><div class="rg-chips">'+chip('misto','Mistos',L.misto)+chip('rg','100% RG',L.rg)+chip('sem','Sem RG',L.sem)+chip('todos','Todos',L.total)+'</div>'+
+    '<div class="filter-bar"><input type="text" id="fLocQ" placeholder="Buscar local..." value="'+esc(f.locQ)+'">'+
+    '<select data-f="locClasse">'+opt('','Classe: todas',f.locClasse)+Array.from(D.porClasse.keys()).sort().map(function(v){ return opt(v,classeNome(v),f.locClasse); }).join('')+'</select>'+
+    '<button class="btn btn-primary" data-act="exporta-loc">Exportar Excel</button></div>'+
+    '<div class="rg-resumo"><span><strong>'+int(lista.length)+'</strong> locais</span><span>Saldo: <strong>'+int(lista.reduce(function(s,l){ return s+l.saldo; },0))+'</strong></span><span>Sem RG: <strong>'+int(lista.reduce(function(s,l){ return s+l.semRg; },0))+'</strong></span><span>Clique num local para ver os itens dele.</span></div>'+
+    tabela('loc',COLS_LOC,lista,{local:1})+'</div>';
+  return h;
+}
+
 function vProdutividade(){
   if(!S.rgs.length) return vazio('Nenhum RG importado','Importe a <strong>QRY0100 (RG - Produtividade)</strong> do Bseller.');
   var f=S.f;
@@ -562,7 +627,7 @@ function vImportacao(){
   return h;
 }
 
-var VIEWS={ painel:vPainel, rgs:vRgs, cobertura:vCobertura, produtividade:vProdutividade, classificacao:vClassificacao, tempo:vTempo, importacao:vImportacao };
+var VIEWS={ painel:vPainel, rgs:vRgs, cobertura:vCobertura, locais:vLocais, produtividade:vProdutividade, classificacao:vClassificacao, tempo:vTempo, importacao:vImportacao };
 
 function render(){
   var t=TABS[S.tab]; $('tabTitle').textContent=t[0]; $('tabSubtitle').textContent=t[1];
@@ -585,6 +650,7 @@ function vaiPara(tab){
 function soTabela(){
   if(S.tab==='rgs'){ render.keep='fQ'; }
   if(S.tab==='cobertura'){ render.keep='fCobQ'; }
+  if(S.tab==='locais'){ render.keep='fLocQ'; }
   var id=render.keep; render();
   var el=id && $(id);
   if(el){ el.focus(); var n=el.value.length; try { el.setSelectionRange(n,n); } catch(e){} }
@@ -665,6 +731,9 @@ function acao(el, ev){
   if(a==='fecha-ficha') return fechaFicha();
   if(a==='escolher') return $('fileInput').click();
   if(a==='cob-modo'){ S.f.cobModo=el.dataset.m; S.sort.cov=null; S.lim.cov=PAGINA; return render(); }
+  if(a==='loc-modo'){ S.f.locModo=el.dataset.m; S.lim.loc=PAGINA; return render(); }
+  if(a==='ver-local'){ S.f.cobLocal=el.dataset.l; S.f.cobModo='todos'; S.f.cobQ=''; S.f.cobClasse=''; S.sort.cov={k:'semRg',dir:-1}; return vaiPara('cobertura'); }
+  if(a==='exporta-loc') return exporta('RG_Reversa_Locais',['Local','Descrição Local','Classe','Situação','Itens','Saldo','Com RG','Sem RG','% com RG'], locFiltrados().map(function(l){ return [l.local,l.localDesc,l.classe,ST_LOC[l.st][0],l.itens,l.saldo,l.comRg,l.semRg,Math.round(l.pRg*1000)/10]; }));
   if(a==='limpa-filtros'){ S.f.q=''; S.f.classif=''; S.f.classe=''; S.f.oper=''; S.f.sit=''; $('globalSearch').value=''; return render(); }
   if(a==='exporta-rgs') return exportaRgs();
   if(a==='exporta-cov') return exporta('RG_Reversa_Estoque_x_RG', CAB_COV, linhasCov(covFiltrada()));
@@ -704,10 +773,11 @@ function inicia(){
   var espera;
   document.addEventListener('input', function(ev){
     var t=ev.target;
-    if(t.id==='fQ' || t.id==='fCobQ' || t.id==='globalSearch'){
+    if(t.id==='fQ' || t.id==='fCobQ' || t.id==='fLocQ' || t.id==='globalSearch'){
       clearTimeout(espera);
       espera=setTimeout(function(){
         if(t.id==='fCobQ'){ S.f.cobQ=t.value; S.lim.cov=PAGINA; soTabela(); return; }
+        if(t.id==='fLocQ'){ S.f.locQ=t.value; S.lim.loc=PAGINA; soTabela(); return; }
         S.f.q=t.value; S.lim.rgs=PAGINA;
         if(t.id==='globalSearch'){ if(S.tab!=='rgs'){ S.tab='rgs'; try { history.replaceState(null,'','#rgs'); } catch(e){} } render(); }
         else { $('globalSearch').value=t.value; soTabela(); }
