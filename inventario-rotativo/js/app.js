@@ -389,29 +389,21 @@ function irTabEhAreaExtra(tab){ return /^(reversa|insumo)_/.test(tab||''); }
    ciclo e mês do topo não tem sobre o que agir. Hoje nenhuma aba está nesse
    caso — Transitórios, que era a única, virou módulo próprio (../transitorios/). */
 const IR_TAB_SEM_CICLO = new Set(['exportar']);
-/* Menu separado por área (Inventário Rotativo, Insumo, Reversa). Cada grupo abre
-   e fecha pelo título; o estado fica salvo no navegador. O grupo da aba aberta
-   sempre fica aberto, senão a aba ativa sumiria do menu. */
+/* Menu Inventário > Rotativo / Reversa / Insumos. Ao abrir o app tudo começa
+   recolhido (pedido do usuário); cada grupo abre e fecha pelo título. O estado
+   vale só enquanto a página está aberta — não é lembrado no próximo acesso. */
+IR.menuAbertos = new Set();
 function irAplicarGrupos(){
-  let fechados = [];
-  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
   document.querySelectorAll('.nav-group').forEach(g=>{
-    const temAtiva = !!g.querySelector('.nav-item.active');
-    const fechado = fechados.includes(g.dataset.grupo) && !temAtiva;
-    g.classList.toggle('fechado', fechado);
+    const aberto = IR.menuAbertos.has(g.dataset.grupo);
+    g.classList.toggle('fechado', !aberto);
     const h = g.querySelector(':scope > .nav-group-h');
-    if(h) h.setAttribute('aria-expanded', String(!fechado));
+    if(h) h.setAttribute('aria-expanded', String(aberto));
   });
 }
 function irToggleGrupo(chave){
-  let fechados = [];
-  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
-  const g = document.querySelector(`.nav-group[data-grupo="${chave}"]`);
-  const fechar = g && !g.classList.contains('fechado');
-  fechados = fechados.filter(k=>k!==chave);
-  if(fechar) fechados.push(chave);
-  try{ localStorage.setItem('ir-menu-fechados2', JSON.stringify(fechados)); }catch(_){}
-  if(g){ g.classList.toggle('fechado', fechar); g.querySelector(':scope > .nav-group-h').setAttribute('aria-expanded', String(!fechar)); }
+  if(IR.menuAbertos.has(chave)) IR.menuAbertos.delete(chave); else IR.menuAbertos.add(chave);
+  irAplicarGrupos();
 }
 function irRenderEmConstrucao(area){
   return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores desta aba vão aparecer aqui.</p></div>`;
@@ -1032,7 +1024,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v257';
+const IR_APP_VERSION = 'v258';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.

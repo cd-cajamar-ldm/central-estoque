@@ -1782,10 +1782,11 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .nav-top > .nav-group-h:hover{ background:rgba(255,255,255,.06); }
 .nav-top > .nav-group-h .ng-tit{ display:flex; align-items:center; gap:11px; }
 .nav-top > .nav-group-h .ng-tit svg{ color:var(--orange); }
-.nav-sub{ margin:2px 0 2px 14px; padding-left:8px; border-left:1px solid rgba(255,255,255,.12); }
+.nav-sub{ margin:2px 0 2px 10px; padding-left:4px; border-left:1px solid rgba(255,255,255,.12); }
 .nav-sub > .nav-group-h{ padding:8px 10px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:#C9D0F2; }
 .nav-sub > .nav-group-h:hover{ color:#fff; background:rgba(255,255,255,.04); }
-.nav-sub .nav-item{ padding:8px 10px; font-size:12.5px; }
+.nav-sub .nav-item{ padding:8px 8px; gap:9px; font-size:12.5px; }
+.nav-item span{ overflow:hidden; text-overflow:ellipsis; }
 .sidebar.collapsed .nav-group-h{ height:0; padding:0 !important; margin:10px 14px; overflow:hidden; border-top:1px solid rgba(255,255,255,.16); }
 .sidebar.collapsed .nav-sub{ margin:0; padding:0; border-left:0; }
 .sidebar.collapsed .nav-group.fechado > .nav-group-body{ display:block; }
