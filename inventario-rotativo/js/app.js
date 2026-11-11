@@ -373,15 +373,53 @@ const IR_TAB_LABELS = {
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
   configuracoes:['Configurações','Pesos do Índice de Prioridade de Auditoria.'],
   gestaoInventario:['Gestão de Inventário','Inventário + local com contagem errada, desconsiderados da acurácia com justificativa.'],
-  exportar:['Exportar','Exporte toda a base, as regras/lógicas e os indicadores do sistema.']
+  exportar:['Exportar','Exporte toda a base, as regras/lógicas e os indicadores do sistema.'],
 };
+/* Reversa e Insumos repetem as abas do Rotativo (menos NET, que vai para outro
+   app). Por enquanto abrem "em construção" — chave: reversa_<aba>, insumo_<aba>. */
+const IR_AREAS_EXTRA = {reversa:'Reversa', insumo:'Insumos'};
+const IR_ABAS_AREA = ['dashboard','produtividade','setores','divergencias','indicadores'];
+for(const [area, nomeArea] of Object.entries(IR_AREAS_EXTRA)){
+  for(const aba of IR_ABAS_AREA){
+    IR_TAB_LABELS[area+'_'+aba] = [nomeArea+' · '+IR_TAB_LABELS[aba][0], 'Em construção.'];
+  }
+}
+function irTabEhAreaExtra(tab){ return /^(reversa|insumo)_/.test(tab||''); }
 /* Abas que não são do ciclo rotativo: sem ciclo e sem contagem, o filtro de
    ciclo e mês do topo não tem sobre o que agir. Hoje nenhuma aba está nesse
    caso — Transitórios, que era a única, virou módulo próprio (../transitorios/). */
 const IR_TAB_SEM_CICLO = new Set(['exportar']);
+/* Menu separado por área (Inventário Rotativo, Insumo, Reversa). Cada grupo abre
+   e fecha pelo título; o estado fica salvo no navegador. O grupo da aba aberta
+   sempre fica aberto, senão a aba ativa sumiria do menu. */
+function irAplicarGrupos(){
+  let fechados = [];
+  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
+  document.querySelectorAll('.nav-group').forEach(g=>{
+    const temAtiva = !!g.querySelector('.nav-item.active');
+    const fechado = fechados.includes(g.dataset.grupo) && !temAtiva;
+    g.classList.toggle('fechado', fechado);
+    const h = g.querySelector(':scope > .nav-group-h');
+    if(h) h.setAttribute('aria-expanded', String(!fechado));
+  });
+}
+function irToggleGrupo(chave){
+  let fechados = [];
+  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
+  const g = document.querySelector(`.nav-group[data-grupo="${chave}"]`);
+  const fechar = g && !g.classList.contains('fechado');
+  fechados = fechados.filter(k=>k!==chave);
+  if(fechar) fechados.push(chave);
+  try{ localStorage.setItem('ir-menu-fechados2', JSON.stringify(fechados)); }catch(_){}
+  if(g){ g.classList.toggle('fechado', fechar); g.querySelector(':scope > .nav-group-h').setAttribute('aria-expanded', String(!fechar)); }
+}
+function irRenderEmConstrucao(area){
+  return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores desta aba vão aparecer aqui.</p></div>`;
+}
 function irSwitchTab(tab){
   IR.currentTab = tab;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  irAplicarGrupos();
   const [title, sub] = IR_TAB_LABELS[tab] || [tab, ''];
   document.getElementById('tabTitle').textContent = title;
   document.getElementById('tabSubtitle').textContent = sub;
@@ -389,7 +427,7 @@ function irSwitchTab(tab){
   // ficava no topo sem efeito nenhum sobre a tela, sugerindo um recorte que a
   // aba não faz.
   const filtros = document.getElementById('topbarFilters');
-  if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab);
+  if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab) || irTabEhAreaExtra(tab);
   // NET é independente do ciclo rotativo (QRY410 é por ano, não por ciclo): troca
   // Ciclo/Mês (que não têm efeito nenhum sobre a NET) pelo Ano/Mês da própria QRY410
   // no topo — mesmo lugar de sempre, só que com o filtro certo pra essa aba.
@@ -479,7 +517,7 @@ function irRenderView(){
   // Transitórios não depende de ciclo importado: é um controle próprio, não uma
   // leitura da contagem.
   const SEM_CICLO = new Set(['importacao','configuracoes','exportar','gestaoInventario']);
-  const needsCiclo = !SEM_CICLO.has(IR.currentTab);
+  const needsCiclo = !SEM_CICLO.has(IR.currentTab) && !irTabEhAreaExtra(IR.currentTab);
   if(needsCiclo && !IR.cicloAtivo){
     root.innerHTML = IR.initErro
       ? irEmptyState('Não foi possível ler os dados salvos',
@@ -496,7 +534,9 @@ function irRenderView(){
     importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes,
     exportar: irRenderExportar, gestaoInventario: irRenderGestaoInventario
   };
-  root.innerHTML = (renderers[IR.currentTab] || (()=>''))();
+  root.innerHTML = irTabEhAreaExtra(IR.currentTab)
+    ? irRenderEmConstrucao(IR_TAB_LABELS[IR.currentTab][0])
+    : (renderers[IR.currentTab] || (()=>''))();
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
   irFitKpiNumbers();
 }
@@ -992,7 +1032,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v252';
+const IR_APP_VERSION = 'v256';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1071,62 +1111,189 @@ function irRenderDashDateFilterBar(){
     </div>
   </div>`;
 }
+/* ============================================================
+   DASHBOARD EXECUTIVO — layout "E1" (foto do CD no topo, cartões brancos
+   sobrepostos, faixa com os demais indicadores e os painéis do ciclo).
+   Todos os números vêm de IR.indicadores — os mesmos 12 da aba Indicadores.
+   ============================================================ */
+// Barra dos cartões de acurácia: escala de 90% a 100% (de 0 a 100 as três
+// barras ficavam praticamente do mesmo tamanho e não diziam nada).
+function irDxPos(v){ return Math.max(2, Math.min(100, ((v||0)-0.90)/0.10*100)).toFixed(1)+'%'; }
+// Ciclo imediatamente anterior ao ativo (qualquer ano), pro "▲/▼ p.p." dos cartões.
+function irDxCicloAnterior(){
+  const c = IR.cicloAtivo;
+  if(!c || !IR.comparativoCiclos) return null;
+  const ant = IR.comparativoCiclos
+    .filter(p => p.ind && irCicloOrdem(p.ciclo) < irCicloOrdem(c))
+    .sort((a,b)=>irCicloOrdem(b.ciclo)-irCicloOrdem(a.ciclo))[0];
+  return ant ? ant.ind : null;
+}
+function irDxDelta(atual, anterior){
+  if(atual==null || anterior==null) return '';
+  const d = (atual-anterior)*100;
+  const cls = d>=0 ? 'up' : 'down';
+  return `<span class="dx-delta ${cls}" title="vs. ciclo anterior">${d>=0?'▲':'▼'} ${irFmtNum(Math.abs(d),1)} p.p.</span>`;
+}
+function irDxCard(rot, v, opts){
+  const naMeta = opts.meta!=null ? v>=opts.meta : null;
+  const chip = naMeta==null ? (opts.chip?`<span class="dx-chip neutro">${opts.chip}</span>`:'')
+    : `<span class="dx-chip ${naMeta?'ok':'nok'}">${naMeta?'Na meta':'Abaixo da meta'}</span>`;
+  const largura = opts.meta!=null ? irDxPos(v) : (Math.max(0,Math.min(1,v||0))*100).toFixed(1)+'%';
+  return `<article class="dx-card">
+    <div class="dx-card-top"><span class="dx-card-rot">${irEsc(rot)}</span>${chip}</div>
+    <div class="dx-card-val"><span class="dx-num ${naMeta===false?'bad':''}">${irFmtPct(v)}</span>${opts.delta||''}</div>
+    <div class="dx-bar"><i style="width:${largura};background:${opts.cor};"></i>${opts.meta!=null?`<b style="left:${irDxPos(opts.meta)};"></b>`:''}</div>
+    <span class="dx-card-hint">${opts.hint||''}</span>
+  </article>`;
+}
 function irRenderDashboard(){
   const ind = IR.indicadores;
   if(!ind) return irEmptyState('Sem indicadores', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   if(IR.comparativoCiclos===null) irCarregarComparativoCiclos(); // async — re-renderiza quando chegar
-  // Cada bloco tem sempre 3 bullets, no mesmo formato: ícone + acurácia (com meta),
-  // + volume principal, + divergência/pendência. Os demais indicadores (itens
-  // divergentes, recontagens, tempo médio etc.) continuam na aba Indicadores.
-  const metaHint = `Meta: ${irFmtPct(ind.meta)}`;
-  // O número que acompanha a meta é a taxa de CANCELAMENTO: locais cuja contagem
-  // começou e foi interrompida antes de fechar (ex.: precisava coletar) sobre o
-  // total de locais orçados do ciclo. Já foi rotulado como "Recontagem", o que
-  // estava errado — recontagem é local que passou da rodada 2 (ind.qtdRecontagens,
-  // exibido no bloco Locais). São coisas diferentes e não devem dividir o rótulo.
-  const cancelHint = `Cancelamento: ${irFmtPct(ind.taxaCancelamento||0)}`;
-  // Denominador das acurácias = SALDO DO SISTEMA (rodada 1), não o
-  // total contado exibido ao lado. Sem essa dica o card mostra dois números com que é
-  // impossível refazer a conta: 1 − divergentes ÷ contadas não reproduz a acurácia.
-  // Mostra a base junto.
-  const basePecasHint = ind.pecasSaldoLogico ? `base: ${irFmtInt(ind.pecasSaldoLogico)} pç` : '';
-  const baseValorHint = ind.valorSaldoLogico ? `base: ${irFmtMoneyInt(ind.valorSaldoLogico)}` : '';
-  const blocoPecas = irKpiBlock('orange','📦','Peças',
-    irKpiTile('🎯', irFmtPct(ind.acuraciaPecas), 'Acurácia Peças', ind.acuraciaPecas>=ind.meta?'good':'bad', metaHint+' · '+cancelHint) +
-    irKpiTile('📦', irFmtInt(ind.pecasContadas), 'Peças Contadas', '', 'total físico'+(basePecasHint?' · '+basePecasHint:'')) +
-    irKpiTile('⚠️', irFmtInt(ind.pecasDivergentes), 'Peças Divergentes', 'bad', irFmtInt(ind.itensDivergentes)+' itens × locais')
-  );
-  const blocoLocais = irKpiBlock('blue','📍','Locais',
-    irKpiTile('🎯', irFmtPct(ind.acuraciaLocal), 'Acurácia Local', ind.acuraciaLocal>=ind.meta?'good':'bad', metaHint+' · base: '+irFmtInt(ind.locaisContadosAcuracia!=null?ind.locaisContadosAcuracia:ind.locaisContadosTotal)+' contados'+(ind.locaisDesconsiderados?' · '+irFmtInt(ind.locaisDesconsiderados)+' desconsiderado(s)':'')) +
-    irKpiTile('✅', irFmtInt(ind.locaisConcluidos), 'Concluídos', '', 'de '+irFmtInt(ind.locaisContadosTotal)+' contados<br>'+irFmtInt(ind.locaisDivergentes)+' divergentes') +
-    irKpiTile('⏳', irFmtInt(ind.locaisPendentes), 'Pendentes', 'bad', irFmtInt(ind.qtdRecontagens)+' recontagens · '+cancelHint)
-  );
-  const blocoValor = irKpiBlock('black','💰','Valor',
-    irKpiTile('🎯', irFmtPct(ind.acuraciaValor), 'Acurácia Valor', ind.acuraciaValor>=ind.meta?'good':'bad', metaHint+' · '+cancelHint) +
-    irKpiTile('💰', irFmtMoneyCompact(ind.valorFisicoTotal), 'Valor Contado', '', irFmtMoneyInt(ind.valorFisicoTotal)+(baseValorHint?' · '+baseValorHint:'')) +
-    irKpiTile('⚠️', irFmtMoneyCompact(ind.valorDivergenteAbsoluto), 'Valor Divergente', 'bad', irFmtMoneyInt(ind.valorDivergenteAbsoluto))
-  );
-  const blocoCiclo = irKpiBlock('neutral','🔄','Ciclo',
-    irKpiTile('📊', irFmtPct(ind.andamentoCiclo), 'Andamento', '', irFmtInt(ind.locaisConcluidos)+' de '+irFmtInt(ind.locaisCongelados)) +
-    irKpiTile('📅', ind.diasRestantes===null?'—':irFmtInt(ind.diasRestantes), 'Dias Restantes', '', 'dias úteis · exclui feriados') +
-    irKpiTile('⚡', irFmtPct(ind.eficiencia), 'Eficiência', ind.eficiencia>=0.8?'good':(ind.eficiencia<0.5?'bad':''), 'qualidade x velocidade')
-  );
-  return `
-    <div class="form-actions" style="margin:0 0 12px;">
-      <button class="btn btn-secondary" onclick="irGerarRelatorioEmail()">📧 Report</button>
+  const meta = ind.meta;
+  const ant = irDxCicloAnterior();
+  // Base das acurácias = SALDO DO SISTEMA (rodada 1), não o total contado — sem
+  // mostrar a base, 1 − divergentes ÷ contadas não reproduz o número do cartão.
+  const metaTxt = 'meta '+irFmtPct(meta);
+  const basePecas = ind.pecasSaldoLogico ? ' · base '+irFmtInt(ind.pecasSaldoLogico)+' pç' : '';
+  const baseLocal = ' · base '+irFmtInt(ind.locaisContadosAcuracia!=null?ind.locaisContadosAcuracia:ind.locaisContadosTotal)+' locais';
+  const baseValor = ind.valorSaldoLogico ? ' · base '+irFmtMoneyCompact(ind.valorSaldoLogico) : '';
+  const cards = [
+    irDxCard('Acurácia Peças', ind.acuraciaPecas, {meta, cor:'var(--dx-pecas)', delta:irDxDelta(ind.acuraciaPecas, ant&&ant.acuraciaPecas), hint:metaTxt+basePecas}),
+    irDxCard('Acurácia Local', ind.acuraciaLocal, {meta, cor:'var(--dx-local)', delta:irDxDelta(ind.acuraciaLocal, ant&&ant.acuraciaLocal), hint:metaTxt+baseLocal}),
+    irDxCard('Acurácia Valor', ind.acuraciaValor, {meta, cor:'var(--dx-valor)', delta:irDxDelta(ind.acuraciaValor, ant&&ant.acuraciaValor), hint:metaTxt+baseValor}),
+    irDxCard('Andamento do Ciclo', ind.andamentoCiclo, {cor:'var(--orange)',
+      chip: ind.diasRestantes==null ? '' : irFmtInt(ind.diasRestantes)+' dias restantes',
+      hint: irFmtInt(ind.locaisConcluidos)+' de '+irFmtInt(ind.locaisCongelados)+' locais concluídos'})
+  ].join('');
+  const tile = (rot, val, hint, cls) => `<div class="dx-tile"><span class="dx-tile-rot">${irEsc(rot)}</span><span class="dx-tile-val ${cls||''}">${val}</span><span class="dx-tile-hint">${hint}</span></div>`;
+  const faixa = [
+    tile('Peças Contadas', irFmtInt(ind.pecasContadas), 'valor '+irFmtMoneyCompact(ind.valorFisicoTotal)),
+    tile('Itens Contados', irFmtInt(ind.itensContados), 'local × item'),
+    tile('Peças Divergentes', irFmtInt(ind.pecasDivergentes), 'valor '+irFmtMoneyCompact(ind.valorDivergenteAbsoluto), 'bad'),
+    tile('Itens Divergentes', irFmtInt(ind.itensDivergentes), irFmtInt(ind.locaisDivergentes||0)+' locais', 'bad'),
+    tile('Recontagens', irFmtInt(ind.qtdRecontagens), 'cancelamento '+irFmtPct(ind.taxaCancelamento||0)),
+    tile('Tempo Médio', irFmtNum(ind.tempoMedioContagemMin,1)+' min', 'por contagem'),
+    tile('Dias Restantes', ind.diasRestantes===null?'—':irFmtInt(ind.diasRestantes), 'dias úteis'),
+    tile('Eficiência', irFmtPct(ind.eficiencia), 'qualidade × velocidade', ind.eficiencia>=0.8?'good':(ind.eficiencia<0.5?'bad':''))
+  ].join('');
+  return `<div class="dx">
+    <section class="dx-hero">
+      <div class="dx-hero-in">
+        <div class="dx-marca">
+          <span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span>
+          <div class="dx-marca-txt"><b>Oficina LDM</b><span>Inventário Rotativo · CD Cajamar</span></div>
+        </div>
+        <div class="dx-hero-row">
+          <div class="dx-hero-tit">
+            <h2>Dashboard Executivo</h2>
+            <span class="dx-tag">Loja do Mecânico · Lugar de quem faz</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <div class="dx-body">
+      <section class="dx-cards">${cards}</section>
+      <section class="dx-faixa">${faixa}</section>
+      <div class="bi-grid-2 dx-grid-mensal">
+        ${irRenderAcuraciaMensalPanel()}
+        ${irRenderStatusInventarioPanel(ind)}
+      </div>
+      ${irRenderCiclosCards()}
+      ${irRenderContadosPorDiaPanel(ind)}
+      ${irRenderDivergentesPorDiaPanel(ind)}
+      ${irRenderLogTablePanel(ind)}
     </div>
-    <div class="kpi-blocks">
-      ${blocoPecas}${blocoLocais}${blocoValor}${blocoCiclo}
+  </div>`;
+}
+/* Acurácia mensal em LINHAS — um ponto por mês do ano do ciclo ativo, somando
+   todos os ciclos daquele ano (cada ciclo traz ind.porMes do motor). A % do mês
+   é recalculada dos totais (divergente ÷ base), não média de percentuais. */
+function irAcuraciaMensalDoAno(){
+  const c = IR.cicloAtivo;
+  const ano = c ? irCicloAno(c) : null;
+  const fontes = (IR.comparativoCiclos||[])
+    .filter(p => p.ind && irCicloAno(p.ciclo)===ano)
+    .map(p => (c && p.ciclo.id===c.id) ? IR.indicadores : p.ind);
+  if(IR.indicadores && !(IR.comparativoCiclos||[]).some(p=>c && p.ciclo.id===c.id)) fontes.push(IR.indicadores);
+  const mapa = new Map();
+  for(const ind of fontes){
+    for(const m of (ind && ind.porMes) || []){
+      if(ano && String(m.mes).slice(0,4)!==String(ano)) continue;
+      const g = mapa.get(m.mes) || {mes:m.mes, pb:0, pd:0, vb:0, vd:0, lb:0, ld:0};
+      g.pb += (m.pecasSaldoLogico || m.pecasContadas || 0); g.pd += m.pecasDivergentes||0;
+      g.vb += (m.valorSaldoLogico || m.valorContado || 0);  g.vd += m.valorDivergente||0;
+      g.lb += m.locaisContados||0; g.ld += m.locaisDivergentes||0;
+      mapa.set(m.mes, g);
+    }
+  }
+  const acc = (b,d) => b>0 ? Math.max(0, 1-d/b) : null;
+  return {ano, rows: Array.from(mapa.values()).sort((a,b)=>a.mes.localeCompare(b.mes))
+    .map(g => ({mes:g.mes, pecas:acc(g.pb,g.pd), local:acc(g.lb,g.ld), valor:acc(g.vb,g.vd)}))};
+}
+function irBuildAcuraciaLinhasSvg(rows, meta){
+  const W = 760, H = 260, padL = 44, padR = 24, padT = 12, padB = 30;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+  const vals = rows.flatMap(r=>[r.pecas,r.local,r.valor]).filter(v=>v!=null);
+  // Eixo começa logo abaixo do menor valor (mínimo 80%) — de 0 a 100 as linhas
+  // ficariam coladas no topo e a distância até a meta sumiria.
+  const menor = Math.min(meta, ...vals);
+  let min = menor >= 0.95 ? Math.floor((menor-0.01)*100)/100 : Math.floor((menor-0.005)*20)/20;
+  min = Math.max(0, Math.min(min, 0.95));
+  const y = v => padT + (1-(Math.max(min,v)-min)/(1-min))*plotH;
+  const n = rows.length;
+  const x = i => n<=1 ? padL+plotW/2 : padL + i*(plotW/(n-1));
+  const passo = (1-min) > 0.25 ? 0.10 : ((1-min) > 0.1 ? 0.05 : 0.01);
+  let grid = '';
+  for(let t=1; t>=min-1e-9; t-=passo){
+    const yy = y(t).toFixed(1);
+    grid += `<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" class="dx-ln-grid"/>
+      <text x="${padL-8}" y="${(+yy+4).toFixed(1)}" text-anchor="end" class="dx-ln-ax">${Math.round(t*100)}%</text>`;
+  }
+  const metaY = y(meta).toFixed(1);
+  const series = [['pecas','Peças','var(--dx-pecas)'],['local','Local','var(--dx-local)'],['valor','Valor','var(--dx-valor)']];
+  const linhas = series.map(([k,rot,cor])=>{
+    const pts = rows.map((r,i)=>r[k]==null?null:[x(i), y(r[k]), r]).filter(Boolean);
+    if(!pts.length) return '';
+    const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+    return `<path d="${d}" fill="none" style="stroke:${cor}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="fill:${cor}" class="dx-ln-pt"><title>${rot} ${irMesLabel(p[2].mes)}: ${irFmtPct(p[2][k])}</title></circle>`).join('')}`;
+  }).join('');
+  const xl = rows.map((r,i)=>`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="dx-ln-ax dx-ln-mes">${irMesLabel(r.mes)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" class="dx-ln" role="img" aria-label="Acurácia mensal de peças, local e valor">
+    ${grid}
+    <line x1="${padL}" y1="${metaY}" x2="${W-padR}" y2="${metaY}" class="dx-ln-meta"/>
+    ${linhas}${xl}
+  </svg>`;
+}
+function irRenderAcuraciaMensalPanel(){
+  const meta = (IR.indicadores && IR.indicadores.meta) || IR_META_ACURACIA;
+  const {ano, rows} = irAcuraciaMensalDoAno();
+  if(!rows.length){
+    const msg = IR.comparativoCiclos===null ? 'Carregando acurácia mensal...' : 'Sem contagem concluída por mês — reprocesse o ciclo na Importação.';
+    return `<div class="panel"><h3>Acurácia mensal</h3><p class="field-hint">${irEsc(msg)}</p></div>`;
+  }
+  const ac = irAcuraciaDoAno(ano);
+  const cel = v => `<td class="mono ${v==null?'':(v>=meta?'':'bad')}">${v==null?'—':irFmtPct(v)}</td>`;
+  return `<div class="panel dx-mensal">
+    <div class="dx-panel-h"><h3>Acurácia mensal</h3>
+      <div class="cmp-legend">
+        <span><span class="cmp-dot" style="background:var(--dx-pecas);"></span>Peças</span>
+        <span><span class="cmp-dot" style="background:var(--dx-local);"></span>Local</span>
+        <span><span class="cmp-dot" style="background:var(--dx-valor);"></span>Valor</span>
+        <span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span>
+      </div>
     </div>
-    <div class="bi-grid-2">
-      ${irRenderAcuraciaAnualPanel()}
-      ${irRenderStatusInventarioPanel(ind)}
-    </div>
-    ${irRenderCiclosCards()}
-    ${irRenderContadosPorDiaPanel(ind)}
-    ${irRenderDivergentesPorDiaPanel(ind)}
-    ${irRenderLogTablePanel(ind)}
-  `;
+    ${irBuildAcuraciaLinhasSvg(rows, meta)}
+    <div class="table-wrap"><table class="dx-mensal-tab">
+      <thead><tr><th></th>${rows.map(r=>`<th>${irEsc(irMesLabel(r.mes))}</th>`).join('')}${ac?`<th>${irEsc(String(ano))}</th>`:''}</tr></thead>
+      <tbody>
+        <tr><td>Peças</td>${rows.map(r=>cel(r.pecas)).join('')}${ac?cel(ac.pecas):''}</tr>
+        <tr><td>Local</td>${rows.map(r=>cel(r.local)).join('')}${ac?cel(ac.locais):''}</tr>
+        <tr><td>Valor</td>${rows.map(r=>cel(r.valor)).join('')}${ac?cel(ac.valor):''}</tr>
+      </tbody>
+    </table></div>
+  </div>`;
 }
 /* ============================================================
    Acurácia mensal — Peças, Locais e Valor (modelo "A3" aprovado)

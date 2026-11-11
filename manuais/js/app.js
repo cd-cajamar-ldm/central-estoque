@@ -232,7 +232,7 @@
   /* Manuais oficiais da Central: vêm sempre do site (pasta exemplos/), nunca
      ficam guardados no navegador — por isso estão sempre na versão mais nova
      para todo mundo. Para mudar um, a pessoa duplica e edita a cópia. */
-  var OFICIAIS_ARQ = ['exemplos/putty-stg.json'];
+  var OFICIAIS_ARQ = ['exemplos/como-montar.json', 'exemplos/putty-stg.json'];
   var oficiais = [];
   function carregarOficiais() {
     return Promise.all(OFICIAIS_ARQ.map(function (arq) {
@@ -322,6 +322,13 @@
   };
   $('#btnNovo').onclick = function () { var m = novoManual(); store.put(m).then(function () { abrirEditor(m); }); };
   $('#btnImportar').onclick = function () { $('#fileImportar').click(); };
+  /* Ajuda: abre o manual oficial "Como montar um manual". */
+  function abrirGuia() {
+    var g = oficiais.filter(function (m) { return m.id === 'oficial-como-montar'; })[0];
+    if (g) assistir(g); else toast('Não consegui abrir o guia agora. Tente de novo em instantes.', true);
+  }
+  $('#btnGuia').onclick = abrirGuia;
+  $('#btnAjuda').onclick = abrirGuia;
   $('#fileImportar').onchange = function (e) {
     var f = e.target.files[0]; e.target.value = '';
     if (!f) return;

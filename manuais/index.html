@@ -55,6 +55,7 @@
           <input type="text" id="libSearch" placeholder="Buscar manual, sistema ou ambiente...">
         </div>
         <button class="btn pri" type="button" id="btnNovo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo manual</button>
+        <button class="btn" type="button" id="btnGuia" title="Passo a passo de como montar um manual">❓ Como montar um manual</button>
         <button class="btn" type="button" id="btnImportar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Importar projeto (.json)</button>
         <input type="file" id="fileImportar" accept=".json,application/json" hidden>
       </div>
@@ -69,6 +70,7 @@
           <p class="card-h" style="margin:0">Dados do manual</p>
           <span class="grow"></span>
           <span class="save-state" id="saveState">Salvo</span>
+          <button class="btn" type="button" id="btnAjuda" title="Como montar um manual">❓ Ajuda</button>
           <button class="btn" type="button" id="btnPreview"><svg viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z" fill="currentColor"/></svg>Assistir</button>
           <button class="btn" type="button" id="btnTreinar" title="Testar o modo treinamento: a pessoa faz cada ação">🎯 Treinar</button>
           <button class="btn" type="button" id="btnExpJson">Salvar projeto (.json)</button>
