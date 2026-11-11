@@ -992,7 +992,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v253';
+const IR_APP_VERSION = 'v254';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1076,7 +1076,6 @@ function irRenderDashDateFilterBar(){
    sobrepostos, faixa com os demais indicadores e os painéis do ciclo).
    Todos os números vêm de IR.indicadores — os mesmos 12 da aba Indicadores.
    ============================================================ */
-const IR_MES_ABREV_UP = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 // Barra dos cartões de acurácia: escala de 90% a 100% (de 0 a 100 as três
 // barras ficavam praticamente do mesmo tamanho e não diziam nada).
 function irDxPos(v){ return Math.max(2, Math.min(100, ((v||0)-0.90)/0.10*100)).toFixed(1)+'%'; }
@@ -1113,10 +1112,6 @@ function irRenderDashboard(){
   if(IR.comparativoCiclos===null) irCarregarComparativoCiclos(); // async — re-renderiza quando chegar
   const meta = ind.meta;
   const ant = irDxCicloAnterior();
-  const c = IR.cicloAtivo;
-  const per = c ? irPeriodoTrimestre(c) : null;
-  const ano = c ? irCicloAno(c) : null;
-  const badge = c ? `CICLO ${irEsc(String(c.numero||''))}${per?' · '+IR_MES_ABREV_UP[+per.inicio.slice(5,7)-1]+'–'+IR_MES_ABREV_UP[+per.fim.slice(5,7)-1]:''}${ano?' '+ano:''}` : '';
   // Base das acurácias = SALDO DO SISTEMA (rodada 1), não o total contado — sem
   // mostrar a base, 1 − divergentes ÷ contadas não reproduz o número do cartão.
   const metaTxt = 'meta '+irFmtPct(meta);
@@ -1151,7 +1146,6 @@ function irRenderDashboard(){
         </div>
         <div class="dx-hero-row">
           <div class="dx-hero-tit">
-            ${badge?`<span class="dx-badge">${badge}</span>`:''}
             <h2>Dashboard Executivo</h2>
             <span class="dx-tag">Loja do Mecânico · Lugar de quem faz</span>
           </div>
@@ -1165,7 +1159,7 @@ function irRenderDashboard(){
     <div class="dx-body">
       <section class="dx-cards">${cards}</section>
       <section class="dx-faixa">${faixa}</section>
-      <div class="bi-grid-2">
+      <div class="bi-grid-2 dx-grid-mensal">
         ${irRenderAcuraciaMensalPanel()}
         ${irRenderStatusInventarioPanel(ind)}
       </div>
@@ -1202,17 +1196,18 @@ function irAcuraciaMensalDoAno(){
     .map(g => ({mes:g.mes, pecas:acc(g.pb,g.pd), local:acc(g.lb,g.ld), valor:acc(g.vb,g.vd)}))};
 }
 function irBuildAcuraciaLinhasSvg(rows, meta){
-  const W = 640, H = 250, padL = 44, padR = 30, padT = 16, padB = 30;
+  const W = 760, H = 260, padL = 44, padR = 24, padT = 12, padB = 30;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const vals = rows.flatMap(r=>[r.pecas,r.local,r.valor]).filter(v=>v!=null);
   // Eixo começa logo abaixo do menor valor (mínimo 80%) — de 0 a 100 as linhas
   // ficariam coladas no topo e a distância até a meta sumiria.
-  let min = Math.floor((Math.min(meta, ...vals)-0.01)*100)/100;
-  min = Math.max(0.80, Math.min(min, 0.95));
+  const menor = Math.min(meta, ...vals);
+  let min = menor >= 0.95 ? Math.floor((menor-0.01)*100)/100 : Math.floor((menor-0.005)*20)/20;
+  min = Math.max(0, Math.min(min, 0.95));
   const y = v => padT + (1-(Math.max(min,v)-min)/(1-min))*plotH;
   const n = rows.length;
   const x = i => n<=1 ? padL+plotW/2 : padL + i*(plotW/(n-1));
-  const passo = (1-min) > 0.1 ? 0.05 : 0.01;
+  const passo = (1-min) > 0.25 ? 0.10 : ((1-min) > 0.1 ? 0.05 : 0.01);
   let grid = '';
   for(let t=1; t>=min-1e-9; t-=passo){
     const yy = y(t).toFixed(1);
@@ -1232,7 +1227,6 @@ function irBuildAcuraciaLinhasSvg(rows, meta){
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" class="dx-ln" role="img" aria-label="Acurácia mensal de peças, local e valor">
     ${grid}
     <line x1="${padL}" y1="${metaY}" x2="${W-padR}" y2="${metaY}" class="dx-ln-meta"/>
-    <text x="${W-padR}" y="${(+metaY-6).toFixed(1)}" text-anchor="end" class="dx-ln-meta-t">meta ${Math.round(meta*100)}%</text>
     ${linhas}${xl}
   </svg>`;
 }
@@ -1251,6 +1245,7 @@ function irRenderAcuraciaMensalPanel(){
         <span><span class="cmp-dot" style="background:var(--dx-pecas);"></span>Peças</span>
         <span><span class="cmp-dot" style="background:var(--dx-local);"></span>Local</span>
         <span><span class="cmp-dot" style="background:var(--dx-valor);"></span>Valor</span>
+        <span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span>
       </div>
     </div>
     ${irBuildAcuraciaLinhasSvg(rows, meta)}
