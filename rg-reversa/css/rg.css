@@ -1,0 +1,50 @@
+/* RG Reversa — só o que não existe no theme.css (design system do Inventário). */
+
+.rg-num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+thead th.rg-num{ text-align:right; }
+tr.rg-click{ cursor:pointer; }
+.rg-desc{ max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rg-mais{ padding:12px; text-align:center; }
+.rg-resumo{ display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft); margin:0 2px 10px; }
+.rg-resumo strong{ color:var(--ink); }
+.rg-chips{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.rg-aviso{ border-radius:10px; padding:11px 14px; font-size:12.5px; line-height:1.55; margin-bottom:16px; background:var(--orange-light); border:1px solid var(--orange); color:var(--ink); }
+.rg-aviso strong{ color:var(--orange); }
+
+/* Barras horizontais com rótulo mais largo (operador, local, classificação). */
+.bi-hbar-row.rg-largo{ grid-template-columns:190px 1fr 110px; }
+
+/* Cobertura: barra única "com RG x sem RG". */
+.rg-cob{ display:flex; height:22px; border-radius:6px; overflow:hidden; background:var(--surface2); margin:8px 0 6px; }
+.rg-cob span{ display:block; height:100%; }
+.rg-cob .c-ok{ background:var(--success); }
+.rg-cob .c-sem{ background:var(--orange); }
+.rg-leg{ display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--ink-soft); }
+.rg-leg i{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; }
+
+/* Cartões de importação */
+.rg-imp-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+.rg-imp-grid .dropzone{ cursor:pointer; padding:26px 18px; transition:border-color .15s, background .15s; }
+.rg-imp-grid .dropzone:hover, .rg-imp-grid .dropzone.over{ border-color:var(--orange); background:var(--orange-light); }
+.rg-imp-st{ font-size:11.5px; margin-top:4px; }
+@media(max-width:900px){ .rg-imp-grid{ grid-template-columns:1fr; } .bi-grid-2, .bi-grid-3, .two-col{ grid-template-columns:1fr; } }
+
+/* Ficha do RG */
+.rg-modal{ position:fixed; inset:0; z-index:90; background:rgba(8,12,30,.55); display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; }
+.rg-modal[hidden]{ display:none; }
+.rg-ficha{ width:100%; max-width:640px; background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:0 30px 60px -20px rgba(0,0,0,.5); overflow:hidden; }
+.rg-ficha-cab{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:18px 20px; background:#0B1230; color:#fff; border-bottom:3px solid var(--orange); }
+.rg-ficha-cab small{ display:block; font-size:10.5px; font-weight:700; letter-spacing:.12em; color:#FF8A4C; }
+.rg-ficha-cab strong{ font-family:'SFMono-Regular',Consolas,monospace; font-size:20px; letter-spacing:.02em; }
+.rg-ficha-cab button{ background:rgba(255,255,255,.12); border:none; color:#fff; width:30px; height:30px; border-radius:8px; font-size:18px; line-height:1; cursor:pointer; }
+.rg-ficha-corpo{ padding:16px 20px 20px; }
+.rg-ficha-item{ font-size:14px; font-weight:700; margin-bottom:12px; }
+.rg-campos{ display:grid; grid-template-columns:1fr 1fr; gap:10px 18px; }
+.rg-campos div{ border-bottom:1px solid var(--line); padding-bottom:7px; min-width:0; }
+.rg-campos div > span{ display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+.rg-campos b{ font-size:13px; font-weight:600; word-break:break-word; }
+@media(max-width:560px){ .rg-campos{ grid-template-columns:1fr; } }
+
+/* O theme.css deixa select com largura total; na barra de filtros eles ficam lado a lado. */
+.filter-bar select{ width:auto; max-width:230px; flex:0 1 auto; }
+.kpi-card .num.rg-longo{ font-size:19px; }

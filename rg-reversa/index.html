@@ -11,231 +11,96 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
-<style>
-  /* Mesmo padrão "Painel Oficina LDM" do hub raiz — mesmas variáveis,
-     mesma sidebar (252px, logo 60px interativa, nav em pílula) e mesmo
-     topbar (h1 26px Poppins, sem borda). Módulo ainda sem telas reais —
-     só a casca, igual ao NET e às Auditorias no começo. */
-  :root{
-    --bg0:#F2F4FA;--surface:#FFFFFF;--line:#DCE1F0;
-    --ink:#101633;--ink-soft:#5B6485;--card-top:#FFFFFF;--card-bottom:#FFFFFF;
-    --chip-bg:#EDF0F9;--chip-bg-hover:#E1E6F4;
-    --shadow-col:rgba(16,22,60,.14);--shadow-near:rgba(16,22,60,.06);
-    --orange:#FE5000;--rivet:rgba(16,22,60,.16);
-  }
-  body.theme-dark{
-    --bg0:#070910;--surface:rgba(255,255,255,.045);--line:rgba(255,255,255,.1);
-    --ink:#F3F2FA;--ink-soft:#8E95C2;--card-top:rgba(255,255,255,.055);--card-bottom:rgba(255,255,255,.02);
-    --chip-bg:rgba(255,255,255,.06);--chip-bg-hover:rgba(255,255,255,.14);
-    --shadow-col:rgba(0,0,0,.55);--shadow-near:rgba(0,0,0,.3);--rivet:rgba(255,255,255,.22);
-  }
-  *{box-sizing:border-box;}
-  body{margin:0;font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg0);color:var(--ink);-webkit-font-smoothing:antialiased;transition:background .3s,color .3s;}
-  a{color:var(--orange);}
-  :focus-visible{outline:2px solid var(--orange);outline-offset:2px;}
-
-  .zoom-ctrl{display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:100px;padding:3px;}
-  .zoom-ctrl button{width:24px;height:24px;border-radius:50%;border:none;background:var(--chip-bg);color:var(--ink);font-size:15px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;}
-  .zoom-ctrl button:hover{background:var(--orange-light,rgba(254,80,0,.12));color:var(--orange);}
-  .zoom-ctrl span{font-size:11px;color:var(--ink-soft);min-width:34px;text-align:center;font-family:'SFMono-Regular',Consolas,monospace;}
-  .zoom-ctrl-float{position:fixed;right:16px;bottom:16px;z-index:70;box-shadow:0 6px 18px rgba(0,0,0,.18);}
-
-  .shell{display:flex;min-height:100vh;width:100%;}
-
-  /* SIDEBAR — azul-marinho fixo, não acompanha o tema (âncora visual da marca) */
-  .sidebar{width:252px;flex-shrink:0;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
-  .brand{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
-  .brand-logo{position:relative;width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;overflow:hidden;border:none;box-shadow:0 10px 22px -6px rgba(254,80,0,.6),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s;padding:0;}
-  .brand-logo:hover{transform:translateY(-2px) scale(1.045);}
-  .brand-logo::before{content:'';position:absolute;top:-50%;left:-70%;width:55%;height:220%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:rotate(18deg);animation:shine 5s ease-in-out infinite;}
-  @keyframes shine{0%{left:-70%;}38%{left:150%;}100%{left:150%;}}
-  .brand-logo img{position:relative;z-index:1;width:70%;height:70%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));pointer-events:none;}
-  .brand-logo:hover img{animation:wiggle 1s ease-in-out infinite;}
-  @keyframes wiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
-  .brand-logo.spin img{animation:spin360 .6s cubic-bezier(.34,1.56,.64,1);}
-  @keyframes spin360{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
-  .brand-name{font-family:'Poppins',sans-serif;font-size:17px;font-weight:800;color:#fff;line-height:1.15;}
-  .brand-sub{font-size:11px;color:#8891C4;margin-top:2px;}
-
-  .brand-back{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:0 0 16px;border-radius:11px;color:#9BA2CC;text-decoration:none;font-size:12.5px;font-weight:600;transition:background .2s,color .2s;}
-  .brand-back:hover{background:rgba(255,255,255,.06);color:#fff;}
-
-  .sb-nav{display:flex;flex-direction:column;gap:3px;margin:4px 0 20px;}
-  .sb-nav-item{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;border-radius:11px;padding:10px 12px;color:#9BA2CC;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:background .2s,color .2s;}
-  .sb-nav-item svg{flex-shrink:0;opacity:.85;transition:opacity .2s,color .2s;}
-  .sb-nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
-  .sb-nav-item.active{background:rgba(254,80,0,.16);color:#fff;}
-  .sb-nav-item.active svg{color:var(--orange);opacity:1;}
-
-  .sb-foot{margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:#6B74A8;}
-
-  /* MAIN */
-  .main{position:relative;flex:1;min-width:0;padding:40px 48px 70px;}
-  .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;}
-  .topbar h1{font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;margin:0;}
-  .topbar p{margin:5px 0 0;color:var(--ink-soft);font-size:13.5px;max-width:480px;}
-  .topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;}
-  .cd-badge{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;}
-  .theme-switch{position:relative;width:54px;height:28px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
-  .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
-  .theme-switch.on .theme-knob{left:29px;}
-
-  .wip-card{position:relative;background:linear-gradient(180deg,var(--card-top),var(--card-bottom));border:1px solid var(--line);border-radius:22px;padding:48px;text-align:center;margin-top:24px;box-shadow:0 1px 2px var(--shadow-near),0 14px 30px -18px var(--shadow-col);}
-  .wip-card .wip-emoji{font-size:40px;margin-bottom:14px;}
-  .wip-card h2{font-family:'Poppins',sans-serif;font-size:18px;font-weight:800;margin:0 0 8px;}
-  .wip-card p{color:var(--ink-soft);font-size:13.5px;max-width:460px;margin:0 auto;}
-
-  @media(max-width:760px){
-    .shell{flex-direction:column;}
-    .sidebar{width:100%;flex-direction:row;align-items:center;padding:16px 20px;flex-wrap:wrap;}
-    .brand{margin-bottom:0;}
-    .brand-back{display:none;}
-    .sb-nav{display:none;}
-    .sb-foot{display:none;}
-    .main{padding:24px 18px 50px;}
-  }
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
+<!-- theme.css é o mesmo design system do app de Inventário (cópia, como nos
+     outros módulos); rg.css só acrescenta o que é próprio do RG Reversa. -->
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/rg.css">
 </head>
 <body>
 <div class="shell">
-
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <button class="brand-logo" id="brandLogo" type="button" aria-label="Oficina LDM">
+      <button class="brand-logo" id="brandLogo" type="button" aria-label="Loja do Mecânico">
         <img src="brand/Logo_LDM_icon.png" alt="">
       </button>
-      <div>
+      <div class="brand-text">
         <div class="brand-name">OFICINA LDM</div>
         <div class="brand-sub">lugar de quem faz</div>
       </div>
+      <button class="sidebar-toggle" type="button" data-act="sidebar" title="Recolher menu">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
     </div>
     <a class="brand-back" href="../">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       <span>Voltar para a Central</span>
     </a>
-    <nav class="sb-nav" id="nav">
-      <button class="sb-nav-item active" type="button" data-tab="painel">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        <span>Painel</span>
-      </button>
+    <nav class="sidebar-nav" id="sidebarNav">
+      <div class="nav-section-label">Visão geral</div>
+      <button class="nav-item" data-tab="painel"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Painel</span></button>
+
+      <div class="nav-section-label">Operação</div>
+      <button class="nav-item" data-tab="rgs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg><span>Consulta de RGs</span></button>
+      <button class="nav-item" data-tab="cobertura"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg><span>Estoque sem RG</span></button>
+      <button class="nav-item" data-tab="produtividade"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Produtividade</span></button>
+
+      <div class="nav-section-label">Análise</div>
+      <button class="nav-item" data-tab="classificacao"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>Classificação</span></button>
+      <button class="nav-item" data-tab="tempo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Tempo parado</span></button>
+
+      <div class="nav-section-label">Sistema</div>
+      <button class="nav-item" data-tab="importacao"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Importação</span></button>
     </nav>
-    <div class="sb-foot">Loja do Mecânico &middot; CD Cajamar</div>
+    <div class="sidebar-footer">
+      Loja do Mecânico &middot; CD Cajamar
+      <div class="sidebar-versao" id="sidebarVersao"></div>
+    </div>
   </aside>
 
-  <main class="main">
+  <main class="content">
     <div class="topbar">
-      <div>
-        <h1 id="tab-title">Painel</h1>
-        <p id="tab-subtitle">RG Reversa — Oficina LDM.</p>
+      <button class="mobile-menu-btn" type="button" data-act="sidebar" title="Abrir menu" aria-label="Abrir menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-titles">
+        <h1 id="tabTitle">Painel</h1>
+        <p id="tabSubtitle">RG Reversa — Oficina LDM.</p>
       </div>
-      <div class="topbar-actions">
-        <span class="cd-badge">CD CAJAMAR</span>
-        <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro">
-          <span class="theme-knob" id="themeKnob"></span>
-        </button>
+      <div class="topbar-gears" aria-hidden="true">
+        <svg class="tb-gear tb-gear-big" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+        <svg class="tb-gear tb-gear-small" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
       </div>
+      <input class="global-search" id="globalSearch" type="text" placeholder="Buscar RG, item, EAN ou descrição...">
+      <div class="topbar-filters">
+        <div class="tb-filter">
+          <label>Base de RGs</label>
+          <div id="cycleBadge">Sem dados</div>
+        </div>
+      </div>
+      <button class="theme-switch" id="themeSwitchBtn" type="button" data-act="tema" aria-label="Alternar tema claro/escuro">
+        <span class="theme-knob"></span>
+      </button>
     </div>
-
-    <div class="view" data-view="painel">
-      <div class="wip-card">
-        <div class="wip-emoji">🛠️</div>
-        <h2>Módulo em construção</h2>
-        <p>As telas de verdade do RG Reversa entram num próximo passo.</p>
-      </div>
+    <div class="page-scroll">
+      <div id="viewRoot"><p class="field-hint">Carregando...</p></div>
     </div>
-
   </main>
+  <div class="sidebar-backdrop" data-act="fecha-sidebar"></div>
 </div>
 
 <div class="zoom-ctrl zoom-ctrl-float" title="Zoom da tela">
-  <button type="button" id="zoomOut" aria-label="Diminuir zoom">&minus;</button>
+  <button type="button" data-act="zoom-menos" aria-label="Diminuir zoom">−</button>
   <span id="zoomLabel">100%</span>
-  <button type="button" id="zoomIn" aria-label="Aumentar zoom">+</button>
+  <button type="button" data-act="zoom-mais" aria-label="Aumentar zoom">+</button>
 </div>
 
-<script>
-(function(){
-  /* Mesma chave usada no Painel Oficina LDM (raiz) — os dois compartilham
-     origem, então o tema escolhido em um lugar vale no outro também. */
-  var SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-  var MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  var btn = document.getElementById('themeSwitch');
-  var knob = document.getElementById('themeKnob');
-  function apply(dark){
-    document.body.classList.toggle('theme-dark', dark);
-    btn.classList.toggle('on', dark);
-    knob.innerHTML = dark ? MOON : SUN;
-  }
-  var dark = false;
-  try { dark = localStorage.getItem('ldm-theme') === 'dark'; } catch(e){}
-  apply(dark);
-  btn.addEventListener('click', function(){
-    dark = !dark;
-    apply(dark);
-    try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
-  });
-})();
+<input type="file" id="fileInput" accept=".xlsx,.xls,.xlsb,.csv" multiple hidden>
+<div id="rgModal" class="rg-modal" hidden></div>
+<div id="toast" class="toast hidden"></div>
 
-(function(){
-  var MIN = 70, MAX = 150, STEP = 10;
-  var label = document.getElementById('zoomLabel');
-  function aplicar(pct){
-    pct = Math.max(MIN, Math.min(MAX, pct));
-    document.body.style.zoom = (pct / 100);
-    if(label) label.textContent = pct + '%';
-    try { localStorage.setItem('ldm-zoom', pct); } catch(e){}
-    return pct;
-  }
-  var atual = 100;
-  try { atual = parseInt(localStorage.getItem('ldm-zoom'), 10) || 100; } catch(e){}
-  atual = aplicar(atual);
-  var btnOut = document.getElementById('zoomOut');
-  var btnIn = document.getElementById('zoomIn');
-  if(btnOut) btnOut.addEventListener('click', function(){ atual = aplicar(atual - STEP); });
-  if(btnIn) btnIn.addEventListener('click', function(){ atual = aplicar(atual + STEP); });
-})();
-
-document.getElementById('brandLogo').addEventListener('click', function(){
-  var el = this;
-  el.classList.remove('spin');
-  void el.offsetWidth;
-  el.classList.add('spin');
-});
-
-(function(){
-  var TAB_LABELS = {
-    painel: ['Painel', 'RG Reversa — Oficina LDM.']
-  };
-  var titleEl = document.getElementById('tab-title');
-  var subtitleEl = document.getElementById('tab-subtitle');
-  var navEl = document.getElementById('nav');
-
-  function switchTab(tab){
-    if(!TAB_LABELS[tab]) return;
-    document.querySelectorAll('.view').forEach(function(v){
-      v.hidden = v.dataset.view !== tab;
-    });
-    document.querySelectorAll('.sb-nav-item[data-tab]').forEach(function(b){
-      b.classList.toggle('active', b.dataset.tab === tab);
-    });
-    titleEl.textContent = TAB_LABELS[tab][0];
-    subtitleEl.textContent = TAB_LABELS[tab][1];
-    try { history.replaceState(null, '', '#' + tab); } catch(e){}
-  }
-
-  navEl.addEventListener('click', function(e){
-    var btn = e.target.closest('.sb-nav-item[data-tab]');
-    if(btn) switchTab(btn.dataset.tab);
-  });
-
-  var initialTab = 'painel';
-  try {
-    var hashTab = decodeURIComponent(location.hash.slice(1));
-    if(hashTab && TAB_LABELS[hashTab]) initialTab = hashTab;
-  } catch(e){}
-  switchTab(initialTab);
-})();
-</script>
+<script src="../version.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
