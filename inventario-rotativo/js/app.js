@@ -374,39 +374,47 @@ const IR_TAB_LABELS = {
   configuracoes:['Configurações','Pesos do Índice de Prioridade de Auditoria.'],
   gestaoInventario:['Gestão de Inventário','Inventário + local com contagem errada, desconsiderados da acurácia com justificativa.'],
   exportar:['Exportar','Exporte toda a base, as regras/lógicas e os indicadores do sistema.'],
-  insumo:['Insumo','Painel de Insumo.'],
-  reversa:['Reversa','Painel da Reversa.']
 };
+/* Reversa e Insumos repetem as abas do Rotativo (menos NET, que vai para outro
+   app). Por enquanto abrem "em construção" — chave: reversa_<aba>, insumo_<aba>. */
+const IR_AREAS_EXTRA = {reversa:'Reversa', insumo:'Insumos'};
+const IR_ABAS_AREA = ['dashboard','produtividade','setores','divergencias','indicadores'];
+for(const [area, nomeArea] of Object.entries(IR_AREAS_EXTRA)){
+  for(const aba of IR_ABAS_AREA){
+    IR_TAB_LABELS[area+'_'+aba] = [nomeArea+' · '+IR_TAB_LABELS[aba][0], 'Em construção.'];
+  }
+}
+function irTabEhAreaExtra(tab){ return /^(reversa|insumo)_/.test(tab||''); }
 /* Abas que não são do ciclo rotativo: sem ciclo e sem contagem, o filtro de
    ciclo e mês do topo não tem sobre o que agir. Hoje nenhuma aba está nesse
    caso — Transitórios, que era a única, virou módulo próprio (../transitorios/). */
-const IR_TAB_SEM_CICLO = new Set(['exportar','insumo','reversa']);
+const IR_TAB_SEM_CICLO = new Set(['exportar']);
 /* Menu separado por área (Inventário Rotativo, Insumo, Reversa). Cada grupo abre
    e fecha pelo título; o estado fica salvo no navegador. O grupo da aba aberta
    sempre fica aberto, senão a aba ativa sumiria do menu. */
 function irAplicarGrupos(){
   let fechados = [];
-  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados')||'[]'); }catch(_){}
+  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
   document.querySelectorAll('.nav-group').forEach(g=>{
     const temAtiva = !!g.querySelector('.nav-item.active');
     const fechado = fechados.includes(g.dataset.grupo) && !temAtiva;
     g.classList.toggle('fechado', fechado);
-    const h = g.querySelector('.nav-group-h');
+    const h = g.querySelector(':scope > .nav-group-h');
     if(h) h.setAttribute('aria-expanded', String(!fechado));
   });
 }
 function irToggleGrupo(chave){
   let fechados = [];
-  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados')||'[]'); }catch(_){}
+  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
   const g = document.querySelector(`.nav-group[data-grupo="${chave}"]`);
   const fechar = g && !g.classList.contains('fechado');
   fechados = fechados.filter(k=>k!==chave);
   if(fechar) fechados.push(chave);
-  try{ localStorage.setItem('ir-menu-fechados', JSON.stringify(fechados)); }catch(_){}
-  if(g){ g.classList.toggle('fechado', fechar); g.querySelector('.nav-group-h').setAttribute('aria-expanded', String(!fechar)); }
+  try{ localStorage.setItem('ir-menu-fechados2', JSON.stringify(fechados)); }catch(_){}
+  if(g){ g.classList.toggle('fechado', fechar); g.querySelector(':scope > .nav-group-h').setAttribute('aria-expanded', String(!fechar)); }
 }
 function irRenderEmConstrucao(area){
-  return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores de ${irEsc(area)} vão aparecer aqui.</p></div>`;
+  return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores desta aba vão aparecer aqui.</p></div>`;
 }
 function irSwitchTab(tab){
   IR.currentTab = tab;
@@ -419,7 +427,7 @@ function irSwitchTab(tab){
   // ficava no topo sem efeito nenhum sobre a tela, sugerindo um recorte que a
   // aba não faz.
   const filtros = document.getElementById('topbarFilters');
-  if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab);
+  if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab) || irTabEhAreaExtra(tab);
   // NET é independente do ciclo rotativo (QRY410 é por ano, não por ciclo): troca
   // Ciclo/Mês (que não têm efeito nenhum sobre a NET) pelo Ano/Mês da própria QRY410
   // no topo — mesmo lugar de sempre, só que com o filtro certo pra essa aba.
@@ -508,8 +516,8 @@ function irRenderView(){
   if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias');
   // Transitórios não depende de ciclo importado: é um controle próprio, não uma
   // leitura da contagem.
-  const SEM_CICLO = new Set(['importacao','configuracoes','exportar','gestaoInventario','insumo','reversa']);
-  const needsCiclo = !SEM_CICLO.has(IR.currentTab);
+  const SEM_CICLO = new Set(['importacao','configuracoes','exportar','gestaoInventario']);
+  const needsCiclo = !SEM_CICLO.has(IR.currentTab) && !irTabEhAreaExtra(IR.currentTab);
   if(needsCiclo && !IR.cicloAtivo){
     root.innerHTML = IR.initErro
       ? irEmptyState('Não foi possível ler os dados salvos',
@@ -524,10 +532,11 @@ function irRenderView(){
     divergencias: irRenderDivergencias,
     indicadores: irRenderIndicadores,
     importacao: irRenderImportacao, configuracoes: irRenderConfiguracoes,
-    exportar: irRenderExportar, gestaoInventario: irRenderGestaoInventario,
-    insumo: ()=>irRenderEmConstrucao('Insumo'), reversa: ()=>irRenderEmConstrucao('Reversa')
+    exportar: irRenderExportar, gestaoInventario: irRenderGestaoInventario
   };
-  root.innerHTML = (renderers[IR.currentTab] || (()=>''))();
+  root.innerHTML = irTabEhAreaExtra(IR.currentTab)
+    ? irRenderEmConstrucao(IR_TAB_LABELS[IR.currentTab][0])
+    : (renderers[IR.currentTab] || (()=>''))();
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
   irFitKpiNumbers();
 }
@@ -1023,7 +1032,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v255';
+const IR_APP_VERSION = 'v256';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.

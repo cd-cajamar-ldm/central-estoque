@@ -1762,18 +1762,23 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
   .dx-tile{ border-right:0; border-bottom:1px solid var(--line); }
 }
 
-/* Menu separado por área: Inventário Rotativo, Insumo, Reversa. */
-.nav-group{ margin-top:6px; }
+/* Menu: Inventário > Rotativo / Reversa / Insumos > abas. */
 .nav-group-h{
   display:flex; align-items:center; justify-content:space-between; width:100%; background:none; border:none; cursor:pointer;
-  font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#C9D0F2;
-  padding:12px 12px 6px; white-space:nowrap;
+  border-radius:11px; white-space:nowrap; font-family:'Inter',sans-serif;
 }
-.nav-group-h:hover{ color:#fff; }
-.nav-group-h .ng-chev{ transition:transform .2s; opacity:.7; }
-.nav-group.fechado .ng-chev{ transform:rotate(-90deg); }
-.nav-group.fechado .nav-group-body{ display:none; }
-.nav-group + .nav-group{ border-top:1px solid rgba(255,255,255,.08); }
-.sidebar.collapsed .nav-group-h{ height:0; padding:0; margin:10px 14px; overflow:hidden; border-top:1px solid rgba(255,255,255,.16); }
-.sidebar.collapsed .nav-group.fechado .nav-group-body{ display:block; }
-.sidebar.collapsed .nav-group + .nav-group{ border-top:0; }
+.nav-group-h .ng-chev{ transition:transform .2s; opacity:.7; flex-shrink:0; }
+.nav-group.fechado > .nav-group-h .ng-chev{ transform:rotate(-90deg); }
+.nav-group.fechado > .nav-group-body{ display:none; }
+.nav-top{ margin-top:8px; }
+.nav-top > .nav-group-h{ padding:10px 12px; font-size:13.5px; font-weight:800; color:#fff; }
+.nav-top > .nav-group-h:hover{ background:rgba(255,255,255,.06); }
+.nav-top > .nav-group-h .ng-tit{ display:flex; align-items:center; gap:11px; }
+.nav-top > .nav-group-h .ng-tit svg{ color:var(--orange); }
+.nav-sub{ margin:2px 0 2px 14px; padding-left:8px; border-left:1px solid rgba(255,255,255,.12); }
+.nav-sub > .nav-group-h{ padding:8px 10px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:#C9D0F2; }
+.nav-sub > .nav-group-h:hover{ color:#fff; background:rgba(255,255,255,.04); }
+.nav-sub .nav-item{ padding:8px 10px; font-size:12.5px; }
+.sidebar.collapsed .nav-group-h{ height:0; padding:0 !important; margin:10px 14px; overflow:hidden; border-top:1px solid rgba(255,255,255,.16); }
+.sidebar.collapsed .nav-sub{ margin:0; padding:0; border-left:0; }
+.sidebar.collapsed .nav-group.fechado > .nav-group-body{ display:block; }
