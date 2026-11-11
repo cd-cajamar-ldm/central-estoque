@@ -1,0 +1,992 @@
+{
+ "id": "oficial-como-montar",
+ "titulo": "Como montar um manual",
+ "sistema": "Manuais",
+ "ambiente": "Guia",
+ "descricao": "Passo a passo para criar o seu manual: dados, etapas, prints, ações animadas, textos, quiz, teste e exportação. Cada campo do editor explicado.",
+ "conclusao": "Agora é com você: clique em Novo manual e monte o seu. Faça o quiz para conferir se pegou tudo.",
+ "autor": "Oficina LDM",
+ "fundo": "claro",
+ "imagens": {
+  "01-biblioteca": "exemplos/como-montar/01-biblioteca.webp",
+  "02-dados": "exemplos/como-montar/02-dados.webp",
+  "03-etapa": "exemplos/como-montar/03-etapa.webp",
+  "04-print": "exemplos/como-montar/04-print.webp",
+  "05-acao-digitar": "exemplos/como-montar/05-acao-digitar.webp",
+  "06-acao-clique": "exemplos/como-montar/06-acao-clique.webp",
+  "07-texto": "exemplos/como-montar/07-texto.webp",
+  "08-quiz": "exemplos/como-montar/08-quiz.webp",
+  "09-cena": "exemplos/como-montar/09-cena.webp",
+  "10-tecla": "exemplos/como-montar/10-tecla.webp",
+  "11-senha": "exemplos/como-montar/11-senha.webp"
+ },
+ "passos": [
+  {
+   "titulo": "Criar o manual",
+   "caminho": [
+    "Biblioteca"
+   ],
+   "instrucoes": [
+    "Na **Biblioteca**, clique em **Novo manual**",
+    "Os manuais com selo **★ Oficial da Central** são só para assistir/treinar — para mudar um, use **Duplicar p/ editar**",
+    "**Importar projeto (.json)** abre um manual que alguém te mandou"
+   ],
+   "valores": [],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "01-biblioteca",
+     "legenda": "Esta é a Biblioteca de manuais",
+     "detalhe": "Aqui ficam os manuais oficiais da Central e os que você criou neste navegador."
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      2.41,
+      13.29,
+      43.69,
+      84.72
+     ],
+     "legenda": "Manual oficial: sempre na versão mais nova",
+     "detalhe": "Oficial não se edita direto. Botões: Treinar (faça você), Exportar (gera o .html) e Duplicar p/ editar (cria uma cópia sua).",
+     "balao": "★ Oficial"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      69.37,
+      3.55,
+      23.7,
+      7.25
+     ],
+     "legenda": "Importar projeto (.json)",
+     "detalhe": "Abre um manual salvo em .json — para continuar a edição em outro computador ou receber o de um colega.",
+     "balao": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      52.41,
+      3.55,
+      16.53,
+      7.25
+     ],
+     "legenda": "Para começar, clique em Novo manual",
+     "detalhe": "O editor abre com uma etapa em branco.",
+     "balao": "",
+     "realce": true,
+     "marcar": false,
+     "dir": false
+    }
+   ]
+  },
+  {
+   "titulo": "Dados do manual",
+   "caminho": [
+    "Editor",
+    "Dados do manual"
+   ],
+   "instrucoes": [
+    "**Título**: o nome do manual (aparece no topo e no nome do arquivo)",
+    "**Sistema** e **Ambiente**: viram etiquetas (ex.: BSeller · STG)",
+    "**Autor / setor**: quem fez",
+    "**Descrição**: frase curta que aparece abaixo do título",
+    "**Mensagem final**: texto da tela \"Serviço concluído\"",
+    "**Fundo atrás do print**: a cor/estampa da bancada onde o print aparece"
+   ],
+   "valores": [],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "02-dados",
+     "legenda": "Primeiro, os dados do manual",
+     "detalhe": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      3.02,
+      32.71,
+      36.72,
+      12.01
+     ],
+     "texto": "Configurando o PuTTY STG",
+     "legenda": "Título: o nome do manual",
+     "detalhe": "Aparece no topo do manual e vira o nome do arquivo exportado.",
+     "balao": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      40.49,
+      32.71,
+      18.5,
+      12.01
+     ],
+     "texto": "BSeller",
+     "legenda": "Sistema: qual sistema o manual ensina",
+     "detalhe": "Vira uma etiqueta laranja no topo.",
+     "balao": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      59.74,
+      32.71,
+      18.5,
+      12.01
+     ],
+     "texto": "STG",
+     "legenda": "Ambiente: STG, PRD, coletor…",
+     "detalhe": "Também vira etiqueta. Ajuda a não confundir teste com produção.",
+     "balao": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      78.99,
+      32.71,
+      18.49,
+      12.01
+     ],
+     "texto": "Estoque · CD Cajamar",
+     "legenda": "Autor / setor: quem fez o manual",
+     "detalhe": "",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      2.89,
+      53.15,
+      56.24,
+      22.07
+     ],
+     "legenda": "Descrição: uma frase explicando o manual",
+     "detalhe": "Aparece logo abaixo do título.",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      59.6,
+      53.15,
+      38.01,
+      22.07
+     ],
+     "legenda": "Mensagem final: aparece quando o manual termina",
+     "detalhe": "Ex.: \"Pronto! Dê dois cliques no atalho para abrir o sistema.\"",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      13.52,
+      77.02,
+      21.57,
+      14.32
+     ],
+     "legenda": "Fundo atrás do print",
+     "detalhe": "Bancada azul, claro, branco, laranja, grafite, sem fundo ou uma cor que você escolher.",
+     "balao": "Fundo"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      41.3,
+      13.5,
+      4.33,
+      6.59
+     ],
+     "legenda": "O manual salva sozinho no navegador",
+     "detalhe": "Fica \"Salvo\" a cada mudança. Para levar a outro computador, use Salvar projeto (.json).",
+     "balao": "Salvo"
+    }
+   ]
+  },
+  {
+   "titulo": "Etapas",
+   "caminho": [
+    "Editor",
+    "Etapas"
+   ],
+   "instrucoes": [
+    "Cada **etapa** é uma parte do processo (ex.: \"Dados da sessão\", \"Teclado\")",
+    "**Título da etapa**: o nome que aparece na lista lateral",
+    "**Caminho na tela**: onde a pessoa está no sistema — separe com **>** (ex.: `Session > Logging`)",
+    "**↑ ↓** mudam a ordem; **Duplicar** copia a etapa; **Excluir** apaga",
+    "**+ Nova etapa** cria outra (começa sem print)"
+   ],
+   "valores": [
+    {
+     "rotulo": "Exemplo de caminho",
+     "valor": "Session > Logging"
+    }
+   ],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "03-etapa",
+     "legenda": "Agora as etapas do manual",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      0.92,
+      1.46,
+      21.91,
+      25.23
+     ],
+     "legenda": "Lista de etapas",
+     "detalhe": "Clique numa etapa para editá-la. O número mostra a ordem.",
+     "balao": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      25.93,
+      8.4,
+      27.82,
+      6.2
+     ],
+     "texto": "Dados da sessão",
+     "legenda": "Título da etapa",
+     "detalhe": "Aparece na \"ordem de serviço\" ao lado do manual.",
+     "balao": ""
+    },
+    {
+     "tipo": "digitar",
+     "area": [
+      54.5,
+      8.4,
+      23.23,
+      6.2
+     ],
+     "texto": "Session > Logging",
+     "legenda": "Caminho na tela (separe com >)",
+     "detalhe": "Mostra para a pessoa em que menu/tela ela está.",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      78.35,
+      8.8,
+      19.28,
+      6.06
+     ],
+     "legenda": "Mover, duplicar ou excluir a etapa",
+     "detalhe": "",
+     "balao": ""
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      2.21,
+      18.13,
+      19.35,
+      6.06
+     ],
+     "legenda": "+ Nova etapa cria a próxima",
+     "detalhe": "A etapa nova começa com o espaço do print vazio.",
+     "balao": "",
+     "realce": true,
+     "marcar": false,
+     "dir": false
+    }
+   ]
+  },
+  {
+   "titulo": "Colocar o print da tela",
+   "caminho": [
+    "Editor",
+    "Roteiro da animação"
+   ],
+   "instrucoes": [
+    "Abra o sistema na tela certa e tire o print com **Win + Shift + S**",
+    "Volte ao editor e aperte **Ctrl + V** — o print aparece no quadro",
+    "Também dá para **arrastar** uma imagem ou usar **Nova tela**",
+    "Quando a tela do sistema mudar, cole **outro print**"
+   ],
+   "valores": [
+    {
+     "rotulo": "Tirar print",
+     "valor": "Win + Shift + S"
+    },
+    {
+     "rotulo": "Colar no editor",
+     "valor": "Ctrl + V"
+    }
+   ],
+   "acoes": [
+    {
+     "tipo": "destacar",
+     "area": [
+      26.99,
+      42.64,
+      41.74,
+      51.27
+     ],
+     "legenda": "Este é o quadro do print",
+     "detalhe": "Ele fica vazio até você colar a imagem da tela.",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      26.99,
+      42.64,
+      41.74,
+      51.27
+     ],
+     "legenda": "No sistema, tire o print com Win + Shift + S",
+     "detalhe": "Selecione só a janela que interessa.",
+     "balao": "Win + Shift + S"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      26.99,
+      42.64,
+      41.74,
+      51.27
+     ],
+     "legenda": "Volte ao editor e cole com Ctrl + V",
+     "detalhe": "Ou arraste a imagem para cá, ou use o botão Nova tela.",
+     "balao": "Ctrl + V"
+    },
+    {
+     "tipo": "tela",
+     "img": "04-print",
+     "legenda": "Pronto: o print aparece e vira a ação 1 (Tela)",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      61.75,
+      18.17,
+      34.94,
+      78.3
+     ],
+     "legenda": "Lista de ações da etapa",
+     "detalhe": "Tudo que acontece na animação aparece aqui, na ordem. ↑ ↓ mudam a ordem, ✕ apaga.",
+     "balao": ""
+    }
+   ]
+  },
+  {
+   "titulo": "Marcar as ações",
+   "caminho": [
+    "Editor",
+    "Ferramentas"
+   ],
+   "instrucoes": [
+    "**Clique** / **Botão direito**: clique sobre o botão ou campo no print",
+    "**Digitar**: arraste um retângulo sobre o campo e escreva o texto",
+    "**Lista suspensa**: marque a caixa da lista, escreva as opções e qual escolher",
+    "**Tecla**: ENTER, F4, SHIFT+F6… (não precisa de print)",
+    "**Destacar**: chama atenção para uma área",
+    "**Cena do físico**: animação do palete, bipagem e conferência",
+    "Em cada ação: **Legenda** (frase curta), **Explicação detalhada** (opcional) e **Etiqueta** (selo laranja)"
+   ],
+   "valores": [],
+   "acoes": [
+    {
+     "tipo": "destacar",
+     "area": [
+      3.53,
+      3.53,
+      93.38,
+      13.65
+     ],
+     "legenda": "Ferramentas de ação",
+     "detalhe": "Escolha a ferramenta e marque no print. Esc cancela.",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      17.18,
+      3.53,
+      10.1,
+      6.86
+     ],
+     "legenda": "Clique e Botão direito",
+     "detalhe": "Clique no lugar exato. Arrastar cria uma área maior.",
+     "balao": "Clique"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      41.4,
+      3.53,
+      10.28,
+      6.86
+     ],
+     "legenda": "Digitar: o texto aparece sendo digitado no campo",
+     "detalhe": "",
+     "balao": "Digitar"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      51.63,
+      3.53,
+      15.69,
+      6.86
+     ],
+     "legenda": "Lista suspensa: abre a lista e escolhe a opção",
+     "detalhe": "",
+     "balao": "Lista"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      67.27,
+      3.53,
+      9.43,
+      6.86
+     ],
+     "legenda": "Tecla: mostra a tecla sendo apertada",
+     "detalhe": "",
+     "balao": "Tecla"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      3.53,
+      10.32,
+      15.22,
+      6.86
+     ],
+     "legenda": "Cena do físico: palete, bipagem e conferência",
+     "detalhe": "",
+     "balao": "Cena"
+    },
+    {
+     "tipo": "tela",
+     "img": "05-acao-digitar",
+     "legenda": "Exemplo: uma ação Digitar já marcada",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      27.32,
+      23.99,
+      15.16,
+      4.49
+     ],
+     "legenda": "A área marcada fica numerada no print",
+     "detalhe": "",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      24.48,
+      32.49,
+      6.94
+     ],
+     "legenda": "Legenda: frase curta que aparece embaixo da tela",
+     "detalhe": "Escreva como uma ordem: \"Clique em Save\", \"Digite 2222\".",
+     "balao": "Legenda"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      35.45,
+      32.49,
+      15.04
+     ],
+     "legenda": "Explicação detalhada (opcional)",
+     "detalhe": "O porquê, o que cada opção significa, cuidados. A animação espera o tempo de leitura.",
+     "balao": "Explicação"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      54.51,
+      32.49,
+      6.94
+     ],
+     "legenda": "Texto digitado",
+     "detalhe": "O que aparece sendo digitado. Use {{chave}} para o dado que o leitor preenche.",
+     "balao": "Texto"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      65.51,
+      32.49,
+      6.94
+     ],
+     "legenda": "Etiqueta (opcional): selo laranja sobre a tela",
+     "detalhe": "Ex.: \"SSH ✓\", \"Salvo ✓\".",
+     "balao": "Etiqueta"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      74.33,
+      14.58,
+      7.13
+     ],
+     "legenda": "Redesenhar área: marca de novo o lugar da ação",
+     "detalhe": "",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      77.53,
+      74.33,
+      14.6,
+      7.13
+     ],
+     "legenda": "+ Print do depois: mostra como a tela fica depois",
+     "detalhe": "Coloca, logo após a ação, o print da tela já alterada.",
+     "balao": ""
+    },
+    {
+     "tipo": "tela",
+     "img": "06-acao-clique",
+     "legenda": "Opções do Clique",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      61.75,
+      5.07,
+      34.94,
+      95.82
+     ],
+     "legenda": "Caixa marcada ✓, Destacar depois e Botão direito",
+     "detalhe": "Caixa marcada desenha o checkbox marcado; Destacar deixa a área em evidência depois do clique.",
+     "balao": ""
+    }
+   ]
+  },
+  {
+   "titulo": "Tecla e Cena do físico",
+   "caminho": [
+    "Editor",
+    "Ferramentas"
+   ],
+   "instrucoes": [
+    "**Tecla**: escreva a tecla ou use os atalhos (ENTER, TAB, F4…). Use **+** para combinação: `Shift+F6`",
+    "**Cena do físico**: escolha o modelo — **Separar palete por SKU**, **Bipar unidade por unidade** ou **Conferir físico x bipado**",
+    "Preencha os campos do modelo (SKUs, quantidade, local…). A prévia aparece no quadro"
+   ],
+   "valores": [
+    {
+     "rotulo": "Exemplo de tecla combinada",
+     "valor": "Shift+F6"
+    }
+   ],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "09-cena",
+     "legenda": "Cena do físico: animação sem print",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      57.88,
+      32.49,
+      7.95
+     ],
+     "legenda": "Escolha o modelo da cena",
+     "detalhe": "Separar palete, bipar unidade por unidade ou conferir físico x bipado.",
+     "balao": "Modelo"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      70.23,
+      32.49,
+      16.32
+     ],
+     "legenda": "Preencha os dados da cena",
+     "detalhe": "Aqui: SKUs do palete (um por linha) e caixas por SKU.",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      5.08,
+      15.48,
+      54.26,
+      65.45
+     ],
+     "legenda": "A prévia mostra como a cena termina",
+     "detalhe": "",
+     "balao": ""
+    },
+    {
+     "tipo": "tela",
+     "img": "10-tecla",
+     "legenda": "Tecla: ENTER, F4, SHIFT+F6…",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      51.89,
+      32.49,
+      5.13
+     ],
+     "legenda": "Escreva a tecla — use + para combinação",
+     "detalhe": "",
+     "balao": "Tecla"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      62.97,
+      57.26,
+      32.49,
+      10.49
+     ],
+     "legenda": "Ou clique num atalho pronto",
+     "detalhe": "",
+     "balao": ""
+    }
+   ]
+  },
+  {
+   "titulo": "Texto da etapa",
+   "caminho": [
+    "Editor",
+    "Texto da etapa"
+   ],
+   "instrucoes": [
+    "**O que fazer**: uma instrução por linha. `**negrito**` e `` `código` `` funcionam",
+    "**Valores para copiar**: o que o leitor precisa digitar ou colar (vira botão Copiar)",
+    "**Observação**: aviso no fim da etapa",
+    "**Pedir um dado ao leitor**: ex.: o caminho da pasta dele. Use `{{chave}}` nos valores",
+    "Palavras em MAIÚSCULAS com _ (ex.: `SENHA_STG`) ficam destacadas para o leitor trocar"
+   ],
+   "valores": [
+    {
+     "rotulo": "Exemplo de valor com dado do leitor",
+     "valor": "{{pasta}}\\puttyconfig.exe"
+    }
+   ],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "07-texto",
+     "legenda": "Embaixo do roteiro fica o texto da etapa",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      3.53,
+      18.96,
+      46.26,
+      35.35
+     ],
+     "legenda": "O que fazer: o checklist da etapa",
+     "detalhe": "Uma linha = um item que a pessoa marca como feito.",
+     "balao": "Checklist"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      50.65,
+      14.21,
+      46.26,
+      18.61
+     ],
+     "legenda": "Valores para copiar",
+     "detalhe": "Campo + valor. No manual vira um botão Copiar.",
+     "balao": "Copiar"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      50.65,
+      47.44,
+      46.26,
+      17.1
+     ],
+     "legenda": "Observação: aviso no fim da etapa",
+     "detalhe": "",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      3.53,
+      73.94,
+      93.38,
+      14.85
+     ],
+     "legenda": "Pedir um dado ao leitor",
+     "detalhe": "Chave (ex.: pasta), a pergunta, um exemplo para a animação e o marcador quando estiver vazio. Use {{pasta}} nos valores.",
+     "balao": "{{chave}}"
+    }
+   ]
+  },
+  {
+   "titulo": "Quiz final",
+   "caminho": [
+    "Editor",
+    "Quiz final"
+   ],
+   "instrucoes": [
+    "Clique em **+ Pergunta**",
+    "Escreva a **pergunta** e até 4 **opções**",
+    "Marque a **bolinha** da opção certa",
+    "**Explicação**: aparece depois que a pessoa responde",
+    "O quiz aparece no fim do manual e no menu lateral"
+   ],
+   "valores": [],
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "08-quiz",
+     "legenda": "O quiz fica no fim do editor",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      89.35,
+      6.23,
+      8.26,
+      7.74
+     ],
+     "legenda": "+ Pergunta cria uma nova pergunta",
+     "detalhe": "",
+     "balao": "+ Pergunta"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      4.17,
+      36.3,
+      44.47,
+      8.6
+     ],
+     "legenda": "Escreva a pergunta",
+     "detalhe": "",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      4.17,
+      45.22,
+      44.47,
+      29.87
+     ],
+     "legenda": "Até 4 opções de resposta",
+     "detalhe": "",
+     "balao": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      4.17,
+      52.67,
+      44.47,
+      7.53
+     ],
+     "legenda": "A bolinha verde marca a opção certa",
+     "detalhe": "",
+     "balao": "Certa"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      4.17,
+      79.48,
+      44.47,
+      8.6
+     ],
+     "legenda": "Explicação: aparece depois de responder",
+     "detalhe": "",
+     "balao": ""
+    }
+   ]
+  },
+  {
+   "titulo": "Testar e publicar",
+   "caminho": [
+    "Editor",
+    "Dados do manual"
+   ],
+   "instrucoes": [
+    "**Assistir**: vê o manual inteiro como o leitor",
+    "**Assistir esta etapa**: testa só a etapa aberta",
+    "**🎯 Treinar**: testa o modo \"faça você\"",
+    "**Salvar projeto (.json)**: guarda para editar depois ou mandar a um colega",
+    "**Exportar manual (.html)**: o arquivo final, que abre offline e vai por Teams/e-mail",
+    "**Senha nunca**: o app bloqueia salvar/exportar se achar senha — use um marcador como `SENHA_STG`"
+   ],
+   "valores": [],
+   "observacao": "Para virar manual **Oficial da Central** (para todo mundo), mande o .json para o responsável pela Central.",
+   "acoes": [
+    {
+     "tipo": "tela",
+     "img": "02-dados",
+     "legenda": "Pronto? Teste antes de publicar",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      46.1,
+      9.93,
+      9.32,
+      13.68
+     ],
+     "legenda": "Assistir: o manual inteiro como o leitor vê",
+     "detalhe": "",
+     "balao": "Assistir"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      55.9,
+      9.93,
+      8.74,
+      13.68
+     ],
+     "legenda": "Treinar: o modo \"faça você\"",
+     "detalhe": "A pessoa clica, digita e aperta as teclas. Erro mostra aviso; no 2º, a dica.",
+     "balao": "Treinar"
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      65.13,
+      9.93,
+      14.33,
+      13.68
+     ],
+     "legenda": "Salvar projeto (.json)",
+     "detalhe": "Para continuar a edição em outro computador ou mandar a um colega.",
+     "balao": ".json"
+    },
+    {
+     "tipo": "clique",
+     "area": [
+      79.95,
+      9.93,
+      17.68,
+      13.68
+     ],
+     "legenda": "Exportar manual (.html): o arquivo final",
+     "detalhe": "Um arquivo só, com prints e animação. Abre offline e pode ir por Teams/e-mail.",
+     "balao": ".html",
+     "realce": true,
+     "marcar": false,
+     "dir": false
+    },
+    {
+     "tipo": "tela",
+     "img": "11-senha",
+     "legenda": "Atenção: senha nunca vai no manual",
+     "detalhe": ""
+    },
+    {
+     "tipo": "destacar",
+     "area": [
+      0.92,
+      75.8,
+      98.66,
+      23.14
+     ],
+     "legenda": "Se o app achar senha, ele bloqueia",
+     "detalhe": "Não salva nem exporta enquanto houver senha. Troque por um marcador como SENHA_STG.",
+     "balao": "Sem senha"
+    }
+   ]
+  }
+ ],
+ "quiz": [
+  {
+   "pergunta": "Como colocar o print da tela no editor?",
+   "opcoes": [
+    "Win + Shift + S e depois Ctrl + V no editor",
+    "Mandar por e-mail",
+    "Digitar o texto da tela",
+    "Só pelo celular"
+   ],
+   "correta": 0,
+   "explicacao": "Tire o print com Win+Shift+S e cole com Ctrl+V. Também dá para arrastar a imagem."
+  },
+  {
+   "pergunta": "Para mostrar um texto sendo digitado num campo, qual ferramenta usar?",
+   "opcoes": [
+    "Destacar",
+    "Digitar",
+    "Cena do físico",
+    "Tecla"
+   ],
+   "correta": 1,
+   "explicacao": "Digitar: arraste sobre o campo e escreva o texto."
+  },
+  {
+   "pergunta": "Onde vai a frase curta que aparece embaixo da tela?",
+   "opcoes": [
+    "Etiqueta",
+    "Observação",
+    "Legenda",
+    "Título da etapa"
+   ],
+   "correta": 2,
+   "explicacao": "A legenda é a frase curta; a explicação detalhada é o texto longo opcional."
+  },
+  {
+   "pergunta": "Como mudar um manual com selo \"Oficial da Central\"?",
+   "opcoes": [
+    "Editar direto",
+    "Não dá para mudar",
+    "Exportar e abrir no Word",
+    "Duplicar p/ editar e mexer na cópia"
+   ],
+   "correta": 3,
+   "explicacao": "O oficial é sempre o do site. Duplique para ter uma cópia sua."
+  },
+  {
+   "pergunta": "O manual precisa do comando com a senha do sistema. O que fazer?",
+   "opcoes": [
+    "Usar um marcador como SENHA_STG",
+    "Escrever a senha no valor",
+    "Colocar a senha na observação",
+    "Mandar a senha no quiz"
+   ],
+   "correta": 0,
+   "explicacao": "Senha nunca vai no manual — o app bloqueia. Use um marcador."
+  },
+  {
+   "pergunta": "Qual arquivo mandar para as pessoas assistirem o manual?",
+   "opcoes": [
+    "O print",
+    "O .json",
+    "O .html exportado",
+    "O link do editor"
+   ],
+   "correta": 2,
+   "explicacao": "O .html é o manual final. O .json é para continuar editando."
+  }
+ ]
+}

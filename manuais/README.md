@@ -26,5 +26,7 @@ maiúsculas com `_` (ex.: `SENHA_STG`), que aparece destacado para o leitor troc
 ## Arquivos
 - `js/player.js` + `css/player.css`: o player (vai embutido em cada manual exportado).
 - `js/app.js` + `css/app.css`: biblioteca, editor e exportação.
+- `exemplos/como-montar.json` + `exemplos/como-montar/*.webp`: manual oficial "Como montar um manual"
+  (botão ❓ na Biblioteca e ❓ Ajuda no editor). Prints recapturáveis com o script de captura do editor.
 - `exemplos/putty-stg.json` + `exemplos/putty-stg/*.webp`: manual de exemplo (PuTTY STG),
   carregado automaticamente na primeira vez.
