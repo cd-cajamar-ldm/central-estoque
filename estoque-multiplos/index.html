@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estoque de Múltiplos — Loja do Mecânico</title>
+<link rel="icon" href="../brand/Logo_LDM_icon.png">
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+<header class="topo">
+  <a class="topo-logo" href="../" title="Voltar para a Oficina LDM"><img src="../brand/Logo_LDM_hor_2_Branco.png" alt="Loja do Mecânico"></a>
+  <div class="topo-titulo">
+    <h1>Estoque de Múltiplos</h1>
+    <p>CD Cajamar <span id="dataBase"></span></p>
+  </div>
+  <div class="topo-acoes" id="acoes" hidden>
+    <button type="button" class="btn btn-claro" id="btAtualizar">Atualizar bases</button>
+    <button type="button" class="btn btn-claro" id="btExcel">Exportar Excel</button>
+    <button type="button" class="btn btn-laranja" id="btImprimir">Imprimir / PDF</button>
+  </div>
+</header>
+
+<main>
+  <!-- Importação -->
+  <section class="importar" id="importar" hidden>
+    <h2>Carregar as bases</h2>
+    <p class="dica">Os arquivos são lidos só neste computador. Nada é enviado para fora.</p>
+    <div class="arquivos">
+      <label class="arquivo" id="cx390">
+        <strong>QRY0390 — Estoque por Local</strong>
+        <span class="arq-nome" id="nm390">Escolher arquivo .xlsx</span>
+        <input type="file" id="f390" accept=".xlsx,.xls,.csv">
+      </label>
+      <label class="arquivo" id="cx051">
+        <strong>ZBIQ0051 — Itens do múltiplo</strong>
+        <span class="arq-nome" id="nm051">Escolher arquivo .xlsx</span>
+        <input type="file" id="f051" accept=".xlsx,.xls,.csv">
+      </label>
+    </div>
+    <p class="dica" id="dica051" hidden>A ZBIQ0051 já está guardada. Só envie de novo se a composição dos múltiplos mudou.</p>
+    <div class="importar-acoes">
+      <button type="button" class="btn btn-laranja" id="btProcessar" disabled>Montar painel</button>
+      <button type="button" class="btn btn-borda" id="btCancelar" hidden>Cancelar</button>
+    </div>
+    <div class="progresso" id="progresso" hidden><div class="barra"><i id="barra"></i></div><span id="progTexto"></span></div>
+    <p class="erro" id="erro" hidden></p>
+  </section>
+
+  <!-- Painel -->
+  <section id="painel" hidden>
+    <nav class="tipos" id="tipos" aria-label="Tipo de produto"></nav>
+
+    <div class="kpis" id="kpis"></div>
+
+    <section class="bloco">
+      <div class="bloco-cab">
+        <h2 id="tituloPanorama">Panorama</h2>
+        <p class="dica" id="dicaPanorama"></p>
+      </div>
+      <div class="rolagem" id="panorama"></div>
+    </section>
+
+    <section class="bloco">
+      <div class="bloco-cab">
+        <h2>Detalhe por fornecedor, peso e modelo</h2>
+        <div class="filtros">
+          <select id="fFornecedor" aria-label="Fornecedor"></select>
+          <select id="fPeso" aria-label="Peso"></select>
+          <select id="fStatus" aria-label="Situação">
+            <option value="">Toda situação</option>
+            <option>Completo</option><option>Descasado</option><option>Fora de venda</option>
+          </select>
+          <input type="search" id="fBusca" placeholder="Buscar nome, modelo ou código">
+          <button type="button" class="btn btn-borda" id="btLimpar">Limpar filtros</button>
+        </div>
+      </div>
+      <div class="rolagem" id="detalhe"></div>
+    </section>
+
+    <p class="rodape" id="rodape"></p>
+  </section>
+</main>
+
+<!-- Correção manual da classificação -->
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h3>Corrigir classificação</h3>
+    <p class="dica" id="dlgNome"></p>
+    <label>Fornecedor <input id="eFornecedor" list="lsFornecedor" required></label>
+    <label>Tipo <input id="eTipo" list="lsTipo" required></label>
+    <label>Peso (ex.: 2,5 T ou 500 kg) <input id="ePeso"></label>
+    <label>Modelo <input id="eModelo"></label>
+    <datalist id="lsFornecedor"></datalist><datalist id="lsTipo"></datalist>
+    <div class="dlg-acoes">
+      <button type="button" class="btn btn-borda" id="dlgRestaurar">Voltar ao automático</button>
+      <span></span>
+      <button type="button" class="btn btn-borda" id="dlgFechar">Cancelar</button>
+      <button type="submit" class="btn btn-laranja">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="./js/regras.js"></script>
+<script src="./js/app.js"></script>
+</body>
+</html>
