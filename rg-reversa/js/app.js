@@ -31,7 +31,7 @@ var S = {
   rgs:[], est:null, mult:null, hist:[], tab:'painel', D:null, ocupado:'', user:'',
   movs:null, movsBusy:false, movsErro:'',
   fm:{ de:'', ate:'', st:'pend', q:'' }, lim:{}, sort:{},
-  col:{ etapa:'origem', origem:'', rgs:[], destino:'', msg:'', erro:false, ultimo:'', salvando:false }
+  col:null
 };
 
 /* ---------- utilidades ---------- */
@@ -315,7 +315,7 @@ function lineChart(pts, sufixo){
   var top=niceTop(max*1.15||1); if(sufixo==='%' && top>100) top=100;
   var X=function(i){ return pts.length>1 ? pl+(W-pl-pr)*i/(pts.length-1) : pl+(W-pl-pr)/2; };
   var Y=function(v){ return pt+(H-pt-pb)*(1-v/top); };
-  var s='<svg class="rv-svg" viewBox="0 0 '+W+' '+H+'"><defs><linearGradient id="rvA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22D3EE" stop-opacity=".35"/><stop offset="1" stop-color="#22D3EE" stop-opacity="0"/></linearGradient></defs>';
+  var s='<svg class="rv-svg" viewBox="0 0 '+W+' '+H+'"><defs><linearGradient id="rvA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#33488E" stop-opacity=".30"/><stop offset="1" stop-color="#33488E" stop-opacity="0"/></linearGradient></defs>';
   for(var g=0;g<=4;g++){ var v=top*g/4; s+='<line class="gr" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+Y(v)+'" y2="'+Y(v)+'"/><text x="'+(pl-8)+'" y="'+(Y(v)+4)+'" text-anchor="end">'+fmtEixo(v)+(sufixo||'')+'</text>'; }
   var path=pts.map(function(p,i){ return (i?'L':'M')+X(i).toFixed(1)+' '+Y(p.y).toFixed(1); }).join(' ');
   if(pts.length>1) s+='<path d="'+path+' L'+X(pts.length-1).toFixed(1)+' '+Y(0)+' L'+X(0).toFixed(1)+' '+Y(0)+' Z" fill="url(#rvA)"/>';
@@ -354,7 +354,7 @@ function hbars(lista, cfg){
     return '<div class="rv-hb"'+(x.t?tipA(x.t):'')+'><div class="lb">'+esc(x.l)+'</div><div class="tk"><i style="width:'+w1+'%;background:'+(x.cor||cfg.cor||'linear-gradient(90deg,#FE5000,#FFB347)')+'"></i>'+(x.v2?'<i style="width:'+w2+'%;background:'+(x.cor2||'#CBD5E1')+'"></i>':'')+'</div><div class="vl">'+(x.txt!=null?x.txt:int(x.v))+'</div></div>';
   }).join('');
 }
-var PALETA=['#0E7490','#FE5000','#22D3EE','#F59E0B','#10B981','#6366F1','#EC4899','#94A3B8'];
+var PALETA=['#001A72','#FE5000','#8A93B8','#F59E0B','#1F8A52','#33488E','#C83812','#94A3B8'];
 function donut(lista, centro){
   var tot=lista.reduce(function(s,x){ return s+x.v; },0);
   if(!tot) return '<div class="rv-empty">Sem dados.</div>';
@@ -370,7 +370,7 @@ function donut(lista, centro){
 }
 function ring(p){
   var R=64, C=2*Math.PI*R, f=Math.max(0,Math.min(1,p/100));
-  return '<div class="rv-ring"><svg viewBox="0 0 150 150"><defs><linearGradient id="rvR" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0E7490"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs>'+
+  return '<div class="rv-ring"><svg viewBox="0 0 150 150"><defs><linearGradient id="rvR" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FE5000"/><stop offset="1" stop-color="#FF7A4D"/></linearGradient></defs>'+
     '<circle class="tr" cx="75" cy="75" r="'+R+'" fill="none" stroke-width="15"/>'+
     '<circle class="pg" cx="75" cy="75" r="'+R+'" fill="none" stroke="url(#rvR)" stroke-width="15" stroke-linecap="round" stroke-dasharray="'+C.toFixed(2)+'" stroke-dashoffset="'+(C*(1-f)).toFixed(2)+'"/></svg>'+
     '<div class="rv-ring-c"><b>'+pct(p,100)+'</b><span>COM RG</span></div></div>';
@@ -386,10 +386,7 @@ function vPainel(){
   var maxDt=D.ultimoDia;
   var hero='<div class="rv-hero"><div class="rv-hero-in">'+
     '<div class="rv-marca"><img src="brand/Logo_LDM_icon.png" alt=""><div><b>Oficina LDM</b><span>RG Reversa · CD Cajamar</span></div></div>'+
-    '<div class="rv-hero-row"><div><h2>Dashboard RG Reversa</h2><p>Meta: 100% do estoque da reversa identificado por RG.</p>'+
-    '<div class="rv-chips"><span class="rv-chip">RGs: <b>'+(S.rgs.length?int(S.rgs.length)+(maxDt?' · até '+dataBR(maxDt):''):'não importado')+'</b></span>'+
-    '<span class="rv-chip">Estoque: <b>'+(S.est?dataHoraBR(S.est.em):'não importado')+'</b></span>'+
-    '<span class="rv-chip">Múltiplos: <b>'+(S.mult?int(S.mult.rows.length)+' ligações':'não importado')+'</b></span></div></div>'+
+    '<div class="rv-hero-row"><div><h2>Dashboard RG Reversa</h2></div>'+
     '<div class="rv-hero-btns"><button class="rv-btn pri" data-act="tab" data-tab="coletor">📲 Abrir coletor</button><button class="rv-btn sec" data-act="tab" data-tab="importacao">⬆ Importar relatórios</button></div></div></div></div>';
   if(!tem && !S.rgs.length){
     return hero+'<div class="rv-body"><div class="panel"><div class="empty-state"><div class="eicon">📦</div><h3>Nenhum relatório importado ainda</h3><p>Importe a <strong>QRY0100</strong> (RGs), a <strong>QRY0390</strong> (Estoque por Local) e a <strong>ZBIQ0051</strong> (Múltiplos) para ver os indicadores.</p><p style="margin-top:16px"><button class="btn btn-orange" data-act="tab" data-tab="importacao">Ir para Importação</button></p></div></div></div>';
@@ -399,18 +396,11 @@ function vPainel(){
   var p=pctN(T.comRg,T.saldo), meta=100;
   b+='<div class="rv-top">';
   if(tem){
-    var prev=null; if(S.hist.length>1){ var h0=S.hist[S.hist.length-2], h1=S.hist[S.hist.length-1]; prev=pctN(h1.comRg,h1.saldo)-pctN(h0.comRg,h0.saldo); }
-    var prev7=null; if(S.hist.length>1){ var hf=S.hist[S.hist.length-1], alvo=hf.d-7*864e5, ref=null; S.hist.forEach(function(h){ if(h.d<=alvo) ref=h; }); if(ref) prev7=pctN(hf.comRg,hf.saldo)-pctN(ref.comRg,ref.saldo); }
-    var proj='';
-    if(T.semRg<=0) proj='<span class="rv-pill ok">Meta atingida 🎉</span>';
-    else if(D.ritmo>0){ var dd=Math.ceil(T.semRg/D.ritmo); proj='No ritmo atual (≈<b>'+int(D.ritmo)+'</b> RGs/dia) faltam ≈ <b>'+int(dd)+' dias de trabalho</b>, sem contar novas entradas.'; }
-    else proj='Sem ritmo de geração de RG para projetar.';
-    b+='<div class="rv-card rv-main teal"'+tipA('Cobertura de RG\n'+int(T.comRg)+' de '+int(T.saldo)+' unidades da reversa\nMeta: 100%')+'>'+ring(p)+
-      '<div class="rv-main-tx"><div class="rv-rot"><span>Indicador principal</span>'+(prev!=null?'<span class="rv-pill '+(prev>=0?'ok':'bad')+'">'+(prev>=0?'▲ ':'▼ ')+Math.abs(prev).toLocaleString('pt-BR',{maximumFractionDigits:2})+' p.p. vs. última foto</span>':'')+'</div>'+
-      '<div class="rv-num">'+pct(T.comRg,T.saldo)+' <small>com RG</small></div>'+
+    b+='<div class="rv-card rv-main blue"'+tipA('Cobertura de RG\n'+int(T.comRg)+' de '+int(T.saldo)+' unidades da reversa\nMeta: 100%')+'>'+ring(p)+
+      '<div class="rv-main-tx"><div class="rv-rot"><span>Cobertura de RG</span></div>'+
+      '<div class="rv-num">'+int(T.comRg)+' <small>de '+int(T.saldo)+' un</small></div>'+
       '<div class="rv-meta-bar"><i style="width:'+Math.max(0.4,p).toFixed(2)+'%"></i><s title="Meta 100%"></s></div>'+
-      '<div class="rv-hint"><b>'+int(T.comRg)+'</b> de <b>'+int(T.saldo)+'</b> unidades já têm RG · faltam <b>'+int(T.semRg)+'</b>'+(prev7!=null?' · semana: <b>'+(prev7>=0?'+':'')+prev7.toLocaleString('pt-BR',{maximumFractionDigits:2})+' p.p.</b>':'')+'</div>'+
-      '<div class="rv-hint">'+proj+'</div></div></div>';
+      '<div class="rv-hint">Faltam <b>'+int(T.semRg)+'</b> · meta 100%</div></div></div>';
     b+='<div class="rv-card"'+tipA('Unidades da reversa ainda sem RG\n'+pct(T.semRg,T.saldo)+' do estoque')+'><div class="rv-rot"><span>Unidades sem RG</span></div><div class="rv-num">'+int(T.semRg)+'</div><div class="rv-hint"><b>'+pct(T.semRg,T.saldo)+'</b> do estoque da reversa · REV + AVA</div></div>';
     b+='<div class="rv-card green"'+tipA('Locais em que toda unidade tem RG\nMeta: 100% dos locais')+'><div class="rv-rot"><span>Locais 100% RG</span><span class="rv-pill '+(D.loc.rg===D.loc.total?'ok':'info')+'">meta 100%</span></div><div class="rv-num">'+pct(D.loc.rg,D.loc.total)+'</div><div class="rv-hint"><b>'+int(D.loc.rg)+'</b> de <b>'+int(D.loc.total)+'</b> locais</div></div>';
     b+='<div class="rv-card '+(D.loc.misto?'red':'green')+'"'+tipA('Locais que misturam peças com RG e sem RG\n'+int(D.loc.unMisto)+' unidades sem RG dentro deles')+'><div class="rv-rot"><span>Locais mistos</span>'+(D.loc.misto?'<span class="rv-pill bad">atenção</span>':'<span class="rv-pill ok">ok</span>')+'</div><div class="rv-num">'+int(D.loc.misto)+'</div><div class="rv-hint"><b>'+int(D.loc.unMisto)+'</b> un. sem RG misturadas com peças com RG</div></div>';
@@ -424,7 +414,7 @@ function vPainel(){
   var valor=ab.reduce(function(s,r){ return s+r.preco; },0);
   var ult=maxDt?(D.porDia.get(maxDt)||0):0, ant=maxDt?(D.porDia.get(maxDt-864e5)||0):0;
   var f='<div class="rv-faixa">';
-  f+=tile('RGs abertos',int(ab.length),int(S.rgs.length)+' RGs na base','teal');
+  f+=tile('RGs abertos',int(ab.length),int(S.rgs.length)+' RGs na base','blue');
   f+=tile('RGs no último dia',int(ult),maxDt?dataBR(maxDt)+' · véspera '+int(ant):'—','',maxDt?'Último dia com RG: '+dataBR(maxDt)+'\n'+int(ult)+' RGs\nDia anterior: '+int(ant):'');
   f+=tile('Ritmo (média 7 dias)',D.ritmo?int(D.ritmo)+'/dia':'—','dias com geração de RG','');
   f+=tile('Valor dos RGs abertos',reaisC(valor),reais(valor)+' · preço da QRY0100','');
@@ -449,40 +439,33 @@ function vPainel(){
   /* — classe + classificação — */
   var pcs=Array.from(D.porClasse.values()).sort(function(a,b){ return b.saldo-a.saldo; });
   var cl=hbars(pcs.map(function(c){ var nome=(S.est.classes[c.classe]?c.classe+' · '+S.est.classes[c.classe]:c.classe);
-    return {l:nome, v:c.comRg, v2:c.semRg, max:c.saldo, cor:'linear-gradient(90deg,#0E7490,#22D3EE)', cor2:'linear-gradient(90deg,#FE5000,#FFB347)', txt:pct(c.comRg,c.saldo), t:nome+'\nSaldo: '+int(c.saldo)+' un\nCom RG: '+int(c.comRg)+' ('+pct(c.comRg,c.saldo)+')\nSem RG: '+int(c.semRg)}; }));
-  cl+='<div class="rv-leg"><span><i style="background:#0E7490"></i>Com RG</span><span><i style="background:#FE5000"></i>Sem RG</span></div>';
+    return {l:nome, v:c.comRg, v2:c.semRg, max:c.saldo, cor:'linear-gradient(90deg,var(--rv-blue),var(--rv-blue2))', cor2:'linear-gradient(90deg,#FE5000,#FFB347)', txt:pct(c.comRg,c.saldo), t:nome+'\nSaldo: '+int(c.saldo)+' un\nCom RG: '+int(c.comRg)+' ('+pct(c.comRg,c.saldo)+')\nSem RG: '+int(c.semRg)}; }));
+  cl+='<div class="rv-leg"><span><i style="background:var(--rv-blue)"></i>Com RG</span><span><i style="background:#FE5000"></i>Sem RG</span></div>';
   var cls=conta(ab,function(r){ return r.classif||'Sem classificação'; }).map(function(x){ return {l:x[0], v:x[1]}; });
   b+='<div class="bi-grid-2">'+panel('Cobertura por classe de local','Quanto de cada classe já tem RG.',cl)+panel('Classificação dos RGs abertos','Resultado da avaliação de cada peça.',donut(cls))+'</div>';
   /* — locais — */
   var mistos=D.locais.filter(function(l){ return l.st==='misto'; }).sort(function(a,b){ return b.semRg-a.semRg; }).slice(0,8).map(function(l){
-    return {l:l.localDesc, v:l.comRg, v2:l.semRg, cor:'linear-gradient(90deg,#0E7490,#22D3EE)', cor2:'linear-gradient(90deg,#DC2626,#F97316)', txt:int(l.semRg)+' sem RG', t:l.localDesc+'\n'+int(l.comRg)+' un com RG\n'+int(l.semRg)+' un sem RG\n'+int(l.itensMistos)+' item(ns) misturado(s)'}; });
+    return {l:l.localDesc, v:l.comRg, v2:l.semRg, cor:'linear-gradient(90deg,var(--rv-blue),var(--rv-blue2))', cor2:'linear-gradient(90deg,#DC2626,#F97316)', txt:int(l.semRg)+' sem RG', t:l.localDesc+'\n'+int(l.comRg)+' un com RG\n'+int(l.semRg)+' un sem RG\n'+int(l.itensMistos)+' item(ns) misturado(s)'}; });
   var semLoc=D.locais.filter(function(l){ return l.semRg>0; }).sort(function(a,b){ return b.semRg-a.semRg; }).slice(0,8).map(function(l){
     return {l:l.localDesc, v:l.semRg, txt:int(l.semRg), t:l.localDesc+'\n'+int(l.semRg)+' un sem RG de '+int(l.saldo)+'\nCobertura do local: '+pct(l.comRg,l.saldo,0)}; });
   b+='<div class="bi-grid-2">'+panel('Locais mistos — maiores','Locais com peça com RG e sem RG juntas. Cada um deve virar 100% RG.',hbars(mistos,{vazio:'Nenhum local misto 🎉'}))+
-    panel('Locais com mais estoque sem RG','Onde está a maior parte das peças ainda sem RG.',hbars(semLoc,{cor:'linear-gradient(90deg,#0B1230,#0E7490)'}))+'</div>';
+    panel('Locais com mais estoque sem RG','Onde está a maior parte das peças ainda sem RG.',hbars(semLoc,{cor:'linear-gradient(90deg,var(--rv-blue),var(--rv-blue2))'}))+'</div>';
   /* — aging + restrição — */
   var maxF=Math.max.apply(null,D.faixas)||1;
   var ag=hbars(FAIXAS.map(function(fx,i){ var cor=i>=4?'linear-gradient(90deg,#DC2626,#F97316)':i>=2?'linear-gradient(90deg,#F59E0B,#FCD34D)':'linear-gradient(90deg,#10B981,#34D399)'; return {l:fx[2], v:D.faixas[i], cor:cor, t:fx[2]+'\n'+int(D.faixas[i])+' un sem RG\n'+pct(D.faixas[i],T.semRg)+' do que falta'}; }),{max:maxF});
-  var rs=Array.from(D.restr.entries()).sort(function(a,b){ return b[1]-a[1]; }).map(function(x){ return {l:x[0]+' · '+(RESTR[x[0]]||'—'), v:x[1], t:x[0]+' · '+(RESTR[x[0]]||'restrição')+'\n'+int(x[1])+' un · '+pct(x[1],T.saldo)+' do estoque da reversa', cor:'linear-gradient(90deg,#6366F1,#22D3EE)'}; });
+  var rs=Array.from(D.restr.entries()).sort(function(a,b){ return b[1]-a[1]; }).map(function(x){ return {l:x[0]+' · '+(RESTR[x[0]]||'—'), v:x[1], t:x[0]+' · '+(RESTR[x[0]]||'restrição')+'\n'+int(x[1])+' un · '+pct(x[1],T.saldo)+' do estoque da reversa', cor:'linear-gradient(90deg,var(--rv-blue),var(--rv-blue2))'}; });
   b+='<div class="bi-grid-2">'+panel('Tempo parado do estoque sem RG','Há quanto tempo as unidades sem RG estão no local (data da situação).',ag)+
     panel('Estoque da reversa por restrição','Em que situação o WMS enxerga as unidades.',hbars(rs))+'</div>';
   /* — produtividade + itens — */
   var d30=ultimo-29*864e5;
   var op=conta(S.rgs.filter(function(r){ return r.dt && r.dt>=d30; }),function(r){ return operNome(r.oper); }).slice(0,8).map(function(x){ return {l:x[0], v:x[1], t:x[0]+'\n'+int(x[1])+' RGs nos últimos 30 dias\n≈ '+int(x[1]/30)+' por dia'}; });
   var top=Array.from(D.itens.values()).sort(function(a,b){ return b.semRg-a.semRg; }).slice(0,8).map(function(it){ return {l:it.item+' · '+(it.desc||''), v:it.semRg, txt:int(it.semRg), t:it.item+' · '+(it.desc||'')+'\n'+int(it.semRg)+' un sem RG de '+int(it.saldo)}; });
-  b+='<div class="bi-grid-2">'+panel('Produtividade por operador','RGs gerados nos últimos 30 dias.',hbars(op,{cor:'linear-gradient(90deg,#0E7490,#22D3EE)'}))+
-    panel('Itens com mais unidades sem RG','Onde o esforço de identificação rende mais.',hbars(top,{cor:'linear-gradient(90deg,#0B1230,#0E7490)'}))+'</div>';
+  b+='<div class="bi-grid-2">'+panel('Produtividade por operador','RGs gerados nos últimos 30 dias.',hbars(op,{cor:'linear-gradient(90deg,var(--rv-blue),var(--rv-blue2))'}))+
+    panel('Itens com mais unidades sem RG','Onde o esforço de identificação rende mais.',hbars(top,{cor:'linear-gradient(90deg,var(--rv-blue),var(--rv-blue2))'}))+'</div>';
   return hero+b+'</div>';
 }
 
 /* ---------- Coletor ---------- */
-function resolveLocal(raw){
-  var D=S.D, v=String(raw||'').trim(); if(!v) return {cod:'',desc:'',ok:false};
-  var c=cod(v);
-  if(D && D.locCod.has(c)) return {cod:c, desc:D.localDesc.get(c)||'', ok:true};
-  if(D){ var k=D.locNome.get(norm(v)); if(k) return {cod:k, desc:D.localDesc.get(k)||v, ok:true}; }
-  return {cod:v, desc:'', ok:false};
-}
 var audio=null;
 function bip(ok){
   try {
@@ -493,68 +476,85 @@ function bip(ok){
   try { if(navigator.vibrate) navigator.vibrate(ok?30:[80,60,80]); } catch(e){}
 }
 function pendentes(){ return lsGet(PEND_KEY); }
+function colNovo(ultimo, hist, rel){ return { origem:'', rgs:[], destino:'', msg:'', erro:false, ultimo:ultimo||'', hist:hist||[], rel:rel||null, salvando:false, foco:'origem' }; }
+
+/* Tela única: campos de bipagem + a prévia do relatório (exatamente as 3 colunas que serão exportadas). */
 function vColetor(){
-  var c=S.col, et=c.etapa, pend=pendentes();
-  var h='<div class="col">';
-  h+='<div class="col-steps"><div class="col-step '+(et==='origem'?'on':'ok')+'">1 · Origem</div><div class="col-step '+(et==='rgs'?'on':et==='destino'?'ok':'')+'">2 · RGs</div><div class="col-step '+(et==='destino'?'on':'')+'">3 · Destino</div></div>';
+  var c=S.col, pend=pendentes(), o={cod:c.origem,ok:false,desc:''}, d={cod:c.destino,ok:false,desc:''};
+  var pode=c.origem && c.rgs.length && c.destino && !c.salvando;
+  var h='';
   if(pend.length) h+='<div class="col-pend"><span>⚠ <b>'+int(pend.reduce(function(s,p){ return s+p.rows.length; },0))+'</b> bipagens aguardando envio (sem conexão).</span><button class="btn btn-secondary" data-act="col-sync">Enviar agora</button></div>';
-  var info=function(r){ var x=resolveLocal(r); return '<b>'+esc(r)+'</b>'+(x.ok&&x.desc?' · '+esc(x.desc):''); };
-  if(et!=='origem') h+='<div><span class="col-chip">📍 Origem: '+info(c.origem)+'</span>'+(et==='destino'?'<span class="col-chip">🏷️ <b>'+c.rgs.length+'</b> RGs</span>':'')+'</div>';
-  h+='<div class="col-card">';
-  if(et==='origem'){
-    h+='<h3 class="col-q">Bipe o local de ORIGEM</h3><div class="col-sub">De onde o palete está saindo.</div><input class="col-in'+(c.erro?' err':'')+'" id="colIn" data-step="origem" autocomplete="off" autocapitalize="off" inputmode="text" placeholder="local de origem">';
-  } else if(et==='rgs'){
-    h+='<div style="display:flex;justify-content:space-between;align-items:center"><div><h3 class="col-q">Bipe os RGs</h3><div class="col-sub">Um por vez. Repetido é recusado.</div></div><div class="col-count" id="colCount">'+c.rgs.length+'</div></div>'+
-      '<input class="col-in'+(c.erro?' err':'')+'" id="colIn" data-step="rgs" autocomplete="off" autocapitalize="off" inputmode="text" placeholder="número do RG">';
-    if(c.rgs.length) h+='<div class="col-list">'+c.rgs.slice().reverse().map(function(r,i){ var idx=c.rgs.length-1-i; return '<div class="col-li"><span class="n">'+(idx+1)+'</span><b>'+esc(r.rg)+'</b>'+(r.aviso?'<span class="tag tag-orange" title="'+esc(r.aviso)+'">'+esc(r.aviso)+'</span>':'')+'<button data-act="col-del" data-i="'+idx+'" aria-label="Remover">✕</button></div>'; }).join('')+'</div>';
-    h+='<div class="col-btns"><button class="btn btn-secondary" data-act="col-voltar">← Origem</button><button class="btn btn-orange" data-act="col-prox"'+(c.rgs.length?'':' disabled')+'>Destino →</button></div>';
-  } else {
-    h+='<h3 class="col-q">Bipe o local de DESTINO</h3><div class="col-sub">Para onde o palete vai.</div><input class="col-in'+(c.erro?' err':'')+'" id="colIn" data-step="destino" autocomplete="off" autocapitalize="off" inputmode="text" placeholder="local de destino" value="'+esc(c.destino)+'">';
-    if(c.destino){
-      var o=resolveLocal(c.origem), d=resolveLocal(c.destino);
-      h+='<div class="col-resumo" style="margin-top:14px"><div><small>Origem</small><b>'+esc(o.cod)+'</b></div><span>→</span><div><small>Destino</small><b>'+esc(d.cod)+'</b></div></div><div class="col-sub" style="margin:10px 0 0;text-align:center"><b>'+c.rgs.length+'</b> RGs serão movidos</div>';
-    }
-    h+='<div class="col-btns"><button class="btn btn-secondary" data-act="col-voltar">← RGs</button><button class="btn btn-orange" data-act="col-final"'+(c.destino&&!c.salvando?'':' disabled')+'>'+(c.salvando?'Salvando…':'✔ Finalizar')+'</button></div>';
-  }
-  if(c.msg) h+='<div class="col-sub" style="margin:12px 0 0;color:'+(c.erro?'var(--danger)':'var(--ink-soft)')+';font-weight:600">'+esc(c.msg)+'</div>';
+  h+='<div class="col2"><div class="col-card">';
+  h+='<h3 class="col-q">Bipagem</h3>';
+  /* 1 · origem */
+  h+='<div class="col-f'+(c.origem?' ok':' on')+'"><label for="colOrigem"><span class="col-n">1</span>Local de origem</label>';
+  if(c.origem) h+='<div class="col-lock"><b>'+esc(c.origem)+'</b>'+(o.ok&&o.desc&&o.desc!==c.origem?'<small>'+esc(o.desc)+'</small>':'')+'<button data-act="col-trocar" aria-label="Trocar origem">✎</button></div>';
+  else h+='<input class="col-in'+(c.erro&&c.foco==='origem'?' err':'')+'" id="colOrigem" autocomplete="off" autocapitalize="off" placeholder="local de origem">';
   h+='</div>';
+  /* 2 · RGs */
+  h+='<div class="col-f'+(c.origem?(c.rgs.length?' ok':' on'):' off')+'"><label for="colRg"><span class="col-n">2</span>RGs do palete <em>'+c.rgs.length+'</em></label>'+
+    '<input class="col-in'+(c.erro&&c.foco==='rg'?' err':'')+'" id="colRg" autocomplete="off" autocapitalize="off" placeholder="RG (entra sozinho)"'+(c.origem?'':' disabled')+'></div>';
+  /* 3 · destino */
+  h+='<div class="col-f'+(c.destino?' ok':(c.rgs.length?' on':' off'))+'"><label for="colDestino"><span class="col-n">3</span>Local de destino</label>';
+  if(c.destino) h+='<div class="col-lock"><b>'+esc(c.destino)+'</b>'+(d.ok&&d.desc&&d.desc!==c.destino?'<small>'+esc(d.desc)+'</small>':'')+'<button data-act="col-trocar-destino" aria-label="Trocar destino">✎</button></div>';
+  else h+='<input class="col-in'+(c.erro&&c.foco==='destino'?' err':'')+'" id="colDestino" autocomplete="off" autocapitalize="off" placeholder="local de destino"'+(c.rgs.length?'':' disabled')+'>';
+  h+='</div>';
+  if(c.msg) h+='<div class="col-msg'+(c.erro?' bad':'')+'">'+esc(c.msg)+'</div>';
+  h+='<div class="col-btns"><button class="btn btn-orange" id="colFinal" data-act="col-final"'+(pode?'':' disabled')+'>'+(c.salvando?'Salvando…':'✔ Finalizar')+'</button></div>';
+  if(c.origem||c.rgs.length||c.destino) h+='<div style="text-align:center;margin-top:8px"><button class="btn-danger-text" data-act="col-cancela">Cancelar e recomeçar</button></div>';
   if(c.ultimo) h+='<div class="col-ultimo">'+esc(c.ultimo)+'</div>';
-  if(et!=='origem') h+='<div style="text-align:center"><button class="btn-danger-text" data-act="col-cancela">Cancelar e recomeçar</button></div>';
+  h+='</div>';
+  /* prévia ao vivo OU relatório gerado (depois de finalizar) */
+  var rel=(!c.origem && !c.rgs.length && !c.destino) ? c.rel : null;
+  if(rel){
+    h+='<div class="col-card"><div class="panel-head-row"><h3 class="col-q">Relatório gerado</h3><span class="rv-pill ok">'+int(rel.rows.length)+' RG'+(rel.rows.length===1?'':'s')+' · '+esc(rel.hora)+'</span></div>'+
+      '<div class="col-sub">Pronto para colar no PuTTY ou abrir no Excel.</div>'+
+      '<div class="col-btns2"><button class="btn btn-orange" data-act="rel-xlsx">⬇ Baixar Excel</button><button class="btn btn-secondary" data-act="rel-copy">📋 Copiar tabela (PuTTY)</button></div>'+
+      (rel.salvo?'':'<div class="col-msg bad">Sem conexão: o relatório está aqui, mas o histórico será enviado depois.</div>')+
+      '<div class="table-wrap col-tab"><table><thead><tr><th>Local origem</th><th>RG</th><th>Local destino</th></tr></thead><tbody>'+
+      rel.rows.map(function(r){ return '<tr><td>'+esc(r[0])+'</td><td><b>'+esc(r[1])+'</b></td><td>'+esc(r[2])+'</td></tr>'; }).join('')+'</tbody></table></div></div>';
+  } else {
+    h+='<div class="col-card"><div class="panel-head-row"><h3 class="col-q">Relatório de movimentação</h3><span class="rv-pill info">'+int(c.rgs.length)+' RG'+(c.rgs.length===1?'':'s')+'</span></div>'+
+      '<div class="col-sub">É assim que sai ao finalizar: local de origem · RG · local de destino.</div>';
+    h+='<div class="table-wrap col-tab"><table><thead><tr><th>#</th><th>Local origem</th><th>RG</th><th>Local destino</th><th></th></tr></thead><tbody>';
+    if(!c.rgs.length) h+='<tr><td colspan="5" class="col-vazio">Os RGs bipados aparecem aqui.</td></tr>';
+    c.rgs.slice().reverse().forEach(function(r,k){
+      var idx=c.rgs.length-1-k;
+      h+='<tr><td class="col-nn">'+(idx+1)+'</td><td>'+esc(c.origem||'—')+'</td><td><b>'+esc(r.rg)+'</b></td><td>'+esc(c.destino||'—')+'</td><td><button class="col-x" data-act="col-del" data-i="'+idx+'" aria-label="Remover">✕</button></td></tr>';
+    });
+    h+='</tbody></table></div></div>';
+  }
+  if(c.hist.length) h+='<div class="col-hist"><div class="col-hist-t">Enviadas nesta sessão</div>'+c.hist.slice(0,5).map(function(x){ return '<div>'+esc(x)+'</div>'; }).join('')+'</div>';
   return h+'</div>';
 }
-function foco(){ var el=$('colIn'); if(el){ el.focus(); var n=el.value.length; try { el.setSelectionRange(n,n); } catch(e){} } }
-function colEnter(el){
+function foco(){
+  var c=S.col, id = c.foco==='final' ? 'colFinal' : c.foco==='destino' ? 'colDestino' : c.foco==='rg' ? 'colRg' : 'colOrigem';
+  var el=$(id); if(el && !el.disabled){ el.focus(); if(el.value){ var n=el.value.length; try { el.setSelectionRange(n,n); } catch(e){} } }
+}
+function colRefaz(){ render(); foco(); }
+function colErro(msg, onde){ var c=S.col; c.erro=true; c.msg=msg; c.foco=onde; bip(false); colRefaz(); }
+function colCommit(campo, el){
   var c=S.col, v=el.value.trim(); if(!v) return;
   c.erro=false; c.msg='';
-  if(el.dataset.step==='origem'){
-    var o=resolveLocal(v); c.origem=v; c.etapa='rgs';
-    c.msg=(S.est && !o.ok)?'Local não encontrado na base de estoque deste aparelho — confira a leitura.':''; bip(true); render(); foco(); return;
-  }
-  if(el.dataset.step==='rgs'){
-    var rg=cod(v);
-    if(c.rgs.some(function(r){ return r.rg===rg; })){ c.erro=true; c.msg='RG '+rg+' já foi bipado neste palete.'; bip(false); render(); el.value=''; foco(); return; }
-    var aviso='', rec=S.D && S.D.rgMap.get(rg);
-    if(S.rgs.length){
-      if(!rec) aviso='RG fora da base';
-      else { var o2=resolveLocal(c.origem); if(o2.ok && rec.local && rec.local!==o2.cod) aviso='consta em '+(S.D.localDesc.get(rec.local)||rec.local); }
-    }
-    c.rgs.push({rg:rg, aviso:aviso}); bip(!aviso); c.msg=aviso?'RG '+rg+': '+aviso+'.':''; render(); foco(); return;
-  }
-  if(el.dataset.step==='destino'){
-    c.destino=v; bip(true); render(); foco();
-  }
+  if(campo==='origem'){ c.origem=v; c.rel=null; c.foco='rg'; bip(true); return colRefaz(); }
+  if(campo==='destino'){ c.destino=v; c.foco='final'; bip(true); return colRefaz(); }
+  /* RG: só recusa repetido no mesmo palete — nada depende de importação. */
+  var rg=cod(v);
+  if(c.rgs.some(function(r){ return r.rg===rg; })){ el.value=''; return colErro('RG '+rg+' já foi bipado neste palete.','rg'); }
+  c.rgs.push({rg:rg}); c.foco='rg'; bip(true); colRefaz();
 }
 function colFinaliza(){
-  var c=S.col; if(!c.destino || !c.rgs.length || c.salvando) return;
+  var c=S.col; if(!c.origem || !c.destino || !c.rgs.length || c.salvando) return;
   c.salvando=true; render();
   var lote=(window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'l'+Date.now()+Math.random().toString(16).slice(2);
   var quando=new Date().toISOString();
   var rows=c.rgs.map(function(r){ return { lote:lote, criado_em:quando, operador:S.user, local_origem:c.origem, rg:r.rg, local_destino:c.destino }; });
-  var resumo=c.rgs.length+' RGs · '+c.origem+' → '+c.destino;
-  enviaLote(rows).then(function(){ c.ultimo='✔ Último: '+resumo; toast('Movimentação salva: '+resumo); }).catch(function(){
+  var resumo=c.rgs.length+' RGs · '+c.origem+' → '+c.destino, hora=d2(new Date().getHours())+':'+d2(new Date().getMinutes());
+  var ultimo='', hist=c.hist, rel={ lote:lote, hora:hora, rows:c.rgs.map(function(r){ return [c.origem, r.rg, c.destino]; }), salvo:false };
+  enviaLote(rows).then(function(){ ultimo='✔ Último: '+resumo; hist.unshift(hora+' · '+resumo); rel.salvo=true; toast('Movimentação salva: '+resumo); }).catch(function(){
     var p=pendentes(); p.push({lote:lote, rows:rows}); lsSet(PEND_KEY,p);
-    c.ultimo='⚠ Salvo neste aparelho (sem conexão): '+resumo; toast('Sem conexão — guardei no aparelho e envio depois.', true);
-  }).then(function(){ S.col={ etapa:'origem', origem:'', rgs:[], destino:'', msg:'', erro:false, ultimo:c.ultimo, salvando:false }; S.movs=null; render(); foco(); });
+    ultimo='⚠ Salvo neste aparelho (sem conexão): '+resumo; hist.unshift(hora+' · '+resumo+' (pendente)'); toast('Sem conexão — guardei no aparelho e envio depois.', true);
+  }).then(function(){ S.col=colNovo(ultimo, hist, rel); S.movs=null; colRefaz(); });
 }
 function enviaLote(rows){
   var partes=[]; for(var i=0;i<rows.length;i+=500) partes.push(rows.slice(i,i+500));
@@ -586,12 +586,11 @@ function movsFiltradas(){
   var q=norm(S.fm.q); if(!S.movs) return [];
   return q ? S.movs.filter(function(m){ return norm(m.rg+' '+m.local_origem+' '+m.local_destino+' '+m.operador).indexOf(q)>=0; }) : S.movs;
 }
-function linhaExport(m){ return [resolveLocal(m.local_origem).cod, m.rg, resolveLocal(m.local_destino).cod]; }
+function linhaExport(m){ return [m.local_origem, m.rg, m.local_destino]; }
 function vMovs(){
   if(S.movs==null && !S.movsBusy) setTimeout(carregaMovs,0);
   var f=S.fm; if(!f.de) f.de=isoDia(hoje0()-6*864e5); if(!f.ate) f.ate=isoDia(hoje0());
   var lista=movsFiltradas(), lotes=new Set(lista.map(function(m){ return m.lote; }));
-  var semCod=lista.filter(function(m){ return !resolveLocal(m.local_origem).ok || !resolveLocal(m.local_destino).ok; }).length;
   var h='<div class="panel"><div class="mv-bar">'+
     '<label>De<input type="date" id="mvDe" data-mv="de" value="'+f.de+'"></label><label>Até<input type="date" id="mvAte" data-mv="ate" value="'+f.ate+'"></label>'+
     '<label>Situação<select data-mv="st"><option value="pend"'+(f.st==='pend'?' selected':'')+'>Pendentes de exportação</option><option value="exp"'+(f.st==='exp'?' selected':'')+'>Já exportados</option><option value="todos"'+(f.st==='todos'?' selected':'')+'>Todos</option></select></label>'+
@@ -599,16 +598,13 @@ function vMovs(){
     '<button class="btn btn-secondary" data-act="mv-load">Atualizar</button>'+
     '<div class="mv-acoes"><button class="btn btn-secondary" data-act="mv-copy"'+(lista.length?'':' disabled')+'>📋 Copiar tabela (PuTTY)</button><button class="btn btn-orange" data-act="mv-xlsx"'+(lista.length?'':' disabled')+'>⬇ Baixar Excel</button></div></div>';
   if(S.movsErro) h+='<div class="rv-aviso" style="margin-bottom:12px"><strong>Erro:</strong> '+esc(S.movsErro)+(/relation|does not exist|schema cache/i.test(S.movsErro)?' — a tabela <code>rg_movimentacoes</code> ainda não foi criada no Supabase (migração <code>rg-reversa/supabase/migrations/001_movimentacoes.sql</code>).':'')+'</div>';
-  if(!S.est) h+='<div class="rv-hint" style="margin-bottom:10px">Dica: importe a QRY0390 neste aparelho para o relatório trazer o <b>código</b> do local quando a bipagem for pela descrição.</div>';
-  if(semCod) h+='<div class="rv-hint" style="margin-bottom:10px">⚠ <b>'+int(semCod)+'</b> linha(s) com local que não foi reconhecido na QRY0390 — saem do jeito que foram bipadas.</div>';
-  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai com 3 colunas: <b>código do local de origem · RG · código do local de destino</b>. Ao exportar, as linhas passam a "Exportado".</div>';
+  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai com 3 colunas: <b>local de origem · RG · local de destino</b>. Ao exportar, as linhas passam a "Exportado".</div>';
   h+='<div class="table-wrap"><table><thead><tr><th>Data/hora</th><th>Operador</th><th>Local origem</th><th>RG</th><th>Local destino</th><th>Situação</th></tr></thead><tbody>';
   if(S.movsBusy && !lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Carregando…</td></tr>';
   else if(!lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Nenhuma movimentação neste filtro.</td></tr>';
   var lim=S.lim.mv||PAGINA;
   lista.slice(0,lim).forEach(function(m){
-    var o=resolveLocal(m.local_origem), d=resolveLocal(m.local_destino);
-    h+='<tr><td>'+dataHoraBR(m.criado_em)+'</td><td>'+esc(m.operador||'—')+'</td><td title="'+esc(o.desc)+'">'+esc(o.cod)+'</td><td><b>'+esc(m.rg)+'</b></td><td title="'+esc(d.desc)+'">'+esc(d.cod)+'</td><td>'+(m.exportado_em?'<span class="tag tag-good">Exportado</span>':'<span class="tag tag-orange">Pendente</span>')+'</td></tr>';
+    h+='<tr><td>'+dataHoraBR(m.criado_em)+'</td><td>'+esc(m.operador||'—')+'</td><td>'+esc(m.local_origem)+'</td><td><b>'+esc(m.rg)+'</b></td><td>'+esc(m.local_destino)+'</td><td>'+(m.exportado_em?'<span class="tag tag-good">Exportado</span>':'<span class="tag tag-orange">Pendente</span>')+'</td></tr>';
   });
   h+='</tbody></table></div>';
   if(lista.length>lim) h+='<div class="rv-mais"><button class="btn btn-secondary" data-act="mv-mais">Mostrar mais ('+int(lista.length-lim)+' restantes)</button></div>';
@@ -622,9 +618,28 @@ function marcaExportado(lista){
   return partes.reduce(function(p,parte){ return p.then(function(){ return window.rgSupa.from('rg_movimentacoes').update({exportado_em:agora}).in('id',parte).then(function(r){ if(r.error) throw r.error; }); }); }, Promise.resolve())
     .then(function(){ S.movs=null; render(); }).catch(function(e){ toast('Exportei, mas não consegui marcar como exportado: '+(e.message||e), true); });
 }
+function relXlsx(){
+  var r=S.col.rel; if(!r) return;
+  var ws=XLSX.utils.aoa_to_sheet([['Local origem','RG','Local destino']].concat(r.rows)); ws['!cols']=[{wch:22},{wch:16},{wch:22}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movimentação');
+  XLSX.writeFile(wb,'rg-reversa-movimentacao-'+isoDia(Date.now())+'-'+r.hora.replace(':','h')+'.xlsx');
+  marcaLote(r);
+}
+function relCopy(){
+  var r=S.col.rel; if(!r) return;
+  var txt=r.rows.map(function(x){ return x.join('\t'); }).join('\n');
+  var ok=function(){ toast(int(r.rows.length)+' linhas copiadas — cole no PuTTY.'); marcaLote(r); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(function(){ copiaFallback(txt); ok(); });
+  else { copiaFallback(txt); ok(); }
+}
+/* Exportou o relatório do coletor: marca o lote como exportado (se ele já chegou ao banco). */
+function marcaLote(r){
+  if(!r.salvo || r.marcado) return; r.marcado=true;
+  window.rgSupa.from('rg_movimentacoes').update({exportado_em:new Date().toISOString()}).eq('lote',r.lote).then(function(){ S.movs=null; });
+}
 function mvXlsx(){
   var lista=movsFiltradas(); if(!lista.length) return;
-  var aoa=[['Código local origem','RG','Código local destino']].concat(lista.map(linhaExport));
+  var aoa=[['Local origem','RG','Local destino']].concat(lista.map(linhaExport));
   var ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:22},{wch:16},{wch:22}];
   var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movimentação');
   XLSX.writeFile(wb,'rg-reversa-movimentacao-'+isoDia(Date.now())+'.xlsx');
@@ -717,18 +732,21 @@ function acao(el, ev){
     if(k==='rgs') S.rgs=[]; if(k==='est') S.est=null; if(k==='mult') S.mult=null; if(k==='hist') S.hist=[];
     return dbDel(k).then(function(){ deriva(); render(); });
   }
-  if(a==='col-prox'){ if(c.rgs.length){ c.etapa='destino'; c.msg=''; c.erro=false; render(); foco(); } return; }
-  if(a==='col-voltar'){ c.etapa = c.etapa==='destino' ? 'rgs' : 'origem'; c.msg=''; c.erro=false; render(); foco(); return; }
-  if(a==='col-del'){ c.rgs.splice(+el.dataset.i,1); render(); foco(); return; }
-  if(a==='col-cancela'){ if(c.rgs.length && !confirm('Descartar esta bipagem?')) return; S.col={ etapa:'origem', origem:'', rgs:[], destino:'', msg:'', erro:false, ultimo:c.ultimo, salvando:false }; render(); foco(); return; }
+  if(a==='col-trocar'){ c.origem=''; c.msg=''; c.erro=false; c.foco='origem'; return colRefaz(); }
+  if(a==='col-trocar-destino'){ c.destino=''; c.msg=''; c.erro=false; c.foco='destino'; return colRefaz(); }
+  if(a==='col-del'){ c.rgs.splice(+el.dataset.i,1); c.foco='rg'; return colRefaz(); }
+  if(a==='col-cancela'){ if(c.rgs.length && !confirm('Descartar esta bipagem?')) return; S.col=colNovo(c.ultimo, c.hist, c.rel); return colRefaz(); }
   if(a==='col-final') return colFinaliza();
   if(a==='col-sync') return colSync();
   if(a==='mv-load'){ S.movs=null; return carregaMovs(); }
   if(a==='mv-mais'){ S.lim.mv=(S.lim.mv||PAGINA)+PAGINA; return render(); }
+  if(a==='rel-xlsx') return relXlsx();
+  if(a==='rel-copy') return relCopy();
   if(a==='mv-xlsx') return mvXlsx();
   if(a==='mv-copy') return mvCopy();
 }
 function inicia(){
+  S.col=colNovo();
   var fi=document.createElement('input'); fi.type='file'; fi.id='fileInput'; fi.accept='.xlsx,.xls,.xlsb,.csv'; fi.multiple=true; fi.hidden=true; document.body.appendChild(fi);
   document.addEventListener('click', function(ev){ var el=ev.target.closest('[data-act]'); if(el) acao(el, ev); });
   document.addEventListener('change', function(ev){
@@ -736,14 +754,16 @@ function inicia(){
     if(t.id==='fileInput'){ importar(t.files); t.value=''; return; }
     if(t.dataset && t.dataset.mv && t.dataset.mv!=='q'){ S.fm[t.dataset.mv]=t.value; S.lim.mv=0; S.movs=null; render(); }
   });
-  var espera;
+  var espera, colTimer;
   document.addEventListener('input', function(ev){
     var t=ev.target;
+    /* O leitor de RG não manda Enter: o código entra sozinho quando a digitação para (leitor é rápido). */
+    if(t.id==='colRg'){ clearTimeout(colTimer); colTimer=setTimeout(function(){ if(t.value.trim().length>=3 && document.activeElement===t) colCommit('rg', t); }, 280); return; }
     if(t.id==='mvQ'){ clearTimeout(espera); espera=setTimeout(function(){ S.fm.q=t.value; S.lim.mv=0; render(); var el=$('mvQ'); if(el){ el.focus(); var n=el.value.length; try { el.setSelectionRange(n,n); } catch(e){} } }, 220); }
   });
   document.addEventListener('keydown', function(ev){
     var t=ev.target;
-    if(t.id==='colIn' && ev.key==='Enter'){ ev.preventDefault(); colEnter(t); }
+    if((t.id==='colOrigem' || t.id==='colDestino' || t.id==='colRg') && ev.key==='Enter'){ ev.preventDefault(); clearTimeout(colTimer); colCommit(t.id==='colOrigem'?'origem':t.id==='colDestino'?'destino':'rg', t); }
     if(t.dataset && t.dataset.act==='escolher' && (ev.key==='Enter' || ev.key===' ')){ ev.preventDefault(); $('fileInput').click(); }
   });
   /* Tooltip: qualquer elemento com data-tip. */
@@ -793,6 +813,7 @@ window.rgIniciar=function(){
     S.hist=Array.isArray(r[3]) ? r[3] : [];
   }).catch(function(){ toast('Não consegui abrir os dados salvos neste navegador.', true); }).then(function(){
     deriva(); render();
+    if(S.tab==='coletor') foco();
     if(pendentes().length) colSync();
   });
 };
