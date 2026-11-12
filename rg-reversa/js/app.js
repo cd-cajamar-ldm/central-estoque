@@ -678,6 +678,7 @@ function inicia(){
     v.textContent='RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:'');
   }
   var rp=$('appRodape'); if(rp) rp.textContent=versaoTxt();
+  RG.vigiaVersao('../version.js');
   var h=''; try { h=decodeURIComponent(location.hash.slice(1)); } catch(e){}
   if(TABS[h]) S.tab=h;
   deriva(); render();

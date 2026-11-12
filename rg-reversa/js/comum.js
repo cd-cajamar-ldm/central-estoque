@@ -91,6 +91,33 @@ RG.subeLocais = function(supa, rows){
   });
 };
 
+/* ---------- aviso de versão nova ---------- */
+/* O navegador guarda a página por alguns minutos. Esta checagem pergunta ao servidor (sem cache) qual é a versão
+   publicada; se for diferente da que está na tela, mostra "Nova versão disponível" e o botão abre a página
+   num endereço novo, que obriga o navegador a baixar tudo de novo. */
+RG.vigiaVersao = function(caminho){
+  var atual = (window.LDM_BUILD && window.LDM_BUILD.commit) || 'local';
+  if(atual === 'local') return;
+  var url = new URL(caminho, location.href).href;
+  function mostra(){
+    if(document.getElementById('rgNovaVersao')) return;
+    var b = document.createElement('div'); b.id = 'rgNovaVersao';
+    b.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:999;background:#FE5000;color:#fff;padding:10px 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;font:600 13px Inter,system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.25)';
+    b.innerHTML = '<span>Nova versão disponível.</span><button type="button" style="background:#fff;color:#FE5000;border:0;border-radius:8px;padding:8px 14px;font:700 13px Inter,system-ui,sans-serif">Atualizar agora</button>';
+    b.querySelector('button').onclick = function(){ location.replace(location.pathname + '?r=' + Date.now() + location.hash); };
+    document.body.appendChild(b);
+  }
+  function checa(){
+    fetch(url + '?t=' + Date.now(), { cache: 'no-store' }).then(function(r){ return r.text(); }).then(function(t){
+      var m = t.match(/commit:\s*'([^']+)'/);
+      if(m && m[1] !== atual) mostra();
+    }).catch(function(){});
+  }
+  checa();
+  setInterval(checa, 120000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) checa(); });
+};
+
 /* ---------- texto / área de transferência ---------- */
 RG.copia = function(texto){
   return new Promise(function(res){

@@ -194,6 +194,7 @@ var bd=window.LDM_BUILD||{};
 $('clVersao').textContent='RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:'');
 S.col=novo();
 render();
+RG.vigiaVersao('../../version.js');
 
 /* Chamado pela trava de acesso (../js/acesso.js) depois que o login e a permissão passam. */
 var iniciado=false;
