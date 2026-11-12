@@ -190,8 +190,7 @@ $('clSync').addEventListener('click', function(){ carregaLista(true); });
 /* o leitor às vezes tira o foco ao tocar na tela: um toque fora dos campos devolve o foco ao campo da vez */
 document.addEventListener('click', function(ev){ if(!ev.target.closest('button,input,a')) foco(); });
 
-var bd=window.LDM_BUILD||{};
-$('clVersao').textContent='RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:'');
+$('clVersao').textContent=RG.versaoTxt();
 S.col=novo();
 render();
 RG.vigiaVersao('../../version.js');

@@ -470,7 +470,7 @@ function vPainel(){
 }
 
 /* ---------- Coletor: agora é um app à parte (coletor/) ---------- */
-function versaoTxt(){ var bd=window.LDM_BUILD||{}; return 'RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:''); }
+function versaoTxt(){ return RG.versaoTxt(); }
 
 /* ---------- Movimentações ---------- */
 function isoDia(t){ var d=new Date(t); return d.getFullYear()+'-'+d2(d.getMonth()+1)+'-'+d2(d.getDate()); }
@@ -673,10 +673,7 @@ function inicia(){
   aplicaTema(temaEscuro());
   aplicaZoom(zoomAtual());
   var v=$('sidebarVersao');
-  if(v){
-    var bd=window.LDM_BUILD||{};
-    v.textContent='RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:'');
-  }
+  if(v) v.textContent=RG.versaoTxt();
   var rp=$('appRodape'); if(rp) rp.textContent=versaoTxt();
   RG.vigiaVersao('../version.js');
   var h=''; try { h=decodeURIComponent(location.hash.slice(1)); } catch(e){}
