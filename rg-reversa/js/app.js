@@ -772,7 +772,10 @@ function inicia(){
   aplicaTema(temaEscuro());
   aplicaZoom(zoomAtual());
   var v=$('sidebarVersao');
-  if(v && window.LDM_BUILD && window.LDM_BUILD.data && window.LDM_BUILD.data!=='—') v.textContent='Atualizado em '+window.LDM_BUILD.data;
+  if(v){
+    var bd=window.LDM_BUILD||{};
+    v.textContent='RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:'');
+  }
   var h=''; try { h=decodeURIComponent(location.hash.slice(1)); } catch(e){}
   if(TABS[h]) S.tab=h;
   deriva(); render();
