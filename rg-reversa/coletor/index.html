@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Coletor — RG Reversa</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="../icons/icon-192.png">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<meta name="theme-color" content="#001A72">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/acesso.css?v=dev">
+<link rel="stylesheet" href="coletor.css?v=dev">
+</head>
+<body>
+<div id="telaAcesso">
+  <div class="acesso-caixa">
+    <img src="../brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="acesso-logo">
+
+    <div class="acesso-cartao" id="acessoLogin">
+      <h1>Coletor RG Reversa</h1>
+      <p class="acesso-sub">CD Cajamar · acesso restrito a quem foi cadastrado pelo administrador.</p>
+      <form id="acessoForm">
+        <label class="acesso-campo">
+          <span class="acesso-rotulo">E-mail</span>
+          <input type="email" id="acessoEmail" class="acesso-input" required autocomplete="username" placeholder="nome@lojadomecanico.com.br">
+        </label>
+        <label class="acesso-campo" id="acessoSenhaCampo">
+          <span class="acesso-rotulo">Senha</span>
+          <div class="acesso-senha-wrap">
+            <input type="password" id="acessoSenha" class="acesso-input" required minlength="6" autocomplete="current-password" placeholder="pelo menos 6 caracteres">
+            <button type="button" class="acesso-mostrar" id="acessoMostrarSenha">Mostrar</button>
+          </div>
+        </label>
+        <p class="acesso-erro" id="acessoErro" hidden></p>
+        <p class="acesso-recado" id="acessoRecado" hidden></p>
+        <button type="submit" class="acesso-botao" id="acessoEnviar">Entrar</button>
+      </form>
+      <div class="acesso-links">
+        <button type="button" id="acessoModoEntrar">← Já tenho acesso</button>
+        <button type="button" id="acessoModoCriar">Primeiro acesso</button>
+        <button type="button" id="acessoModoRecuperar">Esqueci a senha</button>
+      </div>
+    </div>
+
+    <div class="acesso-cartao" id="acessoNegado" hidden>
+      <div class="acesso-negado-emoji">🔒</div>
+      <h1>Acesso negado</h1>
+      <p class="acesso-sub" id="acessoNegadoTexto">A conta <span class="acesso-negado-email" id="acessoNegadoEmail"></span> não tem permissão pra abrir o Coletor RG Reversa. Peça pro administrador liberar em Configurações, no painel da Central.</p>
+      <button type="button" class="acesso-botao" id="acessoSairNegado">Sair</button>
+    </div>
+
+    <a href="../" class="acesso-voltar">← Voltar para a Central</a>
+  </div>
+</div>
+<header class="cl-top">
+  <img src="../brand/Logo_LDM_icon.png" alt="" class="cl-logo">
+  <div class="cl-tit"><b>Coletor</b><span>RG Reversa · CD Cajamar</span></div>
+  <button class="cl-ic" id="clTeclado" type="button" title="Teclado na tela" aria-label="Teclado na tela">⌨</button>
+  <button class="cl-ic" id="clSync" type="button" title="Atualizar lista de locais" aria-label="Atualizar lista de locais">↻</button>
+</header>
+<main class="cl-main" id="app"></main>
+<footer class="cl-rodape"><span id="clVersao"></span><button type="button" id="sidebarSairBtn">Sair</button></footer>
+<div id="toast" class="cl-toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="../../version.js"></script>
+<script src="../js/comum.js?v=dev"></script>
+<script src="coletor.js?v=dev"></script>
+<script src="../js/acesso.js?v=dev"></script>
+</body>
+</html>

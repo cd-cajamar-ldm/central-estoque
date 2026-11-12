@@ -22,7 +22,6 @@ var RESTR = {WN:'Vendável',WA:'Reversa',WQ:'Quebra',RT:'Conferência',WE:'Amost
 
 var TABS = {
   painel:['Dashboard','Implantação de RG na logística reversa — meta: 100% do estoque com RG.'],
-  coletor:['Coletor','Bipe o local de origem, os RGs do palete e o local de destino.'],
   movs:['Movimentações','Relatório do coletor para baixar em Excel ou colar no PuTTY.'],
   importacao:['Importação','Relatórios do Bseller que alimentam o dashboard.']
 };
@@ -159,9 +158,10 @@ function montaEstoque(a, nome){
   var desc=function(i){ return (i>=0 && a.h[i+1]==='descricao') ? i+1 : -1; };
   var iItem=c('item'), iEan=c('ean'), iCl=c('classe local'), iLoc=c('local'), iQ=c('quantidade'), iDt=c('data situacao'), iRes=c('restricao');
   var iItemD=desc(iItem), iClD=desc(iCl), iLocD=desc(iLoc);
-  var m=new Map(), classes={}, linhasRev=0, un=0;
+  var m=new Map(), classes={}, linhasRev=0, un=0, todos=new Map();
   a.linhas.forEach(function(l){
     var cl=String(l[iCl]||'').trim().toUpperCase();
+    var lc=cod(l[iLoc]); if(lc && !todos.has(lc)) todos.set(lc,[lc, iLocD>=0?String(l[iLocD]||'').trim():'', cl]);
     if(CLASSES_REVERSA.indexOf(cl)<0) return;
     var item=cod(l[iItem]), loc=cod(l[iLoc]); if(!item) return;
     var q=num(l[iQ]), t=iDt>=0 ? parseData(l[iDt]) : null;
@@ -174,7 +174,7 @@ function montaEstoque(a, nome){
     var res=iRes>=0 ? String(l[iRes]||'').trim() : '';
     if(res) r.x[res]=(r.x[res]||0)+q;
   });
-  return { rows:Array.from(m.values()), classes:classes, arquivo:nome, em:Date.now(), linhasArquivo:a.linhas.length, linhasReversa:linhasRev, unidades:un };
+  return { rows:Array.from(m.values()), locais:Array.from(todos.values()), classes:classes, arquivo:nome, em:Date.now(), linhasArquivo:a.linhas.length, linhasReversa:linhasRev, unidades:un };
 }
 function montaMult(a, nome){
   var iC=a.h.indexOf('item componente'), iP=a.h.indexOf('item vol multiplo'), iQ=a.h.indexOf('qtde');
@@ -216,7 +216,11 @@ function importar(files){
       S.est=est;
       gravaLog({em:Date.now(), tipo:'QRY0390 · Estoque', arquivo:f.name, resumo:int(est.linhasArquivo)+' linhas no arquivo · '+int(est.linhasReversa)+' da reversa · '+int(est.unidades)+' unidades'});
       msgs.push('estoque da reversa ('+int(est.unidades)+' un)');
-      return dbSet('est', S.est);
+      return dbSet('est', S.est).then(function(){
+        /* a lista de locais (nome de cada local) vai para o Supabase: é o que o coletor mostra ao bipar */
+        return RG.subeLocais(window.rgSupa, est.locais).then(function(n){ msgs.push(int(n)+' locais enviados ao coletor'); })
+          .catch(function(e){ erros.push('Não consegui enviar a lista de locais ao coletor: '+((e&&e.message)||e)); });
+      });
     }).catch(function(e){ erros.push(e.message||String(e)); }).then(proximo);
   }
   setTimeout(function(){
@@ -387,7 +391,7 @@ function vPainel(){
   var hero='<div class="rv-hero"><div class="rv-hero-in">'+
     '<div class="rv-marca"><img src="brand/Logo_LDM_icon.png" alt=""><div><b>Oficina LDM</b><span>RG Reversa · CD Cajamar</span></div></div>'+
     '<div class="rv-hero-row"><div><h2>Dashboard RG Reversa</h2></div>'+
-    '<div class="rv-hero-btns"><button class="rv-btn pri" data-act="tab" data-tab="coletor">📲 Abrir coletor</button><button class="rv-btn sec" data-act="tab" data-tab="importacao">⬆ Importar relatórios</button></div></div></div></div>';
+    '<div class="rv-hero-btns"><a class="rv-btn pri" href="coletor/">📲 Abrir coletor</a><button class="rv-btn sec" data-act="tab" data-tab="importacao">⬆ Importar relatórios</button></div></div></div></div>';
   if(!tem && !S.rgs.length){
     return hero+'<div class="rv-body"><div class="panel"><div class="empty-state"><div class="eicon">📦</div><h3>Nenhum relatório importado ainda</h3><p>Importe a <strong>QRY0100</strong> (RGs), a <strong>QRY0390</strong> (Estoque por Local) e a <strong>ZBIQ0051</strong> (Múltiplos) para ver os indicadores.</p><p style="margin-top:16px"><button class="btn btn-orange" data-act="tab" data-tab="importacao">Ir para Importação</button></p></div></div></div>';
   }
@@ -465,104 +469,8 @@ function vPainel(){
   return hero+b+'</div>';
 }
 
-/* ---------- Coletor ---------- */
-var audio=null;
-function bip(ok){
-  try {
-    audio=audio||new (window.AudioContext||window.webkitAudioContext)();
-    var o=audio.createOscillator(), g=audio.createGain(); o.connect(g); g.connect(audio.destination);
-    o.frequency.value=ok?880:220; o.type=ok?'sine':'square'; g.gain.value=.08; o.start(); o.stop(audio.currentTime+(ok?.08:.28));
-  } catch(e){}
-  try { if(navigator.vibrate) navigator.vibrate(ok?30:[80,60,80]); } catch(e){}
-}
-function pendentes(){ return lsGet(PEND_KEY); }
-function colNovo(ultimo, hist, rel){ return { origem:'', rgs:[], destino:'', msg:'', erro:false, ultimo:ultimo||'', hist:hist||[], rel:rel||null, salvando:false, foco:'origem' }; }
+/* ---------- Coletor: agora é um app à parte (coletor/) ---------- */
 function versaoTxt(){ var bd=window.LDM_BUILD||{}; return 'RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:''); }
-
-/* Coletor (celular): uma coluna só, feita para o leitor de mão.
-   Origem → RGs (um por linha, numerados, com a quantidade embaixo) → destino → Finalizar. */
-function vColetor(){
-  var c=S.col, pend=pendentes(), h='<div class="colm">';
-  if(pend.length) h+='<div class="col-pend"><span>⚠ <b>'+int(pend.reduce(function(s,p){ return s+p.rows.length; },0))+'</b> bipagens aguardando envio.</span><button class="btn btn-secondary" data-act="col-sync">Enviar</button></div>';
-  var rel=(!c.origem && !c.rgs.length && !c.destino) ? c.rel : null;
-  if(rel){
-    /* depois de finalizar: relatório pronto + já pronto para a próxima bipagem */
-    h+='<div class="colm-box on"><label for="colOrigem"><span class="col-n">1</span>Próxima movimentação — local de origem</label><input class="col-in" id="colOrigem" autocomplete="off" autocapitalize="off" placeholder="bipe o local"></div>';
-    h+='<div class="colm-box"><div class="colm-rel-h"><b>✔ Relatório gerado</b><span class="rv-pill ok">'+int(rel.rgs.length)+' RG'+(rel.rgs.length===1?'':'s')+' · '+esc(rel.hora)+'</span></div>'+
-      '<div class="col-btns2"><button class="btn btn-orange" data-act="rel-xlsx">⬇ Excel</button><button class="btn btn-secondary" data-act="rel-copy">📋 Copiar</button></div>'+
-      (rel.salvo?'':'<div class="col-msg bad">Sem conexão: o histórico será enviado depois.</div>')+
-      '<div class="colm-list colm-rel">'+
-      '<div class="colm-li ext"><span>Origem</span><b>'+esc(rel.origem)+'</b></div>'+
-      rel.rgs.map(function(r,i){ return '<div class="colm-li"><span>'+(i+1)+'</span><b>'+esc(r)+'</b></div>'; }).join('')+
-      '<div class="colm-li ext"><span>Destino</span><b>'+esc(rel.destino)+'</b></div></div></div>';
-  } else {
-    var pode=c.origem && c.rgs.length && c.destino && !c.salvando;
-    /* 1 · origem */
-    h+='<div class="colm-box'+(c.origem?' ok':' on')+'"><label for="colOrigem"><span class="col-n">1</span>Local de origem</label>';
-    if(c.origem) h+='<div class="col-lock"><b>'+esc(c.origem)+'</b><button data-act="col-trocar" aria-label="Trocar origem">✎</button></div>';
-    else h+='<input class="col-in'+(c.erro&&c.foco==='origem'?' err':'')+'" id="colOrigem" autocomplete="off" autocapitalize="off" placeholder="bipe o local de origem">';
-    h+='</div>';
-    /* 2 · RGs */
-    h+='<div class="colm-box colm-rgs'+(c.origem?(c.rgs.length?' ok':' on'):' off')+'"><label for="colRg"><span class="col-n">2</span>RGs</label>'+
-      '<input class="col-in'+(c.erro&&c.foco==='rg'?' err':'')+'" id="colRg" autocomplete="off" autocapitalize="off" placeholder="bipe o RG"'+(c.origem?'':' disabled')+'>';
-    h+='<div class="colm-list" id="colList">'+(c.rgs.length?c.rgs.map(function(r,i){ return '<div class="colm-li"><span>'+(i+1)+'</span><b>'+esc(r.rg)+'</b><button class="col-x" data-act="col-del" data-i="'+i+'" aria-label="Remover">✕</button></div>'; }).join(''):'<div class="colm-vazio">Os RGs bipados aparecem aqui, um por linha.</div>')+'</div>';
-    h+='<div class="colm-qtd">Quantidade bipada: <b>'+c.rgs.length+'</b></div></div>';
-    /* 3 · destino */
-    h+='<div class="colm-box'+(c.destino?' ok':(c.rgs.length?' on':' off'))+'"><label for="colDestino"><span class="col-n">3</span>Local de destino</label>';
-    if(c.destino) h+='<div class="col-lock"><b>'+esc(c.destino)+'</b><button data-act="col-trocar-destino" aria-label="Trocar destino">✎</button></div>';
-    else h+='<input class="col-in'+(c.erro&&c.foco==='destino'?' err':'')+'" id="colDestino" autocomplete="off" autocapitalize="off" placeholder="bipe o local de destino"'+(c.rgs.length?'':' disabled')+'>';
-    h+='</div>';
-    if(c.msg) h+='<div class="col-msg'+(c.erro?' bad':'')+'">'+esc(c.msg)+'</div>';
-    h+='<button class="btn btn-orange colm-final" id="colFinal" data-act="col-final"'+(pode?'':' disabled')+'>'+(c.salvando?'Salvando…':'✔ Finalizar')+'</button>';
-    if(c.origem||c.rgs.length||c.destino) h+='<div style="text-align:center"><button class="btn-danger-text" data-act="col-cancela">Cancelar e recomeçar</button></div>';
-  }
-  if(c.hist.length) h+='<div class="col-hist"><div class="col-hist-t">Enviadas nesta sessão</div>'+c.hist.slice(0,3).map(function(x){ return '<div>'+esc(x)+'</div>'; }).join('')+'</div>';
-  return h+'</div>';
-}
-function foco(){
-  var c=S.col, id = c.foco==='final' ? 'colFinal' : c.foco==='destino' ? 'colDestino' : c.foco==='rg' ? 'colRg' : 'colOrigem';
-  var el=$(id); if(el && !el.disabled){ el.focus(); if(el.value){ var n=el.value.length; try { el.setSelectionRange(n,n); } catch(e){} } }
-}
-function colRefaz(){ render(); var l=$('colList'); if(l) l.scrollTop=l.scrollHeight; foco(); }
-function colErro(msg, onde){ var c=S.col; c.erro=true; c.msg=msg; c.foco=onde; bip(false); colRefaz(); }
-function colCommit(campo, el){
-  var c=S.col, v=el.value.trim(); if(!v) return;
-  c.erro=false; c.msg='';
-  if(campo==='origem'){ c.origem=v; c.rel=null; c.foco='rg'; bip(true); return colRefaz(); }
-  if(campo==='destino'){ c.destino=v; c.foco='final'; bip(true); return colRefaz(); }
-  /* RG: só recusa repetido no mesmo palete — nada depende de importação. */
-  var rg=cod(v);
-  if(c.rgs.some(function(r){ return r.rg===rg; })){ el.value=''; return colErro('RG '+rg+' já foi bipado neste palete.','rg'); }
-  c.rgs.push({rg:rg}); c.foco='rg'; bip(true); colRefaz();
-}
-function colFinaliza(){
-  var c=S.col; if(!c.origem || !c.destino || !c.rgs.length || c.salvando) return;
-  c.salvando=true; render();
-  var lote=(window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'l'+Date.now()+Math.random().toString(16).slice(2);
-  var quando=new Date().toISOString();
-  var rows=c.rgs.map(function(r){ return { lote:lote, criado_em:quando, operador:S.user, local_origem:c.origem, rg:r.rg, local_destino:c.destino }; });
-  var resumo=c.rgs.length+' RGs · '+c.origem+' → '+c.destino, hora=d2(new Date().getHours())+':'+d2(new Date().getMinutes());
-  var ultimo='', hist=c.hist, rel={ lote:lote, hora:hora, origem:c.origem, destino:c.destino, rgs:c.rgs.map(function(r){ return r.rg; }), salvo:false };
-  enviaLote(rows).then(function(){ ultimo='✔ Último: '+resumo; hist.unshift(hora+' · '+resumo); rel.salvo=true; toast('Movimentação salva: '+resumo); }).catch(function(){
-    var p=pendentes(); p.push({lote:lote, rows:rows}); lsSet(PEND_KEY,p);
-    ultimo='⚠ Salvo neste aparelho (sem conexão): '+resumo; hist.unshift(hora+' · '+resumo+' (pendente)'); toast('Sem conexão — guardei no aparelho e envio depois.', true);
-  }).then(function(){
-    S.col=colNovo(ultimo, hist, rel); S.movs=null; colRefaz();
-    try { relXlsx(); } catch(e){}   /* o Excel já sobe sozinho ao finalizar */
-  });
-}
-function enviaLote(rows){
-  var partes=[]; for(var i=0;i<rows.length;i+=500) partes.push(rows.slice(i,i+500));
-  return partes.reduce(function(p,parte){
-    return p.then(function(){ return window.rgSupa.from('rg_movimentacoes').insert(parte).then(function(r){ if(r.error) throw r.error; }); });
-  }, Promise.resolve());
-}
-function colSync(){
-  var p=pendentes(); if(!p.length) return;
-  var resto=[], seq=Promise.resolve();
-  p.forEach(function(l){ seq=seq.then(function(){ return enviaLote(l.rows).catch(function(){ resto.push(l); }); }); });
-  seq.then(function(){ lsSet(PEND_KEY,resto); toast(resto.length?'Ainda sem conexão para '+resto.length+' lote(s).':'Tudo enviado.', !!resto.length); S.movs=null; render(); });
-}
 
 /* ---------- Movimentações ---------- */
 function isoDia(t){ var d=new Date(t); return d.getFullYear()+'-'+d2(d.getMonth()+1)+'-'+d2(d.getDate()); }
@@ -581,6 +489,7 @@ function movsFiltradas(){
   var q=norm(S.fm.q); if(!S.movs) return [];
   return q ? S.movs.filter(function(m){ return norm(m.rg+' '+m.local_origem+' '+m.local_destino+' '+m.operador).indexOf(q)>=0; }) : S.movs;
 }
+function locTxt(raw){ var n=RG.nomeLocal(raw); return '<b>'+esc(RG.localNorm(raw))+'</b>'+(n&&n.d?'<br><small style="color:var(--ink-soft)">'+esc(n.d)+'</small>':''); }
 function vMovs(){
   if(S.movs==null && !S.movsBusy) setTimeout(carregaMovs,0);
   var f=S.fm; if(!f.de) f.de=isoDia(hoje0()-6*864e5); if(!f.ate) f.ate=isoDia(hoje0());
@@ -598,7 +507,7 @@ function vMovs(){
   else if(!lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Nenhuma movimentação neste filtro.</td></tr>';
   var lim=S.lim.mv||PAGINA;
   lista.slice(0,lim).forEach(function(m){
-    h+='<tr><td>'+dataHoraBR(m.criado_em)+'</td><td>'+esc(m.operador||'—')+'</td><td>'+esc(m.local_origem)+'</td><td><b>'+esc(m.rg)+'</b></td><td>'+esc(m.local_destino)+'</td><td>'+(m.exportado_em?'<span class="tag tag-good">Exportado</span>':'<span class="tag tag-orange">Pendente</span>')+'</td></tr>';
+    h+='<tr><td>'+dataHoraBR(m.criado_em)+'</td><td>'+esc(m.operador||'—')+'</td><td>'+locTxt(m.local_origem)+'</td><td><b>'+esc(m.rg)+'</b></td><td>'+locTxt(m.local_destino)+'</td><td>'+(m.exportado_em?'<span class="tag tag-good">Exportado</span>':'<span class="tag tag-orange">Pendente</span>')+'</td></tr>';
   });
   h+='</tbody></table></div>';
   if(lista.length>lim) h+='<div class="rv-mais"><button class="btn btn-secondary" data-act="mv-mais">Mostrar mais ('+int(lista.length-lim)+' restantes)</button></div>';
@@ -612,47 +521,27 @@ function marcaExportado(lista){
   return partes.reduce(function(p,parte){ return p.then(function(){ return window.rgSupa.from('rg_movimentacoes').update({exportado_em:agora}).in('id',parte).then(function(r){ if(r.error) throw r.error; }); }); }, Promise.resolve())
     .then(function(){ S.movs=null; render(); }).catch(function(e){ toast('Exportei, mas não consegui marcar como exportado: '+(e.message||e), true); });
 }
-/* Formato do relatório: uma coluna só — 1ª linha o local de origem, depois cada RG, e na última linha o local de destino. */
-function linhasRel(r){ return [r.origem].concat(r.rgs, [r.destino]); }
-function linhasMovs(lista){
+/* Relatório: coluna A = origem, RGs e destino (o que vai para o PuTTY); colunas ao lado dizem o que cada número é. */
+function blocosMovs(lista){
   var ordem=[], g={};
-  lista.forEach(function(m){ if(!g[m.lote]){ g[m.lote]={o:m.local_origem, d:m.local_destino, rgs:[]}; ordem.push(m.lote); } g[m.lote].rgs.push(m.rg); });
-  var out=[]; ordem.forEach(function(l){ var x=g[l]; out=out.concat([x.o], x.rgs, [x.d]); }); return out;
-}
-function baixaXlsx(linhas, nome){
-  var ws=XLSX.utils.aoa_to_sheet(linhas.map(function(l){ return [l]; })); ws['!cols']=[{wch:26}];
-  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movimentação');
-  XLSX.writeFile(wb,nome);
-}
-function copiaTexto(linhas, okMsg, depois){
-  var txt=linhas.join('\n');
-  var ok=function(){ toast(okMsg); if(depois) depois(); };
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(function(){ copiaFallback(txt); ok(); });
-  else { copiaFallback(txt); ok(); }
-}
-function relXlsx(){
-  var r=S.col.rel; if(!r) return;
-  baixaXlsx(linhasRel(r),'rg-reversa-movimentacao-'+isoDia(Date.now())+'-'+r.hora.replace(':','h')+'.xlsx');
-  marcaLote(r);
-}
-function relCopy(){
-  var r=S.col.rel; if(!r) return;
-  copiaTexto(linhasRel(r), int(linhasRel(r).length)+' linhas copiadas — cole no PuTTY.', function(){ marcaLote(r); });
-}
-/* Exportou o relatório do coletor: marca o lote como exportado (se ele já chegou ao banco). */
-function marcaLote(r){
-  if(!r.salvo || r.marcado) return; r.marcado=true;
-  window.rgSupa.from('rg_movimentacoes').update({exportado_em:new Date().toISOString()}).eq('lote',r.lote).then(function(){ S.movs=null; });
+  lista.forEach(function(m){
+    if(!g[m.lote]){ g[m.lote]={ origem:m.local_origem, destino:m.local_destino, rgs:[], hora:dataHoraBR(m.criado_em), operador:m.operador||'' }; ordem.push(m.lote); }
+    var rec=S.D && S.D.rgMap.get(m.rg), desc=rec ? (S.D.itemDesc.get(rec.item)||'') : '';
+    g[m.lote].rgs.push({ rg:m.rg, desc:desc });
+  });
+  return ordem.map(function(l){ return g[l]; });
 }
 function mvXlsx(){
   var lista=movsFiltradas(); if(!lista.length) return;
-  baixaXlsx(linhasMovs(lista),'rg-reversa-movimentacoes-'+isoDia(Date.now())+'.xlsx');
+  var blocos=blocosMovs(lista);
+  var ops=Array.from(new Set(blocos.map(function(b){ return b.operador; }).filter(Boolean))).join(', ');
+  RG.xlsx(blocos, { data:dataBR(Date.now()), operador:ops }, 'rg-reversa-movimentacoes-'+isoDia(Date.now())+'.xlsx');
   marcaExportado(lista);
 }
 function mvCopy(){
   var lista=movsFiltradas(); if(!lista.length) return;
-  var l=linhasMovs(lista);
-  copiaTexto(l, int(l.length)+' linhas copiadas — cole no PuTTY.', function(){ marcaExportado(lista); });
+  var l=RG.linhasBlocos(blocosMovs(lista));
+  RG.copia(l.join('\n')).then(function(){ toast(int(l.length)+' linhas copiadas — cole no PuTTY.'); marcaExportado(lista); });
 }
 function copiaFallback(txt){ var t=document.createElement('textarea'); t.value=txt; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch(e){} t.remove(); }
 
@@ -679,12 +568,11 @@ function vImportacao(){
 }
 
 /* ---------- navegação ---------- */
-var VIEWS={ painel:vPainel, coletor:vColetor, movs:vMovs, importacao:vImportacao };
+var VIEWS={ painel:vPainel, movs:vMovs, importacao:vImportacao };
 function render(){
   var t=TABS[S.tab]; $('tabTitle').textContent=t[0]; $('tabSubtitle').textContent=t[1];
   Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-tab]'),function(b){ b.classList.toggle('active', b.dataset.tab===S.tab); });
   var h=(S.ocupado && S.tab!=='importacao') ? '<div class="rv-aviso" style="margin-bottom:14px"><strong>Aguarde.</strong> '+esc(S.ocupado)+'</div>' : '';
-  document.body.classList.toggle('tab-coletor', S.tab==='coletor');
   var sc=document.querySelector('.page-scroll'), y=sc?sc.scrollTop:0;
   $('viewRoot').innerHTML=h+VIEWS[S.tab]();
   if(sc) sc.scrollTop=y;
@@ -697,7 +585,6 @@ function vaiPara(tab){
   if(tab==='movs') S.movs=null;
   render();
   var sc=document.querySelector('.page-scroll'); if(sc) sc.scrollTop=0;
-  if(tab==='coletor') setTimeout(foco,50);
 }
 
 /* ---------- tema, zoom, menu ---------- */
@@ -721,7 +608,7 @@ function zoomAtual(){ try { return parseInt(localStorage.getItem('ldm-zoom'),10)
 
 /* ---------- eventos ---------- */
 function acao(el, ev){
-  var a=el.dataset.act, c=S.col;
+  var a=el.dataset.act;
   if(a==='tab') return vaiPara(el.dataset.tab);
   if(a==='sidebar'){ var sb=$('sidebar'); return sb.classList.toggle(matchMedia('(max-width:640px)').matches?'mobile-open':'collapsed'); }
   if(a==='fecha-sidebar') return $('sidebar').classList.remove('mobile-open');
@@ -735,21 +622,12 @@ function acao(el, ev){
     if(k==='rgs') S.rgs=[]; if(k==='est') S.est=null; if(k==='mult') S.mult=null; if(k==='hist') S.hist=[];
     return dbDel(k).then(function(){ deriva(); render(); });
   }
-  if(a==='col-trocar'){ c.origem=''; c.msg=''; c.erro=false; c.foco='origem'; return colRefaz(); }
-  if(a==='col-trocar-destino'){ c.destino=''; c.msg=''; c.erro=false; c.foco='destino'; return colRefaz(); }
-  if(a==='col-del'){ c.rgs.splice(+el.dataset.i,1); c.foco='rg'; return colRefaz(); }
-  if(a==='col-cancela'){ if(c.rgs.length && !confirm('Descartar esta bipagem?')) return; S.col=colNovo(c.ultimo, c.hist, c.rel); return colRefaz(); }
-  if(a==='col-final') return colFinaliza();
-  if(a==='col-sync') return colSync();
   if(a==='mv-load'){ S.movs=null; return carregaMovs(); }
   if(a==='mv-mais'){ S.lim.mv=(S.lim.mv||PAGINA)+PAGINA; return render(); }
-  if(a==='rel-xlsx') return relXlsx();
-  if(a==='rel-copy') return relCopy();
   if(a==='mv-xlsx') return mvXlsx();
   if(a==='mv-copy') return mvCopy();
 }
 function inicia(){
-  S.col=colNovo();
   var fi=document.createElement('input'); fi.type='file'; fi.id='fileInput'; fi.accept='.xlsx,.xls,.xlsb,.csv'; fi.multiple=true; fi.hidden=true; document.body.appendChild(fi);
   document.addEventListener('click', function(ev){ var el=ev.target.closest('[data-act]'); if(el) acao(el, ev); });
   document.addEventListener('change', function(ev){
@@ -817,8 +695,7 @@ window.rgIniciar=function(){
     S.hist=Array.isArray(r[3]) ? r[3] : [];
   }).catch(function(){ toast('Não consegui abrir os dados salvos neste navegador.', true); }).then(function(){
     deriva(); render();
-    if(S.tab==='coletor') foco();
-    if(pendentes().length) colSync();
+    RG.carregaLocais(window.rgSupa).then(function(){ if(S.tab==='movs') render(); });
   });
 };
 inicia();
