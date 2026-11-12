@@ -1749,11 +1749,15 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .dx-ln-pt{ stroke:var(--surface); stroke-width:2; cursor:pointer; }
 .dx-ln-pt:hover{ r:7; }
 .dx-ln-fim{ font-size:12.5px; font-weight:800; }
-.dx-mensal-corpo{ display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:16px; align-items:center; }
-.dx-mensal-ano{ display:flex; flex-direction:column; gap:10px; }
-.dx-ano{ display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:10px; background:var(--surface2); border-left:4px solid; }
+.dx-mensal-corpo{ display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:16px; align-items:stretch; }
+.dx-mensal-graf{ display:flex; align-items:flex-start; }
+.dx-mensal-graf svg{ width:100%; }
+/* Cartões do ano ocupam a mesma altura da área do gráfico: o de cima alinha com
+   a linha de 100% e o de baixo com a base do eixo (sem os nomes dos meses). */
+.dx-mensal-ano{ display:flex; flex-direction:column; gap:8px; padding:2px 0 26px; }
+.dx-ano{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:1px; padding:6px 12px; border-radius:10px; background:var(--surface2); border-left:4px solid; }
 .dx-ano-rot{ font-size:12px; color:var(--ink-soft); }
-.dx-ano-v{ font-size:21px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
+.dx-ano-v{ font-size:19px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
 .dx-ano-v.bad{ color:var(--danger); }
 .dx-ano-h{ font-size:11px; color:var(--ink-soft); }
 @media(max-width:700px){ .dx-mensal-corpo{ grid-template-columns:1fr; } .dx-mensal-ano{ flex-direction:row; flex-wrap:wrap; } .dx-ano{ flex:1; min-width:120px; } }
@@ -1808,3 +1812,17 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .sb-foto + .brand-back{ margin-top:8px; }
 /* Carrinho da logo maior dentro do selo laranja. */
 .brand-logo img{ width:86%; height:86%; }
+
+/* Totais do ano abaixo do gráfico de Acurácia mensal (modelo "T1"). */
+.dx-totais{ display:flex; flex-direction:column; gap:12px; margin-top:16px; padding-top:14px; border-top:1px dashed var(--line); }
+.dx-tot{ display:grid; grid-template-columns:64px minmax(90px,1fr) minmax(90px,1fr) minmax(0,2fr) 56px; gap:14px; align-items:center; }
+.dx-tot-rot{ font-size:14px; font-weight:800; }
+.dx-tot-n{ display:flex; flex-direction:column; min-width:0; }
+.dx-tot-n span{ font-size:11px; color:var(--ink-soft); }
+.dx-tot-n b{ font-size:17px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.dx-tot-n b.bad{ color:var(--danger); }
+.dx-tot-bar{ display:flex; height:12px; border-radius:999px; overflow:hidden; background:var(--surface2); }
+.dx-tot-bar i{ flex:1; opacity:.85; }
+.dx-tot-bar em{ min-width:4px; background:var(--danger); }
+.dx-tot-p{ font-size:13px; font-weight:800; color:var(--danger); text-align:right; font-variant-numeric:tabular-nums; }
+@media(max-width:700px){ .dx-tot{ grid-template-columns:56px 1fr 1fr; } .dx-tot-bar{ grid-column:1 / 3; } }
