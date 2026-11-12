@@ -14,8 +14,50 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
 <!-- theme.css é o mesmo design system do app de Inventário (cópia, como nos outros módulos). -->
 <link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/acesso.css">
+<link rel="stylesheet" href="css/rg.css">
 </head>
 <body>
+<div id="telaAcesso">
+  <div class="acesso-caixa">
+    <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="acesso-logo">
+
+    <div class="acesso-cartao" id="acessoLogin">
+      <h1>RG Reversa</h1>
+      <p class="acesso-sub">CD Cajamar · acesso restrito a quem foi cadastrado pelo administrador.</p>
+      <form id="acessoForm">
+        <label class="acesso-campo">
+          <span class="acesso-rotulo">E-mail</span>
+          <input type="email" id="acessoEmail" class="acesso-input" required autocomplete="username" placeholder="nome@lojadomecanico.com.br">
+        </label>
+        <label class="acesso-campo" id="acessoSenhaCampo">
+          <span class="acesso-rotulo">Senha</span>
+          <div class="acesso-senha-wrap">
+            <input type="password" id="acessoSenha" class="acesso-input" required minlength="6" autocomplete="current-password" placeholder="pelo menos 6 caracteres">
+            <button type="button" class="acesso-mostrar" id="acessoMostrarSenha">Mostrar</button>
+          </div>
+        </label>
+        <p class="acesso-erro" id="acessoErro" hidden></p>
+        <p class="acesso-recado" id="acessoRecado" hidden></p>
+        <button type="submit" class="acesso-botao" id="acessoEnviar">Entrar</button>
+      </form>
+      <div class="acesso-links">
+        <button type="button" id="acessoModoEntrar">← Já tenho acesso</button>
+        <button type="button" id="acessoModoCriar">Primeiro acesso</button>
+        <button type="button" id="acessoModoRecuperar">Esqueci a senha</button>
+      </div>
+    </div>
+
+    <div class="acesso-cartao" id="acessoNegado" hidden>
+      <div class="acesso-negado-emoji">🔒</div>
+      <h1>Acesso negado</h1>
+      <p class="acesso-sub" id="acessoNegadoTexto">A conta <span class="acesso-negado-email" id="acessoNegadoEmail"></span> não tem permissão pra abrir o RG Reversa. Peça pro administrador liberar em Configurações, no painel da Central.</p>
+      <button type="button" class="acesso-botao" id="acessoSairNegado">Sair</button>
+    </div>
+
+    <a href="../" class="acesso-voltar">← Voltar para a Central</a>
+  </div>
+</div>
 <div class="shell">
   <aside class="sidebar" id="sidebar">
     <div class="brand">
@@ -35,10 +77,18 @@
       <span>Voltar para a Central</span>
     </a>
     <nav class="sidebar-nav" id="sidebarNav">
+      <div class="nav-section-label">Visão geral</div>
+      <button class="nav-item" data-tab="painel"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></button>
+      <div class="nav-section-label">Operação</div>
+      <button class="nav-item" data-tab="coletor"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="10" y1="6" x2="14" y2="6"/><path d="M9 11h6M9 14h6M9 17h3"/></svg><span>Coletor</span></button>
+      <button class="nav-item" data-tab="movs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span>Movimentações</span></button>
+      <div class="nav-section-label">Sistema</div>
+      <button class="nav-item" data-tab="importacao"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Importação</span></button>
     </nav>
     <div class="sidebar-footer">
       Loja do Mecânico &middot; CD Cajamar
       <div class="sidebar-versao" id="sidebarVersao"></div>
+      <button type="button" class="sidebar-sair" id="sidebarSairBtn">Sair</button>
     </div>
   </aside>
 
@@ -48,13 +98,12 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div class="topbar-titles">
-        <h1 id="tabTitle">RG Reversa</h1>
-        <p id="tabSubtitle">Oficina LDM.</p>
+        <h1 id="tabTitle">Dashboard</h1>
+        <p id="tabSubtitle">Implantação de RG na logística reversa.</p>
       </div>
       <div class="topbar-gears" aria-hidden="true">
         <svg class="tb-gear tb-gear-big" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
         <svg class="tb-gear tb-gear-small" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
-      </div>
       </div>
       <button class="theme-switch" id="themeSwitchBtn" type="button" data-act="tema" aria-label="Alternar tema claro/escuro">
         <span class="theme-knob"></span>
@@ -74,8 +123,12 @@
 </div>
 
 <div id="toast" class="toast hidden"></div>
+<div id="tip" class="rg-tip" hidden></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="../version.js"></script>
 <script src="js/app.js"></script>
+<script src="js/acesso.js"></script>
 </body>
 </html>
