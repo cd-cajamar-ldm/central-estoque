@@ -1024,7 +1024,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v263';
+const IR_APP_VERSION = 'v264';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1192,9 +1192,9 @@ function irRenderDashboard(){
         ${irRenderStatusInventarioPanel(ind)}
       </div>
       ${irRenderCiclosCards()}
+      ${irRenderLogTablePanel(ind)}
       ${irRenderContadosPorDiaPanel(ind)}
       ${irRenderDivergentesPorDiaPanel(ind)}
-      ${irRenderLogTablePanel(ind)}
     </div>
   </div>`;
 }
@@ -1485,32 +1485,86 @@ function irRenderLogTablePanel(ind){
   }
   const total = irCalcLogTotal(rows);
   total.locaisPendentes = rows.reduce((s,r)=>s+r.locaisPendentes, 0);
-  const rowsComTotal = [...rows, total];
   const meta = ind.meta;
+  // Guarda cada linha para o balão (irLogTip) achar os números pelo índice.
+  IR._logCards = [...rows, total];
+  // Modelo "L1": um cartão por log + um de Total. Mesmos números da tabela
+  // antiga; o detalhe de cada acurácia aparece no balão ao passar o mouse.
+  const acc = (r, idx, k, rot, cor) => {
+    const v = r[k];
+    const ok = v!=null && v>=meta;
+    return `<div class="lc-acc ${ok?'ok':'nok'}" onmouseenter="irLogTip(event,${idx},'${k}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
+      <span class="lc-acc-rot"><i style="background:${cor};"></i>${rot}</span>
+      <b>${v==null?'—':irFmtPct(v)}</b>
+    </div>`;
+  };
+  const card = (r, idx) => {
+    const orc = r.locaisOrcados||0, cont = r.locaisContados||0;
+    const pct = orc>0 ? cont/orc : 0;
+    return `<div class="lc-card ${r.isTotal?'lc-total':''}">
+      <div class="lc-top"><span class="lc-nome">${r.isTotal?'Total':irEsc(r.chave)}</span><span class="lc-pc">${irFmtInt(r.pecasContadas)} pç</span></div>
+      <div class="lc-loc">
+        <div class="lc-loc-l"><span>Contados</span><b>${irFmtInt(cont)} de ${irFmtInt(orc)}</b></div>
+        <div class="lc-bar"><i style="width:${(Math.min(1,pct)*100).toFixed(1)}%;"></i></div>
+        <div class="lc-loc-l lc-sub"><span>${irFmtPct(pct)} contado</span><span>${irFmtInt(r.locaisPendentes)} pendentes</span></div>
+      </div>
+      ${acc(r, idx, 'acuraciaPecas', 'Peças', 'var(--dx-pecas)')}
+      ${acc(r, idx, 'acuraciaPosicoes', 'Posições', 'var(--dx-local)')}
+      ${acc(r, idx, 'acuraciaValor', 'Valor', 'var(--dx-valor)')}
+      <div class="lc-div"><span>Divergentes</span><span><b>${irFmtInt(r.locaisDivergentes)}</b> locais · <b>${irFmtInt(r.pecasDivergentes)}</b> pç</span></div>
+    </div>`;
+  };
   return `<div class="panel">
-    <h3>Acurácia por Log</h3>
-    <p class="panel-sub">Locais orçados x contados (Grupo Classe da base congelada), peças e acurácias por log — só locais CONCLUÍDOS (mesma regra do KPI "Acurácia Peças/Valor" do topo).</p>
-    <div class="table-wrap"><table>
-      <thead><tr>
-        <th>Log</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Pendentes</th><th>Locais Divergentes</th>
-        <th>Peças Contadas</th><th>Peças Divergentes</th>
-        <th>Acurácia Peças</th><th>Acurácia Posições</th><th>Acurácia Valor</th>
-      </tr></thead>
-      <tbody>${rowsComTotal.map(r=>`<tr${r.isTotal?' style="font-weight:700;border-top:2px solid var(--line);"':''}>
-        <td class="mono">${r.isTotal?'Total':irEsc(r.chave)}</td>
-        <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
-        <td class="mono">${irFmtInt(r.locaisContados)}</td>
-        <td class="mono">${irFmtInt(r.locaisPendentes)}</td>
-        <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
-        <td class="mono">${irFmtInt(r.pecasContadas)}</td>
-        <td class="mono">${irFmtInt(r.pecasDivergentes)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaPecas, meta)}">${irFmtPct(r.acuraciaPecas)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaPosicoes, meta)}">${irFmtPct(r.acuraciaPosicoes)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaValor, meta)}">${irFmtPct(r.acuraciaValor)}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>
+    <div class="dx-panel-h"><h3>Acurácia por Log</h3>
+      <div class="cmp-legend">
+        <span><span class="cmp-dot" style="background:var(--dx-pecas);"></span>Peças</span>
+        <span><span class="cmp-dot" style="background:var(--dx-local);"></span>Posições</span>
+        <span><span class="cmp-dot" style="background:var(--dx-valor);"></span>Valor</span>
+        <span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span>
+      </div>
+    </div>
+    <div class="lc-grid">${IR._logCards.map((r,i)=>card(r,i)).join('')}</div>
     ${irRenderLogForaDaTabela(ind, rows)}
   </div>`;
+}
+/* Balão da acurácia no cartão do log: a conta inteira (base, divergente,
+   acurácia) e a distância até a meta, com uma régua mostrando onde está. */
+function irLogTip(ev, idx, k){
+  const r = (IR._logCards||[])[idx];
+  const tt = document.getElementById('irChartTooltip');
+  if(!r || !tt) return;
+  const meta = (IR.indicadores && IR.indicadores.meta) || IR_META_ACURACIA;
+  const v = r[k];
+  const nome = r.isTotal ? 'Total dos logs' : r.chave;
+  let titulo, cor, linhas;
+  if(k==='acuraciaPecas'){
+    titulo = 'Peças'; cor = 'var(--dx-pecas)';
+    const base = r.pecasSaldoLogico || r.pecasContadas || 0;
+    linhas = [['Base (saldo do sistema)', irFmtInt(base)+' pç'], ['Contadas', irFmtInt(r.pecasContadas)+' pç'], ['Divergentes', irFmtInt(r.pecasDivergentes)+' pç', 'bad']];
+  } else if(k==='acuraciaPosicoes'){
+    titulo = 'Posições'; cor = 'var(--dx-local)';
+    linhas = [['Locais orçados', irFmtInt(r.locaisOrcados)], ['Locais contados', irFmtInt(r.locaisContados)], ['Locais divergentes', irFmtInt(r.locaisDivergentes), 'bad']];
+  } else {
+    titulo = 'Valor'; cor = 'var(--dx-valor)';
+    const base = r.vlSaldoLogico || r.vlFisicoTotal || 0;
+    linhas = [['Base (saldo do sistema)', irFmtMoney(base)], ['Valor contado', irFmtMoney(r.vlFisicoTotal||0)], ['Valor divergente', irFmtMoney(r.valorDivergenteAbsoluto||0), 'bad']];
+  }
+  const d = v==null ? null : (v-meta)*100;
+  const st = d==null ? '' : (d>=0
+    ? `<span class="lt-pill ok">na meta · +${irFmtNum(d,1)} p.p.</span>`
+    : `<span class="lt-pill nok">${irFmtNum(-d,1)} p.p. abaixo da meta</span>`);
+  // Régua de 90% a 100% com a marca da meta.
+  const pos = x => Math.max(0, Math.min(100, (x-0.90)/0.10*100)).toFixed(1);
+  tt.innerHTML = `<div class="lt">
+    <div class="lt-h"><span class="lt-dot" style="background:${cor};"></span><span>${irEsc(nome)} · Acurácia ${titulo}</span></div>
+    <div class="lt-v"><b class="${d!=null && d<0?'bad':''}">${v==null?'—':irFmtPct(v)}</b>${st}</div>
+    <div class="lt-regua"><i style="width:${v==null?0:pos(v)}%;background:${cor};"></i><em style="left:${pos(meta)}%;"></em></div>
+    <div class="lt-esc"><span>90%</span><span>meta ${irFmtNum(meta*100,0)}%</span><span>100%</span></div>
+    <div class="lt-rows">${linhas.map(([a,b,c])=>`<div><span>${a}</span><b class="${c||''}">${b}</b></div>`).join('')}</div>
+  </div>`;
+  tt.classList.add('lt-wrap');
+  tt.classList.remove('hidden');
+  irMoveDiaTooltip(ev);
 }
 /* O que a tabela deixou de fora, com nome e número.
 
@@ -2306,7 +2360,7 @@ function irMoveDiaTooltip(ev){
 }
 function irHideDiaTooltip(){
   const tt = document.getElementById('irChartTooltip');
-  if(tt) tt.classList.add('hidden');
+  if(tt){ tt.classList.add('hidden'); tt.classList.remove('lt-wrap'); }
 }
 function irRenderRuasMaisDivergentesPanel(ind){
   const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>b.pecasDivergentes-a.pecasDivergentes);

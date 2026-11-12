@@ -1693,9 +1693,9 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
    Foto do CD no topo, cartões brancos sobrepostos à foto, faixa com os
    demais indicadores e os painéis do ciclo em cartões arredondados.
    ============================================================ */
-.dx{ --dx-pecas:#FE5000; --dx-local:#001A72; --dx-valor:#1D1F2A; }
-:root[data-theme="dark"] .dx{ --dx-local:#7D93E8; --dx-valor:#E6E8F0; }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .dx{ --dx-local:#7D93E8; --dx-valor:#E6E8F0; } }
+:root, .dx{ --dx-pecas:#FE5000; --dx-local:#001A72; --dx-valor:#1D1F2A; }
+:root[data-theme="dark"], :root[data-theme="dark"] .dx{ --dx-local:#7D93E8; --dx-valor:#E6E8F0; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]), :root:not([data-theme="light"]) .dx{ --dx-local:#7D93E8; --dx-valor:#E6E8F0; } }
 .dx-hero{
   margin:-20px -24px 0; padding:20px 24px 96px; color:#fff;
   background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.82) 50%, rgba(0,18,82,.35) 100%), url(../brand/dash-hero.jpg);
@@ -1834,3 +1834,49 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 :root[data-theme="dark"], :root[data-app-theme]{ --page-bg:var(--paper); --card-border:var(--line); --card-shadow:none; }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --page-bg:var(--paper); --card-border:var(--line); --card-shadow:none; } }
 :root:not([data-theme="dark"]):not([data-app-theme]) .panel{ box-shadow:var(--card-shadow); }
+
+/* Acurácia por Log (modelo "L1"): um cartão por log + Total. */
+.lc-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; }
+.lc-card{ border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; background:var(--surface); }
+.lc-card.lc-total{ background:var(--surface2); }
+.lc-top{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.lc-nome{ font-family:'Poppins',sans-serif; font-size:17px; font-weight:700; color:var(--ink); }
+.lc-pc{ font-size:12px; color:var(--ink-soft); white-space:nowrap; }
+.lc-loc{ display:flex; flex-direction:column; gap:4px; }
+.lc-loc-l{ display:flex; justify-content:space-between; gap:8px; font-size:11.5px; color:var(--ink-soft); }
+.lc-loc-l b{ color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.lc-loc-l.lc-sub{ font-size:11px; }
+.lc-bar{ height:6px; background:var(--surface2); border-radius:999px; overflow:hidden; }
+.lc-total .lc-bar{ background:var(--line); }
+.lc-bar i{ display:block; height:100%; background:var(--dx-local); border-radius:999px; }
+.lc-acc{ display:flex; justify-content:space-between; align-items:center; padding:7px 10px; border-radius:8px; cursor:help; transition:transform .12s, box-shadow .12s; }
+.lc-acc:hover{ transform:translateY(-1px); box-shadow:0 4px 12px -6px rgba(15,21,48,.35); }
+.lc-acc.ok{ background:var(--success-light); } .lc-acc.nok{ background:var(--danger-light); }
+.lc-acc-rot{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-soft); }
+.lc-acc-rot i{ width:8px; height:8px; border-radius:50%; }
+.lc-acc b{ font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; }
+.lc-acc.ok b{ color:var(--success); } .lc-acc.nok b{ color:var(--danger); }
+.lc-div{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 8px; font-size:11.5px; color:var(--ink-soft); border-top:1px dashed var(--line); padding-top:8px; }
+.lc-div b{ color:var(--danger); }
+
+/* Balão da acurácia do log. */
+.chart-tooltip.lt-wrap{ padding:0; max-width:300px; width:290px; border-radius:12px; overflow:hidden; box-shadow:0 18px 40px -12px rgba(15,21,48,.45), 0 2px 6px rgba(15,21,48,.12); }
+.lt{ display:flex; flex-direction:column; gap:8px; padding:12px 14px 12px; }
+.lt-h{ display:flex; align-items:center; gap:8px; font-size:12px; font-weight:800; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; }
+.lt-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.lt-v{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.lt-v b{ font-family:'Poppins',sans-serif; font-size:26px; font-weight:700; color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; }
+.lt-v b.bad{ color:var(--danger); }
+.lt-pill{ font-size:11px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; }
+.lt-pill.ok{ color:var(--success); background:var(--success-light); }
+.lt-pill.nok{ color:var(--danger); background:var(--danger-light); }
+.lt-regua{ position:relative; height:8px; background:var(--surface2); border-radius:999px; margin-top:2px; }
+.lt-regua i{ display:block; height:100%; border-radius:999px; }
+.lt-regua em{ position:absolute; top:-4px; width:2px; height:16px; background:var(--ink); border-radius:1px; }
+.lt-esc{ display:flex; justify-content:space-between; font-size:10px; color:var(--ink-soft); margin-top:-4px; }
+.lt-rows{ display:flex; flex-direction:column; border-top:1px solid var(--line); padding-top:6px; }
+.lt-rows div{ display:flex; justify-content:space-between; gap:12px; padding:4px 0; font-size:12px; color:var(--ink-soft); }
+.lt-rows div + div{ border-top:1px dashed var(--line); }
+.lt-rows b{ color:var(--ink); font-weight:800; font-variant-numeric:tabular-nums; }
+.lt-rows b.bad{ color:var(--danger); }
+.lc-div > span:last-child{ white-space:nowrap; }
