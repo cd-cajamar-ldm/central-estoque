@@ -192,6 +192,7 @@ $('clVersao').textContent=RG.versaoTxt();
 S.col=novo();
 render();
 RG.vigiaVersao('../js/versao.js');
+(function relogio(){ var el=$('clHora'); function t(){ var d=new Date(); if(el) el.textContent=d2(d.getHours())+':'+d2(d.getMinutes()); } t(); setInterval(t,20000); })();
 
 /* Chamado pela trava de acesso (../js/acesso.js) depois que o login e a permissão passam. */
 var iniciado=false;
