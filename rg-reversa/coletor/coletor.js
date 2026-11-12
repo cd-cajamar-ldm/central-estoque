@@ -48,10 +48,8 @@ function view(){
     h+='<div class="cl-box"><div class="cl-rel-h"><b>✔ Relatório gerado</b><span class="cl-pill">'+int(rel.rgs.length)+' RG'+(rel.rgs.length===1?'':'s')+' · '+esc(rel.hora)+'</span></div>'+
       '<div class="cl-btns"><button class="cl-pri" data-act="rel-xlsx">⬇ Excel</button><button class="cl-sec" data-act="rel-copy">📋 Copiar</button></div>'+
       (rel.salvo?'':'<div class="cl-msg bad" style="margin-bottom:8px">Sem conexão: o histórico será enviado depois.</div>')+
-      '<div class="cl-list">'+
-      '<div class="cl-li ext"><span>Origem</span><b>'+esc(RG.localNorm(rel.origem))+'</b></div>'+
-      rel.rgs.map(function(r,i){ return '<div class="cl-li"><span>'+(i+1)+'</span><b>'+esc(r.rg)+'</b></div>'; }).join('')+
-      '<div class="cl-li ext dst"><span>Destino</span><b>'+esc(RG.localNorm(rel.destino))+'</b></div></div></div>';
+      '<div class="cl-tabw"><table class="cl-tab"><thead><tr><th>Local de origem</th><th>RG</th><th>Local de destino</th></tr></thead><tbody>'+
+      rel.rgs.map(function(r){ return '<tr><td>'+esc(RG.localNorm(rel.origem))+'</td><td class="rg">'+esc(r.rg)+'</td><td>'+esc(RG.localNorm(rel.destino))+'</td></tr>'; }).join('')+'</tbody></table></div></div>';
   } else {
     var pode=c.origem && c.rgs.length && c.destino && !c.salvando;
     /* 1 · origem */

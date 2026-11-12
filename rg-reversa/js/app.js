@@ -501,7 +501,7 @@ function vMovs(){
     '<button class="btn btn-secondary" data-act="mv-load">Atualizar</button>'+
     '<div class="mv-acoes"><button class="btn btn-secondary" data-act="mv-copy"'+(lista.length?'':' disabled')+'>📋 Copiar tabela (PuTTY)</button><button class="btn btn-orange" data-act="mv-xlsx"'+(lista.length?'':' disabled')+'>⬇ Baixar Excel</button></div></div>';
   if(S.movsErro) h+='<div class="rv-aviso" style="margin-bottom:12px"><strong>Erro:</strong> '+esc(S.movsErro)+(/relation|does not exist|schema cache/i.test(S.movsErro)?' — a tabela <code>rg_movimentacoes</code> ainda não foi criada no Supabase (migração <code>rg-reversa/supabase/migrations/001_movimentacoes.sql</code>).':'')+'</div>';
-  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai em uma coluna: <b>local de origem</b>, depois os <b>RGs</b> e, por último, o <b>local de destino</b> (um bloco por movimentação). Ao exportar, as linhas passam a "Exportado".</div>';
+  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai com uma linha por RG, em 3 colunas: <b>local de origem · RG · local de destino</b>. Ao exportar, as linhas passam a "Exportado".</div>';
   h+='<div class="table-wrap"><table><thead><tr><th>Data/hora</th><th>Operador</th><th>Local origem</th><th>RG</th><th>Local destino</th><th>Situação</th></tr></thead><tbody>';
   if(S.movsBusy && !lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Carregando…</td></tr>';
   else if(!lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Nenhuma movimentação neste filtro.</td></tr>';
@@ -541,7 +541,7 @@ function mvXlsx(){
 function mvCopy(){
   var lista=movsFiltradas(); if(!lista.length) return;
   var l=RG.linhasBlocos(blocosMovs(lista));
-  RG.copia(l.join('\n')).then(function(){ toast(int(l.length)+' linhas copiadas — cole no PuTTY.'); marcaExportado(lista); });
+  RG.copia(l.join('\n')).then(function(){ toast(int(l.length)+' linhas (RGs) copiadas — cole no PuTTY.'); marcaExportado(lista); });
 }
 function copiaFallback(txt){ var t=document.createElement('textarea'); t.value=txt; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch(e){} t.remove(); }
 
