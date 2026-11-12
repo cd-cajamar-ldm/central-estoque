@@ -364,7 +364,7 @@ function irZoomIn(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)||
 function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)||100) - IR_ZOOM_STEP); }
 
 const IR_TAB_LABELS = {
-  dashboard:['Dashboard Executivo','Visão geral do ciclo ativo.'],
+  dashboard:['Dashboard Inventário','Visão geral do ciclo ativo.'],
   ciclo:['NET','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
   produtividade:['Produtividade','Aba em reconstrução.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
@@ -1024,7 +1024,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v262';
+const IR_APP_VERSION = 'v263';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1178,7 +1178,7 @@ function irRenderDashboard(){
         </div>
         <div class="dx-hero-row">
           <div class="dx-hero-tit">
-            <h2>Dashboard Executivo</h2>
+            <h2>Dashboard Inventário</h2>
             <span class="dx-tag">Loja do Mecânico · Lugar de quem faz</span>
           </div>
         </div>
