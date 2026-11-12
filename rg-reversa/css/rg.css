@@ -163,3 +163,5 @@
 .topbar .theme-switch{ margin-left:auto; }
 
 .rv-main .rv-num{ font-size:28px; white-space:nowrap; } .rv-main .rv-num small{ font-size:13px; }
+
+.col-btns2{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; } .col-btns2 .btn{ flex:1; min-height:44px; justify-content:center; }
