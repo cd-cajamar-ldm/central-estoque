@@ -12,10 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
-<!-- theme.css é o mesmo design system do app de Inventário (cópia, como nos
-     outros módulos); rg.css só acrescenta o que é próprio do RG Reversa. -->
+<!-- theme.css é o mesmo design system do app de Inventário (cópia, como nos outros módulos). -->
 <link rel="stylesheet" href="css/theme.css">
-<link rel="stylesheet" href="css/rg.css">
 </head>
 <body>
 <div class="shell">
@@ -37,21 +35,6 @@
       <span>Voltar para a Central</span>
     </a>
     <nav class="sidebar-nav" id="sidebarNav">
-      <div class="nav-section-label">Visão geral</div>
-      <button class="nav-item" data-tab="painel"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Painel</span></button>
-
-      <div class="nav-section-label">Operação</div>
-      <button class="nav-item" data-tab="rgs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg><span>Consulta de RGs</span></button>
-      <button class="nav-item" data-tab="cobertura"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg><span>Estoque sem RG</span></button>
-      <button class="nav-item" data-tab="locais"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Locais 100% RG</span></button>
-      <button class="nav-item" data-tab="produtividade"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Produtividade</span></button>
-
-      <div class="nav-section-label">Análise</div>
-      <button class="nav-item" data-tab="classificacao"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>Classificação</span></button>
-      <button class="nav-item" data-tab="tempo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Tempo parado</span></button>
-
-      <div class="nav-section-label">Sistema</div>
-      <button class="nav-item" data-tab="importacao"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Importação</span></button>
     </nav>
     <div class="sidebar-footer">
       Loja do Mecânico &middot; CD Cajamar
@@ -65,26 +48,20 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div class="topbar-titles">
-        <h1 id="tabTitle">Painel</h1>
-        <p id="tabSubtitle">RG Reversa — Oficina LDM.</p>
+        <h1 id="tabTitle">RG Reversa</h1>
+        <p id="tabSubtitle">Oficina LDM.</p>
       </div>
       <div class="topbar-gears" aria-hidden="true">
         <svg class="tb-gear tb-gear-big" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
         <svg class="tb-gear tb-gear-small" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
       </div>
-      <input class="global-search" id="globalSearch" type="text" placeholder="Buscar RG, item, EAN ou descrição...">
-      <div class="topbar-filters">
-        <div class="tb-filter">
-          <label>Base de RGs</label>
-          <div id="cycleBadge">Sem dados</div>
-        </div>
       </div>
       <button class="theme-switch" id="themeSwitchBtn" type="button" data-act="tema" aria-label="Alternar tema claro/escuro">
         <span class="theme-knob"></span>
       </button>
     </div>
     <div class="page-scroll">
-      <div id="viewRoot"><p class="field-hint">Carregando...</p></div>
+      <div id="viewRoot"></div>
     </div>
   </main>
   <div class="sidebar-backdrop" data-act="fecha-sidebar"></div>
@@ -96,12 +73,9 @@
   <button type="button" data-act="zoom-mais" aria-label="Aumentar zoom">+</button>
 </div>
 
-<input type="file" id="fileInput" accept=".xlsx,.xls,.xlsb,.csv" multiple hidden>
-<div id="rgModal" class="rg-modal" hidden></div>
 <div id="toast" class="toast hidden"></div>
 
 <script src="../version.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
