@@ -1749,17 +1749,17 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .dx-ln-pt{ stroke:var(--surface); stroke-width:2; cursor:pointer; }
 .dx-ln-pt:hover{ r:7; }
 .dx-ln-fim{ font-size:12.5px; font-weight:800; }
-.dx-mensal-corpo{ display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:16px; align-items:stretch; }
+.dx-mensal-corpo{ display:grid; grid-template-columns:minmax(0,1fr) 180px; gap:16px; align-items:stretch; }
 .dx-mensal-graf{ display:flex; align-items:flex-start; }
 .dx-mensal-graf svg{ width:100%; }
 /* Cartões do ano ocupam a mesma altura da área do gráfico: o de cima alinha com
    a linha de 100% e o de baixo com a base do eixo (sem os nomes dos meses). */
-.dx-mensal-ano{ display:flex; flex-direction:column; gap:8px; padding:2px 0 26px; }
-.dx-ano{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:1px; padding:6px 12px; border-radius:10px; background:var(--surface2); border-left:4px solid; }
-.dx-ano-rot{ font-size:12px; color:var(--ink-soft); }
-.dx-ano-v{ font-size:19px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
+.dx-mensal-ano{ display:flex; flex-direction:column; gap:8px; padding:2px 0 4px; }
+.dx-ano{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:0; padding:4px 12px; border-radius:10px; background:var(--surface2); border-left:4px solid; }
+.dx-ano-rot{ font-size:14px; font-weight:600; color:var(--ink-soft); }
+.dx-ano-v{ font-size:25px; line-height:1.15; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
 .dx-ano-v.bad{ color:var(--danger); }
-.dx-ano-h{ font-size:11px; color:var(--ink-soft); }
+.dx-ano-h{ font-size:13px; color:var(--ink-soft); }
 @media(max-width:700px){ .dx-mensal-corpo{ grid-template-columns:1fr; } .dx-mensal-ano{ flex-direction:row; flex-wrap:wrap; } .dx-ano{ flex:1; min-width:120px; } }
 .dx-tip-v{ font-size:18px; font-weight:800; color:var(--ink); }
 .dx-tip-s{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
