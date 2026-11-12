@@ -1693,9 +1693,9 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
    Foto do CD no topo, cartões brancos sobrepostos à foto, faixa com os
    demais indicadores e os painéis do ciclo em cartões arredondados.
    ============================================================ */
-.dx{ --dx-pecas:#FE5000; --dx-local:#001A72; --dx-valor:#8A93B8; }
-:root[data-theme="dark"] .dx{ --dx-local:#7D93E8; --dx-valor:#C3C8DC; }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .dx{ --dx-local:#7D93E8; --dx-valor:#C3C8DC; } }
+.dx{ --dx-pecas:#FE5000; --dx-local:#001A72; --dx-valor:#1D1F2A; }
+:root[data-theme="dark"] .dx{ --dx-local:#7D93E8; --dx-valor:#E6E8F0; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .dx{ --dx-local:#7D93E8; --dx-valor:#E6E8F0; } }
 .dx-hero{
   margin:-20px -24px 0; padding:20px 24px 96px; color:#fff;
   background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.82) 50%, rgba(0,18,82,.35) 100%), url(../brand/dash-hero.jpg);
@@ -1745,17 +1745,24 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .dx-ln-grid{ stroke:var(--line); stroke-width:1; }
 .dx-ln-ax{ font-size:12px; fill:var(--ink-soft); }
 .dx-ln-mes{ font-weight:700; fill:var(--ink); }
-.dx-ln-meta{ stroke:var(--ink); stroke-width:1.5; stroke-dasharray:6 5; }
-.dx-ln-pt{ stroke:var(--surface); stroke-width:2; }
-.dx-meta-leg{ display:inline-block; width:18px; border-top:2px dashed var(--ink); }
-.dx-grid-mensal{ grid-template-columns:1.35fr 1fr; }
+.dx-ln-meta{ stroke:var(--ink-soft); stroke-opacity:.55; stroke-width:1.2; stroke-dasharray:5 5; }
+.dx-ln-pt{ stroke:var(--surface); stroke-width:2; cursor:pointer; }
+.dx-ln-pt:hover{ r:7; }
+.dx-ln-fim{ font-size:12.5px; font-weight:800; }
+.dx-mensal-corpo{ display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:16px; align-items:center; }
+.dx-mensal-ano{ display:flex; flex-direction:column; gap:10px; }
+.dx-ano{ display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:10px; background:var(--surface2); border-left:4px solid; }
+.dx-ano-rot{ font-size:12px; color:var(--ink-soft); }
+.dx-ano-v{ font-size:21px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
+.dx-ano-v.bad{ color:var(--danger); }
+.dx-ano-h{ font-size:11px; color:var(--ink-soft); }
+@media(max-width:700px){ .dx-mensal-corpo{ grid-template-columns:1fr; } .dx-mensal-ano{ flex-direction:row; flex-wrap:wrap; } .dx-ano{ flex:1; min-width:120px; } }
+.dx-tip-v{ font-size:18px; font-weight:800; color:var(--ink); }
+.dx-tip-s{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+.dx-tip-s .good{ color:var(--success); font-weight:700; } .dx-tip-s .bad{ color:var(--danger); font-weight:700; }
+.dx-meta-leg{ display:inline-block; width:18px; border-top:2px dashed var(--ink-soft); opacity:.7; }
+.dx-grid-mensal{ grid-template-columns:1.6fr 1fr; }
 @media(max-width:1000px){ .dx-grid-mensal{ grid-template-columns:1fr; } }
-.dx-mensal-tab{ margin-top:8px; font-size:12px; table-layout:fixed; }
-.dx-mensal-tab thead th{ font-size:10.5px; padding:7px 3px; letter-spacing:0; cursor:default; }
-.dx-mensal-tab th, .dx-mensal-tab td{ text-align:right; padding:6px 3px; }
-.dx-mensal-tab th:first-child, .dx-mensal-tab td:first-child{ width:48px; padding-left:8px; }
-.dx-mensal-tab th:first-child, .dx-mensal-tab td:first-child{ text-align:left; color:var(--ink-soft); font-weight:700; }
-.dx-mensal-tab td.bad{ color:var(--danger); font-weight:700; }
 @media(max-width:640px){
   .dx-hero{ margin:-14px -14px 0; padding:16px 16px 90px; }
   .dx-hero-tit h2{ font-size:24px; }
@@ -1775,10 +1782,29 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .nav-top > .nav-group-h:hover{ background:rgba(255,255,255,.06); }
 .nav-top > .nav-group-h .ng-tit{ display:flex; align-items:center; gap:11px; }
 .nav-top > .nav-group-h .ng-tit svg{ color:var(--orange); }
-.nav-sub{ margin:2px 0 2px 14px; padding-left:8px; border-left:1px solid rgba(255,255,255,.12); }
+.nav-sub{ margin:2px 0 2px 10px; padding-left:4px; border-left:1px solid rgba(255,255,255,.12); }
 .nav-sub > .nav-group-h{ padding:8px 10px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:#C9D0F2; }
 .nav-sub > .nav-group-h:hover{ color:#fff; background:rgba(255,255,255,.04); }
-.nav-sub .nav-item{ padding:8px 10px; font-size:12.5px; }
+.nav-sub .nav-item{ padding:8px 8px; gap:9px; font-size:12.5px; }
+.nav-item span{ overflow:hidden; text-overflow:ellipsis; }
 .sidebar.collapsed .nav-group-h{ height:0; padding:0 !important; margin:10px 14px; overflow:hidden; border-top:1px solid rgba(255,255,255,.16); }
 .sidebar.collapsed .nav-sub{ margin:0; padding:0; border-left:0; }
 .sidebar.collapsed .nav-group.fechado > .nav-group-body{ display:block; }
+
+/* Menu modelo "N2": cabeçalho com foto do corredor do CD, marca no topo e o
+   nome da área embaixo. Recolhido, a foto vira só a faixa da logo. */
+.sb-foto{
+  position:relative; flex-shrink:0; height:170px; display:flex; flex-direction:column; justify-content:space-between;
+  background-image:linear-gradient(180deg, rgba(0,18,82,.35) 0%, rgba(11,18,48,1) 100%), url(../brand/menu-corredor.jpg);
+  background-size:cover; background-position:center 40%;
+}
+.sidebar .sb-foto .brand{ border-bottom:0; }
+.sb-foto-tit{ display:flex; flex-direction:column; gap:2px; padding:0 16px 14px; }
+.sb-foto-tit b{ font-family:'Poppins',sans-serif; font-size:18px; font-weight:700; color:#fff; }
+.sb-foto-tit span{ font-size:12px; color:#DCE1F7; }
+.sidebar .sb-foto .brand-sub{ color:#DCE1F7; }
+.sidebar.collapsed .sb-foto{ height:auto; }
+.sidebar.collapsed .sb-foto-tit{ display:none; }
+.sb-foto + .brand-back{ margin-top:8px; }
+/* Carrinho da logo maior dentro do selo laranja. */
+.brand-logo img{ width:86%; height:86%; }

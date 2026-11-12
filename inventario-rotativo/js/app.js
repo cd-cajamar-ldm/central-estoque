@@ -389,29 +389,21 @@ function irTabEhAreaExtra(tab){ return /^(reversa|insumo)_/.test(tab||''); }
    ciclo e mês do topo não tem sobre o que agir. Hoje nenhuma aba está nesse
    caso — Transitórios, que era a única, virou módulo próprio (../transitorios/). */
 const IR_TAB_SEM_CICLO = new Set(['exportar']);
-/* Menu separado por área (Inventário Rotativo, Insumo, Reversa). Cada grupo abre
-   e fecha pelo título; o estado fica salvo no navegador. O grupo da aba aberta
-   sempre fica aberto, senão a aba ativa sumiria do menu. */
+/* Menu Inventário > Rotativo / Reversa / Insumos. Ao abrir o app tudo começa
+   recolhido (pedido do usuário); cada grupo abre e fecha pelo título. O estado
+   vale só enquanto a página está aberta — não é lembrado no próximo acesso. */
+IR.menuAbertos = new Set();
 function irAplicarGrupos(){
-  let fechados = [];
-  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
   document.querySelectorAll('.nav-group').forEach(g=>{
-    const temAtiva = !!g.querySelector('.nav-item.active');
-    const fechado = fechados.includes(g.dataset.grupo) && !temAtiva;
-    g.classList.toggle('fechado', fechado);
+    const aberto = IR.menuAbertos.has(g.dataset.grupo);
+    g.classList.toggle('fechado', !aberto);
     const h = g.querySelector(':scope > .nav-group-h');
-    if(h) h.setAttribute('aria-expanded', String(!fechado));
+    if(h) h.setAttribute('aria-expanded', String(aberto));
   });
 }
 function irToggleGrupo(chave){
-  let fechados = [];
-  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
-  const g = document.querySelector(`.nav-group[data-grupo="${chave}"]`);
-  const fechar = g && !g.classList.contains('fechado');
-  fechados = fechados.filter(k=>k!==chave);
-  if(fechar) fechados.push(chave);
-  try{ localStorage.setItem('ir-menu-fechados2', JSON.stringify(fechados)); }catch(_){}
-  if(g){ g.classList.toggle('fechado', fechar); g.querySelector(':scope > .nav-group-h').setAttribute('aria-expanded', String(!fechar)); }
+  if(IR.menuAbertos.has(chave)) IR.menuAbertos.delete(chave); else IR.menuAbertos.add(chave);
+  irAplicarGrupos();
 }
 function irRenderEmConstrucao(area){
   return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores desta aba vão aparecer aqui.</p></div>`;
@@ -1032,7 +1024,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v256';
+const IR_APP_VERSION = 'v259';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1231,12 +1223,19 @@ function irAcuraciaMensalDoAno(){
   return {ano, rows: Array.from(mapa.values()).sort((a,b)=>a.mes.localeCompare(b.mes))
     .map(g => ({mes:g.mes, pecas:acc(g.pb,g.pd), local:acc(g.lb,g.ld), valor:acc(g.vb,g.vd)}))};
 }
+/* Gráfico de Acurácia mensal (modelo "A8" aprovado): linhas com o nome e o
+   último valor na ponta de cada uma, meta tracejada clara, mês sem o ano no
+   eixo e balão com o detalhe ao passar o mouse no ponto. Cores padrão do app:
+   Peças laranja, Local azul, Valor preto. */
+const IR_MES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function irMesCurto(mes){ const i = parseInt(String(mes||'').slice(5,7),10)-1; return IR_MES_ABREV[i] || String(mes||''); }
+const IR_ACC_SERIES = [['pecas','Peças','var(--dx-pecas)'],['local','Local','var(--dx-local)'],['valor','Valor','var(--dx-valor)']];
 function irBuildAcuraciaLinhasSvg(rows, meta){
-  const W = 760, H = 260, padL = 44, padR = 24, padT = 12, padB = 30;
+  const W = 560, H = 290, padL = 40, padR = 100, padT = 14, padB = 30;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const vals = rows.flatMap(r=>[r.pecas,r.local,r.valor]).filter(v=>v!=null);
-  // Eixo começa logo abaixo do menor valor (mínimo 80%) — de 0 a 100 as linhas
-  // ficariam coladas no topo e a distância até a meta sumiria.
+  // Eixo começa logo abaixo do menor valor — de 0 a 100 as linhas ficariam
+  // coladas no topo e a distância até a meta sumiria.
   const menor = Math.min(meta, ...vals);
   let min = menor >= 0.95 ? Math.floor((menor-0.01)*100)/100 : Math.floor((menor-0.005)*20)/20;
   min = Math.max(0, Math.min(min, 0.95));
@@ -1251,20 +1250,41 @@ function irBuildAcuraciaLinhasSvg(rows, meta){
       <text x="${padL-8}" y="${(+yy+4).toFixed(1)}" text-anchor="end" class="dx-ln-ax">${Math.round(t*100)}%</text>`;
   }
   const metaY = y(meta).toFixed(1);
-  const series = [['pecas','Peças','var(--dx-pecas)'],['local','Local','var(--dx-local)'],['valor','Valor','var(--dx-valor)']];
-  const linhas = series.map(([k,rot,cor])=>{
+  // Rótulo na ponta da linha, sem encavalar: no mínimo 15px entre eles.
+  const fim = {};
+  IR_ACC_SERIES.map(([k])=>{
+    const ult = rows.map(r=>r[k]).filter(v=>v!=null).pop();
+    return ult==null ? null : {k, ult, yy:y(ult)};
+  }).filter(Boolean).sort((a,b)=>a.yy-b.yy).reduce((ant,o)=>{ o.yy = Math.max(o.yy, ant+15); fim[o.k]=o; return o.yy; }, -99);
+  const linhas = IR_ACC_SERIES.map(([k,rot,cor])=>{
     const pts = rows.map((r,i)=>r[k]==null?null:[x(i), y(r[k]), r]).filter(Boolean);
     if(!pts.length) return '';
     const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-    return `<path d="${d}" fill="none" style="stroke:${cor}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-      ${pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="fill:${cor}" class="dx-ln-pt"><title>${rot} ${irMesLabel(p[2].mes)}: ${irFmtPct(p[2][k])}</title></circle>`).join('')}`;
+    const ult = pts[pts.length-1];
+    return `<path d="${d}" fill="none" style="stroke:${cor}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="fill:${cor}" class="dx-ln-pt"
+        onmouseenter="irAccTip(event,'${p[2].mes}','${k}',${p[2][k]},${meta})" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"></circle>`).join('')}
+      ${fim[k]?`<text x="${(ult[0]+10).toFixed(1)}" y="${(fim[k].yy+4).toFixed(1)}" class="dx-ln-fim" style="fill:${cor}">${rot} ${irFmtPct(fim[k].ult)}</text>`:''}`;
   }).join('');
-  const xl = rows.map((r,i)=>`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="dx-ln-ax dx-ln-mes">${irMesLabel(r.mes)}</text>`).join('');
+  const xl = rows.map((r,i)=>`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="dx-ln-ax dx-ln-mes">${irMesCurto(r.mes)}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" class="dx-ln" role="img" aria-label="Acurácia mensal de peças, local e valor">
     ${grid}
     <line x1="${padL}" y1="${metaY}" x2="${W-padR}" y2="${metaY}" class="dx-ln-meta"/>
     ${linhas}${xl}
   </svg>`;
+}
+// Balão do ponto: mês por extenso · indicador, valor e distância da meta.
+function irAccTip(ev, mes, k, v, meta){
+  const tt = document.getElementById('irChartTooltip');
+  if(!tt) return;
+  const rot = ({pecas:'Peças', local:'Local', valor:'Valor'})[k] || k;
+  const i = parseInt(String(mes).slice(5,7),10)-1;
+  const d = (v-meta)*100;
+  const st = d >= 0 ? `<span class="good">na meta</span>` : `<span class="bad">${irFmtNum(-d,1)} p.p. abaixo da meta</span>`;
+  tt.innerHTML = `<div class="ct-title">${irEsc((IR_MES_NOME[i]||mes)+' · '+rot)}</div>
+    <div class="dx-tip-v">${irFmtPct(v)}</div><div class="dx-tip-s">${st} · meta ${irFmtNum(meta*100,0)}%</div>`;
+  tt.classList.remove('hidden');
+  irMoveDiaTooltip(ev);
 }
 function irRenderAcuraciaMensalPanel(){
   const meta = (IR.indicadores && IR.indicadores.meta) || IR_META_ACURACIA;
@@ -1274,25 +1294,26 @@ function irRenderAcuraciaMensalPanel(){
     return `<div class="panel"><h3>Acurácia mensal</h3><p class="field-hint">${irEsc(msg)}</p></div>`;
   }
   const ac = irAcuraciaDoAno(ano);
-  const cel = v => `<td class="mono ${v==null?'':(v>=meta?'':'bad')}">${v==null?'—':irFmtPct(v)}</td>`;
+  // Resumo do ano ao lado do gráfico: acumulado (mesma conta do resto do app) e
+  // em quantos meses o indicador fechou na meta.
+  const resumo = [['pecas','Peças','var(--dx-pecas)', ac&&ac.pecas],['local','Local','var(--dx-local)', ac&&ac.locais],['valor','Valor','var(--dx-valor)', ac&&ac.valor]]
+    .map(([k,rot,cor,v])=>{
+      const comDado = rows.filter(r=>r[k]!=null);
+      const naMeta = comDado.filter(r=>r[k]>=meta).length;
+      return `<div class="dx-ano" style="border-left-color:${cor};">
+        <span class="dx-ano-rot">${rot} · ${irEsc(String(ano||'ano'))}</span>
+        <span class="dx-ano-v ${v!=null && v<meta?'bad':''}">${v==null?'—':irFmtPct(v)}</span>
+        <span class="dx-ano-h">${naMeta} de ${comDado.length} ${comDado.length===1?'mês':'meses'} na meta</span>
+      </div>`;
+    }).join('');
   return `<div class="panel dx-mensal">
     <div class="dx-panel-h"><h3>Acurácia mensal</h3>
-      <div class="cmp-legend">
-        <span><span class="cmp-dot" style="background:var(--dx-pecas);"></span>Peças</span>
-        <span><span class="cmp-dot" style="background:var(--dx-local);"></span>Local</span>
-        <span><span class="cmp-dot" style="background:var(--dx-valor);"></span>Valor</span>
-        <span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span>
-      </div>
+      <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span></div>
     </div>
-    ${irBuildAcuraciaLinhasSvg(rows, meta)}
-    <div class="table-wrap"><table class="dx-mensal-tab">
-      <thead><tr><th></th>${rows.map(r=>`<th>${irEsc(irMesLabel(r.mes))}</th>`).join('')}${ac?`<th>${irEsc(String(ano))}</th>`:''}</tr></thead>
-      <tbody>
-        <tr><td>Peças</td>${rows.map(r=>cel(r.pecas)).join('')}${ac?cel(ac.pecas):''}</tr>
-        <tr><td>Local</td>${rows.map(r=>cel(r.local)).join('')}${ac?cel(ac.locais):''}</tr>
-        <tr><td>Valor</td>${rows.map(r=>cel(r.valor)).join('')}${ac?cel(ac.valor):''}</tr>
-      </tbody>
-    </table></div>
+    <div class="dx-mensal-corpo">
+      <div class="dx-mensal-graf">${irBuildAcuraciaLinhasSvg(rows, meta)}</div>
+      <div class="dx-mensal-ano">${resumo}</div>
+    </div>
   </div>`;
 }
 /* ============================================================
