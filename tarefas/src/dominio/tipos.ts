@@ -84,7 +84,9 @@ export const explicacaoDoPapel: Record<Papel, string> = {
 };
 
 export const PRIORIDADES: Prioridade[] = ['baixa', 'media', 'alta', 'critica'];
-export const STATUS_TAREFA: StatusTarefa[] = ['pendente', 'em_andamento', 'concluida', 'bloqueada', 'cancelada'];
+/* Ordem das colunas do kanban e da lista de situacoes: Concluida fica por
+   ultimo, depois de Bloqueada e Cancelada — e onde o trabalho termina. */
+export const STATUS_TAREFA: StatusTarefa[] = ['pendente', 'em_andamento', 'bloqueada', 'cancelada', 'concluida'];
 
 /* Paleta de cores para escolher ao criar um quadro. Comeca pelas cores
    da marca (laranja e azul LDM) e segue por tons que ficam legiveis com
