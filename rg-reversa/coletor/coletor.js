@@ -193,7 +193,7 @@ document.addEventListener('click', function(ev){ if(!ev.target.closest('button,i
 $('clVersao').textContent=RG.versaoTxt();
 S.col=novo();
 render();
-RG.vigiaVersao('../../version.js');
+RG.vigiaVersao('../js/versao.js');
 
 /* Chamado pela trava de acesso (../js/acesso.js) depois que o login e a permissão passam. */
 var iniciado=false;

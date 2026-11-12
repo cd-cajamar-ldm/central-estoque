@@ -675,7 +675,7 @@ function inicia(){
   var v=$('sidebarVersao');
   if(v) v.textContent=RG.versaoTxt();
   var rp=$('appRodape'); if(rp) rp.textContent=versaoTxt();
-  RG.vigiaVersao('../version.js');
+  RG.vigiaVersao('js/versao.js');
   var h=''; try { h=decodeURIComponent(location.hash.slice(1)); } catch(e){}
   if(TABS[h]) S.tab=h;
   deriva(); render();

@@ -38,13 +38,6 @@ jobs:
         run: |
           echo "window.LDM_BUILD = { commit: '$(git rev-parse --short HEAD)', data: '$(date -u +"%d/%m %H:%M UTC")' };" \
             > version.js
-      - name: Carimbar a versão nos arquivos do RG Reversa
-        # Os navegadores guardam js/css por alguns minutos; com ?v=<commit> cada
-        # deploy vira um endereço novo e o aparelho (coletor) baixa a versão certa.
-        run: |
-          V=$(git rev-parse --short HEAD)
-          D=$(date -u +"%d/%m %H:%M UTC")
-          sed -i "s/?v=dev/?v=$V/g; s#name=\"rg-build\" content=\"dev\"#name=\"rg-build\" content=\"$V|$D\"#" rg-reversa/index.html rg-reversa/coletor/index.html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
