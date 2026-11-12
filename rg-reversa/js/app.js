@@ -517,7 +517,6 @@ function vColetor(){
     if(c.origem||c.rgs.length||c.destino) h+='<div style="text-align:center"><button class="btn-danger-text" data-act="col-cancela">Cancelar e recomeçar</button></div>';
   }
   if(c.hist.length) h+='<div class="col-hist"><div class="col-hist-t">Enviadas nesta sessão</div>'+c.hist.slice(0,3).map(function(x){ return '<div>'+esc(x)+'</div>'; }).join('')+'</div>';
-  h+='<div class="colm-ver">'+esc(versaoTxt())+'</div>';
   return h+'</div>';
 }
 function foco(){
@@ -800,6 +799,7 @@ function inicia(){
     var bd=window.LDM_BUILD||{};
     v.textContent='RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:'');
   }
+  var rp=$('appRodape'); if(rp) rp.textContent=versaoTxt();
   var h=''; try { h=decodeURIComponent(location.hash.slice(1)); } catch(e){}
   if(TABS[h]) S.tab=h;
   deriva(); render();

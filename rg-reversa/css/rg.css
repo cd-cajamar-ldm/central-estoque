@@ -194,3 +194,5 @@
   .tab-coletor .page-scroll{ padding:10px; }
   .colm-list{ max-height:26vh; }
 }
+
+.app-rodape{ text-align:center; font-size:11px; color:var(--ink-soft); padding:18px 0 6px; }
