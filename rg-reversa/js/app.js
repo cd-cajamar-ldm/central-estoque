@@ -477,61 +477,54 @@ function bip(ok){
 }
 function pendentes(){ return lsGet(PEND_KEY); }
 function colNovo(ultimo, hist, rel){ return { origem:'', rgs:[], destino:'', msg:'', erro:false, ultimo:ultimo||'', hist:hist||[], rel:rel||null, salvando:false, foco:'origem' }; }
+function versaoTxt(){ var bd=window.LDM_BUILD||{}; return 'RG Reversa · v'+(bd.commit||'local')+(bd.data&&bd.data!=='—'?' · '+bd.data:''); }
 
-/* Tela única: campos de bipagem + a prévia do relatório (exatamente as 3 colunas que serão exportadas). */
+/* Coletor (celular): uma coluna só, feita para o leitor de mão.
+   Origem → RGs (um por linha, numerados, com a quantidade embaixo) → destino → Finalizar. */
 function vColetor(){
-  var c=S.col, pend=pendentes(), o={cod:c.origem,ok:false,desc:''}, d={cod:c.destino,ok:false,desc:''};
-  var pode=c.origem && c.rgs.length && c.destino && !c.salvando;
-  var h='';
-  if(pend.length) h+='<div class="col-pend"><span>⚠ <b>'+int(pend.reduce(function(s,p){ return s+p.rows.length; },0))+'</b> bipagens aguardando envio (sem conexão).</span><button class="btn btn-secondary" data-act="col-sync">Enviar agora</button></div>';
-  h+='<div class="col2"><div class="col-card">';
-  h+='<h3 class="col-q">Bipagem</h3>';
-  /* 1 · origem */
-  h+='<div class="col-f'+(c.origem?' ok':' on')+'"><label for="colOrigem"><span class="col-n">1</span>Local de origem</label>';
-  if(c.origem) h+='<div class="col-lock"><b>'+esc(c.origem)+'</b>'+(o.ok&&o.desc&&o.desc!==c.origem?'<small>'+esc(o.desc)+'</small>':'')+'<button data-act="col-trocar" aria-label="Trocar origem">✎</button></div>';
-  else h+='<input class="col-in'+(c.erro&&c.foco==='origem'?' err':'')+'" id="colOrigem" autocomplete="off" autocapitalize="off" placeholder="local de origem">';
-  h+='</div>';
-  /* 2 · RGs */
-  h+='<div class="col-f'+(c.origem?(c.rgs.length?' ok':' on'):' off')+'"><label for="colRg"><span class="col-n">2</span>RGs do palete <em>'+c.rgs.length+'</em></label>'+
-    '<input class="col-in'+(c.erro&&c.foco==='rg'?' err':'')+'" id="colRg" autocomplete="off" autocapitalize="off" placeholder="RG (entra sozinho)"'+(c.origem?'':' disabled')+'></div>';
-  /* 3 · destino */
-  h+='<div class="col-f'+(c.destino?' ok':(c.rgs.length?' on':' off'))+'"><label for="colDestino"><span class="col-n">3</span>Local de destino</label>';
-  if(c.destino) h+='<div class="col-lock"><b>'+esc(c.destino)+'</b>'+(d.ok&&d.desc&&d.desc!==c.destino?'<small>'+esc(d.desc)+'</small>':'')+'<button data-act="col-trocar-destino" aria-label="Trocar destino">✎</button></div>';
-  else h+='<input class="col-in'+(c.erro&&c.foco==='destino'?' err':'')+'" id="colDestino" autocomplete="off" autocapitalize="off" placeholder="local de destino"'+(c.rgs.length?'':' disabled')+'>';
-  h+='</div>';
-  if(c.msg) h+='<div class="col-msg'+(c.erro?' bad':'')+'">'+esc(c.msg)+'</div>';
-  h+='<div class="col-btns"><button class="btn btn-orange" id="colFinal" data-act="col-final"'+(pode?'':' disabled')+'>'+(c.salvando?'Salvando…':'✔ Finalizar')+'</button></div>';
-  if(c.origem||c.rgs.length||c.destino) h+='<div style="text-align:center;margin-top:8px"><button class="btn-danger-text" data-act="col-cancela">Cancelar e recomeçar</button></div>';
-  if(c.ultimo) h+='<div class="col-ultimo">'+esc(c.ultimo)+'</div>';
-  h+='</div>';
-  /* prévia ao vivo OU relatório gerado (depois de finalizar) */
+  var c=S.col, pend=pendentes(), h='<div class="colm">';
+  if(pend.length) h+='<div class="col-pend"><span>⚠ <b>'+int(pend.reduce(function(s,p){ return s+p.rows.length; },0))+'</b> bipagens aguardando envio.</span><button class="btn btn-secondary" data-act="col-sync">Enviar</button></div>';
   var rel=(!c.origem && !c.rgs.length && !c.destino) ? c.rel : null;
   if(rel){
-    h+='<div class="col-card"><div class="panel-head-row"><h3 class="col-q">Relatório gerado</h3><span class="rv-pill ok">'+int(rel.rows.length)+' RG'+(rel.rows.length===1?'':'s')+' · '+esc(rel.hora)+'</span></div>'+
-      '<div class="col-sub">Pronto para colar no PuTTY ou abrir no Excel.</div>'+
-      '<div class="col-btns2"><button class="btn btn-orange" data-act="rel-xlsx">⬇ Baixar Excel</button><button class="btn btn-secondary" data-act="rel-copy">📋 Copiar tabela (PuTTY)</button></div>'+
-      (rel.salvo?'':'<div class="col-msg bad">Sem conexão: o relatório está aqui, mas o histórico será enviado depois.</div>')+
-      '<div class="table-wrap col-tab"><table><thead><tr><th>Local origem</th><th>RG</th><th>Local destino</th></tr></thead><tbody>'+
-      rel.rows.map(function(r){ return '<tr><td>'+esc(r[0])+'</td><td><b>'+esc(r[1])+'</b></td><td>'+esc(r[2])+'</td></tr>'; }).join('')+'</tbody></table></div></div>';
+    /* depois de finalizar: relatório pronto + já pronto para a próxima bipagem */
+    h+='<div class="colm-box on"><label for="colOrigem"><span class="col-n">1</span>Próxima movimentação — local de origem</label><input class="col-in" id="colOrigem" autocomplete="off" autocapitalize="off" placeholder="bipe o local"></div>';
+    h+='<div class="colm-box"><div class="colm-rel-h"><b>✔ Relatório gerado</b><span class="rv-pill ok">'+int(rel.rgs.length)+' RG'+(rel.rgs.length===1?'':'s')+' · '+esc(rel.hora)+'</span></div>'+
+      '<div class="col-btns2"><button class="btn btn-orange" data-act="rel-xlsx">⬇ Excel</button><button class="btn btn-secondary" data-act="rel-copy">📋 Copiar</button></div>'+
+      (rel.salvo?'':'<div class="col-msg bad">Sem conexão: o histórico será enviado depois.</div>')+
+      '<div class="colm-list colm-rel">'+
+      '<div class="colm-li ext"><span>Origem</span><b>'+esc(rel.origem)+'</b></div>'+
+      rel.rgs.map(function(r,i){ return '<div class="colm-li"><span>'+(i+1)+'</span><b>'+esc(r)+'</b></div>'; }).join('')+
+      '<div class="colm-li ext"><span>Destino</span><b>'+esc(rel.destino)+'</b></div></div></div>';
   } else {
-    h+='<div class="col-card"><div class="panel-head-row"><h3 class="col-q">Relatório de movimentação</h3><span class="rv-pill info">'+int(c.rgs.length)+' RG'+(c.rgs.length===1?'':'s')+'</span></div>'+
-      '<div class="col-sub">É assim que sai ao finalizar: local de origem · RG · local de destino.</div>';
-    h+='<div class="table-wrap col-tab"><table><thead><tr><th>#</th><th>Local origem</th><th>RG</th><th>Local destino</th><th></th></tr></thead><tbody>';
-    if(!c.rgs.length) h+='<tr><td colspan="5" class="col-vazio">Os RGs bipados aparecem aqui.</td></tr>';
-    c.rgs.slice().reverse().forEach(function(r,k){
-      var idx=c.rgs.length-1-k;
-      h+='<tr><td class="col-nn">'+(idx+1)+'</td><td>'+esc(c.origem||'—')+'</td><td><b>'+esc(r.rg)+'</b></td><td>'+esc(c.destino||'—')+'</td><td><button class="col-x" data-act="col-del" data-i="'+idx+'" aria-label="Remover">✕</button></td></tr>';
-    });
-    h+='</tbody></table></div></div>';
+    var pode=c.origem && c.rgs.length && c.destino && !c.salvando;
+    /* 1 · origem */
+    h+='<div class="colm-box'+(c.origem?' ok':' on')+'"><label for="colOrigem"><span class="col-n">1</span>Local de origem</label>';
+    if(c.origem) h+='<div class="col-lock"><b>'+esc(c.origem)+'</b><button data-act="col-trocar" aria-label="Trocar origem">✎</button></div>';
+    else h+='<input class="col-in'+(c.erro&&c.foco==='origem'?' err':'')+'" id="colOrigem" autocomplete="off" autocapitalize="off" placeholder="bipe o local de origem">';
+    h+='</div>';
+    /* 2 · RGs */
+    h+='<div class="colm-box colm-rgs'+(c.origem?(c.rgs.length?' ok':' on'):' off')+'"><label for="colRg"><span class="col-n">2</span>RGs</label>'+
+      '<input class="col-in'+(c.erro&&c.foco==='rg'?' err':'')+'" id="colRg" autocomplete="off" autocapitalize="off" placeholder="bipe o RG"'+(c.origem?'':' disabled')+'>';
+    h+='<div class="colm-list" id="colList">'+(c.rgs.length?c.rgs.map(function(r,i){ return '<div class="colm-li"><span>'+(i+1)+'</span><b>'+esc(r.rg)+'</b><button class="col-x" data-act="col-del" data-i="'+i+'" aria-label="Remover">✕</button></div>'; }).join(''):'<div class="colm-vazio">Os RGs bipados aparecem aqui, um por linha.</div>')+'</div>';
+    h+='<div class="colm-qtd">Quantidade bipada: <b>'+c.rgs.length+'</b></div></div>';
+    /* 3 · destino */
+    h+='<div class="colm-box'+(c.destino?' ok':(c.rgs.length?' on':' off'))+'"><label for="colDestino"><span class="col-n">3</span>Local de destino</label>';
+    if(c.destino) h+='<div class="col-lock"><b>'+esc(c.destino)+'</b><button data-act="col-trocar-destino" aria-label="Trocar destino">✎</button></div>';
+    else h+='<input class="col-in'+(c.erro&&c.foco==='destino'?' err':'')+'" id="colDestino" autocomplete="off" autocapitalize="off" placeholder="bipe o local de destino"'+(c.rgs.length?'':' disabled')+'>';
+    h+='</div>';
+    if(c.msg) h+='<div class="col-msg'+(c.erro?' bad':'')+'">'+esc(c.msg)+'</div>';
+    h+='<button class="btn btn-orange colm-final" id="colFinal" data-act="col-final"'+(pode?'':' disabled')+'>'+(c.salvando?'Salvando…':'✔ Finalizar')+'</button>';
+    if(c.origem||c.rgs.length||c.destino) h+='<div style="text-align:center"><button class="btn-danger-text" data-act="col-cancela">Cancelar e recomeçar</button></div>';
   }
-  if(c.hist.length) h+='<div class="col-hist"><div class="col-hist-t">Enviadas nesta sessão</div>'+c.hist.slice(0,5).map(function(x){ return '<div>'+esc(x)+'</div>'; }).join('')+'</div>';
+  if(c.hist.length) h+='<div class="col-hist"><div class="col-hist-t">Enviadas nesta sessão</div>'+c.hist.slice(0,3).map(function(x){ return '<div>'+esc(x)+'</div>'; }).join('')+'</div>';
+  h+='<div class="colm-ver">'+esc(versaoTxt())+'</div>';
   return h+'</div>';
 }
 function foco(){
   var c=S.col, id = c.foco==='final' ? 'colFinal' : c.foco==='destino' ? 'colDestino' : c.foco==='rg' ? 'colRg' : 'colOrigem';
   var el=$(id); if(el && !el.disabled){ el.focus(); if(el.value){ var n=el.value.length; try { el.setSelectionRange(n,n); } catch(e){} } }
 }
-function colRefaz(){ render(); foco(); }
+function colRefaz(){ render(); var l=$('colList'); if(l) l.scrollTop=l.scrollHeight; foco(); }
 function colErro(msg, onde){ var c=S.col; c.erro=true; c.msg=msg; c.foco=onde; bip(false); colRefaz(); }
 function colCommit(campo, el){
   var c=S.col, v=el.value.trim(); if(!v) return;
@@ -550,11 +543,14 @@ function colFinaliza(){
   var quando=new Date().toISOString();
   var rows=c.rgs.map(function(r){ return { lote:lote, criado_em:quando, operador:S.user, local_origem:c.origem, rg:r.rg, local_destino:c.destino }; });
   var resumo=c.rgs.length+' RGs · '+c.origem+' → '+c.destino, hora=d2(new Date().getHours())+':'+d2(new Date().getMinutes());
-  var ultimo='', hist=c.hist, rel={ lote:lote, hora:hora, rows:c.rgs.map(function(r){ return [c.origem, r.rg, c.destino]; }), salvo:false };
+  var ultimo='', hist=c.hist, rel={ lote:lote, hora:hora, origem:c.origem, destino:c.destino, rgs:c.rgs.map(function(r){ return r.rg; }), salvo:false };
   enviaLote(rows).then(function(){ ultimo='✔ Último: '+resumo; hist.unshift(hora+' · '+resumo); rel.salvo=true; toast('Movimentação salva: '+resumo); }).catch(function(){
     var p=pendentes(); p.push({lote:lote, rows:rows}); lsSet(PEND_KEY,p);
     ultimo='⚠ Salvo neste aparelho (sem conexão): '+resumo; hist.unshift(hora+' · '+resumo+' (pendente)'); toast('Sem conexão — guardei no aparelho e envio depois.', true);
-  }).then(function(){ S.col=colNovo(ultimo, hist, rel); S.movs=null; colRefaz(); });
+  }).then(function(){
+    S.col=colNovo(ultimo, hist, rel); S.movs=null; colRefaz();
+    try { relXlsx(); } catch(e){}   /* o Excel já sobe sozinho ao finalizar */
+  });
 }
 function enviaLote(rows){
   var partes=[]; for(var i=0;i<rows.length;i+=500) partes.push(rows.slice(i,i+500));
@@ -586,7 +582,6 @@ function movsFiltradas(){
   var q=norm(S.fm.q); if(!S.movs) return [];
   return q ? S.movs.filter(function(m){ return norm(m.rg+' '+m.local_origem+' '+m.local_destino+' '+m.operador).indexOf(q)>=0; }) : S.movs;
 }
-function linhaExport(m){ return [m.local_origem, m.rg, m.local_destino]; }
 function vMovs(){
   if(S.movs==null && !S.movsBusy) setTimeout(carregaMovs,0);
   var f=S.fm; if(!f.de) f.de=isoDia(hoje0()-6*864e5); if(!f.ate) f.ate=isoDia(hoje0());
@@ -598,7 +593,7 @@ function vMovs(){
     '<button class="btn btn-secondary" data-act="mv-load">Atualizar</button>'+
     '<div class="mv-acoes"><button class="btn btn-secondary" data-act="mv-copy"'+(lista.length?'':' disabled')+'>📋 Copiar tabela (PuTTY)</button><button class="btn btn-orange" data-act="mv-xlsx"'+(lista.length?'':' disabled')+'>⬇ Baixar Excel</button></div></div>';
   if(S.movsErro) h+='<div class="rv-aviso" style="margin-bottom:12px"><strong>Erro:</strong> '+esc(S.movsErro)+(/relation|does not exist|schema cache/i.test(S.movsErro)?' — a tabela <code>rg_movimentacoes</code> ainda não foi criada no Supabase (migração <code>rg-reversa/supabase/migrations/001_movimentacoes.sql</code>).':'')+'</div>';
-  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai com 3 colunas: <b>local de origem · RG · local de destino</b>. Ao exportar, as linhas passam a "Exportado".</div>';
+  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai em uma coluna: <b>local de origem</b>, depois os <b>RGs</b> e, por último, o <b>local de destino</b> (um bloco por movimentação). Ao exportar, as linhas passam a "Exportado".</div>';
   h+='<div class="table-wrap"><table><thead><tr><th>Data/hora</th><th>Operador</th><th>Local origem</th><th>RG</th><th>Local destino</th><th>Situação</th></tr></thead><tbody>';
   if(S.movsBusy && !lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Carregando…</td></tr>';
   else if(!lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Nenhuma movimentação neste filtro.</td></tr>';
@@ -618,19 +613,32 @@ function marcaExportado(lista){
   return partes.reduce(function(p,parte){ return p.then(function(){ return window.rgSupa.from('rg_movimentacoes').update({exportado_em:agora}).in('id',parte).then(function(r){ if(r.error) throw r.error; }); }); }, Promise.resolve())
     .then(function(){ S.movs=null; render(); }).catch(function(e){ toast('Exportei, mas não consegui marcar como exportado: '+(e.message||e), true); });
 }
+/* Formato do relatório: uma coluna só — 1ª linha o local de origem, depois cada RG, e na última linha o local de destino. */
+function linhasRel(r){ return [r.origem].concat(r.rgs, [r.destino]); }
+function linhasMovs(lista){
+  var ordem=[], g={};
+  lista.forEach(function(m){ if(!g[m.lote]){ g[m.lote]={o:m.local_origem, d:m.local_destino, rgs:[]}; ordem.push(m.lote); } g[m.lote].rgs.push(m.rg); });
+  var out=[]; ordem.forEach(function(l){ var x=g[l]; out=out.concat([x.o], x.rgs, [x.d]); }); return out;
+}
+function baixaXlsx(linhas, nome){
+  var ws=XLSX.utils.aoa_to_sheet(linhas.map(function(l){ return [l]; })); ws['!cols']=[{wch:26}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movimentação');
+  XLSX.writeFile(wb,nome);
+}
+function copiaTexto(linhas, okMsg, depois){
+  var txt=linhas.join('\n');
+  var ok=function(){ toast(okMsg); if(depois) depois(); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(function(){ copiaFallback(txt); ok(); });
+  else { copiaFallback(txt); ok(); }
+}
 function relXlsx(){
   var r=S.col.rel; if(!r) return;
-  var ws=XLSX.utils.aoa_to_sheet([['Local origem','RG','Local destino']].concat(r.rows)); ws['!cols']=[{wch:22},{wch:16},{wch:22}];
-  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movimentação');
-  XLSX.writeFile(wb,'rg-reversa-movimentacao-'+isoDia(Date.now())+'-'+r.hora.replace(':','h')+'.xlsx');
+  baixaXlsx(linhasRel(r),'rg-reversa-movimentacao-'+isoDia(Date.now())+'-'+r.hora.replace(':','h')+'.xlsx');
   marcaLote(r);
 }
 function relCopy(){
   var r=S.col.rel; if(!r) return;
-  var txt=r.rows.map(function(x){ return x.join('\t'); }).join('\n');
-  var ok=function(){ toast(int(r.rows.length)+' linhas copiadas — cole no PuTTY.'); marcaLote(r); };
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(function(){ copiaFallback(txt); ok(); });
-  else { copiaFallback(txt); ok(); }
+  copiaTexto(linhasRel(r), int(linhasRel(r).length)+' linhas copiadas — cole no PuTTY.', function(){ marcaLote(r); });
 }
 /* Exportou o relatório do coletor: marca o lote como exportado (se ele já chegou ao banco). */
 function marcaLote(r){
@@ -639,18 +647,13 @@ function marcaLote(r){
 }
 function mvXlsx(){
   var lista=movsFiltradas(); if(!lista.length) return;
-  var aoa=[['Local origem','RG','Local destino']].concat(lista.map(linhaExport));
-  var ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:22},{wch:16},{wch:22}];
-  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Movimentação');
-  XLSX.writeFile(wb,'rg-reversa-movimentacao-'+isoDia(Date.now())+'.xlsx');
+  baixaXlsx(linhasMovs(lista),'rg-reversa-movimentacoes-'+isoDia(Date.now())+'.xlsx');
   marcaExportado(lista);
 }
 function mvCopy(){
   var lista=movsFiltradas(); if(!lista.length) return;
-  var txt=lista.map(function(m){ return linhaExport(m).join('\t'); }).join('\n');
-  var ok=function(){ toast(int(lista.length)+' linhas copiadas — cole no PuTTY.'); marcaExportado(lista); };
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(function(){ copiaFallback(txt); ok(); });
-  else { copiaFallback(txt); ok(); }
+  var l=linhasMovs(lista);
+  copiaTexto(l, int(l.length)+' linhas copiadas — cole no PuTTY.', function(){ marcaExportado(lista); });
 }
 function copiaFallback(txt){ var t=document.createElement('textarea'); t.value=txt; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch(e){} t.remove(); }
 
@@ -682,6 +685,7 @@ function render(){
   var t=TABS[S.tab]; $('tabTitle').textContent=t[0]; $('tabSubtitle').textContent=t[1];
   Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-tab]'),function(b){ b.classList.toggle('active', b.dataset.tab===S.tab); });
   var h=(S.ocupado && S.tab!=='importacao') ? '<div class="rv-aviso" style="margin-bottom:14px"><strong>Aguarde.</strong> '+esc(S.ocupado)+'</div>' : '';
+  document.body.classList.toggle('tab-coletor', S.tab==='coletor');
   var sc=document.querySelector('.page-scroll'), y=sc?sc.scrollTop:0;
   $('viewRoot').innerHTML=h+VIEWS[S.tab]();
   if(sc) sc.scrollTop=y;

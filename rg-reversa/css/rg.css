@@ -165,3 +165,32 @@
 .rv-main .rv-num{ font-size:28px; white-space:nowrap; } .rv-main .rv-num small{ font-size:13px; }
 
 .col-btns2{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; } .col-btns2 .btn{ flex:1; min-height:44px; justify-content:center; }
+
+/* ---------- coletor de mão (celular, uma coluna) ---------- */
+.colm{ max-width:480px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
+.colm-box{ background:var(--surface); border:2px solid var(--line); border-radius:14px; padding:10px 12px; }
+.colm-box.on{ border-color:var(--orange); box-shadow:0 0 0 3px var(--accent-glow); }
+.colm-box.ok{ border-color:var(--success); }
+.colm-box.off{ opacity:.55; }
+.colm-box label{ display:flex; align-items:center; gap:8px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:6px; }
+.colm .col-in{ font-size:20px; padding:12px; }
+.colm-list{ margin-top:8px; border:1px solid var(--line); border-radius:10px; max-height:30vh; min-height:56px; overflow-y:auto; background:var(--surface2); }
+.colm-li{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); font-size:16px; }
+.colm-li:last-child{ border-bottom:0; }
+.colm-li span{ min-width:30px; font-weight:800; color:var(--orange); font-variant-numeric:tabular-nums; }
+.colm-li b{ flex:1; font-family:'SFMono-Regular',Consolas,monospace; font-size:17px; }
+.colm-li.ext{ background:var(--blue-light); } .colm-li.ext span{ color:var(--rv-blue); font-size:11px; text-transform:uppercase; letter-spacing:.05em; min-width:56px; }
+.colm-vazio{ padding:14px; text-align:center; color:var(--ink-soft); font-size:12.5px; }
+.colm-qtd{ margin-top:8px; text-align:center; font-size:14px; color:var(--ink-soft); }
+.colm-qtd b{ font-family:Poppins,sans-serif; font-size:26px; color:var(--orange); margin-left:4px; }
+.colm-final{ width:100%; min-height:56px; font-size:17px; justify-content:center; }
+.colm-rel{ max-height:36vh; }
+.colm-rel-h{ display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; }
+.colm-ver{ text-align:center; font-size:10.5px; color:var(--ink-soft); padding:6px 0 2px; }
+.col-n{ width:20px; height:20px; border-radius:50%; background:var(--blue); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:11px; }
+.colm-box.ok .col-n{ background:var(--success); }
+@media(max-width:640px){
+  .tab-coletor .topbar-gears, .tab-coletor .topbar-titles p, .tab-coletor .zoom-ctrl-float{ display:none; }
+  .tab-coletor .page-scroll{ padding:10px; }
+  .colm-list{ max-height:26vh; }
+}
