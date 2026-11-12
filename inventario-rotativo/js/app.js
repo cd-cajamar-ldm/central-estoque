@@ -1024,7 +1024,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v259';
+const IR_APP_VERSION = 'v260';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1314,7 +1314,29 @@ function irRenderAcuraciaMensalPanel(){
       <div class="dx-mensal-graf">${irBuildAcuraciaLinhasSvg(rows, meta)}</div>
       <div class="dx-mensal-ano">${resumo}</div>
     </div>
+    ${irRenderTotaisAnoAcc(ac)}
   </div>`;
+}
+/* Totais do ano abaixo do gráfico (modelo "T1"): por indicador, o inventariado
+   (base da acurácia) e o divergente, com a barra na proporção real. Mesmos
+   totais de irAcuraciaDoAno — o % aqui é exatamente 100% − acurácia do ano. */
+function irRenderTotaisAnoAcc(ac){
+  if(!ac) return '';
+  const linhas = [
+    ['Peças','var(--dx-pecas)', ac.pecasBase, ac.pecasDivergentes, irFmtInt],
+    ['Local','var(--dx-local)', ac.locaisBase, ac.locaisDivergentes, irFmtInt],
+    ['Valor','var(--dx-valor)', ac.valorBase, ac.valorDivergente, irFmtMoneyCompact]
+  ].filter(([,,base])=>base!=null && base>0).map(([rot,cor,base,div,fmt])=>{
+    const p = Math.max(0, Math.min(1, (div||0)/base));
+    return `<div class="dx-tot">
+      <span class="dx-tot-rot" style="color:${cor};">${rot}</span>
+      <div class="dx-tot-n"><span>Inventariado</span><b>${fmt(base)}</b></div>
+      <div class="dx-tot-n"><span>Divergente</span><b class="bad">${fmt(div||0)}</b></div>
+      <div class="dx-tot-bar"><i style="background:${cor};"></i><em style="width:${(p*100).toFixed(2)}%;"></em></div>
+      <span class="dx-tot-p">${irFmtPct(p)}</span>
+    </div>`;
+  }).join('');
+  return linhas ? `<div class="dx-totais">${linhas}</div>` : '';
 }
 /* ============================================================
    Acurácia mensal — Peças, Locais e Valor (modelo "A3" aprovado)
