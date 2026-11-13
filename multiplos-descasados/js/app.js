@@ -1307,6 +1307,8 @@ function mdProcessar(id){
       }
       MD.proc[id] = false; worker.terminate();
       mdSetArquivo(id, null);
+      try { await mdNuvemEnviarBase(id); }
+      catch(e){ console.error(e); irShowToast('Importou aqui, mas não consegui enviar pra nuvem: '+((e && e.message) || e), true); }
       await mdRecarregar();
       if(msg.type === 'done051'){
         irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.'
@@ -1731,6 +1733,8 @@ async function irInit(){
       : MD_APP_VERSION;
   }
   try{
+    try { await mdNuvemSincronizar(); }
+    catch(e){ console.warn('Sem sincronizar com a nuvem (offline?)', e); }
     await mdRecarregar();
   }catch(e){
     console.error('Falha ao iniciar', e);
@@ -1743,4 +1747,20 @@ async function irInit(){
     if(mdH && MD_TELAS[mdH]) mdHashTela = mdH;
   } catch(e){}
   if(mdHashTela) irSwitchTab(mdHashTela); else irRenderView();
+  mdNuvemVigiar();
+}
+/* Enquanto o app está aberto, puxa mudanças feitas por outras pessoas. */
+async function mdNuvemChecar(){
+  if(document.hidden || Object.values(MD.proc).some(Boolean) || mdRascunhoAlterado()) return;
+  try {
+    if(await mdNuvemSincronizar()){
+      await mdRecarregar();
+      irRenderView();
+      irShowToast('Dados atualizados por outra pessoa.');
+    }
+  } catch(e){ console.warn('Checagem da nuvem falhou', e); }
+}
+function mdNuvemVigiar(){
+  setInterval(mdNuvemChecar, 30000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) mdNuvemChecar(); });
 }
