@@ -256,6 +256,8 @@ async function irInit(){
     if(irH && IR_TAB_LABELS[irH]) irHashTab = irH;
   } catch(e){}
   irSwitchTab(irHashTab);
+  // Dados compartilhados (Supabase): começa depois da tela aberta.
+  try { irNuvemVigiar(); } catch(e){ console.warn('Nuvem indisponível', e); }
   // Fora do try acima e sem await: se a pasta conectada falhar (permissão
   // revogada, política nova, arquivo só na nuvem), isso não pode impedir o app
   // de abrir — é conveniência, não dependência.
