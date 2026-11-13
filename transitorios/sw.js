@@ -20,7 +20,9 @@ const PRECACHE_URLS = [
   './brand/Logo_LDM_hor_2.png',
   './brand/Logo_LDM_vert.png',
   './brand/Logo_LDM_hor_branco.png',
-  './brand/Logo_LDM_vert_branco.png'
+  './brand/Logo_LDM_vert_branco.png',
+  './brand/Logo_LDM_icon.png',
+  './brand/menu-corredor.jpg'
 ];
 
 self.addEventListener('install', (event)=>{
