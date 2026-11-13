@@ -1284,6 +1284,7 @@ function mdAtualizarProgresso(id){
   if(st && fi){ st.textContent = p.stage; fi.style.width = p.pct+'%'; }
 }
 function mdProcessar(id){
+  if(window.LDM_SOMENTE_LEITURA){ irShowToast('Seu acesso é só de visualização.', true); return; }
   const base = MD_BASES.find(b=>b.id===id);
   const arq = mdArquivo(id);
   if(MD.proc[id] || !arq) return;
@@ -1509,6 +1510,7 @@ function mdRascunhoAlterado(){
     || JSON.stringify(MD.docaX1x2Rascunho) !== JSON.stringify(MD.docaX1x2);
 }
 function mdSalvarConfiguracao(){
+  if(window.LDM_SOMENTE_LEITURA){ irShowToast('Seu acesso é só de visualização.', true); return; }
   MD_DIMENSOES.forEach(dim=>{
     MD.regras[dim.chave] = {...MD.regrasRascunho[dim.chave]};
     mdSetConfig(MD_CONFIG_KEY_POR_DIM[dim.chave], MD.regras[dim.chave]);
