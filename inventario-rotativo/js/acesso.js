@@ -120,23 +120,28 @@ function irAcessoEmPortugues(msg){
     telaAcesso.classList.add('escondida');
     if(!appIniciado){
       appIniciado = true;
+      /* O app abre JÁ, sem esperar o banco. Esperar a consulta do nível antes
+         de irInit() deixava a tela presa em "Carregando..." quando a chamada
+         não voltava (ex.: disparada de dentro do aviso de login do Supabase,
+         que segura a conexão até o aviso terminar). */
+      irInit();
       /* Nível de acesso: 'visualizar' esconde importação/configuração e não
-         grava na nuvem (o banco também recusa). Se a consulta falhar, segue
-         como editor — quem decide de verdade é o banco. */
-      try {
-        const { data: nivel } = await irSupa.rpc('ldm_nivel_acesso', { p_app_key: IRA_APP_KEY });
-        if(nivel === 'visualizar'){
+         grava na nuvem (o banco também recusa). Se a consulta falhar ou
+         demorar, segue como editor — quem decide de verdade é o banco. */
+      irSupa.rpc('ldm_nivel_acesso', { p_app_key: IRA_APP_KEY }).then(function(r){
+        if(r && r.data === 'visualizar'){
           window.LDM_SOMENTE_LEITURA = true;
           document.documentElement.classList.add('somente-leitura');
         }
-      } catch(e){}
+      }).catch(function(){});
       /* Registra a visita pra contar na frequência (Configurações do hub).
          Não bloqueia o app por causa disso — se falhar, só não conta. */
       irSupa.rpc('ldm_registrar_acesso', { p_app_key: IRA_APP_KEY }).catch(function(){});
-      irInit();
     }
   }
 
-  irSupa.auth.onAuthStateChange(function(){ irVerificarAcesso(); });
+  /* Fora do callback (setTimeout): chamar o Supabase de dentro do aviso de
+     login trava a conexão — documentado na biblioteca. */
+  irSupa.auth.onAuthStateChange(function(){ setTimeout(irVerificarAcesso, 0); });
   irVerificarAcesso();
 })();
