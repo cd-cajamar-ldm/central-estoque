@@ -91,6 +91,42 @@ RG.subeLocais = function(supa, rows){
   });
 };
 
+/* ---------- última importação no servidor (Supabase Storage, balde "rg-reversa") ----------
+ * Cada relatório vira um arquivo JSON compactado (rgs, est, mult) e o "meta" diz quando e de qual
+ * arquivo foi a última importação de cada um — assim o app só baixa quando há novidade. */
+var BALDE = 'rg-reversa';
+function comprime(txt){
+  if(typeof CompressionStream === 'undefined') return Promise.resolve({ blob: new Blob([txt], { type: 'application/json' }), ext: 'json', tipo: 'application/json' });
+  return new Response(new Blob([txt]).stream().pipeThrough(new CompressionStream('gzip'))).blob().then(function(b){ return { blob: b, ext: 'json.gz', tipo: 'application/gzip' }; });
+}
+function descomprime(blob, gz){
+  if(!gz) return blob.text();
+  if(typeof DecompressionStream === 'undefined') return Promise.reject(new Error('Este navegador não abre o arquivo compactado.'));
+  return new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
+function acha(supa, nome){
+  return supa.storage.from(BALDE).download(nome + '.json.gz').then(function(r){
+    if(!r.error && r.data) return descomprime(r.data, true);
+    return supa.storage.from(BALDE).download(nome + '.json').then(function(r2){
+      if(!r2.error && r2.data) return descomprime(r2.data, false);
+      return null;
+    });
+  }).then(function(t){ return t == null ? null : JSON.parse(t); });
+}
+RG.nuvem = {
+  sobe: function(supa, nome, obj){
+    return comprime(JSON.stringify(obj)).then(function(x){
+      return supa.storage.from(BALDE).upload(nome + '.' + x.ext, x.blob, { upsert: true, contentType: x.tipo }).then(function(r){ if(r.error) throw r.error; });
+    });
+  },
+  baixa: function(supa, nome){ return acha(supa, nome); },
+  apaga: function(supa, nome){ return supa.storage.from(BALDE).remove([nome + '.json.gz', nome + '.json']).then(function(r){ if(r.error) throw r.error; }); },
+  metaLe: function(supa){ return acha(supa, 'meta').then(function(m){ return m || {}; }); },
+  metaSet: function(supa, tipo, info){
+    return RG.nuvem.metaLe(supa).then(function(m){ if(info) m[tipo] = info; else delete m[tipo]; return RG.nuvem.sobe(supa, 'meta', m); });
+  }
+};
+
 /* ---------- versão em uso ---------- */
 /* A versão é um número que sobe a cada alteração (rg-reversa/js/versao.js) — não depende do deploy do GitHub. */
 RG.versao = function(){ return window.RG_VERSAO || { n: 0, data: '' }; };

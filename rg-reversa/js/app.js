@@ -3,14 +3,15 @@
  * Meta do módulo: 100% do estoque da reversa identificado por RG (cada peça um RG).
  * Indicador principal: % de unidades da reversa que já têm RG.
  *
- * Bases (exportadas do Bseller e importadas aqui no navegador, guardadas no IndexedDB):
+ * Bases (exportadas do Bseller e importadas aqui; a ÚLTIMA importação de cada uma fica guardada no
+ * navegador (IndexedDB) e no servidor (Supabase Storage), para qualquer computador ver os mesmos dados):
  *   QRY0100 (RG - Produtividade) → 1 linha = 1 RG. Acumula: cada importação soma os novos.
  *   QRY0390 (Estoque por Local)  → foto do saldo; substitui a anterior. Só REV e AVA.
  *   ZBIQ0051 (Item x Múltiplo)   → liga item pai a componentes (para o indicador de múltiplos).
  * Cruzando RG x estoque por item + local sai a cobertura.
  *
- * Coletor / Movimentações: as bipagens vão para o Supabase (tabela public.rg_movimentacoes),
- * para o celular e o computador enxergarem o mesmo dado. */
+ * Coletor / Movimentar: ao finalizar no coletor, a planilha fica no Supabase (tabela public.rg_movimentacoes)
+ * e aparece na aba "Movimentar", onde o assistente baixa/copia e marca como movida. */
 (function(){
 'use strict';
 
@@ -22,12 +23,12 @@ var RESTR = {WN:'Vendável',WA:'Reversa',WQ:'Quebra',RT:'Conferência',WE:'Amost
 
 var TABS = {
   painel:['Dashboard','Implantação de RG na logística reversa — meta: 100% do estoque com RG.'],
-  movs:['Movimentações','Relatório do coletor para baixar em Excel ou colar no PuTTY.'],
+  mover:['Movimentar','Planilhas geradas no coletor, prontas para movimentar no PuTTY.'],
   importacao:['Importação','Relatórios do Bseller que alimentam o dashboard.']
 };
 
 var S = {
-  rgs:[], est:null, mult:null, hist:[], tab:'painel', D:null, ocupado:'', user:'',
+  rgs:[], est:null, mult:null, hist:[], info:{}, nuvemErro:'', tab:'painel', D:null, ocupado:'', user:'',
   movs:null, movsBusy:false, movsErro:'',
   fm:{ de:'', ate:'', st:'pend', q:'' }, lim:{}, sort:{},
   col:null
@@ -183,6 +184,42 @@ function montaMult(a, nome){
   return { rows:rows, arquivo:nome, em:Date.now() };
 }
 
+/* ---------- última importação no servidor ---------- */
+function docNuvem(t){ return t==='rgs' ? { rows:S.rgs, em:S.info.rgs.em, arquivo:S.info.rgs.arquivo } : (t==='est' ? S.est : S.mult); }
+function msgNuvem(e){ var m=(e&&e.message)||String(e); return /bucket|not found|does not exist|row-level|policy/i.test(m) ? m+' (rode a migração rg-reversa/supabase/migrations/003_importacoes.sql no Supabase)' : m; }
+function guardaNuvem(t, msgs, erros){
+  var supa=window.rgSupa;
+  return dbSet('info', S.info).catch(function(){}).then(function(){
+    return RG.nuvem.sobe(supa, t, docNuvem(t)).then(function(){ return RG.nuvem.metaSet(supa, t, S.info[t]); });
+  }).then(function(){ S.nuvemErro=''; if(msgs) msgs.push('guardado no servidor'); })
+    .catch(function(e){ S.nuvemErro=msgNuvem(e); if(erros) erros.push('Importei, mas não consegui guardar no servidor: '+S.nuvemErro); });
+}
+function aplicaNuvem(t, doc, m){
+  if(t==='rgs'){ S.rgs=Array.isArray(doc.rows)?doc.rows:[]; S.info.rgs=m; return dbSet('rgs', S.rgs); }
+  if(t==='est'){ S.est=doc; S.info.est=m; return dbSet('est', S.est); }
+  S.mult=doc; S.info.mult=m; return dbSet('mult', S.mult);
+}
+/* Ao abrir: se o servidor tem importação mais nova que a deste navegador, baixa; se este navegador tem algo que o servidor não tem, sobe. */
+function sincNuvem(){
+  var supa=window.rgSupa;
+  return RG.nuvem.metaLe(supa).then(function(meta){
+    var mudou=false, seq=Promise.resolve();
+    ['rgs','est','mult'].forEach(function(t){
+      var m=meta[t], loc=S.info[t], tem=t==='rgs' ? S.rgs.length>0 : !!(t==='est'?S.est:S.mult);
+      seq=seq.then(function(){
+        if(m && (!tem || !loc || m.em>loc.em)){
+          return RG.nuvem.baixa(supa,t).then(function(doc){ if(!doc) return; return aplicaNuvem(t,doc,m).then(function(){ mudou=true; }); });
+        }
+        if(tem && (!m || (loc && loc.em>m.em))){
+          if(!loc) S.info[t]= t==='rgs' ? {em:Date.now(), arquivo:'RGs já importados', n:S.rgs.length} : {em:(t==='est'?S.est:S.mult).em||Date.now(), arquivo:(t==='est'?S.est:S.mult).arquivo||'', n:(t==='est'?S.est:S.mult).rows.length};
+          return guardaNuvem(t);
+        }
+      });
+    });
+    return seq.then(function(){ return dbSet('info', S.info).catch(function(){}); }).then(function(){ S.nuvemErro=''; return mudou; });
+  }).catch(function(e){ S.nuvemErro=msgNuvem(e); return false; });
+}
+
 function importar(files){
   if(!files || !files.length) return;
   if(typeof XLSX==='undefined'){ toast('A leitura de planilhas não carregou. Verifique a internet e atualize a página.', true); return; }
@@ -201,7 +238,8 @@ function importar(files){
         var add=S.rgs.length-antes;
         gravaLog({em:Date.now(), tipo:'QRY0100 · RG', arquivo:f.name, resumo:int(novos.length)+' RGs lidos · '+int(add)+' novos · '+int(atual)+' atualizados'});
         msgs.push(int(add)+' RGs novos');
-        return dbSet('rgs', S.rgs);
+        S.info.rgs={ em:Date.now(), arquivo:f.name, n:S.rgs.length };
+        return dbSet('rgs', S.rgs).then(function(){ return guardaNuvem('rgs', msgs, erros); });
       }
       if(a.tipo==='mult'){
         var mu=montaMult(a, f.name);
@@ -209,14 +247,16 @@ function importar(files){
         S.mult=mu;
         gravaLog({em:Date.now(), tipo:'ZBIQ0051 · Múltiplos', arquivo:f.name, resumo:int(mu.rows.length)+' ligações pai x componente'});
         msgs.push('múltiplos ('+int(mu.rows.length)+' ligações)');
-        return dbSet('mult', S.mult);
+        S.info.mult={ em:mu.em, arquivo:f.name, n:mu.rows.length };
+        return dbSet('mult', S.mult).then(function(){ return guardaNuvem('mult', msgs, erros); });
       }
       var est=montaEstoque(a, f.name);
       if(!est.rows.length) throw new Error('"'+f.name+'" não tem saldo nas classes da reversa ('+CLASSES_REVERSA.join(', ')+').');
       S.est=est;
       gravaLog({em:Date.now(), tipo:'QRY0390 · Estoque', arquivo:f.name, resumo:int(est.linhasArquivo)+' linhas no arquivo · '+int(est.linhasReversa)+' da reversa · '+int(est.unidades)+' unidades'});
       msgs.push('estoque da reversa ('+int(est.unidades)+' un)');
-      return dbSet('est', S.est).then(function(){
+      S.info.est={ em:est.em, arquivo:f.name, n:est.rows.length };
+      return dbSet('est', S.est).then(function(){ return guardaNuvem('est', msgs, erros); }).then(function(){
         /* a lista de locais (nome de cada local) vai para o Supabase: é o que o coletor mostra ao bipar */
         return RG.subeLocais(window.rgSupa, est.locais).then(function(n){ msgs.push(int(n)+' locais enviados ao coletor'); })
           .catch(function(e){ erros.push('Não consegui enviar a lista de locais ao coletor: '+((e&&e.message)||e)); });
@@ -385,12 +425,17 @@ function panel(tit, sub, corpo, extra){
 function tile(t1,t2,t3,cls,tip){ return '<div class="rv-tile"'+(tip?tipA(tip):'')+'><div class="t1">'+t1+'</div><div class="t2 '+(cls||'')+'">'+t2+'</div><div class="t3">'+t3+'</div></div>'; }
 
 /* ---------- Dashboard ---------- */
+function chipsImp(){
+  var c=[['rgs','RGs (QRY0100)'],['est','Estoque (QRY0390)'],['mult','Múltiplos (ZBIQ0051)']].filter(function(x){ return S.info[x[0]] && S.info[x[0]].em; })
+    .map(function(x){ return '<span class="rv-chip">'+x[1]+' · <b>'+dataHoraBR(S.info[x[0]].em)+'</b></span>'; });
+  return c.length ? '<div class="rv-chips">'+c.join('')+'</div>' : '';
+}
 function vPainel(){
   var D=S.D, T=D.tot, ab=D.abertos, tem=!!S.est;
   var maxDt=D.ultimoDia;
   var hero='<div class="rv-hero"><div class="rv-hero-in">'+
     '<div class="rv-marca"><img src="brand/Logo_LDM_icon.png" alt=""><div><b>Oficina LDM</b><span>RG Reversa · CD Cajamar</span></div></div>'+
-    '<div class="rv-hero-row"><div><h2>Dashboard RG Reversa</h2></div>'+
+    '<div class="rv-hero-row"><div><h2>Dashboard RG Reversa</h2>'+chipsImp()+'</div>'+
     '<div class="rv-hero-btns"><a class="rv-btn pri" href="coletor/">📲 Abrir coletor</a><button class="rv-btn sec" data-act="tab" data-tab="importacao">⬆ Importar relatórios</button></div></div></div></div>';
   if(!tem && !S.rgs.length){
     return hero+'<div class="rv-body"><div class="panel"><div class="empty-state"><div class="eicon">📦</div><h3>Nenhum relatório importado ainda</h3><p>Importe a <strong>QRY0100</strong> (RGs), a <strong>QRY0390</strong> (Estoque por Local) e a <strong>ZBIQ0051</strong> (Múltiplos) para ver os indicadores.</p><p style="margin-top:16px"><button class="btn btn-orange" data-act="tab" data-tab="importacao">Ir para Importação</button></p></div></div></div>';
@@ -485,55 +530,74 @@ function vPainel(){
 /* ---------- Coletor: agora é um app à parte (coletor/) ---------- */
 function versaoTxt(){ return RG.versaoTxt(); }
 
-/* ---------- Movimentações ---------- */
+/* ---------- Movimentar: planilhas geradas no coletor ---------- */
 function isoDia(t){ var d=new Date(t); return d.getFullYear()+'-'+d2(d.getMonth()+1)+'-'+d2(d.getDate()); }
 function carregaMovs(){
   if(S.movsBusy) return;
-  var f=S.fm; if(!f.de) f.de=isoDia(hoje0()-6*864e5); if(!f.ate) f.ate=isoDia(hoje0());
+  var f=S.fm; if(!f.de) f.de=isoDia(hoje0()-29*864e5); if(!f.ate) f.ate=isoDia(hoje0());
   S.movsBusy=true; S.movsErro='';
-  var q=window.rgSupa.from('rg_movimentacoes').select('*').gte('criado_em', new Date(f.de+'T00:00:00').toISOString()).lt('criado_em', new Date(new Date(f.ate+'T00:00:00').getTime()+864e5).toISOString()).order('criado_em',{ascending:true}).order('id',{ascending:true}).limit(5000);
-  if(f.st==='pend') q=q.is('exportado_em',null); else if(f.st==='exp') q=q.not('exportado_em','is',null);
-  q.then(function(r){
+  var q=window.rgSupa.from('rg_movimentacoes').select('*');
+  /* Pendentes: sem filtro de data (nada some da fila por ser antigo). */
+  if(f.st==='pend') q=q.is('exportado_em',null);
+  else { q=q.gte('criado_em', new Date(f.de+'T00:00:00').toISOString()).lt('criado_em', new Date(new Date(f.ate+'T00:00:00').getTime()+864e5).toISOString()); if(f.st==='exp') q=q.not('exportado_em','is',null); }
+  q.order('criado_em',{ascending:f.st==='pend'}).order('id',{ascending:true}).limit(5000).then(function(r){
     if(r.error) throw r.error;
     S.movs=r.data||[];
-  }).catch(function(e){ S.movs=[]; S.movsErro=(e&&e.message)||'Não consegui carregar as movimentações.'; }).then(function(){ S.movsBusy=false; if(S.tab==='movs') render(); });
+  }).catch(function(e){ S.movs=[]; S.movsErro=(e&&e.message)||'Não consegui carregar as planilhas.'; }).then(function(){ S.movsBusy=false; if(S.tab==='mover') render(); });
 }
 function movsFiltradas(){
   var q=norm(S.fm.q); if(!S.movs) return [];
   return q ? S.movs.filter(function(m){ return norm(m.rg+' '+m.local_origem+' '+m.local_destino+' '+m.operador).indexOf(q)>=0; }) : S.movs;
 }
 function locTxt(raw){ var n=RG.nomeLocal(raw); return '<b>'+esc(RG.localNorm(raw))+'</b>'+(n&&n.d?'<br><small style="color:var(--ink-soft)">'+esc(n.d)+'</small>':''); }
-function vMovs(){
+/* Uma planilha = um lote (tudo o que o assistente bipou de uma vez: origem → RGs → destino). */
+function lotesDe(lista){
+  var ordem=[], g={};
+  lista.forEach(function(m){
+    var l=g[m.lote]; if(!l){ l={ lote:m.lote, criado:m.criado_em, operador:m.operador||'', origem:m.local_origem, destino:m.local_destino, rows:[], movida:true }; g[m.lote]=l; ordem.push(m.lote); }
+    l.rows.push(m); if(!m.exportado_em) l.movida=false;
+  });
+  return ordem.map(function(k){ return g[k]; });
+}
+function vMover(){
   if(S.movs==null && !S.movsBusy) setTimeout(carregaMovs,0);
-  var f=S.fm; if(!f.de) f.de=isoDia(hoje0()-6*864e5); if(!f.ate) f.ate=isoDia(hoje0());
-  var lista=movsFiltradas(), lotes=new Set(lista.map(function(m){ return m.lote; }));
+  var f=S.fm; if(!f.de) f.de=isoDia(hoje0()-29*864e5); if(!f.ate) f.ate=isoDia(hoje0());
+  var lista=movsFiltradas(), lotes=lotesDe(lista), pend=lotes.filter(function(l){ return !l.movida; }).length;
   var h='<div class="panel"><div class="mv-bar">'+
-    '<label>De<input type="date" id="mvDe" data-mv="de" value="'+f.de+'"></label><label>Até<input type="date" id="mvAte" data-mv="ate" value="'+f.ate+'"></label>'+
-    '<label>Situação<select data-mv="st"><option value="pend"'+(f.st==='pend'?' selected':'')+'>Pendentes de exportação</option><option value="exp"'+(f.st==='exp'?' selected':'')+'>Já exportados</option><option value="todos"'+(f.st==='todos'?' selected':'')+'>Todos</option></select></label>'+
+    '<label>Situação<select data-mv="st"><option value="pend"'+(f.st==='pend'?' selected':'')+'>A movimentar</option><option value="exp"'+(f.st==='exp'?' selected':'')+'>Já movidas</option><option value="todos"'+(f.st==='todos'?' selected':'')+'>Todas</option></select></label>'+
+    (f.st==='pend'?'':'<label>De<input type="date" id="mvDe" data-mv="de" value="'+f.de+'"></label><label>Até<input type="date" id="mvAte" data-mv="ate" value="'+f.ate+'"></label>')+
     '<label>Buscar<input type="text" id="mvQ" data-mv="q" placeholder="RG, local ou operador" value="'+esc(f.q)+'"></label>'+
     '<button class="btn btn-secondary" data-act="mv-load">Atualizar</button>'+
-    '<div class="mv-acoes"><button class="btn btn-secondary" data-act="mv-copy"'+(lista.length?'':' disabled')+'>📋 Copiar tabela (PuTTY)</button><button class="btn btn-orange" data-act="mv-xlsx"'+(lista.length?'':' disabled')+'>⬇ Baixar Excel</button></div></div>';
+    '<div class="mv-acoes"><button class="btn btn-secondary" data-act="mv-copy"'+(lista.length?'':' disabled')+'>📋 Copiar tudo (PuTTY)</button><button class="btn btn-orange" data-act="mv-xlsx"'+(lista.length?'':' disabled')+'>⬇ Excel de tudo</button></div></div>';
   if(S.movsErro) h+='<div class="rv-aviso" style="margin-bottom:12px"><strong>Erro:</strong> '+esc(S.movsErro)+(/relation|does not exist|schema cache/i.test(S.movsErro)?' — a tabela <code>rg_movimentacoes</code> ainda não foi criada no Supabase (migração <code>rg-reversa/supabase/migrations/001_movimentacoes.sql</code>).':'')+'</div>';
-  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai em uma coluna: <b>local de origem</b>, depois os <b>RGs</b> e, por último, o <b>local de destino</b> (um bloco por movimentação). Ao exportar, as linhas passam a "Exportado".</div>';
-  h+='<div class="table-wrap"><table><thead><tr><th>Data/hora</th><th>Operador</th><th>Local origem</th><th>RG</th><th>Local destino</th><th>Situação</th></tr></thead><tbody>';
-  if(S.movsBusy && !lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Carregando…</td></tr>';
-  else if(!lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Nenhuma movimentação neste filtro.</td></tr>';
-  var lim=S.lim.mv||PAGINA;
-  lista.slice(0,lim).forEach(function(m){
-    h+='<tr><td>'+dataHoraBR(m.criado_em)+'</td><td>'+esc(m.operador||'—')+'</td><td>'+locTxt(m.local_origem)+'</td><td><b>'+esc(m.rg)+'</b></td><td>'+locTxt(m.local_destino)+'</td><td>'+(m.exportado_em?'<span class="tag tag-good">Exportado</span>':'<span class="tag tag-orange">Pendente</span>')+'</td></tr>';
-  });
-  h+='</tbody></table></div>';
-  if(lista.length>lim) h+='<div class="rv-mais"><button class="btn btn-secondary" data-act="mv-mais">Mostrar mais ('+int(lista.length-lim)+' restantes)</button></div>';
+  h+='<div class="rv-hint" style="margin-bottom:10px"><b>'+int(lotes.length)+'</b> planilha(s) · <b>'+int(lista.length)+'</b> RGs'+(f.st==='todos'?' · <b>'+int(pend)+'</b> a movimentar':'')+'. Cada planilha é uma bipagem finalizada no coletor. Baixe o Excel ou copie para o PuTTY, faça a movimentação e clique em <b>Marcar como movida</b>.</div>';
+  if(S.movsBusy && !lotes.length) h+='<div class="rv-empty">Carregando…</div>';
+  else if(!lotes.length) h+='<div class="rv-empty">'+(f.st==='pend'?'Nenhuma planilha a movimentar. 🎉':'Nenhuma planilha neste filtro.')+'</div>';
+  var lim=S.lim.mv||20;
+  h+=lotes.slice(0,lim).map(function(l){
+    var rg=l.rows.map(function(m){ var rec=S.D && S.D.rgMap.get(m.rg), d=rec ? (S.D.itemDesc.get(rec.item)||'') : ''; return '<span class="mv-rg"'+(d?' title="'+esc(d)+'"':'')+'>'+esc(m.rg)+'</span>'; }).join('');
+    return '<div class="mv-lote'+(l.movida?' ok':'')+'">'+
+      '<div class="mv-lote-h"><div><b>'+dataHoraBR(l.criado)+'</b> <span class="rv-hint">· '+esc(l.operador||'—')+' · '+int(l.rows.length)+' RG'+(l.rows.length===1?'':'s')+'</span></div>'+
+      (l.movida?'<span class="tag tag-good">Movida</span>':'<span class="tag tag-orange">A movimentar</span>')+'</div>'+
+      '<div class="mv-rota"><div><small>Origem</small>'+locTxt(l.origem)+'</div><div class="mv-seta">→</div><div><small>Destino</small>'+locTxt(l.destino)+'</div></div>'+
+      '<div class="mv-rgs">'+rg+'</div>'+
+      '<div class="mv-lote-b"><button class="btn btn-secondary" data-act="mv-l-xlsx" data-lote="'+esc(l.lote)+'">⬇ Excel</button><button class="btn btn-secondary" data-act="mv-l-copy" data-lote="'+esc(l.lote)+'">📋 Copiar (PuTTY)</button>'+
+      (l.movida?'<button class="btn-danger-text" data-act="mv-l-desfaz" data-lote="'+esc(l.lote)+'">Desfazer</button>':'<button class="btn btn-orange" data-act="mv-l-ok" data-lote="'+esc(l.lote)+'">✔ Marcar como movida</button>')+'</div></div>';
+  }).join('');
+  if(lotes.length>lim) h+='<div class="rv-mais"><button class="btn btn-secondary" data-act="mv-mais">Mostrar mais ('+int(lotes.length-lim)+' planilhas)</button></div>';
   return h+'</div>';
 }
-function marcaExportado(lista){
-  var ids=lista.filter(function(m){ return !m.exportado_em; }).map(function(m){ return m.id; });
+/* Marca (ou desmarca) todas as linhas da planilha como movidas. */
+function marcaMovida(rows, ligado){
+  var ids=rows.filter(function(m){ return ligado ? !m.exportado_em : !!m.exportado_em; }).map(function(m){ return m.id; });
   if(!ids.length) return Promise.resolve();
   var partes=[]; for(var i=0;i<ids.length;i+=200) partes.push(ids.slice(i,i+200));
-  var agora=new Date().toISOString();
-  return partes.reduce(function(p,parte){ return p.then(function(){ return window.rgSupa.from('rg_movimentacoes').update({exportado_em:agora}).in('id',parte).then(function(r){ if(r.error) throw r.error; }); }); }, Promise.resolve())
-    .then(function(){ S.movs=null; render(); }).catch(function(e){ toast('Exportei, mas não consegui marcar como exportado: '+(e.message||e), true); });
+  var valor=ligado ? new Date().toISOString() : null;
+  return partes.reduce(function(p,parte){ return p.then(function(){ return window.rgSupa.from('rg_movimentacoes').update({exportado_em:valor}).in('id',parte).then(function(r){ if(r.error) throw r.error; }); }); }, Promise.resolve())
+    .then(function(){ toast(ligado?'Planilha marcada como movida.':'Planilha voltou para "a movimentar".'); S.movs=null; render(); })
+    .catch(function(e){ toast('Não consegui atualizar a planilha: '+(e.message||e), true); });
 }
+function rowsLote(id){ return (S.movs||[]).filter(function(m){ return String(m.lote)===String(id); }); }
 /* Relatório: coluna A = origem, RGs e destino (o que vai para o PuTTY); colunas ao lado dizem o que cada número é. */
 function blocosMovs(lista){
   var ordem=[], g={};
@@ -544,34 +608,34 @@ function blocosMovs(lista){
   });
   return ordem.map(function(l){ return g[l]; });
 }
-function mvXlsx(){
-  var lista=movsFiltradas(); if(!lista.length) return;
+function mvXlsx(lista){
+  lista=lista||movsFiltradas(); if(!lista.length) return;
   var blocos=blocosMovs(lista);
   var ops=Array.from(new Set(blocos.map(function(b){ return b.operador; }).filter(Boolean))).join(', ');
-  RG.xlsx(blocos, { data:dataBR(Date.now()), operador:ops }, 'rg-reversa-movimentacoes-'+isoDia(Date.now())+'.xlsx');
-  marcaExportado(lista);
+  RG.xlsx(blocos, { data:dataBR(Date.now()), operador:ops }, 'rg-reversa-movimentacao-'+isoDia(Date.now())+'-'+Date.now().toString(36)+'.xlsx');
 }
-function mvCopy(){
-  var lista=movsFiltradas(); if(!lista.length) return;
+function mvCopy(lista){
+  lista=lista||movsFiltradas(); if(!lista.length) return;
   var l=RG.linhasBlocos(blocosMovs(lista));
-  RG.copia(l.join('\n')).then(function(){ toast(int(l.length)+' linhas copiadas — cole no PuTTY.'); marcaExportado(lista); });
+  RG.copia(l.join('\n')).then(function(){ toast(int(l.length)+' linhas copiadas — cole no PuTTY.'); });
 }
-function copiaFallback(txt){ var t=document.createElement('textarea'); t.value=txt; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch(e){} t.remove(); }
 
 /* ---------- Importação ---------- */
 function vImportacao(){
   var rgDias=S.rgs.map(function(r){ return r.dt; }).filter(Boolean);
-  var stRg = S.rgs.length ? '<span class="tag tag-good">Carregado</span> '+int(S.rgs.length)+' RGs'+(rgDias.length?' · de '+dataBR(Math.min.apply(null,rgDias))+' a '+dataBR(Math.max.apply(null,rgDias)):'') : '<span class="tag tag-muted">Ainda não importado</span>';
-  var stEst = S.est ? '<span class="tag tag-good">Carregado</span> '+int(S.est.unidades)+' unidades · '+dataHoraBR(S.est.em) : '<span class="tag tag-muted">Ainda não importado</span>';
-  var stMu = S.mult ? '<span class="tag tag-good">Carregado</span> '+int(S.mult.rows.length)+' ligações · '+dataHoraBR(S.mult.em) : '<span class="tag tag-muted">Ainda não importado</span>';
+  var ult=function(t){ var i=S.info[t]; return i && i.em ? '<div class="rv-ult">Última importação: <b>'+dataHoraBR(i.em)+'</b>'+(i.arquivo?' · '+esc(i.arquivo):'')+'</div>' : ''; };
+  var stRg = S.rgs.length ? '<span class="tag tag-good">Carregado</span> '+int(S.rgs.length)+' RGs'+(rgDias.length?' · de '+dataBR(Math.min.apply(null,rgDias))+' a '+dataBR(Math.max.apply(null,rgDias)):'')+ult('rgs') : '<span class="tag tag-muted">Ainda não importado</span>';
+  var stEst = S.est ? '<span class="tag tag-good">Carregado</span> '+int(S.est.unidades)+' unidades'+ult('est') : '<span class="tag tag-muted">Ainda não importado</span>';
+  var stMu = S.mult ? '<span class="tag tag-good">Carregado</span> '+int(S.mult.rows.length)+' ligações'+ult('mult') : '<span class="tag tag-muted">Ainda não importado</span>';
   var h='';
+  if(S.nuvemErro) h+='<div class="rv-aviso" style="margin-bottom:14px"><strong>Não estou guardando no servidor:</strong> '+esc(S.nuvemErro)+'</div>';
   if(S.ocupado) h+='<div class="rv-aviso" style="margin-bottom:14px"><strong>Aguarde.</strong> '+esc(S.ocupado)+'</div>';
   h+='<div class="rv-imp">'+
     '<div class="dropzone'+(S.rgs.length?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🏷️</div><div class="dz-title">QRY0100 · RG - Produtividade</div><div class="dz-desc">Lista de RGs gerados. Cada importação <strong>soma</strong> os RGs novos e atualiza os existentes.</div><div class="rv-st">'+stRg+'</div></div>'+
     '<div class="dropzone'+(S.est?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">📦</div><div class="dz-title">QRY0390 · Estoque por Local</div><div class="dz-desc">Foto do saldo. <strong>Substitui</strong> a anterior. Guarda só as classes '+CLASSES_REVERSA.join(' e ')+'.</div><div class="rv-st">'+stEst+'</div></div>'+
     '<div class="dropzone'+(S.mult?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🧩</div><div class="dz-title">ZBIQ0051 · Item x Múltiplo</div><div class="dz-desc">Liga item pai a componentes. <strong>Substitui</strong> a anterior. Alimenta o indicador de múltiplos.</div><div class="rv-st">'+stMu+'</div></div>'+
     '</div>';
-  h+='<div class="panel" style="margin-top:14px"><h3>Como importar</h3><div class="panel-sub">Clique num quadro ou arraste os arquivos para cá. Pode soltar os três de uma vez — o app reconhece cada relatório sozinho. Os dados ficam salvos neste navegador.</div>'+
+  h+='<div class="panel" style="margin-top:14px"><h3>Como importar</h3><div class="panel-sub">Clique num quadro ou arraste os arquivos para cá. Pode soltar os três de uma vez — o app reconhece cada relatório sozinho. A última importação de cada relatório fica guardada no servidor: qualquer computador que abrir o app vê os mesmos dados.</div>'+
     '<ol style="margin:0 0 4px 18px;line-height:1.9"><li>Bseller: exporte a <strong>QRY0100</strong> (período desde a última importação), a <strong>QRY0390</strong> (CD inteiro) e a <strong>ZBIQ0051</strong>.</li><li>Solte os arquivos aqui.</li><li>A cada importação da QRY0390 o app guarda uma foto da cobertura — é ela que forma o gráfico de evolução.</li></ol></div>';
   var log=lsGet(LOG_KEY);
   h+='<div class="panel" style="margin-top:14px"><div class="panel-head-row"><h3>Histórico de importações</h3><div><button class="btn-danger-text" data-act="limpa" data-k="rgs">Apagar RGs</button> <button class="btn-danger-text" data-act="limpa" data-k="est">Apagar estoque</button> <button class="btn-danger-text" data-act="limpa" data-k="mult">Apagar múltiplos</button> <button class="btn-danger-text" data-act="limpa" data-k="hist">Apagar evolução</button></div></div>';
@@ -581,7 +645,7 @@ function vImportacao(){
 }
 
 /* ---------- navegação ---------- */
-var VIEWS={ painel:vPainel, movs:vMovs, importacao:vImportacao };
+var VIEWS={ painel:vPainel, mover:vMover, importacao:vImportacao };
 function render(){
   var t=TABS[S.tab]; $('tabTitle').textContent=t[0]; $('tabSubtitle').textContent=t[1];
   Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-tab]'),function(b){ b.classList.toggle('active', b.dataset.tab===S.tab); });
@@ -595,7 +659,7 @@ function vaiPara(tab){
   S.tab=tab;
   try { history.replaceState(null,'','#'+tab); } catch(e){}
   $('sidebar').classList.remove('mobile-open');
-  if(tab==='movs') S.movs=null;
+  if(tab==='mover') S.movs=null;
   render();
   var sc=document.querySelector('.page-scroll'); if(sc) sc.scrollTop=0;
 }
@@ -631,14 +695,20 @@ function acao(el, ev){
   if(a==='escolher'){ $('fileInput').click(); return; }
   if(a==='limpa'){
     var k=el.dataset.k;
-    if(!confirm('Apagar '+({rgs:'os RGs',est:'o estoque',mult:'os múltiplos',hist:'o histórico de evolução'}[k])+' deste navegador?')) return;
+    if(!confirm('Apagar '+({rgs:'os RGs',est:'o estoque',mult:'os múltiplos',hist:'o histórico de evolução'}[k])+(k==='hist'?' deste navegador?':' deste navegador e do servidor?'))) return;
     if(k==='rgs') S.rgs=[]; if(k==='est') S.est=null; if(k==='mult') S.mult=null; if(k==='hist') S.hist=[];
-    return dbDel(k).then(function(){ deriva(); render(); });
+    delete S.info[k];
+    var nv = k==='hist' ? Promise.resolve() : RG.nuvem.apaga(window.rgSupa,k).then(function(){ return RG.nuvem.metaSet(window.rgSupa,k,null); }).catch(function(e){ toast('Apaguei aqui, mas não consegui apagar no servidor: '+msgNuvem(e), true); });
+    return Promise.all([dbDel(k), dbSet('info',S.info).catch(function(){}), nv]).then(function(){ deriva(); render(); });
   }
   if(a==='mv-load'){ S.movs=null; return carregaMovs(); }
-  if(a==='mv-mais'){ S.lim.mv=(S.lim.mv||PAGINA)+PAGINA; return render(); }
+  if(a==='mv-mais'){ S.lim.mv=(S.lim.mv||20)+20; return render(); }
   if(a==='mv-xlsx') return mvXlsx();
   if(a==='mv-copy') return mvCopy();
+  if(a==='mv-l-xlsx') return mvXlsx(rowsLote(el.dataset.lote));
+  if(a==='mv-l-copy') return mvCopy(rowsLote(el.dataset.lote));
+  if(a==='mv-l-ok') return marcaMovida(rowsLote(el.dataset.lote), true);
+  if(a==='mv-l-desfaz') return marcaMovida(rowsLote(el.dataset.lote), false);
 }
 function inicia(){
   var fi=document.createElement('input'); fi.type='file'; fi.id='fileInput'; fi.accept='.xlsx,.xls,.xlsb,.csv'; fi.multiple=true; fi.hidden=true; document.body.appendChild(fi);
@@ -699,14 +769,20 @@ var iniciado=false;
 window.rgIniciar=function(){
   if(iniciado) return; iniciado=true;
   try { window.rgSupa.auth.getSession().then(function(r){ var u=r.data && r.data.session && r.data.session.user; S.user=u&&u.email ? u.email.split('@')[0] : ''; }); } catch(e){}
-  Promise.all([dbGet('rgs'), dbGet('est'), dbGet('mult'), dbGet('hist')]).then(function(r){
+  Promise.all([dbGet('rgs'), dbGet('est'), dbGet('mult'), dbGet('hist'), dbGet('info')]).then(function(r){
     S.rgs=Array.isArray(r[0]) ? r[0] : [];
     S.est=r[1] && r[1].rows ? r[1] : null;
     S.mult=r[2] && r[2].rows ? r[2] : null;
     S.hist=Array.isArray(r[3]) ? r[3] : [];
+    S.info=(r[4] && typeof r[4]==='object') ? r[4] : {};
   }).catch(function(){ toast('Não consegui abrir os dados salvos neste navegador.', true); }).then(function(){
     deriva(); render();
-    RG.carregaLocais(window.rgSupa).then(function(){ if(S.tab==='movs') render(); });
+    RG.carregaLocais(window.rgSupa).then(function(){ if(S.tab==='mover') render(); });
+    /* traz a última importação guardada no servidor (ou sobe a deste navegador, se o servidor ainda não tem) */
+    sincNuvem().then(function(mudou){
+      if(mudou){ deriva(); render(); toast('Dados atualizados com a última importação guardada no servidor.'); }
+      else if(S.nuvemErro && S.tab==='importacao') render();
+    });
   });
 };
 inicia();

@@ -1,6 +1,6 @@
 /* Coletor de mão — RG Reversa.
  * Fluxo: bipa o local de origem → bipa cada RG (um por linha, numerados) → bipa o local de destino → Finalizar.
- * Ao finalizar, o Excel sobe sozinho. Nada é importado aqui: o nome do local vem da lista que o dashboard
+ * Ao finalizar, a planilha fica guardada no app (aba Movimentar do dashboard) — quem movimenta é feito no computador. Nada é importado aqui: o nome do local vem da lista que o dashboard
  * mantém no Supabase (public.rg_locais) e que o aparelho guarda para funcionar até sem internet. */
 (function(){
 'use strict';
@@ -126,8 +126,7 @@ function finaliza(){
     var p=pendentes(); p.push({lote:lote, rows:rows}); lsSet(PEND_KEY,p);
     hist.unshift(hora+' · '+resumo+' (pendente)'); toast('Sem conexão — guardei no aparelho e envio depois.', true);
   }).then(function(){
-    S.col=novo(ultimo, hist, rel); render();
-    try { xlsx(); } catch(e){}   /* o Excel já sobe sozinho ao finalizar */
+    S.col=novo(ultimo, hist, rel); render();   /* a planilha fica no app (aba Movimentar do dashboard) para o assistente movimentar no computador */
   });
 }
 
@@ -136,19 +135,12 @@ function blocoRel(r){ return { origem:r.origem, destino:r.destino, rgs:r.rgs, ho
 function xlsx(){
   var r=S.col.rel; if(!r) return;
   RG.xlsx([blocoRel(r)], { data:r.data+' '+r.hora, operador:S.user }, 'rg-reversa-movimentacao-'+r.hora.replace(':','h')+'-'+Date.now().toString(36)+'.xlsx');
-  marca(r);
 }
 function copia(){
   var r=S.col.rel; if(!r) return;
   var linhas=RG.linhasBlocos([blocoRel(r)]);
-  RG.copia(linhas.join('\n')).then(function(){ toast(int(linhas.length)+' linhas copiadas — cole no PuTTY.'); marca(r); });
+  RG.copia(linhas.join('\n')).then(function(){ toast(int(linhas.length)+' linhas copiadas — cole no PuTTY.'); });
 }
-/* Exportou o relatório: marca o lote como exportado (se já chegou ao banco). */
-function marca(r){
-  if(!r.salvo || r.marcado) return; r.marcado=true;
-  window.rgSupa.from('rg_movimentacoes').update({ exportado_em:new Date().toISOString() }).eq('lote', r.lote).then(function(){});
-}
-
 /* ---------- lista de locais ---------- */
 function carregaLista(force){
   S.avisoLista='Atualizando lista de locais…'; if(S.col) render();
