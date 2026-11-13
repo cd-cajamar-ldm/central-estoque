@@ -164,10 +164,17 @@ async function mdGetEstoques(){ return mdGetAll(MD_STORES.estoques); }
 async function mdGetEstoqueMeta(){ return mdGetConfig('estoques-meta'); }
 
 /* ---------- Config chave/valor ---------- */
-async function mdSetConfig(key, valor){
+async function mdSetConfigLocal(key, valor){
   const store = await mdTx(MD_STORES.config, 'readwrite');
   return mdPromise(store.put({key, valor}));
 }
+async function mdSetConfig(key, valor){
+  await mdSetConfigLocal(key, valor);
+  // Na tela principal (nuvem.js carregado) a configuração também vai pro
+  // Supabase; no worker de importação a função não existe e só grava local.
+  if(typeof mdNuvemConfig === 'function') mdNuvemConfig(key, valor);
+}
+async function mdGetAllConfig(){ return mdGetAll(MD_STORES.config); }
 async function mdGetConfig(key){
   const store = await mdTx(MD_STORES.config, 'readonly');
   return mdPromise(store.get(key)).then(r=>r ? r.valor : null);

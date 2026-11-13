@@ -1284,6 +1284,7 @@ function mdAtualizarProgresso(id){
   if(st && fi){ st.textContent = p.stage; fi.style.width = p.pct+'%'; }
 }
 function mdProcessar(id){
+  if(window.LDM_SOMENTE_LEITURA){ irShowToast('Seu acesso é só de visualização.', true); return; }
   const base = MD_BASES.find(b=>b.id===id);
   const arq = mdArquivo(id);
   if(MD.proc[id] || !arq) return;
@@ -1307,6 +1308,8 @@ function mdProcessar(id){
       }
       MD.proc[id] = false; worker.terminate();
       mdSetArquivo(id, null);
+      try { await mdNuvemEnviarBase(id); }
+      catch(e){ console.error(e); irShowToast('Importou aqui, mas não consegui enviar pra nuvem: '+((e && e.message) || e), true); }
       await mdRecarregar();
       if(msg.type === 'done051'){
         irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.'
@@ -1507,6 +1510,7 @@ function mdRascunhoAlterado(){
     || JSON.stringify(MD.docaX1x2Rascunho) !== JSON.stringify(MD.docaX1x2);
 }
 function mdSalvarConfiguracao(){
+  if(window.LDM_SOMENTE_LEITURA){ irShowToast('Seu acesso é só de visualização.', true); return; }
   MD_DIMENSOES.forEach(dim=>{
     MD.regras[dim.chave] = {...MD.regrasRascunho[dim.chave]};
     mdSetConfig(MD_CONFIG_KEY_POR_DIM[dim.chave], MD.regras[dim.chave]);
@@ -1743,4 +1747,30 @@ async function irInit(){
     if(mdH && MD_TELAS[mdH]) mdHashTela = mdH;
   } catch(e){}
   if(mdHashTela) irSwitchTab(mdHashTela); else irRenderView();
+  mdNuvemVigiar();
+}
+/* Enquanto o app está aberto, puxa mudanças feitas por outras pessoas. */
+async function mdNuvemChecar(primeira){
+  if(!primeira && document.hidden) return;
+  if(Object.values(MD.proc).some(Boolean) || mdRascunhoAlterado()) return;
+  try {
+    if(primeira) irShowToast('Sincronizando com a nuvem...');
+    if(await mdNuvemSincronizar()){
+      await mdRecarregar();
+      irRenderView();
+      irShowToast(primeira ? 'Dados sincronizados com a nuvem.' : 'Dados atualizados por outra pessoa.');
+    } else if(primeira){
+      irShowToast('Nuvem em dia.');
+    }
+  } catch(e){
+    console.warn('Checagem da nuvem falhou', e);
+    if(primeira) irShowToast('Não consegui sincronizar com a nuvem: '+((e && e.message) || e), true);
+  }
+}
+function mdNuvemVigiar(){
+  // A 1ª sincronização roda depois da tela já aberta (e fora do callback de
+  // login), pra um envio demorado nunca deixar o app preso em "Carregando...".
+  setTimeout(()=>mdNuvemChecar(true), 500);
+  setInterval(mdNuvemChecar, 30000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) mdNuvemChecar(); });
 }

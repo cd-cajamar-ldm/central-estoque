@@ -256,6 +256,9 @@
   .access-toggle{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink);margin:14px 0 0;}
   .access-apps-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
   .access-app-chip{display:flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);border-radius:14px;padding:6px 12px 6px 6px;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;}
+  .access-app-wrap{display:flex;align-items:center;gap:6px;}
+  .access-nivel{font-family:inherit;font-size:11.5px;font-weight:600;color:var(--ink);background:var(--chip-bg);border:1px solid var(--line);border-radius:10px;padding:5px 8px;cursor:pointer;}
+  #accessNovoNome{text-transform:uppercase;}
   .access-app-chip-freq{display:block;font-size:10.5px;font-weight:500;color:var(--ink-soft);}
   .access-app-chip.marcado{background:rgba(254,80,0,.1);border-color:rgba(254,80,0,.35);color:var(--ink);}
   .access-app-chip-icon{width:20px;height:20px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
@@ -1704,7 +1707,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     accessPermissoesCache = {};
     (permissoes || []).forEach(function(p){
       if(!accessPermissoesCache[p.pessoa_id]) accessPermissoesCache[p.pessoa_id] = {};
-      accessPermissoesCache[p.pessoa_id][p.app_key] = true;
+      accessPermissoesCache[p.pessoa_id][p.app_key] = p.nivel || 'editar';
     });
     /* Frequência: quantos acessos e qual o mais recente, por pessoa+app.
        A tabela de log é nova — se ainda não existir (migração não rodada),
@@ -1755,7 +1758,10 @@ document.getElementById('brandLogo').addEventListener('click', function(){
                 var freqTxt = freq
                   ? ' · ' + freq.total + (freq.total === 1 ? ' acesso' : ' acessos') + ' · último em ' + new Date(freq.ultimo).toLocaleDateString('pt-BR')
                   : (marcado ? ' · nunca acessou' : '');
-                return '<label class="access-app-chip' + (marcado ? ' marcado' : '') + '"><input type="checkbox" class="access-cb-app" data-app="' + a.key + '" ' + (marcado ? 'checked' : '') + '><span class="access-app-chip-icon" style="--accent:' + a.color + ';">' + a.icon + '</span><span>' + esc(a.name) + '<span class="access-app-chip-freq">' + esc(freqTxt) + '</span></span></label>';
+                var nivelSel = marcado
+                  ? '<select class="access-nivel" data-app="' + a.key + '" title="Nível de acesso neste app"><option value="editar"' + (marcado === 'editar' ? ' selected' : '') + '>Pode editar</option><option value="visualizar"' + (marcado === 'visualizar' ? ' selected' : '') + '>Só visualizar</option></select>'
+                  : '';
+                return '<div class="access-app-wrap"><label class="access-app-chip' + (marcado ? ' marcado' : '') + '"><input type="checkbox" class="access-cb-app" data-app="' + a.key + '" ' + (marcado ? 'checked' : '') + '><span class="access-app-chip-icon" style="--accent:' + a.color + ';">' + a.icon + '</span><span>' + esc(a.name) + '<span class="access-app-chip-freq">' + esc(freqTxt) + '</span></span></label>' + nivelSel + '</div>';
               }).join('') + '</div>'
         +   '</div>'
         + '</div>';
@@ -1816,7 +1822,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     document.getElementById('accessNovaPessoaSalvar').addEventListener('click', async function(){
       var nomeEl = document.getElementById('accessNovoNome');
       var emailEl = document.getElementById('accessNovoEmail');
-      var nome = nomeEl.value.trim();
+      var nome = nomeEl.value.trim().toUpperCase();
       var email = emailEl.value.trim().toLowerCase();
       if(!nome || !email){ accessMsg('Preencha nome e e-mail.'); return; }
       var { error } = await sbAcessos.schema('acessos').from('pessoas').insert({ nome: nome, email: email });
@@ -1853,6 +1859,13 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         var novoPapel = e.target.checked ? 'admin' : 'colaborador';
         var { error: errPapel } = await sbAcessos.schema('acessos').from('pessoas').update({ papel: novoPapel }).eq('id', id);
         if(errPapel){ accessMsg(accessEmPortugues(errPapel.message)); e.target.checked = !e.target.checked; return; }
+        accessCarregarTudo();
+        return;
+      }
+      if(e.target.classList.contains('access-nivel')){
+        var { error: errNivel } = await sbAcessos.schema('acessos').from('permissoes').update({ nivel: e.target.value }).eq('pessoa_id', id).eq('app_key', e.target.dataset.app);
+        if(errNivel){ accessMsg(accessEmPortugues(errNivel.message)); }
+        accessAbertas[id] = true;
         accessCarregarTudo();
         return;
       }
