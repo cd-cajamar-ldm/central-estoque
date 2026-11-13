@@ -430,15 +430,28 @@ function vPainel(){
   b+=f+'</div>';
   if(!tem) return hero+b+'</div>';
   /* — evolução — */
-  var pts=S.hist.map(function(h){ var pp=pctN(h.comRg,h.saldo); return {l:dm(h.d), y:pp, t:dataBR(h.d)+'\nCobertura: '+pp.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%\nCom RG: '+int(h.comRg)+' de '+int(h.saldo)+'\nLocais 100% RG: '+int(h.locRg)+' de '+int(h.locTot)}; });
-  var evo=lineChart(pts,'%');
-  if(pts.length<2) evo+='<div class="rv-hint" style="margin-top:6px">A linha ganha forma a cada nova importação da QRY0390: o app guarda uma foto da cobertura por dia.</div>';
+  /* Previsão: no ritmo atual (RGs por dia útil), quando a cobertura chega a 100%? */
+  var evo, falta=T.semRg, rit=D.ritmo, dUteis=rit>0 ? Math.ceil(falta/rit) : 0;
+  var addUteis=function(t0,n){ var t=t0; while(n>0){ t+=864e5; var w=new Date(t).getDay(); if(w!==0&&w!==6) n--; } return t; };
+  if(falta<=0){
+    evo='<div class="rv-empty">Meta atingida: 100% das unidades da reversa têm RG.</div>';
+  } else if(!(rit>0)){
+    evo='<div class="rv-empty">Sem ritmo ainda: importe a QRY0100 (RGs) para calcular a previsão.</div>';
+  } else {
+    var h0=hoje0(), fim=addUteis(h0,dUteis), np=Math.min(12,Math.max(2,dUteis+1)), pts=[];
+    for(var k=0;k<np;k++){
+      var du=Math.round(dUteis*k/(np-1)), t=k===np-1?fim:addUteis(h0,du), com=Math.min(T.saldo,T.comRg+rit*du), pp=pctN(com,T.saldo);
+      pts.push({l:dm(t), y:pp, t:dataBR(t)+(k===0?' (hoje)':'')+'\nCobertura prevista: '+pp.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%\nCom RG: '+int(com)+' de '+int(T.saldo)});
+    }
+    evo='<div class="rv-num" style="font-size:22px;margin-bottom:4px">100% em '+dataBR(fim)+'</div>'+
+      '<div class="rv-hint" style="margin-bottom:6px">Faltam <b>'+int(falta)+'</b> un · ritmo de <b>'+int(rit)+' RGs/dia</b> (média dos últimos 7 dias com geração) · ≈ <b>'+int(dUteis)+'</b> dias úteis</div>'+lineChart(pts,'%');
+  }
   var ultimo=maxDt||hoje0(), ser=[], acum=0, base=0;
   S.rgs.forEach(function(r){ if(r.dt && r.dt<ultimo-29*864e5) base++; });
   acum=base;
   for(var i=29;i>=0;i--){ var t=ultimo-i*864e5, v=D.porDia.get(t)||0; acum+=v; ser.push({l:dm(t), y:v, t:dataBR(t)+'\n'+int(v)+' RGs gerados\nAcumulado: '+int(acum)}); }
   b+='<div class="rv-g12">'+
-    panel('Evolução da cobertura de RG','% de unidades da reversa com RG, foto a foto.',evo)+
+    panel('Previsão de cobertura de RG','Nesse ritmo, quando chega a 100% de unidades com RG.',evo)+
     panel('RGs gerados por dia','Últimos 30 dias até '+(maxDt?dataBR(maxDt):'—')+'.',barChart(ser))+'</div>';
   /* — classe + classificação — */
   var pcs=Array.from(D.porClasse.values()).sort(function(a,b){ return b.saldo-a.saldo; });
