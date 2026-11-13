@@ -120,6 +120,16 @@ function mdAcessoEmPortugues(msg){
     telaAcesso.classList.add('escondida');
     if(!appIniciado){
       appIniciado = true;
+      /* Nível de acesso: 'visualizar' esconde importação/configuração e não
+         grava na nuvem (o banco também recusa). Se a consulta falhar, segue
+         como editor — quem decide de verdade é o banco. */
+      try {
+        const { data: nivel } = await mdSupa.rpc('ldm_nivel_acesso', { p_app_key: MD_APP_KEY });
+        if(nivel === 'visualizar'){
+          window.LDM_SOMENTE_LEITURA = true;
+          document.documentElement.classList.add('somente-leitura');
+        }
+      } catch(e){}
       /* Registra a visita pra contar na frequência (Configurações do hub).
          Não bloqueia o app por causa disso — se falhar, só não conta. */
       mdSupa.rpc('ldm_registrar_acesso', { p_app_key: MD_APP_KEY }).catch(function(){});

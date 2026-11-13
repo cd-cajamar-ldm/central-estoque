@@ -74,6 +74,7 @@ function irNuvemDividir(linhas){
   return partes;
 }
 async function irNuvemPublicar(unidade){
+  if(window.LDM_SOMENTE_LEITURA) return; // só visualiza: nada sobe
   const linhas = await irNuvemLerUnidade(unidade);
   const partes = irNuvemDividir(linhas);
   const ciclo = unidade.split('@')[1];

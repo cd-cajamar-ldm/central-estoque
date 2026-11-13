@@ -24,6 +24,7 @@ async function mdNuvemGuardarVersao(chave, versao){
 }
 
 async function mdNuvemPublicar(chave, meta, dadosCabecalho, partes){
+  if(window.LDM_SOMENTE_LEITURA) return; // só visualiza: nada sobe
   const versao = new Date().toISOString() + '-' + Math.random().toString(36).slice(2, 6);
   const tab = mdSupa.from(MD_NUVEM_TAB);
   for(let i = 0; i < partes.length; i++){
