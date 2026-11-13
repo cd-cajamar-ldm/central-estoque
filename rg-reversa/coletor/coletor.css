@@ -63,3 +63,41 @@ button{ font-family:inherit; cursor:pointer; }
 .cl-hist{ font-size:12px; color:var(--ink-soft); display:flex; flex-direction:column; gap:3px; border-top:1px solid var(--line); padding-top:8px; }
 .cl-hist-t{ font-weight:800; text-transform:uppercase; letter-spacing:.05em; font-size:10.5px; }
 .cl-info{ font-size:11px; color:var(--ink-soft); text-align:center; }
+
+.cl-tabw{ max-height:40vh; overflow:auto; border:1px solid var(--line); border-radius:10px; }
+.cl-tab{ width:100%; border-collapse:collapse; font-family:'SFMono-Regular',Consolas,monospace; font-size:12.5px; }
+.cl-tab th{ position:sticky; top:0; background:var(--blue); color:#fff; font:700 10.5px Inter,system-ui,sans-serif; text-transform:uppercase; letter-spacing:.03em; padding:8px 6px; text-align:center; }
+.cl-tab td{ padding:8px 6px; text-align:center; border-bottom:1px solid var(--line); }
+.cl-tab td:first-child{ background:var(--blue-light); color:var(--blue); font-weight:700; }
+.cl-tab td:last-child{ background:var(--orange-light); color:#B33700; font-weight:700; }
+.cl-tab td.rg{ color:var(--orange); font-weight:700; }
+
+/* ---------- aparelho (só em tela grande): o coletor dentro de um leitor de mão ---------- */
+.cl-bezel-top, .cl-bezel-bottom, .cl-status, .cl-navbar, .cl-legenda{ display:none; }
+.cl-device, .cl-screen, .cl-scroll{ display:contents; }
+@media (min-width:720px){
+  body{ background:radial-gradient(1200px 700px at 50% 0%,#2A3C7A 0%,#0B1230 70%); align-items:center; padding:28px 0 18px; }
+  .cl-device{ display:flex; flex-direction:column; position:relative; width:408px; padding:0 16px; border-radius:52px;
+    background:linear-gradient(155deg,#33353E 0%,#15161B 55%,#0C0D10 100%);
+    box-shadow:0 0 0 7px #101115, 0 0 0 9px #3A3D47, 0 50px 90px -10px rgba(0,0,0,.75), inset 0 2px 0 rgba(255,255,255,.12), inset 0 0 0 2px #23252C; }
+  .cl-device::before{ content:''; position:absolute; left:-13px; top:170px; width:6px; height:62px; border-radius:4px 0 0 4px; background:#101115; box-shadow:0 84px 0 #101115; }
+  .cl-device::after{ content:''; position:absolute; right:-13px; top:230px; width:6px; height:96px; border-radius:0 4px 4px 0; background:#FE5000; box-shadow:inset 0 0 0 1px rgba(0,0,0,.4); }
+  .cl-bezel-top{ display:flex; align-items:center; justify-content:center; gap:18px; height:78px; position:relative; }
+  .cl-speaker{ width:92px; height:10px; border-radius:6px; background:repeating-linear-gradient(90deg,#050506 0 3px,#2A2C33 3px 6px); box-shadow:inset 0 1px 2px rgba(0,0,0,.8); }
+  .cl-camera{ width:11px; height:11px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#3C4A7A,#05060A 70%); box-shadow:0 0 0 2px #1E2026; }
+  .cl-screen{ display:flex; flex-direction:column; position:relative; width:376px; height:min(716px, calc(100vh - 250px)); min-height:520px; background:var(--paper); border-radius:10px; overflow:hidden; transform:translateZ(0); box-shadow:0 0 0 3px #050506; }
+  .cl-status{ display:flex; justify-content:space-between; align-items:center; height:24px; padding:0 12px; background:#001A72; color:#fff; font:600 12px Inter,system-ui,sans-serif; flex:0 0 auto; }
+  .cl-sicons{ display:flex; gap:7px; align-items:center; }
+  .cl-wifi{ width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:10px solid #fff; border-radius:2px; opacity:.9; }
+  .cl-bat{ width:9px; height:14px; border:1.5px solid #fff; border-radius:2px; background:linear-gradient(#001A72 0 25%,#fff 25%); }
+  .cl-scroll{ display:flex; flex-direction:column; flex:1; min-height:0; overflow-y:auto; }
+  .cl-main{ flex:1 0 auto; }
+  .cl-navbar{ display:flex; justify-content:space-around; align-items:center; height:36px; background:#0B1230; color:#fff; font-size:22px; flex:0 0 auto; }
+  .cl-navbar span{ width:60px; text-align:center; }
+  .cl-pill{ height:8px; width:60px; border-radius:6px; background:#C9D0F2; }
+  .cl-screen .cl-toast{ position:absolute; bottom:46px; }
+  .cl-bezel-bottom{ display:flex; align-items:center; justify-content:center; height:74px; }
+  .cl-bezel-bottom span{ font:800 11px Poppins,sans-serif; letter-spacing:.3em; color:#555966; }
+  .cl-legenda{ display:block; margin:16px 0 0; color:#8E9ACB; font-size:12px; text-align:center; }
+}
+@media (min-width:720px) and (max-height:760px){ .cl-screen{ height:calc(100vh - 220px); min-height:440px; } }

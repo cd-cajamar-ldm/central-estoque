@@ -27,7 +27,7 @@ var TABS = {
 };
 
 var S = {
-  rgs:[], est:null, mult:null, hist:[], tab:'painel', D:null, ocupado:'', user:'',
+  rgs:[], est:null, mult:null, hist:[], tab:'painel', D:null, ocupado:'', user:'', stamps:{}, nuvem:{ estado:'', msg:'' },
   movs:null, movsBusy:false, movsErro:'',
   fm:{ de:'', ate:'', st:'pend', q:'' }, lim:{}, sort:{},
   col:null
@@ -183,12 +183,57 @@ function montaMult(a, nome){
   return { rows:rows, arquivo:nome, em:Date.now() };
 }
 
+/* ---------- dados da última importação no servidor ---------- */
+var GRUPOS=['rgs','est','mult','hist'];
+function valorLocal(g){ return g==='rgs' ? S.rgs : g==='est' ? S.est : g==='mult' ? S.mult : S.hist; }
+function temLocal(g){ var v=valorLocal(g); return (g==='rgs'||g==='hist') ? v.length>0 : !!v; }
+function poeLocal(g,v){ if(g==='rgs') S.rgs=v||[]; else if(g==='est') S.est=v; else if(g==='mult') S.mult=v; else S.hist=v||[]; }
+function empurra(g){
+  return RG.nuvem.salvaGrupo(window.rgSupa, g, valorLocal(g), S.user).then(function(em){ S.stamps[g]=em; });
+}
+function msgNuvem(e){
+  var m=(e&&e.message)||String(e);
+  return /rg_dados|relation|does not exist|schema cache/i.test(m) ? 'a tabela rg_dados ainda não existe no Supabase' : m;
+}
+/* Traz do servidor o que for mais novo que o deste aparelho; o que só existe aqui sobe (primeira vez). */
+function sincroniza(){
+  if(!window.rgSupa) return Promise.resolve(false);
+  S.nuvem={ estado:'sync', msg:'Carregando os dados da última importação…' };
+  var mudou=false;
+  return RG.nuvem.metas(window.rgSupa).then(function(metas){
+    var seq=Promise.resolve();
+    GRUPOS.forEach(function(g){
+      seq=seq.then(function(){
+        var m=metas[RG.nuvem.chaveMeta(g)], st=S.stamps[g]||'';
+        if(m && Date.parse(m.em)>(st?Date.parse(st):0)){
+          return RG.nuvem.carregaGrupo(window.rgSupa,g).then(function(r){
+            if(!r) return;
+            poeLocal(g,r.valor); S.stamps[g]=r.em; mudou=true;
+            return dbSet(g, valorLocal(g));
+          });
+        }
+        if(!m && temLocal(g)) return empurra(g);
+      });
+    });
+    return seq;
+  }).then(function(){
+    return dbSet('stamps',S.stamps).catch(function(){});
+  }).then(function(){
+    S.nuvem={ estado:'ok', msg:'' };
+    if(mudou){ deriva(); }
+    return mudou;
+  }).catch(function(e){
+    S.nuvem={ estado:'erro', msg:msgNuvem(e) };
+    return false;
+  });
+}
+
 function importar(files){
   if(!files || !files.length) return;
   if(typeof XLSX==='undefined'){ toast('A leitura de planilhas não carregou. Verifique a internet e atualize a página.', true); return; }
   S.ocupado='Lendo '+(files.length>1?files.length+' arquivos':'"'+files[0].name+'"')+'… arquivos grandes levam alguns segundos.';
   render();
-  var fila=Array.prototype.slice.call(files), msgs=[], erros=[];
+  var fila=Array.prototype.slice.call(files), msgs=[], erros=[], mudados=new Set();
   function proximo(){
     if(!fila.length) return Promise.resolve();
     var f=fila.shift();
@@ -200,7 +245,7 @@ function importar(files){
         S.rgs=Array.from(mapa.values());
         var add=S.rgs.length-antes;
         gravaLog({em:Date.now(), tipo:'QRY0100 · RG', arquivo:f.name, resumo:int(novos.length)+' RGs lidos · '+int(add)+' novos · '+int(atual)+' atualizados'});
-        msgs.push(int(add)+' RGs novos');
+        msgs.push(int(add)+' RGs novos'); mudados.add('rgs');
         return dbSet('rgs', S.rgs);
       }
       if(a.tipo==='mult'){
@@ -208,14 +253,14 @@ function importar(files){
         if(!mu.rows.length) throw new Error('"'+f.name+'" não tem componentes de múltiplos.');
         S.mult=mu;
         gravaLog({em:Date.now(), tipo:'ZBIQ0051 · Múltiplos', arquivo:f.name, resumo:int(mu.rows.length)+' ligações pai x componente'});
-        msgs.push('múltiplos ('+int(mu.rows.length)+' ligações)');
+        msgs.push('múltiplos ('+int(mu.rows.length)+' ligações)'); mudados.add('mult');
         return dbSet('mult', S.mult);
       }
       var est=montaEstoque(a, f.name);
       if(!est.rows.length) throw new Error('"'+f.name+'" não tem saldo nas classes da reversa ('+CLASSES_REVERSA.join(', ')+').');
       S.est=est;
       gravaLog({em:Date.now(), tipo:'QRY0390 · Estoque', arquivo:f.name, resumo:int(est.linhasArquivo)+' linhas no arquivo · '+int(est.linhasReversa)+' da reversa · '+int(est.unidades)+' unidades'});
-      msgs.push('estoque da reversa ('+int(est.unidades)+' un)');
+      msgs.push('estoque da reversa ('+int(est.unidades)+' un)'); mudados.add('est');
       return dbSet('est', S.est).then(function(){
         /* a lista de locais (nome de cada local) vai para o Supabase: é o que o coletor mostra ao bipar */
         return RG.subeLocais(window.rgSupa, est.locais).then(function(n){ msgs.push(int(n)+' locais enviados ao coletor'); })
@@ -224,11 +269,18 @@ function importar(files){
     }).catch(function(e){ erros.push(e.message||String(e)); }).then(proximo);
   }
   setTimeout(function(){
-    proximo().then(function(){
-      S.ocupado=''; deriva(); snapshot();
+    /* antes de somar RGs novos, traz o que outro aparelho possa ter importado */
+    sincroniza().then(proximo).then(function(){
+      deriva(); snapshot(); mudados.add('hist');
       return dbSet('hist', S.hist).catch(function(){});
     }).then(function(){
-      render();
+      S.ocupado='Guardando os dados da importação no servidor…'; render();
+      var seq=Promise.resolve();
+      Array.from(mudados).forEach(function(g){ seq=seq.then(function(){ return empurra(g); }); });
+      return seq.then(function(){ msgs.push('dados guardados no servidor'); return dbSet('stamps',S.stamps).catch(function(){}); })
+        .catch(function(e){ erros.push('Não consegui guardar os dados no servidor: '+msgNuvem(e)); });
+    }).then(function(){
+      S.ocupado=''; render();
       if(erros.length) toast(erros.join(' '), true);
       else if(msgs.length) toast('Importado: '+msgs.join(' · ')+'.');
     });
@@ -392,6 +444,9 @@ function vPainel(){
     '<div class="rv-marca"><img src="brand/Logo_LDM_icon.png" alt=""><div><b>Oficina LDM</b><span>RG Reversa · CD Cajamar</span></div></div>'+
     '<div class="rv-hero-row"><div><h2>Dashboard RG Reversa</h2></div>'+
     '<div class="rv-hero-btns"><a class="rv-btn pri" href="coletor/">📲 Abrir coletor</a><button class="rv-btn sec" data-act="tab" data-tab="importacao">⬆ Importar relatórios</button></div></div></div></div>';
+  if(!tem && !S.rgs.length && S.nuvem.estado==='sync'){
+    return hero+'<div class="rv-body"><div class="panel"><div class="empty-state"><div class="eicon">⏳</div><h3>Carregando os dados da última importação…</h3><p>Buscando no servidor. Isso leva alguns segundos.</p></div></div></div>';
+  }
   if(!tem && !S.rgs.length){
     return hero+'<div class="rv-body"><div class="panel"><div class="empty-state"><div class="eicon">📦</div><h3>Nenhum relatório importado ainda</h3><p>Importe a <strong>QRY0100</strong> (RGs), a <strong>QRY0390</strong> (Estoque por Local) e a <strong>ZBIQ0051</strong> (Múltiplos) para ver os indicadores.</p><p style="margin-top:16px"><button class="btn btn-orange" data-act="tab" data-tab="importacao">Ir para Importação</button></p></div></div></div>';
   }
@@ -501,7 +556,7 @@ function vMovs(){
     '<button class="btn btn-secondary" data-act="mv-load">Atualizar</button>'+
     '<div class="mv-acoes"><button class="btn btn-secondary" data-act="mv-copy"'+(lista.length?'':' disabled')+'>📋 Copiar tabela (PuTTY)</button><button class="btn btn-orange" data-act="mv-xlsx"'+(lista.length?'':' disabled')+'>⬇ Baixar Excel</button></div></div>';
   if(S.movsErro) h+='<div class="rv-aviso" style="margin-bottom:12px"><strong>Erro:</strong> '+esc(S.movsErro)+(/relation|does not exist|schema cache/i.test(S.movsErro)?' — a tabela <code>rg_movimentacoes</code> ainda não foi criada no Supabase (migração <code>rg-reversa/supabase/migrations/001_movimentacoes.sql</code>).':'')+'</div>';
-  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai em uma coluna: <b>local de origem</b>, depois os <b>RGs</b> e, por último, o <b>local de destino</b> (um bloco por movimentação). Ao exportar, as linhas passam a "Exportado".</div>';
+  h+='<div class="rv-hint" style="margin-bottom:8px"><b>'+int(lista.length)+'</b> RGs em <b>'+int(lotes.size)+'</b> movimentação(ões). O relatório sai com uma linha por RG, em 3 colunas: <b>local de origem · RG · local de destino</b>. Ao exportar, as linhas passam a "Exportado".</div>';
   h+='<div class="table-wrap"><table><thead><tr><th>Data/hora</th><th>Operador</th><th>Local origem</th><th>RG</th><th>Local destino</th><th>Situação</th></tr></thead><tbody>';
   if(S.movsBusy && !lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Carregando…</td></tr>';
   else if(!lista.length) h+='<tr><td colspan="6" style="text-align:center;padding:26px;color:var(--ink-soft)">Nenhuma movimentação neste filtro.</td></tr>';
@@ -541,7 +596,7 @@ function mvXlsx(){
 function mvCopy(){
   var lista=movsFiltradas(); if(!lista.length) return;
   var l=RG.linhasBlocos(blocosMovs(lista));
-  RG.copia(l.join('\n')).then(function(){ toast(int(l.length)+' linhas copiadas — cole no PuTTY.'); marcaExportado(lista); });
+  RG.copia(l.join('\n')).then(function(){ toast(int(l.length)+' linhas (RGs) copiadas — cole no PuTTY.'); marcaExportado(lista); });
 }
 function copiaFallback(txt){ var t=document.createElement('textarea'); t.value=txt; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch(e){} t.remove(); }
 
@@ -553,6 +608,8 @@ function vImportacao(){
   var stMu = S.mult ? '<span class="tag tag-good">Carregado</span> '+int(S.mult.rows.length)+' ligações · '+dataHoraBR(S.mult.em) : '<span class="tag tag-muted">Ainda não importado</span>';
   var h='';
   if(S.ocupado) h+='<div class="rv-aviso" style="margin-bottom:14px"><strong>Aguarde.</strong> '+esc(S.ocupado)+'</div>';
+  h+=S.nuvem.estado==='erro' ? '<div class="rv-aviso" style="margin-bottom:14px"><strong>Dados no servidor:</strong> '+esc(S.nuvem.msg)+'. Enquanto isso, a importação fica só neste navegador.</div>'
+    : '<div class="rv-hint" style="margin-bottom:12px">☁ A última importação fica guardada no servidor'+(S.stamps.est?' · estoque de <b>'+dataHoraBR(S.stamps.est)+'</b>':'')+(S.stamps.rgs?' · RGs de <b>'+dataHoraBR(S.stamps.rgs)+'</b>':'')+' — ao abrir o app, ela volta sozinha.</div>';
   h+='<div class="rv-imp">'+
     '<div class="dropzone'+(S.rgs.length?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🏷️</div><div class="dz-title">QRY0100 · RG - Produtividade</div><div class="dz-desc">Lista de RGs gerados. Cada importação <strong>soma</strong> os RGs novos e atualiza os existentes.</div><div class="rv-st">'+stRg+'</div></div>'+
     '<div class="dropzone'+(S.est?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">📦</div><div class="dz-title">QRY0390 · Estoque por Local</div><div class="dz-desc">Foto do saldo. <strong>Substitui</strong> a anterior. Guarda só as classes '+CLASSES_REVERSA.join(' e ')+'.</div><div class="rv-st">'+stEst+'</div></div>'+
@@ -686,15 +743,20 @@ var iniciado=false;
 window.rgIniciar=function(){
   if(iniciado) return; iniciado=true;
   try { window.rgSupa.auth.getSession().then(function(r){ var u=r.data && r.data.session && r.data.session.user; S.user=u&&u.email ? u.email.split('@')[0] : ''; }); } catch(e){}
-  Promise.all([dbGet('rgs'), dbGet('est'), dbGet('mult'), dbGet('hist')]).then(function(r){
+  /* pede ao navegador para não apagar os dados do site por falta de espaço */
+  try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+  Promise.all([dbGet('rgs'), dbGet('est'), dbGet('mult'), dbGet('hist'), dbGet('stamps')]).then(function(r){
     S.rgs=Array.isArray(r[0]) ? r[0] : [];
     S.est=r[1] && r[1].rows ? r[1] : null;
     S.mult=r[2] && r[2].rows ? r[2] : null;
     S.hist=Array.isArray(r[3]) ? r[3] : [];
+    S.stamps=r[4] && typeof r[4]==='object' ? r[4] : {};
   }).catch(function(){ toast('Não consegui abrir os dados salvos neste navegador.', true); }).then(function(){
-    deriva(); render();
+    deriva();
+    S.nuvem={ estado:'sync', msg:'Carregando os dados da última importação…' }; render();
     RG.carregaLocais(window.rgSupa).then(function(){ if(S.tab==='movs') render(); });
-  });
+    return sincroniza();
+  }).then(function(){ deriva(); render(); if(S.nuvem.estado==='erro') toast('Dados do servidor: '+S.nuvem.msg, true); });
 };
 inicia();
 })();
