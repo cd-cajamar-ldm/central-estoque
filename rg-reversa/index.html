@@ -14,8 +14,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
 <!-- theme.css é o mesmo design system do app de Inventário (cópia, como nos outros módulos). -->
 <link rel="stylesheet" href="css/theme.css">
-<link rel="stylesheet" href="css/acesso.css?v=3">
-<link rel="stylesheet" href="css/rg.css?v=3">
+<link rel="stylesheet" href="css/acesso.css?v=4">
+<link rel="stylesheet" href="css/rg.css?v=4">
 </head>
 <body>
 <div id="telaAcesso">
@@ -60,17 +60,20 @@
 </div>
 <div class="shell">
   <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <button class="brand-logo" id="brandLogo" type="button" aria-label="Loja do Mecânico">
-        <img src="brand/Logo_LDM_icon.png" alt="">
-      </button>
-      <div class="brand-text">
-        <div class="brand-name">OFICINA LDM</div>
-        <div class="brand-sub">lugar de quem faz</div>
+    <div class="sb-foto">
+      <div class="brand">
+        <button class="brand-logo" id="brandLogo" type="button" aria-label="Loja do Mecânico">
+          <img src="brand/Logo_LDM_icon.png" alt="">
+        </button>
+        <div class="brand-text">
+          <div class="brand-name">OFICINA LDM</div>
+          <div class="brand-sub">lugar de quem faz</div>
+        </div>
+        <button class="sidebar-toggle" type="button" data-act="sidebar" title="Recolher menu">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
       </div>
-      <button class="sidebar-toggle" type="button" data-act="sidebar" title="Recolher menu">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
+      <div class="sb-foto-tit"><b>RG Reversa</b><span>CD Cajamar</span></div>
     </div>
     <a class="brand-back" href="../">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
@@ -79,6 +82,8 @@
     <nav class="sidebar-nav" id="sidebarNav">
       <div class="nav-section-label">Visão geral</div>
       <button class="nav-item" data-act="tab" data-tab="painel"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></button>
+      <button class="nav-item" data-act="tab" data-tab="estoque"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Estoque × RG</span></button>
+      <button class="nav-item" data-act="tab" data-tab="rgs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg><span>Consulta de RGs</span></button>
       <div class="nav-section-label">Operação</div>
       <a class="nav-item" href="coletor/"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="10" y1="6" x2="14" y2="6"/><path d="M9 11h6M9 14h6M9 17h3"/></svg><span>Coletor</span></a>
       <button class="nav-item" data-act="tab" data-tab="movs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span>Movimentações</span></button>
@@ -125,13 +130,16 @@
 
 <div id="toast" class="toast hidden"></div>
 <div id="tip" class="rv-tip" hidden></div>
+<div id="rgModal" class="rg-modal" hidden></div>
+<div id="rgPainelFundo" class="rgx-pn-fundo"></div>
+<aside id="rgPainel" class="rgx-pn" aria-label="Detalhe do local"></aside>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="../version.js"></script>
-<script src="js/versao.js?v=3"></script>
-<script src="js/comum.js?v=3"></script>
-<script src="js/app.js?v=3"></script>
-<script src="js/acesso.js?v=3"></script>
+<script src="js/versao.js?v=4"></script>
+<script src="js/comum.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
+<script src="js/acesso.js?v=4"></script>
 </body>
 </html>
