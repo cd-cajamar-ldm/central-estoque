@@ -1733,8 +1733,6 @@ async function irInit(){
       : MD_APP_VERSION;
   }
   try{
-    try { await mdNuvemSincronizar(); }
-    catch(e){ console.warn('Sem sincronizar com a nuvem (offline?)', e); }
     await mdRecarregar();
   }catch(e){
     console.error('Falha ao iniciar', e);
@@ -1750,17 +1748,27 @@ async function irInit(){
   mdNuvemVigiar();
 }
 /* Enquanto o app está aberto, puxa mudanças feitas por outras pessoas. */
-async function mdNuvemChecar(){
-  if(document.hidden || Object.values(MD.proc).some(Boolean) || mdRascunhoAlterado()) return;
+async function mdNuvemChecar(primeira){
+  if(!primeira && document.hidden) return;
+  if(Object.values(MD.proc).some(Boolean) || mdRascunhoAlterado()) return;
   try {
+    if(primeira) irShowToast('Sincronizando com a nuvem...');
     if(await mdNuvemSincronizar()){
       await mdRecarregar();
       irRenderView();
-      irShowToast('Dados atualizados por outra pessoa.');
+      irShowToast(primeira ? 'Dados sincronizados com a nuvem.' : 'Dados atualizados por outra pessoa.');
+    } else if(primeira){
+      irShowToast('Nuvem em dia.');
     }
-  } catch(e){ console.warn('Checagem da nuvem falhou', e); }
+  } catch(e){
+    console.warn('Checagem da nuvem falhou', e);
+    if(primeira) irShowToast('Não consegui sincronizar com a nuvem: '+((e && e.message) || e), true);
+  }
 }
 function mdNuvemVigiar(){
+  // A 1ª sincronização roda depois da tela já aberta (e fora do callback de
+  // login), pra um envio demorado nunca deixar o app preso em "Carregando...".
+  setTimeout(()=>mdNuvemChecar(true), 500);
   setInterval(mdNuvemChecar, 30000);
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) mdNuvemChecar(); });
 }
