@@ -156,7 +156,11 @@ button{ font-family:inherit; cursor:pointer; }
 .sidebar .brand-sub{ font-size:10.5px; color:#8891C4; margin-top:2px; white-space:nowrap; }
 /* Título do app dentro da sidebar, abaixo do selo — mesmo lugar e estilo do
    Inventário ("Inventário" / "CD Cajamar"). */
-.sb-foto{ flex-shrink:0; }
+.sb-foto{
+  position:relative; flex-shrink:0; height:170px; display:flex; flex-direction:column; justify-content:space-between;
+  background-image:linear-gradient(180deg, rgba(0,18,82,.35) 0%, rgba(11,18,48,1) 100%), url(../brand/menu-corredor.jpg);
+  background-size:cover; background-position:center 40%;
+}
 .sidebar .sb-foto .brand{ border-bottom:0; }
 .sb-foto-tit{ display:flex; flex-direction:column; gap:2px; padding:0 16px 14px; }
 .sb-foto-tit b{ font-family:'Poppins',sans-serif; font-size:18px; font-weight:700; color:#fff; }
@@ -662,7 +666,7 @@ table.prod-rank td{ white-space:nowrap; }
 .ofe-num{ padding:14px 18px; border-right:1px solid var(--line); }
 .ofe-num:last-child{ border-right:none; }
 .ofe-num-lbl{ display:block; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
-.ofe-num strong{ display:block; font-size:22px; font-weight:800; color:var(--ink); line-height:1.2; margin-top:4px; letter-spacing:-.01em; }
+.ofe-num strong{ display:block; font-family:'Poppins',sans-serif; font-size:22px; font-weight:700; color:var(--ink); line-height:1.2; margin-top:4px; letter-spacing:-.01em; }
 .ofe-num-sub{ display:block; font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
 .ofe-num.neg strong{ color:var(--danger); }
 .ofe-num.pos strong{ color:var(--success); }
@@ -1328,11 +1332,11 @@ table.trans-table td.trans-ganho .trans-pct{ color:var(--danger); opacity:.75; }
 .tg-wrap{ display:grid; grid-template-columns:1.15fr 1.15fr minmax(172px,.52fr); gap:10px;
   align-items:stretch; margin:2px 0 14px; }
 .tg-card{ background:var(--surface2); border:1px solid var(--line); border-radius:10px; padding:9px 11px 6px; min-width:0;
-  display:flex; flex-direction:column; }
+  display:flex; flex-direction:column; box-shadow:0 10px 22px -16px rgba(0,26,114,.3); }
 .tg-card .tg-svg{ margin-block:auto; }
 .tg-head{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:2px; }
 .tg-head span{ font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
-.tg-head strong{ font-size:13px; color:var(--blue); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.tg-head strong{ font-family:'Poppins',sans-serif; font-size:14px; color:var(--blue); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .tg-head strong.atraso{ color:var(--orange); }
 /* height:auto + viewBox com proporção fixa: o SVG escala inteiro, sem esticar
    traço nem texto na horizontal. Nada de overflow:visible: o desenho todo cabe
@@ -1352,7 +1356,7 @@ table.trans-table td.trans-ganho .trans-pct{ color:var(--danger); opacity:.75; }
 .tg-leg i{ width:9px; height:9px; border-radius:50%; flex:none; }
 .tg-leg i.prazo{ background:var(--blue); }
 .tg-leg i.atraso{ background:var(--orange); }
-.tg-leg b{ font-size:13.5px; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.tg-leg b{ font-family:'Poppins',sans-serif; font-size:15px; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .tg-leg b.atraso{ color:var(--orange); }
 @media (max-width:1100px){ .tg-wrap{ grid-template-columns:1fr; } }
 
