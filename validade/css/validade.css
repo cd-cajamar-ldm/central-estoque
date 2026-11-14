@@ -36,7 +36,7 @@
 .vl-col-v{ font-size:9.5px; color:var(--ink-soft); white-space:nowrap; }
 .vl-col-l{ font-size:10.5px; font-weight:700; color:var(--ink-soft); white-space:nowrap; }
 .vl-col.passado .vl-col-l{ color:var(--danger); }
-.vl-col.passado .vl-col-b{ box-shadow:0 0 0 2px var(--danger); }
+
 .vl-col:hover .vl-col-b{ filter:brightness(1.15); }
 
 .vl-hbars{ display:flex; flex-direction:column; gap:7px; }
@@ -74,3 +74,17 @@
 .vl-fora{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; font-size:12px; }
 .vl-fora span{ background:var(--surface2); border-radius:100px; padding:4px 12px; color:var(--ink-soft); }
 .vl-fora span.venc{ background:var(--danger-light); color:var(--danger); }
+
+.vl-secao{ margin-top:18px; padding-left:12px; border-left:4px solid var(--c); }
+.vl-secao > h2{ margin:0 0 10px; font-size:17px; font-weight:800; color:var(--c); text-transform:uppercase; letter-spacing:.04em; }
+.vl-secao .vl-area{ border-top:none; }
+.vl-secao .vl-area > h3{ display:none; }
+
+.vl-secao > .kpi-grid + .panel{ margin-top:0; }
+.vl-hist1{ display:flex; gap:28px; flex-wrap:wrap; margin-bottom:8px; }
+.vl-hist1 span{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; font-weight:700; color:var(--ink-soft); }
+.vl-hist1 b{ font-size:22px; font-weight:800; font-family:'SFMono-Regular',Consolas,monospace; }
+
+#vlTip{ white-space:pre-line; max-width:320px; line-height:1.5; }
+.vl-col-a{ font-size:9.5px; color:var(--ink-soft); white-space:nowrap; border-top:1px solid var(--line); padding-top:2px; width:100%; text-align:center; }
+.vl-locs{ font-size:11px; color:var(--ink-soft); white-space:nowrap; }

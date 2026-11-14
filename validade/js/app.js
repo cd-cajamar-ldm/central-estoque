@@ -21,9 +21,16 @@ const VL_TITULOS = {
 const VL_SEED = ('MAZA TEKBOND NORTON VONDER WURTH RADNAQ KALIPSO ONYX CARBOGRAFITE UNIPEGA QUIMATIC MOCOCA BIOLUB SCHEBOR DANNY EURODECOR NUTRIEX ' +
   'CENTRALSUL MARLUVAS TECBRIL DRYKO ORBI ESAB MAGMA RUST-OLEUM SOFT99 RADCOLOR STP CASCOLA VULCAFLEX SOUDAL BARDAHL BADEN LOCTITE WD-40 MTX VEDACIT ' +
   'PLASTCOR SANRO 3M STARRETT SHIELD BRASILUX KADESH AMAZONAS DISFLEX TRAMONTINA VOLK SAIT PULVITEC BEMFIXA LEDAN KARCHER LYNUS BOSCH ATOMOS ARCDAL ' +
-  'AUTOSHINE GRAZIA HENKEL JEFLUB GALZER KOUBE BALMER TOYAMA GEDORE SUALL CHEMICOLOR MIRAX TIREBOR NOVE54 KLYO TBCC').split(' ');
+  'AUTOSHINE GRAZIA HENKEL JEFLUB GALZER KOUBE BALMER TOYAMA GEDORE SUALL CHEMICOLOR MIRAX TIREBOR NOVE54 KLYO TBCC GT2000 MILITEC JAÇA RENKO').split(' ');
 /* Trechos da descrição que identificam o fornecedor mesmo sem a marca isolada. */
-const VL_FRASES = [['MAXI RUBBER', 'MAXI RUBBER'], ['LIMPZ AUTO', 'LIMPZ AUTO'], ['SUAL PISCINAS', 'SUALL'], ['MAZA', 'MAZA']];
+const VL_FRASES = [['MAXI RUBBER', 'MAXI RUBBER'], ['LIMPZ AUTO', 'LIMPZ AUTO'], ['SUAL PISCINAS', 'SUALL'], ['MAZA', 'MAZA'],
+  ['NOVE 54', 'NOVE54'], ['PROTEG LUB', 'PROTEG LUB'], ['BIO QUIMICA', 'BIO QUIMICA'], ['STP-', 'STP'], ['SUAVITE', 'RENKO']];
+/* Última palavra que é abreviação de marca ("... AMARELA VD" = Vonder, "... PRATA 954" = Nove54). */
+const VL_SUFIXO = {VD: 'VONDER', '954': 'NOVE54'};
+/* Prefixo do código de barras (empresa dona do EAN) -> fornecedor. Levantado na
+   própria QRY0390: itens sem marca na descrição que dividem o prefixo com
+   centenas de itens de marca conhecida. Só vale quando a descrição não resolve. */
+const VL_EAN = [['7893946', 'VONDER'], ['7898507096', 'ONYX'], ['7899228', 'MAZA'], ['7894120170', 'AMAZONAS'], ['78985510', 'RENKO'], ['7899674', 'TECBRIL']];
 const VL_ALIAS = {VOND: 'VONDER', 'RUST OLEUM': 'RUST-OLEUM'};
 const VL_NOISE = new Set(['AUTO', 'BLISTER', 'QUIMICA', 'RUBBER', 'PISCINAS', 'UNIDADE', 'KIT', 'PRETO', 'BRANCO', 'AZUL', 'CINZA', 'VERMELHO', 'PRETA']);
 
@@ -72,7 +79,7 @@ function faixas(){
 function faixaDe(dias, fx){ for(const f of fx) if(dias <= f.max) return f; return fx[fx.length - 1]; }
 
 /* ---------- marca / fornecedor ---------- */
-function marcaDe(desc){
+function marcaDe(desc, ean){
   const lim = t => t.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '');
   const toks = String(desc || '').toUpperCase().split(/\s+/).map(lim).filter(Boolean);
   if(!toks.length) return 'SEM MARCA';
@@ -84,6 +91,9 @@ function marcaDe(desc){
   for(const [fr, m] of VL_FRASES) if(D.indexOf(fr) >= 0) return m;
   for(const sd of VL_SEED) if(sd.length >= 5 && D.indexOf(sd) >= 0) return sd; // marca colada: "300MLVONDER", "NUTRIEX-61093"
   const l = toks[toks.length - 1];
+  if(VL_SUFIXO[l]) return VL_SUFIXO[l];
+  const e = String(ean || '');
+  for(const [pre, m] of VL_EAN) if(e.indexOf(pre) === 0) return m;
   if(/^[A-Z][A-Z-]{2,}$/.test(l) && !VL_NOISE.has(l)) return VL_ALIAS[l] || l;
   return 'SEM MARCA';
 }
@@ -95,7 +105,8 @@ function preparar(){
   VL.fx = fx;
   VL.rows.forEach(r => {
     r.area = rev.has(r.cl) ? 'R' : 'E';
-    r.marca = marcaDe(r.d); r.forn = fornDe(r.marca);
+    r.marca = marcaDe(r.d, r.e); r.forn = fornDe(r.marca);
+    r.loc = (r.lo.split(/\s+/)[0] || r.cl || '—').toUpperCase(); // 1ª parte do endereço: TRI, MZP, GAI...
     r.dias = diasAte(r.v); r.faixa = faixaDe(r.dias, fx).k;
     r.valor = r.q * (r.c || 0);
     r.mes = r.v.slice(0, 7);
@@ -167,7 +178,7 @@ function dividir(linhas, limite){
   if(atual.length) partes.push(atual);
   return partes;
 }
-const CAMPOS = ['i', 'd', 'l', 'v', 'lo', 'cl', 'r', 'q', 'c', 'm'];
+const CAMPOS = ['i', 'd', 'l', 'v', 'lo', 'cl', 'r', 'q', 'c', 'm', 'e'];
 const lerCampos = r => { const o = {}; CAMPOS.forEach(k => { o[k] = r[k]; }); return o; };
 
 async function carregar(){
@@ -291,7 +302,8 @@ function vazio(){
   return '<div class="empty-state panel"><div class="eicon">📅</div><h3>Nenhuma base importada ainda</h3><p>Importe a QRY0390 (estoque com Data de Validade), a SIGEQ278 (preço) e a ZBIQ0051 (múltiplos).</p>' +
     (somenteLeitura() ? '' : '<button class="btn btn-orange" onclick="vlTab(\'importacao\')">Ir para Importação</button>') + '</div>';
 }
-function kpis(rows){
+const AREAS = [['E', 'Estoque', VL_COR_E], ['R', 'Reversa', VL_COR_R]];
+function kpis(rows, nomeArea){
   const por = somar(rows, r => r.faixa), mp = {}; por.forEach(o => { mp[o.k] = o; });
   const total = tot(rows);
   return '<div class="kpi-grid">' + VL.fx.map(f => {
@@ -300,7 +312,7 @@ function kpis(rows){
       '<div class="label">' + esc(f.nome) + '</div><div class="num">' + fBRLc(o.valor) + '</div>' +
       '<div class="sub">' + fInt(o.q) + ' peças · ' + fInt(o.lotes) + ' lotes</div>' +
       '<div class="vl-mini"><i style="width:' + (total.valor ? o.valor / total.valor * 100 : 0) + '%;background:' + f.cor + '"></i></div>' +
-      '<div class="sub">' + fPct(o.valor, total.valor) + ' do valor com validade</div></div>';
+      '<div class="sub">' + fPct(o.valor, total.valor) + ' do valor com validade ' + (nomeArea ? 'n' + (nomeArea === 'Estoque' ? 'o estoque' : 'a reversa') : '') + '</div></div>';
   }).join('') + '</div>';
 }
 function cartaoArea(nome, cor, rows){
@@ -312,26 +324,52 @@ function cartaoArea(nome, cor, rows){
     '<div><span>Vence em até ' + Math.max.apply(null, VL.cfg.faixas) + ' dias</span><b style="color:' + VL_CORES_PROX[0] + '">' + fBRLc(prox.valor) + '</b><em>' + fInt(prox.q) + ' peças</em></div>' +
     '<div><span>Total com validade</span><b>' + fBRLc(t.valor) + '</b></div></div></div>' + barraFaixas(o) + '</div>';
 }
-function graficoMensal(rows, alt){
-  const por = somar(rows, r => r.mes + '|' + r.area).reduce((m, o) => { const [ym, a] = o.k.split('|'); (m[ym] = m[ym] || {ym, E: 0, R: 0})[a] = o.valor; return m; }, {});
-  const todos = Object.values(por).sort((a, b) => a.ym.localeCompare(b.ym));
+/* Acumulado: o vencido soma do mais antigo até o mês passado; o a vencer soma do
+   mês atual pra frente. Assim cada mês mostra "quanto já venceu até aqui" ou
+   "quanto vence até aqui". */
+function mesesArea(rows){
+  const por = {}, hoje = hojeISO().slice(0, 7);
+  rows.forEach(r => {
+    const o = por[r.mes] = por[r.mes] || {ym: r.mes, v: 0, q: 0, lotes: 0, loc: {}};
+    o.v += r.valor; o.q += r.q; o.lotes++; o.loc[r.loc] = (o.loc[r.loc] || 0) + r.valor;
+    if(r.dias < 0) o.jaVenc = (o.jaVenc || 0) + r.valor;
+  });
+  const ms = Object.values(por).sort((a, b) => a.ym.localeCompare(b.ym));
+  let aV = 0, aF = 0;
+  // No mês atual, o que já passou da data conta como vencido (bate com os cartões, que são por dia).
+  ms.forEach(m => {
+    m.passado = m.ym < hoje;
+    if(m.passado){ aV += m.v; m.acc = aV; }
+    else { const ja = m.ym === hoje ? (m.jaVenc || 0) : 0; aV += ja; aF += m.v - ja; m.acc = aF; m.jaNoMes = ja; }
+  });
+  return {ms, vencido: aV, aVencer: aF};
+}
+function tipMes(m){
+  const locs = Object.entries(m.loc).sort((a, b) => b[1] - a[1]);
+  const linhas = locs.slice(0, 8).map(l => l[0] + ': ' + fBRL(l[1]));
+  if(locs.length > 8) linhas.push('Outros ' + (locs.length - 8) + ' locais: ' + fBRL(locs.slice(8).reduce((a, l) => a + l[1], 0)));
+  return fMes(m.ym) + (m.passado ? ' · VENCIDO' : ' · a vencer') + '\nNo mês: ' + fBRL(m.v) + ' · ' + fInt(m.q) + ' peças\n' + (m.jaNoMes ? 'Já vencido neste mês: ' + fBRL(m.jaNoMes) + '\n' : '') +
+    (m.passado ? 'Vencido acumulado até aqui: ' : 'A vencer acumulado até aqui: ') + fBRL(m.acc) + '\n— Onde está —\n' + linhas.join('\n');
+}
+function graficoMensal(rows, alt, cor){ // uma área por gráfico: estoque e reversa nunca na mesma coluna
+  const A = mesesArea(rows), todos = A.ms;
   if(!todos.length) return '<p class="field-hint">Sem dados.</p>';
   // Janela de 12 meses pra trás e 12 pra frente: o que fica fora vira um resumo,
   // senão um mês distante com muito valor achata todas as colunas.
   const desl = n => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
   const ini = desl(-12), fim = desl(12);
   const meses = todos.filter(m => m.ym >= ini && m.ym <= fim);
-  const antes = todos.filter(m => m.ym < ini).reduce((a, m) => a + m.E + m.R, 0), depois = todos.filter(m => m.ym > fim).reduce((a, m) => a + m.E + m.R, 0);
-  const fora = '<div class="vl-fora">' + (antes ? '<span class="venc">Vencido antes de ' + fMes(ini) + ': <b>' + fBRL(antes) + '</b></span>' : '') + (depois ? '<span>Vence depois de ' + fMes(fim) + ': <b>' + fBRL(depois) + '</b></span>' : '') + '</div>';
+  const antes = todos.filter(m => m.ym < ini).reduce((a, m) => a + m.v, 0), depois = todos.filter(m => m.ym > fim).reduce((a, m) => a + m.v, 0);
+  const fora = '<div class="vl-fora"><span class="venc">Vencido acumulado: <b>' + fBRL(A.vencido) + '</b></span><span>A vencer acumulado: <b>' + fBRL(A.aVencer) + '</b></span>' +
+    (antes ? '<span class="venc">antes de ' + fMes(ini) + ': ' + fBRL(antes) + '</span>' : '') + (depois ? '<span>depois de ' + fMes(fim) + ': ' + fBRL(depois) + '</span>' : '') + '</div>';
   if(!meses.length) return fora;
-  const max = Math.max.apply(null, meses.map(m => m.E + m.R)) || 1, hoje = hojeISO().slice(0, 7);
-  return fora + '<div class="vl-mensal" style="height:' + alt + 'px">' + meses.map(m => {
-    const t = m.E + m.R, passado = m.ym < hoje;
-    return '<div class="vl-col' + (passado ? ' passado' : '') + '"' + tip(fMes(m.ym) + ' · Estoque ' + fBRL(m.E) + ' · Reversa ' + fBRL(m.R) + ' · Total ' + fBRL(t)) + '>' +
-      '<span class="vl-col-v">' + (t ? fBRLc(t).replace('R$ ', '') : '') + '</span>' +
-      '<div class="vl-col-b" style="height:' + (t / max * 100) + '%"><i style="height:' + (t ? m.R / t * 100 : 0) + '%;background:' + VL_COR_R + '"></i><i style="flex:1;background:' + VL_COR_E + '"></i></div>' +
-      '<span class="vl-col-l">' + fMes(m.ym) + '</span></div>';
-  }).join('') + '</div><div class="vl-leg"><span><i style="background:' + VL_COR_E + '"></i>Estoque</span><span><i style="background:' + VL_COR_R + '"></i>Reversa</span><span class="vl-leg-venc">Meses em vermelho já venceram</span></div>';
+  const max = Math.max.apply(null, meses.map(m => m.v)) || 1;
+  return fora + '<div class="vl-mensal" style="height:' + alt + 'px">' + meses.map(m =>
+    '<div class="vl-col' + (m.passado ? ' passado' : '') + '"' + tip(tipMes(m)) + '>' +
+      '<span class="vl-col-v">' + (m.v ? fBRLc(m.v).replace('R$ ', '') : '') + '</span>' +
+      '<div class="vl-col-b" style="height:' + (m.v / max * 100) + '%;background:' + (m.passado ? VL_COR_VENC : cor) + '"></div>' +
+      '<span class="vl-col-l">' + fMes(m.ym) + '</span><span class="vl-col-a">' + fBRLc(m.acc).replace('R$ ', '') + '</span></div>'
+  ).join('') + '</div><div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Mês já vencido</span><span><i style="background:' + cor + '"></i>A vencer</span><span>Linha de baixo = acumulado (R$) · passe o mouse para ver os locais</span></div>';
 }
 function topForn(rows, n){
   const por = somar(rows, r => r.forn).map(o => ({k: o.k, venc: o.f.venc || 0, prox: VL.fx.filter(f => f.k !== 'venc' && f.k !== 'ok').reduce((a, f) => a + (o.f[f.k] || 0), 0)}))
@@ -343,16 +381,18 @@ function topForn(rows, n){
     '<span class="vl-hv">' + fBRLc(o.venc + o.prox) + '</span></div>').join('') + '</div>' +
     '<div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Vencido</span><span><i style="background:' + VL_CORES_PROX[0] + '"></i>A vencer (dentro das faixas)</span></div>';
 }
-function graficoHist(){
-  const p = VL.hist; if(p.length < 2) return '<p class="field-hint">A evolução aparece a partir da 2ª importação em dias diferentes (hoje há ' + p.length + ' registro).</p>';
-  const W = 640, H = 160, pad = 28, max = Math.max.apply(null, p.map(x => x.vE + x.vR)) || 1;
+function graficoHist(){ // estoque e reversa em linhas próprias, sem somar
+  const p = VL.hist;
+  if(!p.length) return '<p class="field-hint">Ainda não há registro. Cada importação da QRY0390 grava um ponto por dia.</p>';
+  if(p.length < 2) return '<div class="vl-hist1"><div><span>Estoque vencido em ' + fData(p[0].d) + '</span><b style="color:' + VL_COR_E + '">' + fBRL(p[0].vE) + '</b></div><div><span>Reversa vencida em ' + fData(p[0].d) + '</span><b style="color:' + VL_COR_R + '">' + fBRL(p[0].vR) + '</b></div></div>' +
+    '<p class="field-hint">Este é o ponto de partida. A linha de evolução precisa de pelo menos duas importações da QRY0390 em dias diferentes — importe de novo outro dia e o gráfico aparece.</p>';
+  const W = 640, H = 160, pad = 28, max = Math.max.apply(null, p.map(x => Math.max(x.vE, x.vR))) || 1;
   const X = i => pad + i * (W - pad * 2) / (p.length - 1), Y = v => H - 22 - v / max * (H - 40);
   const linha = fn => p.map((x, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(fn(x)).toFixed(1)).join(' ');
-  return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="vl-linha"><path d="' + linha(x => x.vE + x.vR) + '" fill="none" stroke="' + VL_COR_VENC + '" stroke-width="2.5"/>' +
-    '<path d="' + linha(x => x.vE) + '" fill="none" stroke="' + VL_COR_E + '" stroke-width="1.8" stroke-dasharray="4 3"/><path d="' + linha(x => x.vR) + '" fill="none" stroke="' + VL_COR_R + '" stroke-width="1.8" stroke-dasharray="4 3"/>' +
-    p.map((x, i) => '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(x.vE + x.vR).toFixed(1) + '" r="4" fill="' + VL_COR_VENC + '"' + tip(fData(x.d) + ' · vencido ' + fBRL(x.vE + x.vR) + ' (estoque ' + fBRL(x.vE) + ' · reversa ' + fBRL(x.vR) + ')') + '/>').join('') +
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="vl-linha"><path d="' + linha(x => x.vE) + '" fill="none" stroke="' + VL_COR_E + '" stroke-width="2.5"/><path d="' + linha(x => x.vR) + '" fill="none" stroke="' + VL_COR_R + '" stroke-width="2.5"/>' +
+    p.map((x, i) => '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(x.vE).toFixed(1) + '" r="4" fill="' + VL_COR_E + '"' + tip(fData(x.d) + ' · estoque vencido ' + fBRL(x.vE)) + '/><circle cx="' + X(i).toFixed(1) + '" cy="' + Y(x.vR).toFixed(1) + '" r="4" fill="' + VL_COR_R + '"' + tip(fData(x.d) + ' · reversa vencida ' + fBRL(x.vR)) + '/>').join('') +
     '<text x="' + pad + '" y="' + (H - 4) + '" class="vl-ax">' + fData(p[0].d) + '</text><text x="' + (W - pad) + '" y="' + (H - 4) + '" text-anchor="end" class="vl-ax">' + fData(p[p.length - 1].d) + '</text></svg>' +
-    '<div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Vencido total</span><span><i style="background:' + VL_COR_E + '"></i>Estoque</span><span><i style="background:' + VL_COR_R + '"></i>Reversa</span></div>';
+    '<div class="vl-leg"><span><i style="background:' + VL_COR_E + '"></i>Estoque</span><span><i style="background:' + VL_COR_R + '"></i>Reversa</span></div>';
 }
 function viewPainel(){
   if(!VL.rows.length) return vazio();
@@ -361,26 +401,33 @@ function viewPainel(){
   const m = VL.meta || {};
   return filtrosBarra(false) +
     '<p class="vl-ref">Base de ' + (m.importadoEm ? fData(m.importadoEm.slice(0, 10)) : '—') + ' · hoje é ' + fData(hojeISO()) + ' · valor = quantidade × preço de custo (SIGEQ278)' +
-    (semPreco ? ' · <b class="vl-warn">' + fInt(semPreco) + ' lotes sem preço</b> (valor zerado)' : '') + '</p>' + kpis(rows) +
-    // Com filtro de área, mostra só o cartão dela — o outro apareceria zerado e parecia erro.
-    '<div class="' + (VL.f.area ? '' : 'two-col ') + 'vl-gap">' + (VL.f.area === 'R' ? '' : cartaoArea('Estoque', VL_COR_E, rows.filter(r => r.area === 'E'))) + (VL.f.area === 'E' ? '' : cartaoArea('Reversa', VL_COR_R, rows.filter(r => r.area === 'R'))) + '</div>' +
-    '<div class="panel vl-gap"><h3>Visão mensal · valor por mês de vencimento</h3><div class="panel-sub">Passe o mouse nas colunas para ver estoque × reversa.</div>' + graficoMensal(rf, 190) + '</div>' +
-    '<div class="two-col vl-gap"><div class="panel"><h3>Fornecedores · maior valor em risco</h3><div class="panel-sub">Vencido + a vencer. Clique para filtrar.</div>' + topForn(rows, 10) + '</div>' +
-    '<div class="panel"><h3>Evolução do valor vencido</h3><div class="panel-sub">Um ponto por dia de importação.</div>' + graficoHist() + '</div></div>';
+    (semPreco ? ' · <b class="vl-warn">' + fInt(semPreco) + ' lotes sem preço</b> (valor zerado)' : '') + '</p>' +
+    // Estoque e reversa nunca somados: cada área tem o seu bloco de números.
+    AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => {
+      const ra = rows.filter(r => r.area === a[0]);
+      return '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2>' + cartaoArea(a[1], a[2], ra) + '<div class="vl-gap"></div>' + kpis(ra, a[1]) +
+        '<div class="panel"><h3>' + a[1] + ' · valor por mês de vencimento</h3><div class="panel-sub">Passe o mouse nas colunas para ver o detalhe.</div>' + graficoMensal(ra, 170, a[2]) + '</div></div>';
+    }).join('') +
+    '<div class="' + (VL.f.area ? '' : 'two-col ') + 'vl-gap">' + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => '<div class="panel" style="border-top:3px solid ' + a[2] + '"><h3>' + a[1] + ' · fornecedores com maior valor em risco</h3><div class="panel-sub">Vencido + a vencer. Clique para filtrar.</div>' + topForn(rows.filter(r => r.area === a[0]), 8) + '</div>').join('') + '</div>' +
+    '<div class="vl-gap"><div class="panel"><h3>Evolução do valor vencido · estoque × reversa</h3><div class="panel-sub">Um ponto por dia em que a QRY0390 foi importada.</div>' + graficoHist() + '</div></div>';
 }
-function viewFornecedores(){
-  if(!VL.rows.length) return vazio();
-  const rows = filtradas(true); const por = somar(rows, r => r.forn);
+function tabelaForn(rows){
+  const por = somar(rows, r => r.forn);
   por.forEach(o => { o.venc = o.f.venc || 0; });
-  const ord = VL.sort.k === 'k' || !por[0] || por[0][VL.sort.k] === undefined ? 'venc' : VL.sort.k;
+  const ord = VL.sort.k === 'valor' ? 'valor' : 'venc';
   por.sort((a, b) => ((b[ord] || 0) - (a[ord] || 0)) * (VL.sort.d === -1 ? 1 : -1));
   const T = tot(rows);
-  return filtrosBarra(false) + '<div class="table-wrap"><table class="vl-tab"><thead><tr><th>Fornecedor</th><th class="n">Lotes</th><th class="n">Peças</th>' +
+  return '<div class="table-wrap"><table class="vl-tab"><thead><tr><th>Fornecedor</th><th class="n">Lotes</th><th class="n">Peças</th>' +
     VL.fx.map(f => '<th class="n"><i class="vl-dot" style="background:' + f.cor + '"></i>' + esc(f.nome) + '</th>').join('') + '<th class="n" onclick="vlOrd(\'valor\')">Total ↕</th><th class="n" onclick="vlOrd(\'venc\')">% vencido ↕</th></tr></thead><tbody>' +
     por.map(o => '<tr class="clicavel" onclick="vlVer(\'' + esc(o.k).replace(/'/g, '&#39;') + '\')"><td><b>' + esc(o.k) + '</b></td><td class="n">' + fInt(o.lotes) + '</td><td class="n">' + fInt(o.q) + '</td>' +
       VL.fx.map(f => '<td class="n">' + (o.f[f.k] ? fBRL(o.f[f.k]) : '<span class="vl-zero">—</span>') + '</td>').join('') + '<td class="n"><b>' + fBRL(o.valor) + '</b></td><td class="n">' + fPct(o.venc, o.valor) + '</td></tr>').join('') +
-    '</tbody><tfoot><tr><td><b>Total</b></td><td class="n">' + fInt(T.lotes) + '</td><td class="n">' + fInt(T.q) + '</td>' + VL.fx.map(f => '<td class="n"><b>' + fBRL(rows.filter(r => r.faixa === f.k).reduce((a, r) => a + r.valor, 0)) + '</b></td>').join('') + '<td class="n"><b>' + fBRL(T.valor) + '</b></td><td></td></tr></tfoot></table></div>' +
-    (por.some(o => o.k === 'A classificar') ? '<div class="callout callout-warn"><strong>Fornecedor a classificar</strong>Há itens sem marca reconhecida. ' + (somenteLeitura() ? '' : 'Ajuste em Configurações → Fornecedores.') + '</div>' : '');
+    '</tbody><tfoot><tr><td><b>Total</b></td><td class="n">' + fInt(T.lotes) + '</td><td class="n">' + fInt(T.q) + '</td>' + VL.fx.map(f => '<td class="n"><b>' + fBRL(rows.filter(r => r.faixa === f.k).reduce((a, r) => a + r.valor, 0)) + '</b></td>').join('') + '<td class="n"><b>' + fBRL(T.valor) + '</b></td><td></td></tr></tfoot></table></div>';
+}
+function viewFornecedores(){
+  if(!VL.rows.length) return vazio();
+  const rows = filtradas(true);
+  return filtrosBarra(false) + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2>' + tabelaForn(rows.filter(r => r.area === a[0])) + '</div>').join('') +
+    (rows.some(r => r.forn === 'A classificar') ? '<div class="callout callout-warn"><strong>Fornecedor a classificar</strong>Há itens sem marca reconhecida. ' + (somenteLeitura() ? '' : 'Ajuste em Configurações → Fornecedores.') + '</div>' : '');
 }
 function dadosMensal(rows){
   const m = {};
@@ -389,12 +436,15 @@ function dadosMensal(rows){
 }
 function viewMensal(){
   if(!VL.rows.length) return vazio();
-  const rows = filtradas(true), ms = dadosMensal(rows), hoje = hojeISO().slice(0, 7);
-  const T = ms.reduce((a, m) => { a.E += m.E; a.R += m.R; a.qE += m.qE; a.qR += m.qR; a.lotes += m.lotes; return a; }, {E: 0, R: 0, qE: 0, qR: 0, lotes: 0});
-  return filtrosBarra(false) + '<div class="panel"><h3>Valor por mês de vencimento</h3>' + graficoMensal(rows, 230) + '</div>' +
-    '<div class="table-wrap vl-gap"><table class="vl-tab"><thead><tr><th>Mês</th><th>Situação</th><th class="n">Estoque (R$)</th><th class="n">Reversa (R$)</th><th class="n">Total (R$)</th><th class="n">Peças</th><th class="n">Lotes</th></tr></thead><tbody>' +
-    ms.map(m => '<tr><td><b>' + fMes(m.ym) + '</b></td><td>' + (m.ym < hoje ? '<span class="tag tag-bad">Vencido</span>' : m.ym === hoje ? '<span class="tag tag-orange">Mês atual</span>' : '<span class="tag tag-good">A vencer</span>') + '</td><td class="n">' + fBRL(m.E) + '</td><td class="n">' + fBRL(m.R) + '</td><td class="n"><b>' + fBRL(m.E + m.R) + '</b></td><td class="n">' + fInt(m.qE + m.qR) + '</td><td class="n">' + fInt(m.lotes) + '</td></tr>').join('') +
-    '</tbody><tfoot><tr><td><b>Total</b></td><td></td><td class="n">' + fBRL(T.E) + '</td><td class="n">' + fBRL(T.R) + '</td><td class="n"><b>' + fBRL(T.E + T.R) + '</b></td><td class="n">' + fInt(T.qE + T.qR) + '</td><td class="n">' + fInt(T.lotes) + '</td></tr></tfoot></table></div>';
+  const rows = filtradas(true), hoje = hojeISO().slice(0, 7);
+  return filtrosBarra(false) + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => {
+    const ra = rows.filter(r => r.area === a[0]), ms = mesesArea(ra).ms, T = tot(ra);
+    return '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2><div class="panel"><h3>' + a[1] + ' · valor por mês de vencimento</h3>' + graficoMensal(ra, 230, a[2]) + '</div>' +
+      '<div class="table-wrap vl-gap"><table class="vl-tab"><thead><tr><th>Mês</th><th>Situação</th><th class="n">Valor no mês (R$)</th><th class="n">Acumulado (R$)</th><th class="n">Peças</th><th class="n">Lotes</th><th>Principais locais</th></tr></thead><tbody>' +
+      ms.map(m => '<tr' + tip(tipMes(m)) + '><td><b>' + fMes(m.ym) + '</b></td><td>' + (m.passado ? '<span class="tag tag-bad">Vencido</span>' : m.ym === hoje ? '<span class="tag tag-orange">Mês atual</span>' : '<span class="tag tag-good">A vencer</span>') + '</td><td class="n"><b>' + fBRL(m.v) + '</b></td><td class="n">' + fBRL(m.acc) + '</td><td class="n">' + fInt(m.q) + '</td><td class="n">' + fInt(m.lotes) + '</td>' +
+        '<td class="vl-locs">' + Object.entries(m.loc).sort((x, y) => y[1] - x[1]).slice(0, 3).map(l => esc(l[0]) + ' ' + fBRLc(l[1])).join(' · ') + '</td></tr>').join('') +
+      '</tbody><tfoot><tr><td><b>Total</b></td><td></td><td class="n"><b>' + fBRL(T.valor) + '</b></td><td></td><td class="n">' + fInt(T.q) + '</td><td class="n">' + fInt(T.lotes) + '</td><td></td></tr></tfoot></table></div></div>';
+  }).join('');
 }
 const COLS = [['i', 'Item'], ['d', 'Descrição'], ['forn', 'Fornecedor'], ['l', 'Lote'], ['v', 'Validade'], ['dias', 'Dias'], ['faixa', 'Faixa'], ['area', 'Área'], ['lo', 'Endereço'], ['q', 'Qtd'], ['c', 'Custo un.'], ['valor', 'Valor']];
 function viewItens(){
@@ -496,15 +546,20 @@ function vlExportar(){
   });
   const T = tot(rows); resumo.push(['Geral', 'TOTAL', T.lotes, T.q, +T.valor.toFixed(2)]);
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(resumo), 'Resumo');
-  const forn = [['Fornecedor', 'Lotes', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido'])];
-  somar(rows, r => r.forn).sort((a, b) => b.valor - a.valor).forEach(o => forn.push([o.k, o.lotes, o.q].concat(fx.map(f => +(o.f[f.k] || 0).toFixed(2)), [+o.valor.toFixed(2), o.valor ? +((o.f.venc || 0) / o.valor).toFixed(4) : 0])));
+  const forn = [['Área', 'Fornecedor', 'Lotes', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido'])];
+  AREAS.forEach(a => somar(rows.filter(r => r.area === a[0]), r => r.forn).sort((x, y) => y.valor - x.valor).forEach(o => forn.push([a[1], o.k, o.lotes, o.q].concat(fx.map(f => +(o.f[f.k] || 0).toFixed(2)), [+o.valor.toFixed(2), o.valor ? +((o.f.venc || 0) / o.valor).toFixed(4) : 0]))));
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(forn), 'Fornecedores');
-  const mes = [['Mês', 'Situação', 'Estoque (R$)', 'Reversa (R$)', 'Total (R$)', 'Peças', 'Lotes']], hoje = hojeISO().slice(0, 7);
-  dadosMensal(rows).forEach(m => mes.push([fMes(m.ym), m.ym < hoje ? 'Vencido' : m.ym === hoje ? 'Mês atual' : 'A vencer', +m.E.toFixed(2), +m.R.toFixed(2), +(m.E + m.R).toFixed(2), m.qE + m.qR, m.lotes]));
+  const mes = [['Área', 'Mês', 'Situação', 'Valor no mês (R$)', 'Acumulado (R$)', 'Peças', 'Lotes']], loc = [['Área', 'Mês', 'Situação', 'Local', 'Valor (R$)']], hoje = hojeISO().slice(0, 7);
+  AREAS.forEach(a => mesesArea(rows.filter(r => r.area === a[0])).ms.forEach(m => {
+    const sit = m.passado ? 'Vencido' : m.ym === hoje ? 'Mês atual' : 'A vencer';
+    mes.push([a[1], fMes(m.ym), sit, +m.v.toFixed(2), +m.acc.toFixed(2), m.q, m.lotes]);
+    Object.entries(m.loc).sort((x, y) => y[1] - x[1]).forEach(l => loc.push([a[1], fMes(m.ym), sit, l[0], +l[1].toFixed(2)]));
+  }));
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(loc), 'Mensal por local');
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(mes), 'Mensal');
   const nm = {}; fx.forEach(f => { nm[f.k] = f.nome; });
-  const it = [['Item', 'Descrição', 'Fornecedor', 'Marca', 'Lote', 'Validade', 'Dias p/ vencer', 'Faixa', 'Área', 'Classe local', 'Endereço', 'Restrição', 'Quantidade', 'Custo unitário (R$)', 'Valor (R$)', 'Obs.']];
-  rows.slice().sort((a, b) => a.dias - b.dias).forEach(r => it.push([+r.i || r.i, r.d, r.forn, r.marca, r.l, fData(r.v), r.dias, nm[r.faixa], r.area === 'R' ? 'Reversa' : 'Estoque', r.cl, r.lo, r.r, r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : '')]));
+  const it = [['Item', 'Descrição', 'Fornecedor', 'Marca', 'Lote', 'Validade', 'Dias p/ vencer', 'Faixa', 'Área', 'Classe local', 'Endereço', 'Restrição', 'EAN', 'Quantidade', 'Custo unitário (R$)', 'Valor (R$)', 'Obs.']];
+  rows.slice().sort((a, b) => a.dias - b.dias).forEach(r => it.push([+r.i || r.i, r.d, r.forn, r.marca, r.l, fData(r.v), r.dias, nm[r.faixa], r.area === 'R' ? 'Reversa' : 'Estoque', r.cl, r.lo, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : '')]));
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(it), 'Itens');
   X.writeFile(wb, 'Controle_de_Validade_' + hojeISO() + '.xlsx');
   toast('Planilha exportada.');

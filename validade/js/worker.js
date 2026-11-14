@@ -47,7 +47,7 @@ self.onmessage = (e) => {
       const c = {
         item: achar(cab, ['Item', 'ID_ITEM_FILHO']), desc: achar(cab, ['Descrição', 'Descricao', 'NOME_ITEM_FILHO']),
         lote: achar(cab, ['Lote']), cl: achar(cab, ['Classe Local', 'CLAL']), local: achar(cab, ['Descrição_2', 'DESC_LOCAL']),
-        restr: achar(cab, ['Restrição', 'Restricao']), qtd: achar(cab, ['Quantidade', 'QTDE'])
+        restr: achar(cab, ['Restrição', 'Restricao']), qtd: achar(cab, ['Quantidade', 'QTDE']), ean: achar(cab, ['EAN'])
       };
       if(!c.item || !c.qtd) throw new Error('QRY0390: colunas Item/Quantidade não encontradas.');
       const out = []; let wvSemData = 0;
@@ -58,7 +58,7 @@ self.onmessage = (e) => {
         const q = num(r[c.qtd]); if(q <= 0) continue;
         const lote = chave(r[c.lote]);
         out.push({i: chave(r[c.item]), d: String(r[c.desc] == null ? '' : r[c.desc]).trim(), l: lote === '0' ? '' : lote, v,
-          lo: String(r[c.local] == null ? '' : r[c.local]).trim(), cl: String(r[c.cl] == null ? '' : r[c.cl]).trim().toUpperCase(), r: restr, q});
+          lo: String(r[c.local] == null ? '' : r[c.local]).trim(), cl: String(r[c.cl] == null ? '' : r[c.cl]).trim().toUpperCase(), r: restr, q, e: c.ean ? chave(r[c.ean]) : ''});
       }
       self.postMessage({tipo: 'ok', base: '390', nome, linhas: rows.length, dados: out, wvSemData});
     } else if(cCusto){ // SIGEQ278
