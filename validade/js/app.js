@@ -4,10 +4,12 @@
    p/ valorar) e ZBIQ0051 (múltiplos: qual componente carrega valor).
    Dados compartilhados em public.vl_dados (migração 007).
    ============================================================ */
-const VL_VERSAO = 8; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const VL_VERSAO = 9; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const VL_TAB = 'vl_dados';
-const VL_CORES_PROX = ['#FE5000', '#E5A21C', '#B5B81F', '#7DBE4B', '#4FA66A'];
-const VL_COR_VENC = '#C83812', VL_COR_OK = '#1F8A52', VL_COR_E = '#1E33C7', VL_COR_R = '#0E7490';
+/* Cores da marca (azul #001A72 e laranja #FE5000): vermelho -> laranja -> âmbar -> azuis.
+   Quanto mais perto de vencer, mais quente. */
+const VL_CORES_PROX = ['#FE5000', '#F59E0B', '#7184C4', '#4B5FA8', '#33488E'];
+const VL_COR_VENC = '#C83812', VL_COR_OK = '#001A72', VL_COR_E = '#001A72', VL_COR_R = '#0E7490';
 const VL_MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const VL_TITULOS = {
   painel: ['Painel de validade', 'Quanto está vencido e perto de vencer — estoque × reversa.'],
@@ -25,7 +27,7 @@ const VL_SEED = ('MAZA TEKBOND NORTON VONDER WURTH RADNAQ KALIPSO ONYX CARBOGRAF
   'AUTOSHINE GRAZIA HENKEL JEFLUB GALZER KOUBE BALMER TOYAMA GEDORE SUALL CHEMICOLOR MIRAX TIREBOR NOVE54 KLYO TBCC GT2000 MILITEC JAÇA RENKO').split(' ');
 /* Trechos da descrição que identificam o fornecedor mesmo sem a marca isolada. */
 const VL_FRASES = [['MAXI RUBBER', 'MAXI RUBBER'], ['LIMPZ AUTO', 'LIMPZ AUTO'], ['SUAL PISCINAS', 'SUALL'], ['MAZA', 'MAZA'],
-  ['NOVE 54', 'NOVE54'], ['PROTEG LUB', 'PROTEG LUB'], ['BIO QUIMICA', 'BIO QUIMICA'], ['STP-', 'STP'], ['SUAVITE', 'RENKO']];
+  ['NOVE 54', 'NOVE54'], ['CAMISETA PRETA MALHA PV LOGO', 'CAMISAS LDM'], ['PROTEG LUB', 'PROTEG LUB'], ['BIO QUIMICA', 'BIO QUIMICA'], ['STP-', 'STP'], ['SUAVITE', 'RENKO']];
 /* Última palavra que é abreviação de marca ("... AMARELA VD" = Vonder, "... PRATA 954" = Nove54). */
 const VL_SUFIXO = {VD: 'VONDER', '954': 'NOVE54'};
 /* Prefixo do código de barras (empresa dona do EAN) -> fornecedor. Levantado na
@@ -53,6 +55,8 @@ function fBRLc(n){
   if(a >= 1e4) return 'R$ ' + (n / 1e3).toLocaleString('pt-BR', {maximumFractionDigits: 0}) + ' mil';
   return fBRL(n);
 }
+/* Valor curto pros gráficos: 682 · 4,9 mil · 1,2 mi (o valor exato fica no tooltip). */
+const fK = n => { n = n || 0; const a = Math.abs(n); return a >= 1e6 ? (n / 1e6).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' mi' : a >= 1e3 ? (n / 1e3).toLocaleString('pt-BR', {maximumFractionDigits: a >= 1e4 ? 0 : 1}) + ' mil' : Math.round(n).toLocaleString('pt-BR'); };
 const fPct = (a, b) => b > 0 ? (a / b * 100).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%' : '—';
 const fData = iso => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
 const fMes = ym => VL_MESES[+ym.slice(5, 7) - 1] + '/' + ym.slice(2, 4);
@@ -123,13 +127,17 @@ function somar(rows, chaveFn){
   const m = new Map();
   rows.forEach(r => {
     const k = chaveFn(r); let o = m.get(k);
-    if(!o){ o = {k, valor: 0, q: 0, lotes: 0, f: {}}; m.set(k, o); }
-    o.valor += r.valor; o.q += r.q; o.lotes++;
-    o.f[r.faixa] = (o.f[r.faixa] || 0) + r.valor;
+    if(!o){ o = {k, valor: 0, q: 0, lotes: 0, f: {}, fq: {}, fi: {}, its: new Set()}; m.set(k, o); }
+    o.valor += r.valor; o.q += r.q; o.lotes++; o.its.add(r.i);
+    o.f[r.faixa] = (o.f[r.faixa] || 0) + r.valor; o.fq[r.faixa] = (o.fq[r.faixa] || 0) + r.q;
+    (o.fi[r.faixa] = o.fi[r.faixa] || new Set()).add(r.i);
   });
-  return Array.from(m.values());
+  const out = Array.from(m.values()); out.forEach(o => { o.itens = o.its.size; }); return out;
 }
-const tot = rows => rows.reduce((a, r) => { a.valor += r.valor; a.q += r.q; a.lotes++; return a; }, {valor: 0, q: 0, lotes: 0});
+const tot = rows => { const its = new Set(); const t = rows.reduce((a, r) => { a.valor += r.valor; a.q += r.q; a.lotes++; its.add(r.i); return a; }, {valor: 0, q: 0, lotes: 0}); t.itens = its.size; return t; };
+/* Validade improvável (ex.: 30/03/2080, 30/01/3030): erro de cadastro na 390. Continua
+   na conta (é o que o sistema diz), mas é sinalizada no painel e na planilha. */
+const suspeita = r => r.dias > 13 * 365 || r.dias < -10 * 365;
 
 /* ---------- IndexedDB local (cache das bases 278 e 051) ---------- */
 function idb(){
@@ -179,7 +187,7 @@ function dividir(linhas, limite){
   if(atual.length) partes.push(atual);
   return partes;
 }
-const CAMPOS = ['i', 'd', 'l', 'v', 'lo', 'cl', 'r', 'q', 'c', 'm', 'e'];
+const CAMPOS = ['i', 'd', 'l', 'v', 'lo', 'cl', 'r', 'q', 'c', 'm', 'e', 'qr'];
 const lerCampos = r => { const o = {}; CAMPOS.forEach(k => { o[k] = r[k]; }); return o; };
 
 async function carregar(){
@@ -207,6 +215,15 @@ function lerArquivo(file){
     w.onerror = e => { w.terminate(); no(new Error(file.name + ': ' + (e.message || 'falha ao ler'))); };
     file.arrayBuffer().then(buf => w.postMessage({nome: file.name, buf}, [buf]), no);
   });
+}
+/* Linhas da 390 que ficam fora da conta por não ter data — valoradas aqui pra
+   aparecer no painel como inconsistência (não somam nos números de validade). */
+function qualidade(n, precos){
+  const val = l => l.q * (precos[l.i] || 0);
+  const wv = (n.wv || []).map(l => Object.assign({}, l, {valor: val(l)}));
+  const sd = (n.semData || []).map(l => Object.assign({}, l, {valor: val(l)}));
+  const soma = ls => ({linhas: ls.reduce((a, l) => a + (l.n || 1), 0), itens: new Set(ls.map(l => l.i)).size, q: ls.reduce((a, l) => a + l.q, 0), valor: ls.reduce((a, l) => a + l.valor, 0)});
+  return {wv: Object.assign(soma(wv), {lista: wv}), semData: Object.assign(soma(sd), {lista: sd})};
 }
 function valorar(rows, precos, est){
   const pais = {};
@@ -244,6 +261,7 @@ async function importar(files){
       importadoEm: new Date().toISOString(), por: sessao ? sessao.user.email : '',
       arquivo390: novas ? novas.nome : antigo.arquivo390, linhas390: novas ? novas.linhas : antigo.linhas390,
       wvSemData: novas ? novas.wvSemData : antigo.wvSemData,
+      qual: novas ? qualidade(novas, precos) : antigo.qual,
       preco: await kvGet('precos-meta') || null, estrutura: await kvGet('estrutura-meta') || null
     };
     await nuvemGravar('base', meta, {}, dividir(rows, 400000));
@@ -275,8 +293,8 @@ async function salvarCfg(){
 function tip(el){ return ' data-tip="' + esc(el) + '"'; }
 function anel(pct, cor, centro, sub){
   const r = 42, c = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct));
-  return '<div class="vl-anel"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="' + r + '" fill="none" stroke="var(--surface2)" stroke-width="12"/>' +
-    '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + cor + '" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + (c * p) + ' ' + c + '" transform="rotate(-90 50 50)"/></svg>' +
+  return '<div class="vl-anel"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="' + r + '" fill="none" stroke="var(--surface2)" stroke-width="11"/>' +
+    '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + cor + '" stroke-width="11" stroke-linecap="' + (p > 0.004 ? 'round' : 'butt') + '" stroke-dasharray="' + (c * p) + ' ' + c + '" transform="rotate(-90 50 50)"/></svg>' +
     '<div class="vl-anel-c"><b>' + centro + '</b><span>' + sub + '</span></div></div>';
 }
 function barraFaixas(o){ // barra empilhada 100% por faixa
@@ -306,26 +324,30 @@ function vazio(){
     (somenteLeitura() ? '' : '<button class="btn btn-orange" onclick="vlTab(\'importacao\')">Ir para Importação</button>') + '</div>';
 }
 const AREAS = [['E', 'Estoque', VL_COR_E], ['R', 'Reversa', VL_COR_R]];
-function kpis(rows, nomeArea){
-  const por = somar(rows, r => r.faixa), mp = {}; por.forEach(o => { mp[o.k] = o; });
-  const total = tot(rows);
-  return '<div class="kpi-grid">' + VL.fx.map(f => {
-    const o = mp[f.k] || {valor: 0, q: 0, lotes: 0};
-    return '<div class="kpi-card vl-kpi" style="--c:' + f.cor + '" onclick="vlSet(\'faixa\',\'' + (VL.f.faixa === f.k ? '' : f.k) + '\')">' +
-      '<div class="label">' + esc(f.nome) + '</div><div class="num">' + fBRLc(o.valor) + '</div>' +
-      '<div class="sub">' + fInt(o.q) + ' peças · ' + fInt(o.lotes) + ' lotes</div>' +
-      '<div class="vl-mini"><i style="width:' + (total.valor ? o.valor / total.valor * 100 : 0) + '%;background:' + f.cor + '"></i></div>' +
-      '<div class="sub">' + fPct(o.valor, total.valor) + ' do valor com validade ' + (nomeArea ? 'n' + (nomeArea === 'Estoque' ? 'o estoque' : 'a reversa') : '') + '</div></div>';
+const AREA_TXT = {E: 'do estoque', R: 'da reversa'};
+const n3 = (b, l) => '<div><b>' + b + '</b><span>' + l + '</span></div>';
+/* Faixas de vencimento: item (SKU) em destaque, depois peças e valor; lote fica no rodapé do cartão. */
+function faixasTiles(rows, a){
+  const T = tot(rows), por = {}; somar(rows, r => r.faixa).forEach(o => { por[o.k] = o; });
+  return '<div class="vl-faixas">' + VL.fx.map(f => {
+    const o = por[f.k] || {valor: 0, q: 0, lotes: 0, itens: 0}, pc = T.valor ? o.valor / T.valor : 0;
+    return '<div class="vl-ft" style="--c:' + f.cor + '" onclick="vlFaixa(\'' + a[0] + '\',\'' + f.k + '\')"' + tip(f.nome + ' — ' + a[1] + '\n' + fInt(o.itens) + ' itens · ' + fInt(o.q) + ' peças · ' + fInt(o.lotes) + ' lotes\nValor de custo: ' + fBRL2(o.valor) + '\n' + fPct(o.valor, T.valor) + ' do valor de custo ' + AREA_TXT[a[0]] + '\nClique para ver os itens') + '>' +
+      '<div class="vl-ft-h">' + esc(f.nome) + '</div>' +
+      '<div class="vl-ft-big">' + fInt(o.itens) + '<small>' + (o.itens === 1 ? 'item' : 'itens') + '</small></div>' +
+      '<div class="vl-ft-l"><span>Peças</span><b>' + fInt(o.q) + '</b></div>' +
+      '<div class="vl-ft-l"><span>Valor de custo</span><b>' + fBRL(o.valor) + '</b></div>' +
+      '<div class="vl-ft-bar"><i style="width:' + Math.max(pc * 100, o.valor ? 1.5 : 0) + '%"></i></div>' +
+      '<div class="vl-ft-p"><b>' + fPct(o.valor, T.valor) + '</b> do valor ' + AREA_TXT[a[0]] + ' · ' + fInt(o.lotes) + ' lotes</div></div>';
   }).join('') + '</div>';
 }
-function cartaoArea(nome, cor, rows){
-  const t = tot(rows), venc = tot(rows.filter(r => r.faixa === 'venc')), prox = tot(rows.filter(r => r.dias >= 0 && r.dias <= Math.max.apply(null, VL.cfg.faixas)));
-  const o = somar(rows, () => 'x')[0] || {f: {}};
-  return '<div class="panel vl-area" style="--c:' + cor + '"><h3>' + nome + '</h3><div class="panel-sub">' + fInt(t.q) + ' peças · ' + fInt(t.lotes) + ' lotes com validade</div>' +
-    '<div class="vl-area-row">' + anel(t.valor ? venc.valor / t.valor : 0, VL_COR_VENC, fPct(venc.valor, t.valor), 'vencido') +
-    '<div class="vl-area-n"><div><span>Vencido</span><b style="color:' + VL_COR_VENC + '">' + fBRLc(venc.valor) + '</b><em>' + fInt(venc.q) + ' peças</em></div>' +
-    '<div><span>Vence em até ' + Math.max.apply(null, VL.cfg.faixas) + ' dias</span><b style="color:' + VL_CORES_PROX[0] + '">' + fBRLc(prox.valor) + '</b><em>' + fInt(prox.q) + ' peças</em></div>' +
-    '<div><span>Total com validade</span><b>' + fBRLc(t.valor) + '</b></div></div></div>' + barraFaixas(o) + '</div>';
+function blocoVencido(rows, a){
+  const T = tot(rows), V = tot(rows.filter(r => r.faixa === 'venc'));
+  const lim = Math.max.apply(null, VL.cfg.faixas), P = tot(rows.filter(r => r.dias >= 0 && r.dias <= lim));
+  return '<div class="panel vl-card"><div class="vl-card-h"><h3>Quanto ' + AREA_TXT[a[0]] + ' já venceu?</h3><p>Percentual do <b>valor de custo</b> dos itens com validade ' + AREA_TXT[a[0]] + ' que já passou da data.</p></div>' +
+    '<div class="vl-venc">' + anel(T.valor ? V.valor / T.valor : 0, VL_COR_VENC, fPct(V.valor, T.valor), 'do valor vencido') +
+    '<div class="vl-venc-txt"><p class="vl-frase"><b>' + fBRL(V.valor) + '</b> vencidos de <b>' + fBRL(T.valor) + '</b> em valor de custo com validade.</p>' +
+    '<div class="vl-n3">' + n3(fInt(V.itens) + ' <em>de ' + fInt(T.itens) + '</em>', 'itens vencidos') + n3(fInt(V.q) + ' <em>de ' + fInt(T.q) + '</em>', 'peças vencidas') + n3(fPct(V.q, T.q), 'das peças') + '</div>' +
+    '<div class="vl-prox"><span>Vencem nos próximos ' + lim + ' dias</span><b>' + fInt(P.itens) + ' itens · ' + fInt(P.q) + ' peças · ' + fBRL(P.valor) + '</b></div></div></div></div>';
 }
 /* Acumulado: o vencido soma do mais antigo até o mês passado; o a vencer soma do
    mês atual pra frente. Assim cada mês mostra "quanto já venceu até aqui" ou
@@ -333,8 +355,8 @@ function cartaoArea(nome, cor, rows){
 function mesesArea(rows){
   const por = {}, hoje = hojeISO().slice(0, 7);
   rows.forEach(r => {
-    const o = por[r.mes] = por[r.mes] || {ym: r.mes, v: 0, q: 0, lotes: 0, loc: {}};
-    o.v += r.valor; o.q += r.q; o.lotes++; o.loc[r.loc] = (o.loc[r.loc] || 0) + r.valor;
+    const o = por[r.mes] = por[r.mes] || {ym: r.mes, v: 0, q: 0, lotes: 0, loc: {}, its: new Set()};
+    o.v += r.valor; o.q += r.q; o.lotes++; o.its.add(r.i); o.loc[r.loc] = (o.loc[r.loc] || 0) + r.valor;
     if(r.dias < 0) o.jaVenc = (o.jaVenc || 0) + r.valor;
   });
   const ms = Object.values(por).sort((a, b) => a.ym.localeCompare(b.ym));
@@ -347,11 +369,11 @@ function mesesArea(rows){
   });
   return {ms, vencido: aV, aVencer: aF};
 }
-function tipMes(m){
+function tipMes(m){ // título do mês, número do mês, acumulado e onde está
   const locs = Object.entries(m.loc).sort((a, b) => b[1] - a[1]);
   const linhas = locs.slice(0, 8).map(l => l[0] + ': ' + fBRL(l[1]));
   if(locs.length > 8) linhas.push('Outros ' + (locs.length - 8) + ' locais: ' + fBRL(locs.slice(8).reduce((a, l) => a + l[1], 0)));
-  return fMes(m.ym) + (m.passado ? ' · VENCIDO' : ' · a vencer') + '\nNo mês: ' + fBRL(m.v) + ' · ' + fInt(m.q) + ' peças\n' + (m.jaNoMes ? 'Já vencido neste mês: ' + fBRL(m.jaNoMes) + '\n' : '') +
+  return fMes(m.ym) + (m.passado ? ' · VENCIDO' : ' · a vencer') + '\nNo mês: ' + fInt(m.its.size) + ' itens · ' + fInt(m.q) + ' peças · ' + fBRL(m.v) + '\n' + (m.jaNoMes ? 'Já vencido neste mês: ' + fBRL(m.jaNoMes) + '\n' : '') +
     (m.passado ? 'Vencido acumulado até aqui: ' : 'A vencer acumulado até aqui: ') + fBRL(m.acc) + '\n— Onde está —\n' + linhas.join('\n');
 }
 function graficoMensal(rows, alt, cor){ // uma área por gráfico: estoque e reversa nunca na mesma coluna
@@ -363,26 +385,31 @@ function graficoMensal(rows, alt, cor){ // uma área por gráfico: estoque e rev
   const ini = desl(-12), fim = desl(12);
   const meses = todos.filter(m => m.ym >= ini && m.ym <= fim);
   const antes = todos.filter(m => m.ym < ini).reduce((a, m) => a + m.v, 0), depois = todos.filter(m => m.ym > fim).reduce((a, m) => a + m.v, 0);
-  const fora = '<div class="vl-fora"><span class="venc">Vencido acumulado: <b>' + fBRL(A.vencido) + '</b></span><span>A vencer acumulado: <b>' + fBRL(A.aVencer) + '</b></span>' +
+  const fora = '<div class="vl-fora"><span class="venc">Total vencido: <b>' + fBRL(A.vencido) + '</b></span><span>Total a vencer: <b>' + fBRL(A.aVencer) + '</b></span>' +
     (antes ? '<span class="venc">antes de ' + fMes(ini) + ': ' + fBRL(antes) + '</span>' : '') + (depois ? '<span>depois de ' + fMes(fim) + ': ' + fBRL(depois) + '</span>' : '') + '</div>';
   if(!meses.length) return fora;
   const max = Math.max.apply(null, meses.map(m => m.v)) || 1;
   return fora + '<div class="vl-mensal" style="height:' + alt + 'px">' + meses.map(m =>
     '<div class="vl-col' + (m.passado ? ' passado' : '') + '"' + tip(tipMes(m)) + '>' +
-      '<span class="vl-col-v">' + (m.v ? fBRLc(m.v).replace('R$ ', '') : '') + '</span>' +
+      '<span class="vl-col-v">' + (m.v ? fK(m.v) : '') + '</span>' +
       '<div class="vl-col-b" style="height:' + (m.v / max * 100) + '%;background:' + (m.passado ? VL_COR_VENC : cor) + '"></div>' +
-      '<span class="vl-col-l">' + fMes(m.ym) + '</span><span class="vl-col-a">' + fBRLc(m.acc).replace('R$ ', '') + '</span></div>'
-  ).join('') + '</div><div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Mês já vencido</span><span><i style="background:' + cor + '"></i>A vencer</span><span>Linha de baixo = acumulado (R$) · passe o mouse para ver os locais</span></div>';
+      '<span class="vl-col-l">' + fMes(m.ym) + '</span><span class="vl-col-a">' + fK(m.acc) + '</span></div>'
+  ).join('') + '</div><div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Mês que já venceu</span><span><i style="background:' + cor + '"></i>Mês a vencer</span><span><i class="vl-leg-acc"></i>Acumulado (embaixo do mês)</span><span>Valores em R$ de custo · mil = milhares</span></div>';
 }
 function topForn(rows, n){
-  const por = somar(rows, r => r.forn).map(o => ({k: o.k, venc: o.f.venc || 0, prox: VL.fx.filter(f => f.k !== 'venc' && f.k !== 'ok').reduce((a, f) => a + (o.f[f.k] || 0), 0)}))
-    .filter(o => o.venc + o.prox > 0).sort((a, b) => (b.venc + b.prox) - (a.venc + a.prox)).slice(0, n);
-  if(!por.length) return '<p class="field-hint">Sem vencidos ou a vencer.</p>';
-  const max = por[0].venc + por[0].prox;
-  return '<div class="vl-hbars">' + por.map(o => '<div class="vl-hrow" onclick="vlSet(\'forn\',\'' + esc(o.k).replace(/'/g, '&#39;') + '\')">' +
-    '<span class="vl-hl">' + esc(o.k) + '</span><div class="vl-ht"><i style="width:' + (o.venc / max * 100) + '%;background:' + VL_COR_VENC + '"' + tip('Vencido: ' + fBRL(o.venc)) + '></i><i style="width:' + (o.prox / max * 100) + '%;background:' + VL_CORES_PROX[0] + '"' + tip('A vencer: ' + fBRL(o.prox)) + '></i></div>' +
-    '<span class="vl-hv">' + fBRLc(o.venc + o.prox) + '</span></div>').join('') + '</div>' +
-    '<div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Vencido</span><span><i style="background:' + VL_CORES_PROX[0] + '"></i>A vencer (dentro das faixas)</span></div>';
+  const lim = Math.max.apply(null, VL.cfg.faixas);
+  const m = new Map();
+  rows.filter(r => r.dias <= lim).forEach(r => {
+    let o = m.get(r.forn); if(!o){ o = {k: r.forn, venc: 0, prox: 0, q: 0, its: new Set()}; m.set(r.forn, o); }
+    if(r.dias < 0) o.venc += r.valor; else o.prox += r.valor; o.q += r.q; o.its.add(r.i);
+  });
+  const por = Array.from(m.values()).sort((a, b) => (b.venc + b.prox) - (a.venc + a.prox)).slice(0, n);
+  if(!por.length) return '<p class="field-hint">Nenhum item vencido ou vencendo em até ' + lim + ' dias.</p>';
+  const max = por[0].venc + por[0].prox || 1;
+  return '<div class="vl-hbars">' + por.map(o => '<div class="vl-hrow" onclick="vlSet(\'forn\',\'' + esc(o.k).replace(/'/g, '&#39;') + '\')"' + tip(o.k + '\nVencido: ' + fBRL2(o.venc) + '\nVence em até ' + lim + ' dias: ' + fBRL2(o.prox) + '\n' + fInt(o.its.size) + ' itens · ' + fInt(o.q) + ' peças') + '>' +
+    '<div class="vl-hl"><b>' + esc(o.k) + '</b><span>' + fInt(o.its.size) + ' itens · ' + fInt(o.q) + ' peças</span></div><div class="vl-ht"><i style="width:' + (o.venc / max * 100) + '%;background:' + VL_COR_VENC + '"></i><i style="width:' + (o.prox / max * 100) + '%;background:' + VL_CORES_PROX[0] + '"></i></div>' +
+    '<span class="vl-hv">' + fBRL(o.venc + o.prox) + '</span></div>').join('') + '</div>' +
+    '<div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Vencido</span><span><i style="background:' + VL_CORES_PROX[0] + '"></i>Vence em até ' + lim + ' dias</span></div>';
 }
 function graficoHist(){ // estoque e reversa em linhas próprias, sem somar
   const p = VL.hist;
@@ -397,40 +424,68 @@ function graficoHist(){ // estoque e reversa em linhas próprias, sem somar
     '<text x="' + pad + '" y="' + (H - 4) + '" class="vl-ax">' + fData(p[0].d) + '</text><text x="' + (W - pad) + '" y="' + (H - 4) + '" text-anchor="end" class="vl-ax">' + fData(p[p.length - 1].d) + '</text></svg>' +
     '<div class="vl-leg"><span><i style="background:' + VL_COR_E + '"></i>Estoque</span><span><i style="background:' + VL_COR_R + '"></i>Reversa</span></div>';
 }
+function hero(){
+  const m = VL.meta || {};
+  const per = VL.f.de || VL.f.ate ? 'Vencimento de ' + (VL.f.de ? fMes(VL.f.de) : 'início') + ' até ' + (VL.f.ate ? fMes(VL.f.ate) : 'fim') : '';
+  return '<div class="vl-hero"><div><span class="vl-hero-tag">Controle de Validade · CD Cajamar</span><h2>Vencidos e a vencer — estoque e reversa</h2>' +
+    '<p>Base QRY0390 de <b>' + (m.importadoEm ? fData(m.importadoEm.slice(0, 10)) : '—') + '</b> · situação em <b>' + fData(hojeISO()) + '</b> · valor = quantidade × preço de custo (SIGEQ278)' +
+    (VL.f.forn ? ' · fornecedor <b>' + esc(VL.f.forn) + '</b>' : '') + (per ? ' · <b>' + per + '</b>' : '') + '</p></div></div>';
+}
+function secaoArea(a, ra){
+  const T = tot(ra), desc = a[0] === 'E' ? 'Itens em locais de estoque (classes fora de ' + esc(VL.cfg.reversa.join(', ')) + ').' : 'Itens em locais da reversa (classes ' + esc(VL.cfg.reversa.join(', ')) + ').';
+  return '<section class="vl-sec" style="--c:' + a[2] + '"><header class="vl-sec-h"><div><h2>' + a[1] + '</h2><p>' + desc + '</p></div>' +
+    '<div class="vl-sec-tot">' + n3(fInt(T.itens), 'itens com validade') + n3(fInt(T.q), 'peças') + n3(fBRLc(T.valor), 'valor de custo') + n3(fInt(T.lotes), 'lotes') + '</div></header>' +
+    '<h4 class="vl-tit">Itens por faixa de vencimento <span>Um item com lotes de datas diferentes aparece em mais de uma faixa · clique numa faixa para ver a lista</span></h4>' + faixasTiles(ra, a) +
+    '<div class="vl-row2">' + blocoVencido(ra, a) +
+    '<div class="panel vl-card"><div class="vl-card-h"><h3>Fornecedores com mais valor em risco</h3><p>Vencido + vence em até ' + Math.max.apply(null, VL.cfg.faixas) + ' dias, em valor de custo. Clique para filtrar.</p></div>' + topForn(ra, 8) + '</div></div>' +
+    '<div class="panel vl-card"><div class="vl-card-h"><h3>Valor de custo por mês de vencimento</h3><p>Quanto vence em cada mês. Embaixo de cada mês, o acumulado. Passe o mouse para ver itens, peças e em quais locais está.</p></div>' + graficoMensal(ra, 200, a[2]) + '</div></section>';
+}
+function painelQualidade(rows){
+  const q = (VL.meta || {}).qual, sus = rows.filter(suspeita), rom = rows.filter(r => r.qr > 0);
+  const S = tot(sus), Rm = rom.reduce((a, r) => a + (r.qr || 0), 0);
+  const li = (cor, tit, txt) => '<li style="--c:' + cor + '"><b>' + tit + '</b><span>' + txt + '</span></li>';
+  return '<div class="panel vl-card"><div class="vl-card-h"><h3>Qualidade da base · pontos de atenção</h3><p>Diferenças encontradas na própria QRY0390. Estão na aba "Inconsistências" do Excel.</p></div><ul class="vl-qual">' +
+    (q ? li(VL_COR_VENC, 'Restrição WV (fora do prazo de validade) sem data', fInt(q.wv.itens) + ' itens · ' + fInt(q.wv.q) + ' peças · ' + fBRL(q.wv.valor) + ' — <b>não entram</b> nos números acima porque a 390 não traz a data.') +
+      li(VL_CORES_PROX[1], 'Itens com parte do saldo sem data de validade', fInt(q.semData.itens) + ' itens · ' + fInt(q.semData.q) + ' peças · ' + fBRL(q.semData.valor) + ' em linhas sem data — também ficam de fora.')
+      : li(VL_CORES_PROX[1], 'Saldo sem data de validade', 'Reimporte a QRY0390 para calcular o que ficou de fora por não ter data.')) +
+    li(VL_CORES_PROX[2], 'Validade improvável (antes de ' + (+hojeISO().slice(0, 4) - 10) + ' ou depois de ' + (+hojeISO().slice(0, 4) + 13) + ')', fInt(S.itens) + ' itens · ' + fInt(S.q) + ' peças · ' + fBRL(S.valor) + ' (ex.: 30/03/2080). Contam como "acima de ' + Math.max.apply(null, VL.cfg.faixas) + ' dias" — provável erro de cadastro.') +
+    (rows.some(r => 'qr' in r) ? li(VL_CORES_PROX[3], 'Peças já romaneadas (separadas para pedido)', fInt(rom.length) + ' lotes · ' + fInt(Rm) + ' peças. Estão incluídas no saldo.') : '') +
+    '</ul></div>';
+}
+function rodapeExport(){
+  return '<div class="vl-export"><div><b>Enviar este retrato</b><span>A planilha traz todos os números e listas; o HTML abre no navegador com o painel como está agora, com os filtros aplicados.</span></div>' +
+    '<button class="btn btn-secondary" onclick="vlBaixarHTML()">⬇ Baixar HTML</button><button class="btn btn-orange" onclick="vlExportar()">⬇ Exportar Excel</button></div>';
+}
 function viewPainel(){
   if(!VL.rows.length) return vazio();
-  const rows = filtradas(true), rf = filtradas(false);
-  const semPreco = rows.filter(r => !r.c && !r.m).length;
-  const m = VL.meta || {};
-  return filtrosBarra(false) +
-    '<p class="vl-ref">Base de ' + (m.importadoEm ? fData(m.importadoEm.slice(0, 10)) : '—') + ' · hoje é ' + fData(hojeISO()) + ' · valor = quantidade × preço de custo (SIGEQ278)' +
-    (semPreco ? ' · <b class="vl-warn">' + fInt(semPreco) + ' lotes sem preço</b> (valor zerado)' : '') + '</p>' +
-    // Estoque e reversa nunca somados: cada área tem o seu bloco de números.
-    AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => {
-      const ra = rows.filter(r => r.area === a[0]);
-      return '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2>' + cartaoArea(a[1], a[2], ra) + '<div class="vl-gap"></div>' + kpis(ra, a[1]) +
-        '<div class="panel"><h3>' + a[1] + ' · valor por mês de vencimento</h3><div class="panel-sub">Passe o mouse nas colunas para ver o detalhe.</div>' + graficoMensal(ra, 170, a[2]) + '</div></div>';
-    }).join('') +
-    '<div class="' + (VL.f.area ? '' : 'two-col ') + 'vl-gap">' + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => '<div class="panel" style="border-top:3px solid ' + a[2] + '"><h3>' + a[1] + ' · fornecedores com maior valor em risco</h3><div class="panel-sub">Vencido + a vencer. Clique para filtrar.</div>' + topForn(rows.filter(r => r.area === a[0]), 8) + '</div>').join('') + '</div>' +
-    '<div class="vl-gap"><div class="panel"><h3>Evolução do valor vencido · estoque × reversa</h3><div class="panel-sub">Um ponto por dia em que a QRY0390 foi importada.</div>' + graficoHist() + '</div></div>';
+  const rows = filtradas(true);
+  const semPreco = tot(rows.filter(r => !r.c && !r.m));
+  // Estoque e reversa nunca somados: cada área tem a sua seção completa.
+  return hero() + (VL.snap ? '' : filtrosBarra(false)) +
+    (semPreco.lotes ? '<div class="callout callout-warn"><strong>Itens sem preço</strong>' + fInt(semPreco.itens) + ' itens (' + fInt(semPreco.q) + ' peças) não têm preço de custo na SIGEQ278 e entram com valor zero.</div>' : '') +
+    AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => secaoArea(a, rows.filter(r => r.area === a[0]))).join('') +
+    '<div class="vl-row2">' + painelQualidade(rows) +
+    '<div class="panel vl-card"><div class="vl-card-h"><h3>Evolução do valor vencido</h3><p>Valor de custo vencido em cada dia em que a QRY0390 foi importada.</p></div>' + graficoHist() + '</div></div>' +
+    (VL.snap ? '' : rodapeExport());
 }
+function vlFaixa(area, faixa){ VL.f.area = area; VL.f.faixa = faixa; VL.tab = 'itens'; VL.sort = {k: 'dias', d: 1}; VL.pag = 0; renderView(); }
 function tabelaForn(rows){
   const por = somar(rows, r => r.forn);
   por.forEach(o => { o.venc = o.f.venc || 0; });
   const ord = VL.sort.k === 'valor' ? 'valor' : 'venc';
   por.sort((a, b) => ((b[ord] || 0) - (a[ord] || 0)) * (VL.sort.d === -1 ? 1 : -1));
   const T = tot(rows);
-  return '<div class="table-wrap"><table class="vl-tab"><thead><tr><th>Fornecedor</th><th class="n">Lotes</th><th class="n">Peças</th>' +
+  return '<div class="table-wrap"><table class="vl-tab"><thead><tr><th>Fornecedor</th><th class="n">Itens</th><th class="n">Peças</th>' +
     VL.fx.map(f => '<th class="n"><i class="vl-dot" style="background:' + f.cor + '"></i>' + esc(f.nome) + '</th>').join('') + '<th class="n" onclick="vlOrd(\'valor\')">Total ↕</th><th class="n" onclick="vlOrd(\'venc\')">% vencido ↕</th></tr></thead><tbody>' +
-    por.map(o => '<tr class="clicavel" onclick="vlVer(\'' + esc(o.k).replace(/'/g, '&#39;') + '\')"><td><b>' + esc(o.k) + '</b></td><td class="n">' + fInt(o.lotes) + '</td><td class="n">' + fInt(o.q) + '</td>' +
+    por.map(o => '<tr class="clicavel" onclick="vlVer(\'' + esc(o.k).replace(/'/g, '&#39;') + '\')"><td><b>' + esc(o.k) + '</b></td><td class="n">' + fInt(o.itens) + '</td><td class="n">' + fInt(o.q) + '</td>' +
       VL.fx.map(f => '<td class="n">' + (o.f[f.k] ? fBRL(o.f[f.k]) : '<span class="vl-zero">—</span>') + '</td>').join('') + '<td class="n"><b>' + fBRL(o.valor) + '</b></td><td class="n">' + fPct(o.venc, o.valor) + '</td></tr>').join('') +
-    '</tbody><tfoot><tr><td><b>Total</b></td><td class="n">' + fInt(T.lotes) + '</td><td class="n">' + fInt(T.q) + '</td>' + VL.fx.map(f => '<td class="n"><b>' + fBRL(rows.filter(r => r.faixa === f.k).reduce((a, r) => a + r.valor, 0)) + '</b></td>').join('') + '<td class="n"><b>' + fBRL(T.valor) + '</b></td><td></td></tr></tfoot></table></div>';
+    '</tbody><tfoot><tr><td><b>Total</b></td><td class="n">' + fInt(T.itens) + '</td><td class="n">' + fInt(T.q) + '</td>' + VL.fx.map(f => '<td class="n"><b>' + fBRL(rows.filter(r => r.faixa === f.k).reduce((a, r) => a + r.valor, 0)) + '</b></td>').join('') + '<td class="n"><b>' + fBRL(T.valor) + '</b></td><td></td></tr></tfoot></table></div>';
 }
 function viewFornecedores(){
   if(!VL.rows.length) return vazio();
   const rows = filtradas(true);
   return filtrosBarra(false) + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2>' + tabelaForn(rows.filter(r => r.area === a[0])) + '</div>').join('') +
-    (rows.some(r => r.forn === 'A classificar') ? '<div class="callout callout-warn"><strong>Fornecedor a classificar</strong>Há itens sem marca reconhecida. ' + (somenteLeitura() ? '' : 'Ajuste em Configurações → Fornecedores.') + '</div>' : '');
+    (rows.some(r => r.forn === 'A classificar') ? '<div class="callout callout-warn"><strong>Fornecedor a classificar</strong>Há itens sem marca reconhecida. ' + (somenteLeitura() ? '' : 'Ajuste em Configurações → Fornecedores.') + '</div>' : '') + rodapeExport();
 }
 function dadosMensal(rows){
   const m = {};
@@ -500,6 +555,7 @@ function vlSalvarCfg(){
 }
 
 /* ---------- navegação / estado ---------- */
+const COM_EXPORT = new Set(['mensal', 'itens']);
 const VIEWS = {painel: viewPainel, fornecedores: viewFornecedores, mensal: viewMensal, itens: viewItens, importacao: viewImportacao, configuracoes: viewConfig};
 function renderMsg(){ const el = document.getElementById('vlMsg'); if(el) el.textContent = VL.ocupado ? '⏳ ' + VL.msg : ''; }
 function renderView(){
@@ -507,7 +563,7 @@ function renderView(){
   if(somenteLeitura() && (VL.tab === 'importacao' || VL.tab === 'configuracoes')) VL.tab = 'painel';
   const el = document.getElementById('viewRoot'); if(!el) return;
   const y = document.querySelector('.page-scroll') ? document.querySelector('.page-scroll').scrollTop : 0;
-  el.innerHTML = VIEWS[VL.tab]();
+  el.innerHTML = VIEWS[VL.tab]() + (COM_EXPORT.has(VL.tab) && VL.rows.length ? rodapeExport() : '');
   const t = VL_TITULOS[VL.tab];
   document.getElementById('tabTitle').textContent = t[0]; document.getElementById('tabSubtitle').textContent = t[1];
   document.querySelectorAll('.nav-item[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === VL.tab));
@@ -578,38 +634,71 @@ function vlExportar(){
   const filtroTxt = [VL.f.area ? (VL.f.area === 'E' ? 'Só estoque' : 'Só reversa') : 'Estoque e Reversa (separados)', VL.f.forn || 'Todos os fornecedores', per].join(' · ');
   const tit = n => ['Controle de Validade — CD Cajamar · ' + n, 'Relatório de ' + fData(hojeISO()) + ' · base importada em ' + (VL.meta && VL.meta.importadoEm ? fData(VL.meta.importadoEm.slice(0, 10)) : '—') + ' · ' + filtroTxt + ' · valor = quantidade × preço de custo'];
   const sit = ym => ym < hoje ? 'Vencido' : ym === hoje ? 'Mês atual' : 'A vencer';
-  const itens = rs => new Set(rs.map(r => r.i)).size;
-  const wb = X.utils.book_new();
+    const wb = X.utils.book_new();
 
   const resumo = [];
   AREAS.forEach(a => {
     const ra = rows.filter(r => r.area === a[0]);
-    fx.forEach(f => { const rf = ra.filter(r => r.faixa === f.k), t = tot(rf); resumo.push([a[1], f.nome, itens(rf), t.lotes, t.q, +t.valor.toFixed(2)]); });
-    const t = tot(ra); resumo.push([a[1], 'TOTAL', itens(ra), t.lotes, t.q, +t.valor.toFixed(2)]);
+    fx.forEach(f => { const rf = ra.filter(r => r.faixa === f.k), t = tot(rf); resumo.push([a[1], f.nome, t.itens, t.q, +t.valor.toFixed(2), t.valor && tot(ra).valor ? +(t.valor / tot(ra).valor).toFixed(4) : 0, t.lotes]); });
+    const t = tot(ra); resumo.push([a[1], 'TOTAL', t.itens, t.q, +t.valor.toFixed(2), 1, t.lotes]);
   });
-  folha(wb, 'Resumo', ['Área', 'Faixa (dias p/ vencer)', 'Itens (SKUs)', 'Lotes', 'Peças', 'Valor de custo (R$)'], resumo, [12, 26, 13, 10, 12, 20], ['', '', 'N', 'N', 'N', 'R'], tit('Resumo por faixa'));
+  folha(wb, 'Resumo', ['Área', 'Faixa (dias p/ vencer)', 'Itens (SKUs)', 'Peças', 'Valor de custo (R$)', '% do valor da área', 'Lotes'], resumo, [12, 26, 13, 12, 20, 14, 10], ['', '', 'N', 'N', 'R', 'P', 'N'], tit('Resumo por faixa'));
 
   const mes = [], loc = [];
   AREAS.forEach(a => {
     const ra = rows.filter(r => r.area === a[0]);
     mesesArea(ra).ms.forEach(m => {
-      mes.push([a[1], fMes(m.ym), sit(m.ym), itens(ra.filter(r => r.mes === m.ym)), m.lotes, m.q, +m.v.toFixed(2), +m.acc.toFixed(2)]);
+      mes.push([a[1], fMes(m.ym), sit(m.ym), m.its.size, m.q, +m.v.toFixed(2), +m.acc.toFixed(2), m.lotes]);
       Object.entries(m.loc).sort((x, y) => y[1] - x[1]).forEach(l => loc.push([a[1], fMes(m.ym), sit(m.ym), l[0], +l[1].toFixed(2)]));
     });
   });
-  folha(wb, 'Mensal', ['Área', 'Mês de vencimento', 'Situação', 'Itens (SKUs)', 'Lotes', 'Peças', 'Valor de custo (R$)', 'Acumulado (R$)'], mes, [12, 18, 12, 13, 10, 12, 20, 18], ['', '', '', 'N', 'N', 'N', 'R', 'R'], tit('Visão mensal'));
+  folha(wb, 'Mensal', ['Área', 'Mês de vencimento', 'Situação', 'Itens (SKUs)', 'Peças', 'Valor de custo (R$)', 'Acumulado (R$)', 'Lotes'], mes, [12, 18, 12, 13, 12, 20, 18, 10], ['', '', '', 'N', 'N', 'R', 'R', 'N'], tit('Visão mensal'));
   folha(wb, 'Mensal por local', ['Área', 'Mês de vencimento', 'Situação', 'Local', 'Valor de custo (R$)'], loc, [12, 18, 12, 12, 20], ['', '', '', '', 'R'], tit('Valor por mês e local'));
 
   const forn = [];
-  AREAS.forEach(a => somar(rows.filter(r => r.area === a[0]), r => r.forn).sort((x, y) => y.valor - x.valor).forEach(o => forn.push([a[1], o.k, o.lotes, o.q].concat(fx.map(f => +(o.f[f.k] || 0).toFixed(2)), [+o.valor.toFixed(2), o.valor ? +((o.f.venc || 0) / o.valor).toFixed(4) : 0]))));
-  folha(wb, 'Fornecedores', ['Área', 'Fornecedor', 'Lotes', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido']), forn, [12, 26, 9, 11].concat(fx.map(() => 18), [18, 11]), ['', '', 'N', 'N'].concat(fx.map(() => 'R'), ['R', 'P']), tit('Por fornecedor'));
+  AREAS.forEach(a => somar(rows.filter(r => r.area === a[0]), r => r.forn).sort((x, y) => y.valor - x.valor).forEach(o => forn.push([a[1], o.k, o.itens, o.q].concat(fx.map(f => +(o.f[f.k] || 0).toFixed(2)), [+o.valor.toFixed(2), o.valor ? +((o.f.venc || 0) / o.valor).toFixed(4) : 0]))));
+  folha(wb, 'Fornecedores', ['Área', 'Fornecedor', 'Itens (SKUs)', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido']), forn, [12, 26, 9, 11].concat(fx.map(() => 18), [18, 11]), ['', '', 'N', 'N'].concat(fx.map(() => 'R'), ['R', 'P']), tit('Por fornecedor'));
 
   const nm = {}; fx.forEach(f => { nm[f.k] = f.nome; });
-  const it = rows.slice().sort((a, b) => a.area.localeCompare(b.area) || a.dias - b.dias).map(r => [r.area === 'R' ? 'Reversa' : 'Estoque', +r.i || r.i, r.d, r.forn, r.l, fData(r.v), fMes(r.mes), r.dias, nm[r.faixa], r.lo, r.cl, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : '')]);
+  const it = rows.slice().sort((a, b) => a.area.localeCompare(b.area) || a.dias - b.dias).map(r => [r.area === 'R' ? 'Reversa' : 'Estoque', +r.i || r.i, r.d, r.forn, r.l, fData(r.v), fMes(r.mes), r.dias, nm[r.faixa], r.lo, r.cl, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), [r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : ''), suspeita(r) ? 'Validade improvável' : '', r.qr ? r.qr + ' pç romaneada(s)' : ''].filter(Boolean).join(' · ')]);
   folha(wb, 'Itens', ['Área', 'Item', 'Descrição', 'Fornecedor', 'Lote', 'Validade', 'Mês de vencimento', 'Dias p/ vencer', 'Faixa (dias p/ vencer)', 'Endereço', 'Classe local', 'Restrição', 'EAN', 'Quantidade', 'Custo unitário (R$)', 'Valor de custo (R$)', 'Obs.'],
-    it, [10, 10, 52, 18, 10, 11, 12, 9, 22, 18, 9, 9, 15, 11, 14, 16, 20], ['', '', '', '', '', '', '', 'N', '', '', '', '', '', 'N', 'C', 'R', ''], tit('Itens e lotes'));
+    it, [10, 10, 52, 18, 10, 11, 12, 9, 22, 18, 9, 9, 15, 11, 14, 16, 30], ['', '', '', '', '', '', '', 'N', '', '', '', '', '', 'N', 'C', 'R', ''], tit('Itens e lotes'));
+  const q = (VL.meta || {}).qual, inc = [], pc = r => r.area ? (r.area === 'R' ? 'Reversa' : 'Estoque') : (VL.cfg.reversa.indexOf(r.cl) >= 0 ? 'Reversa' : 'Estoque');
+  rows.filter(suspeita).forEach(r => inc.push(['Validade improvável', pc(r), +r.i || r.i, r.d, r.lo, r.cl, r.r, fData(r.v), r.q, +r.valor.toFixed(2), 'Data fora do normal — conferir cadastro do lote']));
+  if(q){
+    q.wv.lista.forEach(l => inc.push(['Restrição WV sem data', pc(l), +l.i || l.i, l.d, l.lo, l.cl, l.r, '', l.q, +l.valor.toFixed(2), 'Bloqueado por validade, mas a 390 não traz a data — fora dos números']));
+    q.semData.lista.forEach(l => inc.push(['Saldo sem data de validade', pc(l), +l.i || l.i, l.d, l.n > 1 ? l.n + ' linhas' : l.lo, l.cl, '', '', l.q, +l.valor.toFixed(2), 'Item tem validade em outras linhas; este saldo ficou fora dos números']));
+  }
+  rows.filter(r => r.qr > 0).forEach(r => inc.push(['Peças romaneadas', pc(r), +r.i || r.i, r.d, r.lo, r.cl, r.r, fData(r.v), r.q, +r.valor.toFixed(2), r.qr + ' de ' + r.q + ' peças já separadas para pedido (incluídas no saldo)']));
+  folha(wb, 'Inconsistências', ['Tipo', 'Área', 'Item', 'Descrição', 'Endereço', 'Classe local', 'Restrição', 'Validade', 'Quantidade', 'Valor de custo (R$)', 'Observação'], inc,
+    [24, 10, 10, 48, 18, 9, 9, 11, 11, 16, 58], ['', '', '', '', '', '', '', '', 'N', 'R', ''], tit('Pontos de atenção da base' + (q ? '' : ' (reimporte a 390 para ver o saldo sem data)')));
   X.writeFile(wb, 'Controle_de_Validade_' + hojeISO() + '.xlsx');
   toast('Planilha exportada.');
+}
+
+/* ---------- baixar HTML: retrato do painel, abre em qualquer navegador sem login ---------- */
+async function vlBaixarHTML(){
+  if(!VL.rows.length) return toast('Nada para baixar: importe a base primeiro.', true);
+  try {
+    const css = (await Promise.all(['css/theme.css', 'css/validade.css'].map(f => fetch(f + '?v=' + VL_VERSAO).then(r => r.text())))).join('\n').replace(/url\([^)]*\)/g, 'none');
+    VL.snap = true;
+    let corpo;
+    try {
+      corpo = viewPainel() + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => '<section class="vl-sec" style="--c:' + a[2] + '"><header class="vl-sec-h"><div><h2>' + a[1] + ' · por fornecedor</h2><p>Valor de custo por faixa de vencimento.</p></div></header>' + tabelaForn(filtradas(true).filter(r => r.area === a[0])) + '</section>').join('');
+    } finally { VL.snap = false; }
+    corpo = corpo.replace(/ onclick="[^"]*"/g, '');
+    const doc = '<!DOCTYPE html><html lang="pt-BR" data-theme="light"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>Controle de Validade — ' + fData(hojeISO()) + '</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">' +
+      '<style>' + css + '\nbody{background:var(--paper);margin:0;font-family:Inter,system-ui,sans-serif;color:var(--ink)}.vl-snap{max-width:1320px;margin:0 auto;padding:24px 20px 40px}.vl-hrow,.vl-ft,tr.clicavel{cursor:default}</style></head><body>' +
+      '<div class="vl-snap">' + corpo + '<p class="vl-snap-pe">Gerado pelo Controle de Validade · Oficina LDM · ' + new Date().toLocaleString('pt-BR') + '</p></div><div id="vlTip" class="chart-tooltip hidden"></div>' +
+      '<script>document.addEventListener("mouseover",function(e){var t=document.getElementById("vlTip"),el=e.target.closest&&e.target.closest("[data-tip]");if(!el){t.classList.add("hidden");return;}t.textContent=el.getAttribute("data-tip");t.classList.remove("hidden");});' +
+      'document.addEventListener("mousemove",function(e){var t=document.getElementById("vlTip");if(!t.classList.contains("hidden")){var x=e.clientX+14,y=e.clientY+14;if(x+t.offsetWidth>innerWidth)x=e.clientX-t.offsetWidth-10;if(y+t.offsetHeight>innerHeight)y=e.clientY-t.offsetHeight-10;t.style.left=x+"px";t.style.top=y+"px";}});<\/script></body></html>';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([doc], {type: 'text/html'}));
+    a.download = 'Controle_de_Validade_' + hojeISO() + '.html';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    toast('HTML baixado.');
+  } catch(e){ VL.snap = false; toast('Não consegui gerar o HTML: ' + (e.message || e), true); }
 }
 
 /* ---------- tooltip ---------- */
@@ -619,7 +708,13 @@ document.addEventListener('mouseover', e => {
   if(!el){ t.classList.add('hidden'); return; }
   t.textContent = el.getAttribute('data-tip'); t.classList.remove('hidden');
 });
-document.addEventListener('mousemove', e => { const t = document.getElementById('vlTip'); if(t && !t.classList.contains('hidden')){ t.style.left = (e.clientX + 14) + 'px'; t.style.top = (e.clientY + 14) + 'px'; } });
+document.addEventListener('mousemove', e => {
+  const t = document.getElementById('vlTip'); if(!t || t.classList.contains('hidden')) return;
+  let x = e.clientX + 14, y = e.clientY + 14;
+  if(x + t.offsetWidth > innerWidth) x = e.clientX - t.offsetWidth - 10;
+  if(y + t.offsetHeight > innerHeight) y = e.clientY - t.offsetHeight - 10;
+  t.style.left = x + 'px'; t.style.top = y + 'px';
+});
 
 /* ---------- início (chamado por acesso.js depois do login) ---------- */
 async function vlInit(){

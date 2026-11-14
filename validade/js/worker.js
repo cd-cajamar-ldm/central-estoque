@@ -47,20 +47,36 @@ self.onmessage = (e) => {
       const c = {
         item: achar(cab, ['Item', 'ID_ITEM_FILHO']), desc: achar(cab, ['Descrição', 'Descricao', 'NOME_ITEM_FILHO']),
         lote: achar(cab, ['Lote']), cl: achar(cab, ['Classe Local', 'CLAL']), local: achar(cab, ['Descrição_2', 'DESC_LOCAL']),
-        restr: achar(cab, ['Restrição', 'Restricao']), qtd: achar(cab, ['Quantidade', 'QTDE']), ean: achar(cab, ['EAN'])
+        restr: achar(cab, ['Restrição', 'Restricao']), qtd: achar(cab, ['Quantidade', 'QTDE']), ean: achar(cab, ['EAN']),
+        rom: achar(cab, ['Quantidade Romaneada', 'QTDE_ROM'])
       };
       if(!c.item || !c.qtd) throw new Error('QRY0390: colunas Item/Quantidade não encontradas.');
-      const out = []; let wvSemData = 0;
+      const out = [], wv = [], semDataLinhas = []; let wvSemData = 0;
+      const txt = (r, k) => String(k && r[k] != null ? r[k] : '').trim();
       for(const r of rows){
         const v = iso(r[cVal]);
-        const restr = String(r[c.restr] == null ? '' : r[c.restr]).trim().toUpperCase();
-        if(!v){ if(restr === 'WV') wvSemData++; continue; }
-        const q = num(r[c.qtd]); if(q <= 0) continue;
-        const lote = chave(r[c.lote]);
-        out.push({i: chave(r[c.item]), d: String(r[c.desc] == null ? '' : r[c.desc]).trim(), l: lote === '0' ? '' : lote, v,
-          lo: String(r[c.local] == null ? '' : r[c.local]).trim(), cl: String(r[c.cl] == null ? '' : r[c.cl]).trim().toUpperCase(), r: restr, q, e: c.ean ? chave(r[c.ean]) : ''});
+        const restr = txt(r, c.restr).toUpperCase();
+        const q = num(r[c.qtd]);
+        const base = {i: chave(r[c.item]), d: txt(r, c.desc), lo: txt(r, c.local), cl: txt(r, c.cl).toUpperCase(), r: restr, q};
+        if(!v){
+          // Sem data não entra na conta de validade, mas é guardado pra aparecer como inconsistência.
+          if(q > 0){ if(restr === 'WV'){ wvSemData++; wv.push(base); } else semDataLinhas.push(base); }
+          continue;
+        }
+        if(q <= 0) continue;
+        const lote = chave(r[c.lote]), qr = c.rom ? num(r[c.rom]) : 0;
+        const o = Object.assign(base, {l: lote === '0' ? '' : lote, v, e: c.ean ? chave(r[c.ean]) : ''});
+        if(qr > 0) o.qr = qr;
+        out.push(o);
       }
-      self.postMessage({tipo: 'ok', base: '390', nome, linhas: rows.length, dados: out, wvSemData});
+      // Itens que têm validade em algumas linhas e não em outras: o saldo sem data fica de fora.
+      const comData = new Set(out.map(o => o.i)), sd = new Map();
+      semDataLinhas.filter(l => comData.has(l.i)).forEach(l => {
+        const k = l.i + '|' + l.cl; let o = sd.get(k);
+        if(!o){ o = {i: l.i, d: l.d, cl: l.cl, lo: l.lo, q: 0, n: 0}; sd.set(k, o); }
+        o.q += l.q; o.n++;
+      });
+      self.postMessage({tipo: 'ok', base: '390', nome, linhas: rows.length, dados: out, wvSemData, wv, semData: Array.from(sd.values())});
     } else if(cCusto){ // SIGEQ278
       const cItem = achar(cab, ['Item']); const mapa = {}; let n = 0;
       for(const r of rows){
