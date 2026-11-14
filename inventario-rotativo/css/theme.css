@@ -1895,3 +1895,7 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 /* Peças / Valor / Locais divergentes por dia: lado a lado. */
 .dx-div-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(520px, 1fr)); gap:16px; }
 .dx-div-grid > *{ min-width:0; }
+/* Contados por dia e por mês: lado a lado. */
+.dx-conta-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.dx-conta-grid > *{ min-width:0; }
+@media(max-width:1000px){ .dx-conta-grid{ grid-template-columns:1fr; } }
