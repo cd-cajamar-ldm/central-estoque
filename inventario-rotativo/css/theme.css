@@ -1755,9 +1755,8 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 /* Cartões do ano ocupam a mesma altura da área do gráfico: o de cima alinha com
    a linha de 100% e o de baixo com a base do eixo (sem os nomes dos meses). */
 .dx-mensal-ano{ display:flex; flex-direction:column; gap:8px; padding:2px 0 4px; }
-.dx-ano{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:0; padding:4px 12px; border-radius:10px; background:var(--surface2); border-left:4px solid; }
-.dx-ano-rot{ font-size:14px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:7px; }
-.dx-ano-dot{ width:10px; height:10px; border-radius:50%; flex:none; }
+.dx-ano{ flex:1; display:flex; flex-direction:column; justify-content:flex-start; gap:2px; padding:12px 12px 8px; border-radius:10px; background:var(--surface2); border-left:4px solid; }
+.dx-ano-rot{ font-size:14px; font-weight:700; color:var(--ink); }
 .dx-ano-v{ font-size:25px; line-height:1.15; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
 .dx-ano-v.bad{ color:var(--danger); }
 .dx-ano-h{ font-size:13px; color:var(--ink-soft); }
@@ -1881,3 +1880,18 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .lt-rows b{ color:var(--ink); font-weight:800; font-variant-numeric:tabular-nums; }
 .lt-rows b.bad{ color:var(--danger); }
 .lc-div > span:last-child{ white-space:nowrap; }
+
+/* Dashboard: Status do Inventário preenche o painel (rosca maior, números à direita,
+   ranking de ruas ocupando o espaço que sobrava). */
+.dx-status{ display:flex; flex-direction:column; }
+.dx-status .status-donut-row{ justify-content:space-evenly; gap:24px; }
+.dx-status .status-donut-row > svg{ max-width:100%; height:auto; flex:none; }
+.dx-status .status-donut-stats{ flex:0 0 auto; min-width:200px; padding-left:28px; gap:20px; }
+.dx-status .pior-ruas{ flex:1; display:flex; flex-direction:column; }
+.dx-status .pior-rua{ flex:1; margin:0; align-content:center; }
+/* Contados por dia: meta fininha e clara, o rótulo da meta vai para o topo do painel. */
+.dx-body .bi-vbar-meta-line{ border-top-width:1px; opacity:.16; }
+.dx-ult{ font-size:11px; font-weight:600; color:var(--ink-soft); margin-left:6px; text-transform:none; letter-spacing:0; }
+/* Peças / Valor / Locais divergentes por dia: lado a lado. */
+.dx-div-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(520px, 1fr)); gap:16px; }
+.dx-div-grid > *{ min-width:0; }
