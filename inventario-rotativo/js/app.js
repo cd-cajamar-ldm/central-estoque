@@ -1032,7 +1032,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v271';
+const IR_APP_VERSION = 'v272';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1301,7 +1301,7 @@ function irRenderAcuraciaMensalPanel(){
       const comDado = rows.filter(r=>r[k]!=null);
       const naMeta = comDado.filter(r=>r[k]>=meta).length;
       return `<div class="dx-ano" style="border-left-color:${cor};">
-        <span class="dx-ano-rot"><i class="dx-ano-dot" style="background:${cor};"></i>${rot}</span>
+        <span class="dx-ano-rot">${rot}</span>
         <span class="dx-ano-v ${v!=null && v<meta?'bad':''}">${v==null?'—':irFmtPct(v)}</span>
         <span class="dx-ano-h">${naMeta} de ${comDado.length} ${comDado.length===1?'mês':'meses'} na meta</span>
       </div>`;
@@ -2152,11 +2152,11 @@ function irRenderStatusInventarioPanel(ind){
   const total = ind.locaisCongelados||0, concluidos = ind.locaisConcluidos||0;
   const pct = total>0 ? concluidos/total : 0;
 
-  return `<div class="panel">
+  return `<div class="panel dx-status">
     <h3>Status do Inventário</h3>
     <p class="panel-sub">Percentual de locais concluídos em relação ao total orçado do ciclo.</p>
     <div class="status-donut-row">
-      ${irDonutSvg(pct)}
+      ${irDonutSvg(pct, {size:250, stroke:36})}
       <div class="status-donut-stats">
         <div class="status-donut-stat"><div class="n mono">${irFmtInt(total)}</div><div class="l">Locais totais (orçados)</div></div>
         <div class="status-donut-stat"><div class="n mono good">${irFmtInt(concluidos)}</div><div class="l">Locais concluídos</div></div>
@@ -2198,17 +2198,18 @@ function irRenderPioresRuas(ind){
   </div>`;
 }
 function irRenderContadosPorDiaPanel(ind){
-  const rows = ind.contadosPorDia||[];
+  const rows = (ind.contadosPorDia||[]).slice(-7); // só os últimos 7 dias
   if(!rows.length) return `<div class="panel"><h3>Contados por Dia</h3><p class="field-hint">Nenhuma contagem registrada ainda.</p></div>`;
   const max = Math.max(1, IR_META_DIARIA, ...rows.map(r=>r.total));
   const metaPct = Math.min(100, Math.round(IR_META_DIARIA/max*100));
   IR._porDiaRua = ind.porDiaRua||{};
   return `<div class="panel">
-    <h3>Contados por Dia</h3>
+    <div class="dx-panel-h"><h3>Contados por Dia <small class="dx-ult">últimos 7 dias</small></h3>
+      <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtInt(IR_META_DIARIA)}</span></div>
+    </div>
     <div class="bi-vbars-scroll">
       <div class="bi-vbars bi-vbars-meta">
         <div class="bi-vbar-meta-line" style="bottom:${metaPct}%;"></div>
-        <div class="bi-vbar-meta-tag" style="bottom:${metaPct}%;">Meta ${irFmtInt(IR_META_DIARIA)}</div>
         ${rows.map(r=>`<div class="bi-vbar-col" onmouseenter="irShowDiaTooltip(event,'${r.dia}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
           <div class="bi-vbar-val">${irFmtInt(r.total)}</div>
           <div class="bi-vbar orange" style="height:${Math.round(r.total/max*100)}%;"></div>
@@ -2270,7 +2271,7 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
     const mediana = sorted.length%2 ? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
     if(mediana>0 && trueMax > mediana*3) maxS = mediana*3;
   }
-  const barW = slot*0.3, gap = slot*0.08;
+  const barW = slot*(opts.barFrac||0.3), gap = slot*(opts.gapFrac||0.08), fLbl = opts.fontLbl||10;
   const base = padT + plotH;
   const corteMark = (xCentro)=> `<path d="M ${(xCentro-7).toFixed(1)} ${(padT+5).toFixed(1)} l 5 -6 l 4 6 l 5 -6" style="stroke:${cores.axis};stroke-width:1.4;fill:none;opacity:.6"/>`;
   let svg = `<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -2295,8 +2296,8 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
     svg += `<rect x="${xD}" y="${base-hD}" width="${barW}" height="${hD}" rx="3" style="fill:${cores.div}"/>`;
     if(sist>maxS) svg += corteMark(xS+barW/2);
     if(div>maxS) svg += corteMark(xD+barW/2);
-    svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${cores.sist}">${fmt(sist)}</text>`;
-    svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${cores.div}">${fmt(div)}</text>`;
+    svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="${fLbl}" font-weight="700" style="fill:${cores.sist}">${fmt(sist)}</text>`;
+    svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="${fLbl}" font-weight="700" style="fill:${cores.div}">${fmt(div)}</text>`;
     svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:${cores.axis}">${diaLabel(r.dia)}</text>`;
   });
   // preserveAspectRatio="none": o desenho estica pra preencher a largura do
@@ -2309,27 +2310,27 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
   return { svgHtml, omitidos, total: rows.length, visiveis: n };
 }
 function irRenderDivergentesPorDiaPanel(ind){
-  const rows = ind.divergentesPorDia||[];
+  const rows = (ind.divergentesPorDia||[]).slice(-7); // só os últimos 7 dias
   if(!rows.length) return '';
   const META = ind.meta;
   const legenda = `<div class="bi-combo-legend">
     <span><i style="background:var(--blue)"></i>Sistêmica</span>
     <span><i style="background:var(--orange)"></i>Divergente</span>
   </div>`;
-  const chart = (campoDiv, campoSist, fmt, titulo, slot)=>{
-    const { svgHtml } = irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, {slot, meta:META});
+  const chart = (campoDiv, campoSist, fmt, titulo, slot, fontLbl)=>{
+    const { svgHtml } = irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, {slot, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fontLbl||9});
     return `<div class="panel">
-      <h3>${titulo}</h3>
+      <h3>${titulo} <small class="dx-ult">últimos 7 dias</small></h3>
       ${legenda}
       <div class="bi-vbars-scroll">${svgHtml}</div>
     </div>`;
   };
-  // Largura por dia IGUAL nos 3 (a mesma do gráfico de valor, que precisa de
-  // mais espaço pro rótulo em R$): senão peças e locais mostravam mais dias
-  // na tela que valor ao mesmo tempo, quebrando o padrão visual entre eles.
-  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)',104)
-    + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente por Dia (abs.)',104)
-    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia',104);
+  // Os três são parecidos: ficam lado a lado, com 7 dias cada e a mesma largura por dia.
+  return `<div class="dx-div-grid">`
+    + chart('pecas','sistema',irFmtInt,'Peças Divergentes (abs.)',66)
+    + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente (abs.)',66,8)
+    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes',66)
+    + `</div>`;
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];
