@@ -1,3 +1,5 @@
+/* tempo de abertura: ver irMostrarVersao() em app.js */
+window.LDM_T = window.LDM_T || {}; window.LDM_T.scripts = performance.now();
 /* ============================================================
    Inventário Rotativo — trava de acesso real.
    Mesmo projeto Supabase de Tarefas/Projetos ("Estoque Project"), schema
@@ -124,6 +126,7 @@ function irAcessoEmPortugues(msg){
          de irInit() deixava a tela presa em "Carregando..." quando a chamada
          não voltava (ex.: disparada de dentro do aviso de login do Supabase,
          que segura a conexão até o aviso terminar). */
+      window.LDM_T = window.LDM_T || {}; window.LDM_T.acesso = performance.now();
       irInit();
       /* Nível de acesso: 'visualizar' esconde importação/configuração e não
          grava na nuvem (o banco também recusa). Se a consulta falhar ou
