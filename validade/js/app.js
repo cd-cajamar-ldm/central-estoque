@@ -4,7 +4,7 @@
    p/ valorar) e ZBIQ0051 (múltiplos: qual componente carrega valor).
    Dados compartilhados em public.vl_dados (migração 007).
    ============================================================ */
-const VL_VERSAO = 10; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const VL_VERSAO = 11; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const VL_TAB = 'vl_dados';
 /* Cores da marca (azul #001A72 e laranja #FE5000): vermelho -> laranja -> âmbar -> azuis.
    Quanto mais perto de vencer, mais quente. */
@@ -433,8 +433,8 @@ function hero(){
   const m = VL.meta || {};
   const per = VL.f.de || VL.f.ate ? 'Vencimento de ' + (VL.f.de ? fMes(VL.f.de) : 'início') + ' até ' + (VL.f.ate ? fMes(VL.f.ate) : 'fim') : '';
   return '<div class="vl-hero"><div><span class="vl-hero-tag">Controle de Validade · CD Cajamar</span><h2>Vencidos e a vencer — estoque e reversa</h2>' +
-    '<p>Base QRY0390 de <b>' + (m.importadoEm ? fData(m.importadoEm.slice(0, 10)) : '—') + '</b> · situação em <b>' + fData(hojeISO()) + '</b> · valor = quantidade × preço de custo (SIGEQ278)' +
-    ((VL.cfg.ignorar || []).length ? ' · desconsiderados: <b>' + esc(VL.cfg.ignorar.join(', ')) + '</b>' : '') + (VL.f.forn ? ' · fornecedor <b>' + esc(VL.f.forn) + '</b>' : '') + (per ? ' · <b>' + per + '</b>' : '') + '</p></div></div>';
+    // Só os filtros ativos (base, regra de valor e locais desconsiderados saíram a pedido).
+    (VL.f.forn || per ? '<p>' + [VL.f.forn ? 'Fornecedor <b>' + esc(VL.f.forn) + '</b>' : '', per ? '<b>' + per + '</b>' : ''].filter(Boolean).join(' · ') + '</p>' : '') + '</div></div>';
 }
 function secaoArea(a, ra){
   const T = tot(ra), desc = a[0] === 'E' ? 'Itens em locais de estoque (classes fora de ' + esc(VL.cfg.reversa.join(', ')) + ').' : 'Itens em locais da reversa (classes ' + esc(VL.cfg.reversa.join(', ')) + ').';
