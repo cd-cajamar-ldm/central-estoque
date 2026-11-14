@@ -291,7 +291,8 @@ function vazio(){
   return '<div class="empty-state panel"><div class="eicon">📅</div><h3>Nenhuma base importada ainda</h3><p>Importe a QRY0390 (estoque com Data de Validade), a SIGEQ278 (preço) e a ZBIQ0051 (múltiplos).</p>' +
     (somenteLeitura() ? '' : '<button class="btn btn-orange" onclick="vlTab(\'importacao\')">Ir para Importação</button>') + '</div>';
 }
-function kpis(rows){
+const AREAS = [['E', 'Estoque', VL_COR_E], ['R', 'Reversa', VL_COR_R]];
+function kpis(rows, nomeArea){
   const por = somar(rows, r => r.faixa), mp = {}; por.forEach(o => { mp[o.k] = o; });
   const total = tot(rows);
   return '<div class="kpi-grid">' + VL.fx.map(f => {
@@ -300,7 +301,7 @@ function kpis(rows){
       '<div class="label">' + esc(f.nome) + '</div><div class="num">' + fBRLc(o.valor) + '</div>' +
       '<div class="sub">' + fInt(o.q) + ' peças · ' + fInt(o.lotes) + ' lotes</div>' +
       '<div class="vl-mini"><i style="width:' + (total.valor ? o.valor / total.valor * 100 : 0) + '%;background:' + f.cor + '"></i></div>' +
-      '<div class="sub">' + fPct(o.valor, total.valor) + ' do valor com validade</div></div>';
+      '<div class="sub">' + fPct(o.valor, total.valor) + ' do valor com validade ' + (nomeArea ? 'n' + (nomeArea === 'Estoque' ? 'o estoque' : 'a reversa') : '') + '</div></div>';
   }).join('') + '</div>';
 }
 function cartaoArea(nome, cor, rows){
@@ -361,26 +362,33 @@ function viewPainel(){
   const m = VL.meta || {};
   return filtrosBarra(false) +
     '<p class="vl-ref">Base de ' + (m.importadoEm ? fData(m.importadoEm.slice(0, 10)) : '—') + ' · hoje é ' + fData(hojeISO()) + ' · valor = quantidade × preço de custo (SIGEQ278)' +
-    (semPreco ? ' · <b class="vl-warn">' + fInt(semPreco) + ' lotes sem preço</b> (valor zerado)' : '') + '</p>' + kpis(rows) +
-    // Com filtro de área, mostra só o cartão dela — o outro apareceria zerado e parecia erro.
-    '<div class="' + (VL.f.area ? '' : 'two-col ') + 'vl-gap">' + (VL.f.area === 'R' ? '' : cartaoArea('Estoque', VL_COR_E, rows.filter(r => r.area === 'E'))) + (VL.f.area === 'E' ? '' : cartaoArea('Reversa', VL_COR_R, rows.filter(r => r.area === 'R'))) + '</div>' +
+    (semPreco ? ' · <b class="vl-warn">' + fInt(semPreco) + ' lotes sem preço</b> (valor zerado)' : '') + '</p>' +
+    // Estoque e reversa nunca somados: cada área tem o seu bloco de números.
+    AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => {
+      const ra = rows.filter(r => r.area === a[0]);
+      return '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2>' + cartaoArea(a[1], a[2], ra) + '<div class="vl-gap"></div>' + kpis(ra, a[1]) + '</div>';
+    }).join('') +
     '<div class="panel vl-gap"><h3>Visão mensal · valor por mês de vencimento</h3><div class="panel-sub">Passe o mouse nas colunas para ver estoque × reversa.</div>' + graficoMensal(rf, 190) + '</div>' +
-    '<div class="two-col vl-gap"><div class="panel"><h3>Fornecedores · maior valor em risco</h3><div class="panel-sub">Vencido + a vencer. Clique para filtrar.</div>' + topForn(rows, 10) + '</div>' +
-    '<div class="panel"><h3>Evolução do valor vencido</h3><div class="panel-sub">Um ponto por dia de importação.</div>' + graficoHist() + '</div></div>';
+    '<div class="' + (VL.f.area ? '' : 'two-col ') + 'vl-gap">' + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => '<div class="panel" style="border-top:3px solid ' + a[2] + '"><h3>' + a[1] + ' · fornecedores com maior valor em risco</h3><div class="panel-sub">Vencido + a vencer. Clique para filtrar.</div>' + topForn(rows.filter(r => r.area === a[0]), 8) + '</div>').join('') + '</div>' +
+    '<div class="vl-gap"><div class="panel"><h3>Evolução do valor vencido</h3><div class="panel-sub">Um ponto por dia de importação.</div>' + graficoHist() + '</div></div>';
 }
-function viewFornecedores(){
-  if(!VL.rows.length) return vazio();
-  const rows = filtradas(true); const por = somar(rows, r => r.forn);
+function tabelaForn(rows){
+  const por = somar(rows, r => r.forn);
   por.forEach(o => { o.venc = o.f.venc || 0; });
-  const ord = VL.sort.k === 'k' || !por[0] || por[0][VL.sort.k] === undefined ? 'venc' : VL.sort.k;
+  const ord = VL.sort.k === 'valor' ? 'valor' : 'venc';
   por.sort((a, b) => ((b[ord] || 0) - (a[ord] || 0)) * (VL.sort.d === -1 ? 1 : -1));
   const T = tot(rows);
-  return filtrosBarra(false) + '<div class="table-wrap"><table class="vl-tab"><thead><tr><th>Fornecedor</th><th class="n">Lotes</th><th class="n">Peças</th>' +
+  return '<div class="table-wrap"><table class="vl-tab"><thead><tr><th>Fornecedor</th><th class="n">Lotes</th><th class="n">Peças</th>' +
     VL.fx.map(f => '<th class="n"><i class="vl-dot" style="background:' + f.cor + '"></i>' + esc(f.nome) + '</th>').join('') + '<th class="n" onclick="vlOrd(\'valor\')">Total ↕</th><th class="n" onclick="vlOrd(\'venc\')">% vencido ↕</th></tr></thead><tbody>' +
     por.map(o => '<tr class="clicavel" onclick="vlVer(\'' + esc(o.k).replace(/'/g, '&#39;') + '\')"><td><b>' + esc(o.k) + '</b></td><td class="n">' + fInt(o.lotes) + '</td><td class="n">' + fInt(o.q) + '</td>' +
       VL.fx.map(f => '<td class="n">' + (o.f[f.k] ? fBRL(o.f[f.k]) : '<span class="vl-zero">—</span>') + '</td>').join('') + '<td class="n"><b>' + fBRL(o.valor) + '</b></td><td class="n">' + fPct(o.venc, o.valor) + '</td></tr>').join('') +
-    '</tbody><tfoot><tr><td><b>Total</b></td><td class="n">' + fInt(T.lotes) + '</td><td class="n">' + fInt(T.q) + '</td>' + VL.fx.map(f => '<td class="n"><b>' + fBRL(rows.filter(r => r.faixa === f.k).reduce((a, r) => a + r.valor, 0)) + '</b></td>').join('') + '<td class="n"><b>' + fBRL(T.valor) + '</b></td><td></td></tr></tfoot></table></div>' +
-    (por.some(o => o.k === 'A classificar') ? '<div class="callout callout-warn"><strong>Fornecedor a classificar</strong>Há itens sem marca reconhecida. ' + (somenteLeitura() ? '' : 'Ajuste em Configurações → Fornecedores.') + '</div>' : '');
+    '</tbody><tfoot><tr><td><b>Total</b></td><td class="n">' + fInt(T.lotes) + '</td><td class="n">' + fInt(T.q) + '</td>' + VL.fx.map(f => '<td class="n"><b>' + fBRL(rows.filter(r => r.faixa === f.k).reduce((a, r) => a + r.valor, 0)) + '</b></td>').join('') + '<td class="n"><b>' + fBRL(T.valor) + '</b></td><td></td></tr></tfoot></table></div>';
+}
+function viewFornecedores(){
+  if(!VL.rows.length) return vazio();
+  const rows = filtradas(true);
+  return filtrosBarra(false) + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2>' + tabelaForn(rows.filter(r => r.area === a[0])) + '</div>').join('') +
+    (rows.some(r => r.forn === 'A classificar') ? '<div class="callout callout-warn"><strong>Fornecedor a classificar</strong>Há itens sem marca reconhecida. ' + (somenteLeitura() ? '' : 'Ajuste em Configurações → Fornecedores.') + '</div>' : '');
 }
 function dadosMensal(rows){
   const m = {};
@@ -496,8 +504,8 @@ function vlExportar(){
   });
   const T = tot(rows); resumo.push(['Geral', 'TOTAL', T.lotes, T.q, +T.valor.toFixed(2)]);
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(resumo), 'Resumo');
-  const forn = [['Fornecedor', 'Lotes', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido'])];
-  somar(rows, r => r.forn).sort((a, b) => b.valor - a.valor).forEach(o => forn.push([o.k, o.lotes, o.q].concat(fx.map(f => +(o.f[f.k] || 0).toFixed(2)), [+o.valor.toFixed(2), o.valor ? +((o.f.venc || 0) / o.valor).toFixed(4) : 0])));
+  const forn = [['Área', 'Fornecedor', 'Lotes', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido'])];
+  AREAS.forEach(a => somar(rows.filter(r => r.area === a[0]), r => r.forn).sort((x, y) => y.valor - x.valor).forEach(o => forn.push([a[1], o.k, o.lotes, o.q].concat(fx.map(f => +(o.f[f.k] || 0).toFixed(2)), [+o.valor.toFixed(2), o.valor ? +((o.f.venc || 0) / o.valor).toFixed(4) : 0]))));
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(forn), 'Fornecedores');
   const mes = [['Mês', 'Situação', 'Estoque (R$)', 'Reversa (R$)', 'Total (R$)', 'Peças', 'Lotes']], hoje = hojeISO().slice(0, 7);
   dadosMensal(rows).forEach(m => mes.push([fMes(m.ym), m.ym < hoje ? 'Vencido' : m.ym === hoje ? 'Mês atual' : 'A vencer', +m.E.toFixed(2), +m.R.toFixed(2), +(m.E + m.R).toFixed(2), m.qE + m.qR, m.lotes]));

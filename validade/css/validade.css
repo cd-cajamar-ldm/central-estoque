@@ -74,3 +74,8 @@
 .vl-fora{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; font-size:12px; }
 .vl-fora span{ background:var(--surface2); border-radius:100px; padding:4px 12px; color:var(--ink-soft); }
 .vl-fora span.venc{ background:var(--danger-light); color:var(--danger); }
+
+.vl-secao{ margin-top:18px; padding-left:12px; border-left:4px solid var(--c); }
+.vl-secao > h2{ margin:0 0 10px; font-size:17px; font-weight:800; color:var(--c); text-transform:uppercase; letter-spacing:.04em; }
+.vl-secao .vl-area{ border-top:none; }
+.vl-secao .vl-area > h3{ display:none; }
