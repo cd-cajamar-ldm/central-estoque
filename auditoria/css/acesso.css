@@ -44,3 +44,6 @@
 
 .acesso-negado-emoji{ font-size:34px; margin-bottom:10px; text-align:center; }
 .acesso-negado-email{ font-weight:700; color:var(--ink, #1D1F2A); }
+
+/* Acesso "só visualizar": esconde o que importa/grava dados. */
+html.somente-leitura .nav-item[data-tab="qry"]{ display:none !important; }

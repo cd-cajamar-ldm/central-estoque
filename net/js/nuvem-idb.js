@@ -215,7 +215,7 @@ function estado(tipo, msg){
   if(tipo === 'sync') t.textContent = '☁ Sincronizando…';
   else if(tipo === 'pend') t.textContent = '☁ Enviando…';
   else if(tipo === 'erro'){ t.textContent = '⚠ Servidor: ' + msg; ui.style.background = '#7A1F0A'; return; }
-  else t.textContent = '☁ Guardado no servidor' + (ST.em ? ' · ' + quando(ST.em) : '');
+  else t.textContent = somenteLeitura() ? '👁 Somente visualização' + (ST.em ? ' · dados de ' + quando(ST.em) : '') : '☁ Guardado no servidor' + (ST.em ? ' · ' + quando(ST.em) : '');
   ui.style.background = '#0B1230';
 }
 function criaUI(){
