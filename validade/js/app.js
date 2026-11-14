@@ -4,6 +4,7 @@
    p/ valorar) e ZBIQ0051 (múltiplos: qual componente carrega valor).
    Dados compartilhados em public.vl_dados (migração 007).
    ============================================================ */
+const VL_VERSAO = 8; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const VL_TAB = 'vl_dados';
 const VL_CORES_PROX = ['#FE5000', '#E5A21C', '#B5B81F', '#7DBE4B', '#4FA66A'];
 const VL_COR_VENC = '#C83812', VL_COR_OK = '#1F8A52', VL_COR_E = '#1E33C7', VL_COR_R = '#0E7490';
@@ -37,7 +38,7 @@ const VL_NOISE = new Set(['AUTO', 'BLISTER', 'QUIMICA', 'RUBBER', 'PISCINAS', 'U
 const VL = {
   rows: [], meta: null, hist: [],
   cfg: {faixas: [30, 60, 90], reversa: ['REV', 'AVA'], forn: {}},
-  tab: 'painel', f: {area: '', forn: '', busca: '', faixa: ''}, sort: {k: 'valor', d: -1}, pag: 0,
+  tab: 'painel', f: {area: '', forn: '', busca: '', faixa: '', de: '', ate: ''}, sort: {k: 'valor', d: -1}, pag: 0,
   ocupado: false, msg: '', carregando: true
 };
 
@@ -114,7 +115,7 @@ function preparar(){
 }
 function filtradas(ignorarFaixa){
   const b = VL.f.busca.trim().toLowerCase();
-  return VL.rows.filter(r => (!VL.f.area || r.area === VL.f.area) && (!VL.f.forn || r.forn === VL.f.forn) &&
+  return VL.rows.filter(r => (!VL.f.area || r.area === VL.f.area) && (!VL.f.forn || r.forn === VL.f.forn) && (!VL.f.de || r.mes >= VL.f.de) && (!VL.f.ate || r.mes <= VL.f.ate) &&
     (ignorarFaixa || !VL.f.faixa || r.faixa === VL.f.faixa) &&
     (!b || r.i.indexOf(b) >= 0 || r.d.toLowerCase().indexOf(b) >= 0 || r.l.toLowerCase().indexOf(b) >= 0 || r.forn.toLowerCase().indexOf(b) >= 0));
 }
@@ -196,7 +197,7 @@ async function carregar(){
 /* ---------- importação ---------- */
 function lerArquivo(file){
   return new Promise((ok, no) => {
-    const w = new Worker('js/worker.js');
+    const w = new Worker('js/worker.js?v=' + VL_VERSAO);
     w.onmessage = e => {
       const m = e.data;
       if(m.tipo === 'prog'){ VL.msg = m.msg; renderMsg(); return; }
@@ -288,13 +289,15 @@ function barraFaixas(o){ // barra empilhada 100% por faixa
 function legenda(){ return '<div class="vl-leg">' + VL.fx.map(f => '<span><i style="background:' + f.cor + '"></i>' + esc(f.nome) + '</span>').join('') + '</div>'; }
 
 /* ---------- views ---------- */
+function mesesOpt(sel){ return Array.from(new Set(VL.rows.map(r => r.mes))).sort().map(m => '<option value="' + m + '"' + (m === sel ? ' selected' : '') + '>' + fMes(m) + '</option>').join(''); }
 function filtrosBarra(comFaixa){
   const forns = Array.from(new Set(VL.rows.map(r => r.forn))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const chip = (v, t) => '<button class="chip' + (VL.f.area === v ? ' active' : '') + '" onclick="vlSet(\'area\',\'' + v + '\')">' + t + '</button>';
   return '<div class="filter-bar vl-filtros"><div class="vl-chips">' + chip('', 'Estoque + Reversa') + chip('E', 'Só estoque') + chip('R', 'Só reversa') + '</div>' +
     '<select onchange="vlSet(\'forn\',this.value)"><option value="">Todos os fornecedores</option>' + forns.map(f => '<option' + (f === VL.f.forn ? ' selected' : '') + '>' + esc(f) + '</option>').join('') + '</select>' +
     (comFaixa ? '<select onchange="vlSet(\'faixa\',this.value)"><option value="">Todas as faixas</option>' + VL.fx.map(f => '<option value="' + f.k + '"' + (f.k === VL.f.faixa ? ' selected' : '') + '>' + esc(f.nome) + '</option>').join('') + '</select>' : '') +
-    (VL.f.area || VL.f.forn || VL.f.faixa ? '<button class="btn btn-secondary" onclick="vlLimpar()">Limpar filtros</button>' : '') + '</div>';
+    '<label class="vl-per">Vence de <select onchange="vlSet(\'de\',this.value)"><option value="">início</option>' + mesesOpt(VL.f.de) + '</select> até <select onchange="vlSet(\'ate\',this.value)"><option value="">fim</option>' + mesesOpt(VL.f.ate) + '</select></label>' +
+    (VL.f.area || VL.f.forn || VL.f.faixa || VL.f.de || VL.f.ate ? '<button class="btn btn-secondary" onclick="vlLimpar()">Limpar filtros</button>' : '') + '</div>';
 }
 function vazio(){
   if(VL.carregando) return '<p class="field-hint">Carregando...</p>';
@@ -518,7 +521,7 @@ function renderView(){
 }
 function vlTab(t){ VL.tab = t; VL.pag = 0; if(t === 'itens' && VL.sort.k === 'k') VL.sort = {k: 'valor', d: -1}; renderView(); vlCloseSidebarMobile(); }
 function vlSet(k, v){ VL.f[k] = v; VL.pag = 0; renderView(); }
-function vlLimpar(){ VL.f = {area: '', forn: '', busca: '', faixa: ''}; VL.pag = 0; renderView(); }
+function vlLimpar(){ VL.f = {area: '', forn: '', busca: '', faixa: '', de: '', ate: ''}; VL.pag = 0; renderView(); }
 function vlVer(forn){ VL.f.forn = forn; VL.tab = 'itens'; VL.sort = {k: 'valor', d: -1}; VL.pag = 0; renderView(); }
 function vlOrd(k){ VL.sort = {k, d: VL.sort.k === k ? -VL.sort.d : (['i', 'd', 'forn', 'l', 'area', 'lo', 'faixa'].includes(k) ? 1 : -1)}; renderView(); }
 function vlPag(n){ VL.pag += n; renderView(); }
@@ -533,34 +536,78 @@ function vlToggleTheme(){
 window.vlAplicarNivel = () => renderView();
 
 /* ---------- exportar Excel ---------- */
+/* Planilha com layout padrão: cabeçalho azul, linhas zebradas, bordas, larguras,
+   formato de moeda e filtro. tipos: R = R$, N = inteiro, P = %, vazio = texto. */
+function folha(wb, nome, cab, linhas, larg, tipos, titulo){
+  const X = XLSX, pre = titulo ? [[titulo[0]], [titulo[1]], []] : [], h = pre.length;
+  const ws = X.utils.aoa_to_sheet(pre.concat([cab], linhas));
+  const borda = {style: 'thin', color: {rgb: 'D5D8E0'}}, B = {top: borda, bottom: borda, left: borda, right: borda};
+  const fmt = {R: '"R$" #,##0.00', N: '#,##0', P: '0.0%', C: '"R$" #,##0.0000'};
+  cab.forEach((c, j) => {
+    const cel = ws[X.utils.encode_cell({r: h, c: j})];
+    if(cel) cel.s = {font: {bold: true, color: {rgb: 'FFFFFF'}, sz: 10}, fill: {fgColor: {rgb: '001A72'}}, alignment: {horizontal: 'center', vertical: 'center', wrapText: true}, border: B};
+  });
+  linhas.forEach((l, i) => {
+    const total = String(l[0]).toUpperCase() === 'TOTAL' || String(l[1]).toUpperCase() === 'TOTAL';
+    l.forEach((v, j) => {
+      const cel = ws[X.utils.encode_cell({r: h + 1 + i, c: j})]; if(!cel) return;
+      const t = tipos[j] || '';
+      cel.s = {font: {sz: 10, bold: total}, border: B, alignment: {horizontal: t ? 'right' : 'left', vertical: 'center'},
+        fill: {fgColor: {rgb: total ? 'FFEDE7' : (i % 2 ? 'F4F5F7' : 'FFFFFF')}}};
+      if(t && typeof v === 'number') cel.z = fmt[t];
+      if(cab[j].indexOf('Faixa') === 0 || cab[j] === 'Situação'){
+        const cor = /^Vencido/.test(v) ? 'C83812' : /^Vence em até|^Mês atual/.test(v) ? 'FE5000' : /^De /.test(v) ? 'B5790A' : '1F8A52';
+        cel.s.font = {sz: 10, bold: true, color: {rgb: cor}};
+      }
+    });
+  });
+  if(titulo){
+    ws.A1.s = {font: {bold: true, sz: 14, color: {rgb: '001A72'}}}; ws.A2.s = {font: {sz: 10, color: {rgb: '6B7280'}}};
+    ws['!merges'] = [{s: {r: 0, c: 0}, e: {r: 0, c: Math.max(cab.length - 1, 3)}}, {s: {r: 1, c: 0}, e: {r: 1, c: Math.max(cab.length - 1, 3)}}];
+  }
+  ws['!cols'] = larg.map(w => ({wch: w}));
+  ws['!rows'] = []; ws['!rows'][h] = {hpt: 30};
+  ws['!autofilter'] = {ref: X.utils.encode_range({s: {r: h, c: 0}, e: {r: h + linhas.length, c: cab.length - 1}})};
+  X.utils.book_append_sheet(wb, ws, nome);
+}
 function vlExportar(){
   if(!VL.rows.length) return toast('Nada para exportar: importe a base primeiro.', true);
-  const rows = filtradas(true), fx = VL.fx, X = XLSX;
-  const filtroTxt = [VL.f.area ? (VL.f.area === 'E' ? 'Só estoque' : 'Só reversa') : 'Estoque + Reversa', VL.f.forn || 'Todos os fornecedores'].join(' · ');
+  const rows = filtradas(true), fx = VL.fx, X = XLSX, hoje = hojeISO().slice(0, 7);
+  if(!rows.length) return toast('Nenhum lote nos filtros atuais.', true);
+  const per = VL.f.de || VL.f.ate ? 'Vencimento de ' + (VL.f.de ? fMes(VL.f.de) : 'início') + ' até ' + (VL.f.ate ? fMes(VL.f.ate) : 'fim') : 'Todos os meses';
+  const filtroTxt = [VL.f.area ? (VL.f.area === 'E' ? 'Só estoque' : 'Só reversa') : 'Estoque e Reversa (separados)', VL.f.forn || 'Todos os fornecedores', per].join(' · ');
+  const tit = n => ['Controle de Validade — CD Cajamar · ' + n, 'Relatório de ' + fData(hojeISO()) + ' · base importada em ' + (VL.meta && VL.meta.importadoEm ? fData(VL.meta.importadoEm.slice(0, 10)) : '—') + ' · ' + filtroTxt + ' · valor = quantidade × preço de custo'];
+  const sit = ym => ym < hoje ? 'Vencido' : ym === hoje ? 'Mês atual' : 'A vencer';
+  const itens = rs => new Set(rs.map(r => r.i)).size;
   const wb = X.utils.book_new();
-  const resumo = [['Controle de Validade — CD Cajamar'], ['Data do relatório', fData(hojeISO())], ['Base importada em', VL.meta && VL.meta.importadoEm ? fData(VL.meta.importadoEm.slice(0, 10)) : ''], ['Filtro', filtroTxt], [],
-    ['Área', 'Faixa', 'Lotes', 'Peças', 'Valor (R$)']];
-  [['E', 'Estoque'], ['R', 'Reversa']].forEach(([a, nome]) => {
-    fx.forEach(f => { const t = tot(rows.filter(r => r.area === a && r.faixa === f.k)); resumo.push([nome, f.nome, t.lotes, t.q, +t.valor.toFixed(2)]); });
-    const t = tot(rows.filter(r => r.area === a)); resumo.push([nome, 'TOTAL', t.lotes, t.q, +t.valor.toFixed(2)]);
+
+  const resumo = [];
+  AREAS.forEach(a => {
+    const ra = rows.filter(r => r.area === a[0]);
+    fx.forEach(f => { const rf = ra.filter(r => r.faixa === f.k), t = tot(rf); resumo.push([a[1], f.nome, itens(rf), t.lotes, t.q, +t.valor.toFixed(2)]); });
+    const t = tot(ra); resumo.push([a[1], 'TOTAL', itens(ra), t.lotes, t.q, +t.valor.toFixed(2)]);
   });
-  const T = tot(rows); resumo.push(['Geral', 'TOTAL', T.lotes, T.q, +T.valor.toFixed(2)]);
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(resumo), 'Resumo');
-  const forn = [['Área', 'Fornecedor', 'Lotes', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido'])];
+  folha(wb, 'Resumo', ['Área', 'Faixa (dias p/ vencer)', 'Itens (SKUs)', 'Lotes', 'Peças', 'Valor de custo (R$)'], resumo, [12, 26, 13, 10, 12, 20], ['', '', 'N', 'N', 'N', 'R'], tit('Resumo por faixa'));
+
+  const mes = [], loc = [];
+  AREAS.forEach(a => {
+    const ra = rows.filter(r => r.area === a[0]);
+    mesesArea(ra).ms.forEach(m => {
+      mes.push([a[1], fMes(m.ym), sit(m.ym), itens(ra.filter(r => r.mes === m.ym)), m.lotes, m.q, +m.v.toFixed(2), +m.acc.toFixed(2)]);
+      Object.entries(m.loc).sort((x, y) => y[1] - x[1]).forEach(l => loc.push([a[1], fMes(m.ym), sit(m.ym), l[0], +l[1].toFixed(2)]));
+    });
+  });
+  folha(wb, 'Mensal', ['Área', 'Mês de vencimento', 'Situação', 'Itens (SKUs)', 'Lotes', 'Peças', 'Valor de custo (R$)', 'Acumulado (R$)'], mes, [12, 18, 12, 13, 10, 12, 20, 18], ['', '', '', 'N', 'N', 'N', 'R', 'R'], tit('Visão mensal'));
+  folha(wb, 'Mensal por local', ['Área', 'Mês de vencimento', 'Situação', 'Local', 'Valor de custo (R$)'], loc, [12, 18, 12, 12, 20], ['', '', '', '', 'R'], tit('Valor por mês e local'));
+
+  const forn = [];
   AREAS.forEach(a => somar(rows.filter(r => r.area === a[0]), r => r.forn).sort((x, y) => y.valor - x.valor).forEach(o => forn.push([a[1], o.k, o.lotes, o.q].concat(fx.map(f => +(o.f[f.k] || 0).toFixed(2)), [+o.valor.toFixed(2), o.valor ? +((o.f.venc || 0) / o.valor).toFixed(4) : 0]))));
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(forn), 'Fornecedores');
-  const mes = [['Área', 'Mês', 'Situação', 'Valor no mês (R$)', 'Acumulado (R$)', 'Peças', 'Lotes']], loc = [['Área', 'Mês', 'Situação', 'Local', 'Valor (R$)']], hoje = hojeISO().slice(0, 7);
-  AREAS.forEach(a => mesesArea(rows.filter(r => r.area === a[0])).ms.forEach(m => {
-    const sit = m.passado ? 'Vencido' : m.ym === hoje ? 'Mês atual' : 'A vencer';
-    mes.push([a[1], fMes(m.ym), sit, +m.v.toFixed(2), +m.acc.toFixed(2), m.q, m.lotes]);
-    Object.entries(m.loc).sort((x, y) => y[1] - x[1]).forEach(l => loc.push([a[1], fMes(m.ym), sit, l[0], +l[1].toFixed(2)]));
-  }));
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(loc), 'Mensal por local');
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(mes), 'Mensal');
+  folha(wb, 'Fornecedores', ['Área', 'Fornecedor', 'Lotes', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido']), forn, [12, 26, 9, 11].concat(fx.map(() => 18), [18, 11]), ['', '', 'N', 'N'].concat(fx.map(() => 'R'), ['R', 'P']), tit('Por fornecedor'));
+
   const nm = {}; fx.forEach(f => { nm[f.k] = f.nome; });
-  const it = [['Item', 'Descrição', 'Fornecedor', 'Marca', 'Lote', 'Validade', 'Dias p/ vencer', 'Faixa', 'Área', 'Classe local', 'Endereço', 'Restrição', 'EAN', 'Quantidade', 'Custo unitário (R$)', 'Valor (R$)', 'Obs.']];
-  rows.slice().sort((a, b) => a.dias - b.dias).forEach(r => it.push([+r.i || r.i, r.d, r.forn, r.marca, r.l, fData(r.v), r.dias, nm[r.faixa], r.area === 'R' ? 'Reversa' : 'Estoque', r.cl, r.lo, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : '')]));
-  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(it), 'Itens');
+  const it = rows.slice().sort((a, b) => a.area.localeCompare(b.area) || a.dias - b.dias).map(r => [r.area === 'R' ? 'Reversa' : 'Estoque', +r.i || r.i, r.d, r.forn, r.l, fData(r.v), fMes(r.mes), r.dias, nm[r.faixa], r.lo, r.cl, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : '')]);
+  folha(wb, 'Itens', ['Área', 'Item', 'Descrição', 'Fornecedor', 'Lote', 'Validade', 'Mês de vencimento', 'Dias p/ vencer', 'Faixa (dias p/ vencer)', 'Endereço', 'Classe local', 'Restrição', 'EAN', 'Quantidade', 'Custo unitário (R$)', 'Valor de custo (R$)', 'Obs.'],
+    it, [10, 10, 52, 18, 10, 11, 12, 9, 22, 18, 9, 9, 15, 11, 14, 16, 20], ['', '', '', '', '', '', '', 'N', '', '', '', '', '', 'N', 'C', 'R', ''], tit('Itens e lotes'));
   X.writeFile(wb, 'Controle_de_Validade_' + hojeISO() + '.xlsx');
   toast('Planilha exportada.');
 }
@@ -577,7 +624,7 @@ document.addEventListener('mousemove', e => { const t = document.getElementById(
 /* ---------- início (chamado por acesso.js depois do login) ---------- */
 async function vlInit(){
   try { const t = localStorage.getItem('vl-theme'); if(t) document.documentElement.setAttribute('data-theme', t); } catch(e){}
-  const v = document.getElementById('sidebarVersao'); if(v && window.LDM_BUILD) v.textContent = 'v ' + (window.LDM_BUILD.commit || '');
+  const v = document.getElementById('sidebarVersao'); if(v) v.textContent = 'Validade · v' + VL_VERSAO;
   renderView();
   await carregar();
   VL.carregando = false;

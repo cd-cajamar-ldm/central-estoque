@@ -88,3 +88,5 @@
 #vlTip{ white-space:pre-line; max-width:320px; line-height:1.5; }
 .vl-col-a{ font-size:9.5px; color:var(--ink-soft); white-space:nowrap; border-top:1px solid var(--line); padding-top:2px; width:100%; text-align:center; }
 .vl-locs{ font-size:11px; color:var(--ink-soft); white-space:nowrap; }
+
+.vl-per{ font-size:12px; color:var(--ink-soft); display:inline-flex; align-items:center; gap:6px; }
