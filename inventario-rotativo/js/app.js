@@ -1032,7 +1032,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v270';
+const IR_APP_VERSION = 'v271';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1301,7 +1301,7 @@ function irRenderAcuraciaMensalPanel(){
       const comDado = rows.filter(r=>r[k]!=null);
       const naMeta = comDado.filter(r=>r[k]>=meta).length;
       return `<div class="dx-ano" style="border-left-color:${cor};">
-        <span class="dx-ano-rot"><i class="dx-ano-dot" style="background:${cor};"></i>${rot} · ${irEsc(String(ano||'ano'))}</span>
+        <span class="dx-ano-rot"><i class="dx-ano-dot" style="background:${cor};"></i>${rot}</span>
         <span class="dx-ano-v ${v!=null && v<meta?'bad':''}">${v==null?'—':irFmtPct(v)}</span>
         <span class="dx-ano-h">${naMeta} de ${comDado.length} ${comDado.length===1?'mês':'meses'} na meta</span>
       </div>`;
