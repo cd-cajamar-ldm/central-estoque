@@ -1,0 +1,46 @@
+/* Tela de acesso (login / primeiro acesso / recuperar senha / acesso negado).
+   Os valores depois da vírgula são o padrão do app, usados quando a página não define os tokens do theme.css. */
+/* ============================================================
+   Múltiplos Descasados — tela de acesso (login / primeiro acesso /
+   recuperar senha / acesso negado). Usa os mesmos tokens de cor do
+   theme.css, então acompanha claro/escuro automaticamente.
+   ============================================================ */
+#telaAcesso{
+  position:fixed; inset:0; z-index:500; display:flex; align-items:center; justify-content:center;
+  background:var(--blue, #001A72); padding:24px;
+}
+#telaAcesso.escondida{ display:none; }
+.acesso-caixa{ width:100%; max-width:380px; }
+.acesso-logo{ display:block; margin:0 auto 24px; height:64px; width:auto; }
+.acesso-cartao{
+  position:relative; background:var(--surface, #FFFFFF); border:1px solid var(--line, #D5D8E0); border-radius:var(--radius-lg, 12px);
+  box-shadow:0 20px 50px -20px rgba(0,0,0,.4); padding:24px;
+}
+.acesso-cartao h1{ margin:0 0 4px; font-size:19px; font-weight:800; color:var(--ink, #1D1F2A); }
+.acesso-cartao p.acesso-sub{ margin:0 0 18px; font-size:12.5px; color:var(--ink-soft, #6B7280); }
+.acesso-campo{ display:block; margin-bottom:12px; }
+.acesso-rotulo{ display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft, #6B7280); margin-bottom:5px; }
+.acesso-input{
+  width:100%; box-sizing:border-box; font-family:inherit; font-size:13.5px; color:var(--ink, #1D1F2A);
+  background:var(--paper, #F4F5F7); border:1px solid var(--line, #D5D8E0); border-radius:var(--radius, 8px); padding:10px 12px;
+}
+.acesso-input:focus{ outline:none; border-color:var(--orange, #FE5000); box-shadow:0 0 0 3px var(--orange-light, #FFEDE7); }
+.acesso-senha-wrap{ position:relative; }
+.acesso-mostrar{
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  background:none; border:none; font-size:11.5px; font-weight:700; color:var(--orange, #FE5000); cursor:pointer;
+}
+.acesso-erro{ background:var(--danger-light, rgba(200,56,18,.10)); color:var(--danger, #C83812); border-radius:var(--radius, 8px); padding:9px 12px; font-size:12.5px; margin-bottom:12px; }
+.acesso-recado{ background:var(--orange-light, #FFEDE7); color:var(--orange, #FE5000); border-radius:var(--radius, 8px); padding:9px 12px; font-size:12.5px; margin-bottom:12px; }
+.acesso-botao{
+  width:100%; background:var(--orange, #FE5000); color:#fff; border:none; border-radius:var(--radius, 8px);
+  font-family:inherit; font-size:13.5px; font-weight:700; padding:11px; cursor:pointer;
+}
+.acesso-botao:disabled{ opacity:.6; cursor:default; }
+.acesso-links{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin-top:14px; }
+.acesso-links button{ background:none; border:none; font-size:11.5px; font-weight:700; color:var(--orange, #FE5000); cursor:pointer; padding:0; }
+.acesso-voltar{ display:block; text-align:center; margin-top:16px; font-size:12px; color:rgba(255,255,255,.65); text-decoration:none; }
+.acesso-voltar:hover{ color:#fff; }
+
+.acesso-negado-emoji{ font-size:34px; margin-bottom:10px; text-align:center; }
+.acesso-negado-email{ font-weight:700; color:var(--ink, #1D1F2A); }
