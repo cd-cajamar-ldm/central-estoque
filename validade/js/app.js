@@ -21,9 +21,16 @@ const VL_TITULOS = {
 const VL_SEED = ('MAZA TEKBOND NORTON VONDER WURTH RADNAQ KALIPSO ONYX CARBOGRAFITE UNIPEGA QUIMATIC MOCOCA BIOLUB SCHEBOR DANNY EURODECOR NUTRIEX ' +
   'CENTRALSUL MARLUVAS TECBRIL DRYKO ORBI ESAB MAGMA RUST-OLEUM SOFT99 RADCOLOR STP CASCOLA VULCAFLEX SOUDAL BARDAHL BADEN LOCTITE WD-40 MTX VEDACIT ' +
   'PLASTCOR SANRO 3M STARRETT SHIELD BRASILUX KADESH AMAZONAS DISFLEX TRAMONTINA VOLK SAIT PULVITEC BEMFIXA LEDAN KARCHER LYNUS BOSCH ATOMOS ARCDAL ' +
-  'AUTOSHINE GRAZIA HENKEL JEFLUB GALZER KOUBE BALMER TOYAMA GEDORE SUALL CHEMICOLOR MIRAX TIREBOR NOVE54 KLYO TBCC').split(' ');
+  'AUTOSHINE GRAZIA HENKEL JEFLUB GALZER KOUBE BALMER TOYAMA GEDORE SUALL CHEMICOLOR MIRAX TIREBOR NOVE54 KLYO TBCC GT2000 MILITEC JAÇA RENKO').split(' ');
 /* Trechos da descrição que identificam o fornecedor mesmo sem a marca isolada. */
-const VL_FRASES = [['MAXI RUBBER', 'MAXI RUBBER'], ['LIMPZ AUTO', 'LIMPZ AUTO'], ['SUAL PISCINAS', 'SUALL'], ['MAZA', 'MAZA']];
+const VL_FRASES = [['MAXI RUBBER', 'MAXI RUBBER'], ['LIMPZ AUTO', 'LIMPZ AUTO'], ['SUAL PISCINAS', 'SUALL'], ['MAZA', 'MAZA'],
+  ['NOVE 54', 'NOVE54'], ['PROTEG LUB', 'PROTEG LUB'], ['BIO QUIMICA', 'BIO QUIMICA'], ['STP-', 'STP'], ['SUAVITE', 'RENKO']];
+/* Última palavra que é abreviação de marca ("... AMARELA VD" = Vonder, "... PRATA 954" = Nove54). */
+const VL_SUFIXO = {VD: 'VONDER', '954': 'NOVE54'};
+/* Prefixo do código de barras (empresa dona do EAN) -> fornecedor. Levantado na
+   própria QRY0390: itens sem marca na descrição que dividem o prefixo com
+   centenas de itens de marca conhecida. Só vale quando a descrição não resolve. */
+const VL_EAN = [['7893946', 'VONDER'], ['7898507096', 'ONYX'], ['7899228', 'MAZA'], ['7894120170', 'AMAZONAS'], ['78985510', 'RENKO'], ['7899674', 'TECBRIL']];
 const VL_ALIAS = {VOND: 'VONDER', 'RUST OLEUM': 'RUST-OLEUM'};
 const VL_NOISE = new Set(['AUTO', 'BLISTER', 'QUIMICA', 'RUBBER', 'PISCINAS', 'UNIDADE', 'KIT', 'PRETO', 'BRANCO', 'AZUL', 'CINZA', 'VERMELHO', 'PRETA']);
 
@@ -72,7 +79,7 @@ function faixas(){
 function faixaDe(dias, fx){ for(const f of fx) if(dias <= f.max) return f; return fx[fx.length - 1]; }
 
 /* ---------- marca / fornecedor ---------- */
-function marcaDe(desc){
+function marcaDe(desc, ean){
   const lim = t => t.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '');
   const toks = String(desc || '').toUpperCase().split(/\s+/).map(lim).filter(Boolean);
   if(!toks.length) return 'SEM MARCA';
@@ -84,6 +91,9 @@ function marcaDe(desc){
   for(const [fr, m] of VL_FRASES) if(D.indexOf(fr) >= 0) return m;
   for(const sd of VL_SEED) if(sd.length >= 5 && D.indexOf(sd) >= 0) return sd; // marca colada: "300MLVONDER", "NUTRIEX-61093"
   const l = toks[toks.length - 1];
+  if(VL_SUFIXO[l]) return VL_SUFIXO[l];
+  const e = String(ean || '');
+  for(const [pre, m] of VL_EAN) if(e.indexOf(pre) === 0) return m;
   if(/^[A-Z][A-Z-]{2,}$/.test(l) && !VL_NOISE.has(l)) return VL_ALIAS[l] || l;
   return 'SEM MARCA';
 }
@@ -95,7 +105,8 @@ function preparar(){
   VL.fx = fx;
   VL.rows.forEach(r => {
     r.area = rev.has(r.cl) ? 'R' : 'E';
-    r.marca = marcaDe(r.d); r.forn = fornDe(r.marca);
+    r.marca = marcaDe(r.d, r.e); r.forn = fornDe(r.marca);
+    r.loc = (r.lo.split(/\s+/)[0] || r.cl || '—').toUpperCase(); // 1ª parte do endereço: TRI, MZP, GAI...
     r.dias = diasAte(r.v); r.faixa = faixaDe(r.dias, fx).k;
     r.valor = r.q * (r.c || 0);
     r.mes = r.v.slice(0, 7);
@@ -167,7 +178,7 @@ function dividir(linhas, limite){
   if(atual.length) partes.push(atual);
   return partes;
 }
-const CAMPOS = ['i', 'd', 'l', 'v', 'lo', 'cl', 'r', 'q', 'c', 'm'];
+const CAMPOS = ['i', 'd', 'l', 'v', 'lo', 'cl', 'r', 'q', 'c', 'm', 'e'];
 const lerCampos = r => { const o = {}; CAMPOS.forEach(k => { o[k] = r[k]; }); return o; };
 
 async function carregar(){
@@ -313,27 +324,52 @@ function cartaoArea(nome, cor, rows){
     '<div><span>Vence em até ' + Math.max.apply(null, VL.cfg.faixas) + ' dias</span><b style="color:' + VL_CORES_PROX[0] + '">' + fBRLc(prox.valor) + '</b><em>' + fInt(prox.q) + ' peças</em></div>' +
     '<div><span>Total com validade</span><b>' + fBRLc(t.valor) + '</b></div></div></div>' + barraFaixas(o) + '</div>';
 }
+/* Acumulado: o vencido soma do mais antigo até o mês passado; o a vencer soma do
+   mês atual pra frente. Assim cada mês mostra "quanto já venceu até aqui" ou
+   "quanto vence até aqui". */
+function mesesArea(rows){
+  const por = {}, hoje = hojeISO().slice(0, 7);
+  rows.forEach(r => {
+    const o = por[r.mes] = por[r.mes] || {ym: r.mes, v: 0, q: 0, lotes: 0, loc: {}};
+    o.v += r.valor; o.q += r.q; o.lotes++; o.loc[r.loc] = (o.loc[r.loc] || 0) + r.valor;
+    if(r.dias < 0) o.jaVenc = (o.jaVenc || 0) + r.valor;
+  });
+  const ms = Object.values(por).sort((a, b) => a.ym.localeCompare(b.ym));
+  let aV = 0, aF = 0;
+  // No mês atual, o que já passou da data conta como vencido (bate com os cartões, que são por dia).
+  ms.forEach(m => {
+    m.passado = m.ym < hoje;
+    if(m.passado){ aV += m.v; m.acc = aV; }
+    else { const ja = m.ym === hoje ? (m.jaVenc || 0) : 0; aV += ja; aF += m.v - ja; m.acc = aF; m.jaNoMes = ja; }
+  });
+  return {ms, vencido: aV, aVencer: aF};
+}
+function tipMes(m){
+  const locs = Object.entries(m.loc).sort((a, b) => b[1] - a[1]);
+  const linhas = locs.slice(0, 8).map(l => l[0] + ': ' + fBRL(l[1]));
+  if(locs.length > 8) linhas.push('Outros ' + (locs.length - 8) + ' locais: ' + fBRL(locs.slice(8).reduce((a, l) => a + l[1], 0)));
+  return fMes(m.ym) + (m.passado ? ' · VENCIDO' : ' · a vencer') + '\nNo mês: ' + fBRL(m.v) + ' · ' + fInt(m.q) + ' peças\n' + (m.jaNoMes ? 'Já vencido neste mês: ' + fBRL(m.jaNoMes) + '\n' : '') +
+    (m.passado ? 'Vencido acumulado até aqui: ' : 'A vencer acumulado até aqui: ') + fBRL(m.acc) + '\n— Onde está —\n' + linhas.join('\n');
+}
 function graficoMensal(rows, alt, cor){ // uma área por gráfico: estoque e reversa nunca na mesma coluna
-  const por = {};
-  rows.forEach(r => { const o = por[r.mes] = por[r.mes] || {ym: r.mes, v: 0, q: 0}; o.v += r.valor; o.q += r.q; });
-  const todos = Object.values(por).sort((a, b) => a.ym.localeCompare(b.ym));
+  const A = mesesArea(rows), todos = A.ms;
   if(!todos.length) return '<p class="field-hint">Sem dados.</p>';
   // Janela de 12 meses pra trás e 12 pra frente: o que fica fora vira um resumo,
   // senão um mês distante com muito valor achata todas as colunas.
   const desl = n => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
-  const ini = desl(-12), fim = desl(12), hoje = hojeISO().slice(0, 7);
+  const ini = desl(-12), fim = desl(12);
   const meses = todos.filter(m => m.ym >= ini && m.ym <= fim);
   const antes = todos.filter(m => m.ym < ini).reduce((a, m) => a + m.v, 0), depois = todos.filter(m => m.ym > fim).reduce((a, m) => a + m.v, 0);
-  const fora = '<div class="vl-fora">' + (antes ? '<span class="venc">Vencido antes de ' + fMes(ini) + ': <b>' + fBRL(antes) + '</b></span>' : '') + (depois ? '<span>Vence depois de ' + fMes(fim) + ': <b>' + fBRL(depois) + '</b></span>' : '') + '</div>';
+  const fora = '<div class="vl-fora"><span class="venc">Vencido acumulado: <b>' + fBRL(A.vencido) + '</b></span><span>A vencer acumulado: <b>' + fBRL(A.aVencer) + '</b></span>' +
+    (antes ? '<span class="venc">antes de ' + fMes(ini) + ': ' + fBRL(antes) + '</span>' : '') + (depois ? '<span>depois de ' + fMes(fim) + ': ' + fBRL(depois) + '</span>' : '') + '</div>';
   if(!meses.length) return fora;
   const max = Math.max.apply(null, meses.map(m => m.v)) || 1;
-  return fora + '<div class="vl-mensal" style="height:' + alt + 'px">' + meses.map(m => {
-    const passado = m.ym < hoje;
-    return '<div class="vl-col' + (passado ? ' passado' : '') + '"' + tip(fMes(m.ym) + ' · ' + fBRL(m.v) + ' · ' + fInt(m.q) + ' peças' + (passado ? ' · vencido' : '')) + '>' +
+  return fora + '<div class="vl-mensal" style="height:' + alt + 'px">' + meses.map(m =>
+    '<div class="vl-col' + (m.passado ? ' passado' : '') + '"' + tip(tipMes(m)) + '>' +
       '<span class="vl-col-v">' + (m.v ? fBRLc(m.v).replace('R$ ', '') : '') + '</span>' +
-      '<div class="vl-col-b" style="height:' + (m.v / max * 100) + '%;background:' + (passado ? VL_COR_VENC : cor) + '"></div>' +
-      '<span class="vl-col-l">' + fMes(m.ym) + '</span></div>';
-  }).join('') + '</div><div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Mês já vencido</span><span><i style="background:' + cor + '"></i>A vencer</span></div>';
+      '<div class="vl-col-b" style="height:' + (m.v / max * 100) + '%;background:' + (m.passado ? VL_COR_VENC : cor) + '"></div>' +
+      '<span class="vl-col-l">' + fMes(m.ym) + '</span><span class="vl-col-a">' + fBRLc(m.acc).replace('R$ ', '') + '</span></div>'
+  ).join('') + '</div><div class="vl-leg"><span><i style="background:' + VL_COR_VENC + '"></i>Mês já vencido</span><span><i style="background:' + cor + '"></i>A vencer</span><span>Linha de baixo = acumulado (R$) · passe o mouse para ver os locais</span></div>';
 }
 function topForn(rows, n){
   const por = somar(rows, r => r.forn).map(o => ({k: o.k, venc: o.f.venc || 0, prox: VL.fx.filter(f => f.k !== 'venc' && f.k !== 'ok').reduce((a, f) => a + (o.f[f.k] || 0), 0)}))
@@ -402,11 +438,12 @@ function viewMensal(){
   if(!VL.rows.length) return vazio();
   const rows = filtradas(true), hoje = hojeISO().slice(0, 7);
   return filtrosBarra(false) + AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => {
-    const ra = rows.filter(r => r.area === a[0]), ms = dadosMensal(ra), T = tot(ra);
-    return '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2><div class="panel"><h3>' + a[1] + ' · valor por mês de vencimento</h3>' + graficoMensal(ra, 210, a[2]) + '</div>' +
-      '<div class="table-wrap vl-gap"><table class="vl-tab"><thead><tr><th>Mês</th><th>Situação</th><th class="n">Valor (R$)</th><th class="n">Peças</th><th class="n">Lotes</th></tr></thead><tbody>' +
-      ms.map(m => '<tr><td><b>' + fMes(m.ym) + '</b></td><td>' + (m.ym < hoje ? '<span class="tag tag-bad">Vencido</span>' : m.ym === hoje ? '<span class="tag tag-orange">Mês atual</span>' : '<span class="tag tag-good">A vencer</span>') + '</td><td class="n"><b>' + fBRL(m[a[0]]) + '</b></td><td class="n">' + fInt(m['q' + a[0]]) + '</td><td class="n">' + fInt(m.lotes) + '</td></tr>').join('') +
-      '</tbody><tfoot><tr><td><b>Total</b></td><td></td><td class="n"><b>' + fBRL(T.valor) + '</b></td><td class="n">' + fInt(T.q) + '</td><td class="n">' + fInt(T.lotes) + '</td></tr></tfoot></table></div></div>';
+    const ra = rows.filter(r => r.area === a[0]), ms = mesesArea(ra).ms, T = tot(ra);
+    return '<div class="vl-secao" style="--c:' + a[2] + '"><h2>' + a[1] + '</h2><div class="panel"><h3>' + a[1] + ' · valor por mês de vencimento</h3>' + graficoMensal(ra, 230, a[2]) + '</div>' +
+      '<div class="table-wrap vl-gap"><table class="vl-tab"><thead><tr><th>Mês</th><th>Situação</th><th class="n">Valor no mês (R$)</th><th class="n">Acumulado (R$)</th><th class="n">Peças</th><th class="n">Lotes</th><th>Principais locais</th></tr></thead><tbody>' +
+      ms.map(m => '<tr' + tip(tipMes(m)) + '><td><b>' + fMes(m.ym) + '</b></td><td>' + (m.passado ? '<span class="tag tag-bad">Vencido</span>' : m.ym === hoje ? '<span class="tag tag-orange">Mês atual</span>' : '<span class="tag tag-good">A vencer</span>') + '</td><td class="n"><b>' + fBRL(m.v) + '</b></td><td class="n">' + fBRL(m.acc) + '</td><td class="n">' + fInt(m.q) + '</td><td class="n">' + fInt(m.lotes) + '</td>' +
+        '<td class="vl-locs">' + Object.entries(m.loc).sort((x, y) => y[1] - x[1]).slice(0, 3).map(l => esc(l[0]) + ' ' + fBRLc(l[1])).join(' · ') + '</td></tr>').join('') +
+      '</tbody><tfoot><tr><td><b>Total</b></td><td></td><td class="n"><b>' + fBRL(T.valor) + '</b></td><td></td><td class="n">' + fInt(T.q) + '</td><td class="n">' + fInt(T.lotes) + '</td><td></td></tr></tfoot></table></div></div>';
   }).join('');
 }
 const COLS = [['i', 'Item'], ['d', 'Descrição'], ['forn', 'Fornecedor'], ['l', 'Lote'], ['v', 'Validade'], ['dias', 'Dias'], ['faixa', 'Faixa'], ['area', 'Área'], ['lo', 'Endereço'], ['q', 'Qtd'], ['c', 'Custo un.'], ['valor', 'Valor']];
@@ -512,12 +549,17 @@ function vlExportar(){
   const forn = [['Área', 'Fornecedor', 'Lotes', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido'])];
   AREAS.forEach(a => somar(rows.filter(r => r.area === a[0]), r => r.forn).sort((x, y) => y.valor - x.valor).forEach(o => forn.push([a[1], o.k, o.lotes, o.q].concat(fx.map(f => +(o.f[f.k] || 0).toFixed(2)), [+o.valor.toFixed(2), o.valor ? +((o.f.venc || 0) / o.valor).toFixed(4) : 0]))));
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(forn), 'Fornecedores');
-  const mes = [['Área', 'Mês', 'Situação', 'Valor (R$)', 'Peças', 'Lotes']], hoje = hojeISO().slice(0, 7);
-  AREAS.forEach(a => dadosMensal(rows.filter(r => r.area === a[0])).forEach(m => mes.push([a[1], fMes(m.ym), m.ym < hoje ? 'Vencido' : m.ym === hoje ? 'Mês atual' : 'A vencer', +m[a[0]].toFixed(2), m['q' + a[0]], m.lotes])));
+  const mes = [['Área', 'Mês', 'Situação', 'Valor no mês (R$)', 'Acumulado (R$)', 'Peças', 'Lotes']], loc = [['Área', 'Mês', 'Situação', 'Local', 'Valor (R$)']], hoje = hojeISO().slice(0, 7);
+  AREAS.forEach(a => mesesArea(rows.filter(r => r.area === a[0])).ms.forEach(m => {
+    const sit = m.passado ? 'Vencido' : m.ym === hoje ? 'Mês atual' : 'A vencer';
+    mes.push([a[1], fMes(m.ym), sit, +m.v.toFixed(2), +m.acc.toFixed(2), m.q, m.lotes]);
+    Object.entries(m.loc).sort((x, y) => y[1] - x[1]).forEach(l => loc.push([a[1], fMes(m.ym), sit, l[0], +l[1].toFixed(2)]));
+  }));
+  X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(loc), 'Mensal por local');
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(mes), 'Mensal');
   const nm = {}; fx.forEach(f => { nm[f.k] = f.nome; });
-  const it = [['Item', 'Descrição', 'Fornecedor', 'Marca', 'Lote', 'Validade', 'Dias p/ vencer', 'Faixa', 'Área', 'Classe local', 'Endereço', 'Restrição', 'Quantidade', 'Custo unitário (R$)', 'Valor (R$)', 'Obs.']];
-  rows.slice().sort((a, b) => a.dias - b.dias).forEach(r => it.push([+r.i || r.i, r.d, r.forn, r.marca, r.l, fData(r.v), r.dias, nm[r.faixa], r.area === 'R' ? 'Reversa' : 'Estoque', r.cl, r.lo, r.r, r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : '')]));
+  const it = [['Item', 'Descrição', 'Fornecedor', 'Marca', 'Lote', 'Validade', 'Dias p/ vencer', 'Faixa', 'Área', 'Classe local', 'Endereço', 'Restrição', 'EAN', 'Quantidade', 'Custo unitário (R$)', 'Valor (R$)', 'Obs.']];
+  rows.slice().sort((a, b) => a.dias - b.dias).forEach(r => it.push([+r.i || r.i, r.d, r.forn, r.marca, r.l, fData(r.v), r.dias, nm[r.faixa], r.area === 'R' ? 'Reversa' : 'Estoque', r.cl, r.lo, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : '')]));
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(it), 'Itens');
   X.writeFile(wb, 'Controle_de_Validade_' + hojeISO() + '.xlsx');
   toast('Planilha exportada.');
