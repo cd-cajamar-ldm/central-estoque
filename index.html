@@ -124,8 +124,11 @@
   .card-title{position:relative;font-size:16px;font-weight:700;margin:0 0 5px;}
   .card-desc{position:relative;font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin:0 0 16px;flex:1;}
   .card-cta{position:relative;display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:800;color:var(--accent);padding-top:13px;border-top:1px solid var(--line);}
-  .card-cta .arrow{transition:transform .15s;}
-  .card:hover .card-cta .arrow{transform:translateX(3px);}
+  .card-lock{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:9px;transition:transform .15s,background .15s,color .15s;}
+  .card-lock svg{width:16px;height:16px;display:block;}
+  .card-lock.fechado{color:var(--ink-soft);background:var(--surface2,rgba(120,130,150,.12));}
+  .card-lock.aberto{color:#1F8A52;background:rgba(31,138,82,.12);}
+  .card:hover .card-lock.aberto{transform:translateY(-1px);}
 
   .card-kebab{position:absolute;top:18px;right:18px;z-index:3;width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;transition:all .2s;}
   .card-kebab:hover{background:var(--chip-bg-hover);color:var(--ink);}
@@ -900,6 +903,36 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     });
   }
 
+  /* Cadeado no canto do card: fechado = sem acesso; aberto = a pessoa logada tem acesso (liberado em Configurações).
+     Sem login (ou sem permissão) fica fechado. */
+  var LOCK_FECHADO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  var LOCK_ABERTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+  var acessoApps = {};
+  function lockHTML(key){
+    var ab = !!acessoApps[key];
+    return '<span class="card-lock ' + (ab ? 'aberto' : 'fechado') + '" data-lock="' + key + '" title="' + (ab ? 'Você tem acesso' : 'Sem acesso — peça ao administrador') + '" aria-label="' + (ab ? 'Você tem acesso' : 'Sem acesso') + '">' + (ab ? LOCK_ABERTO : LOCK_FECHADO) + '</span>';
+  }
+  async function atualizarCadeados(){
+    if(!sbAcessos) return;
+    var novo = {};
+    try {
+      var { data: { session } } = await sbAcessos.auth.getSession();
+      if(session){
+        await Promise.all(getAllApps().map(function(app){
+          return sbAcessos.rpc('ldm_nivel_acesso', { p_app_key: app.key }).then(function(r){ novo[app.key] = !!(r && r.data); }).catch(function(){});
+        }));
+      }
+    } catch(e){}
+    acessoApps = novo;
+    Array.prototype.forEach.call(document.querySelectorAll('.card-lock'), function(el){
+      var ab = !!acessoApps[el.getAttribute('data-lock')];
+      el.className = 'card-lock ' + (ab ? 'aberto' : 'fechado');
+      el.innerHTML = ab ? LOCK_ABERTO : LOCK_FECHADO;
+      el.title = ab ? 'Você tem acesso' : 'Sem acesso — peça ao administrador';
+      el.setAttribute('aria-label', ab ? 'Você tem acesso' : 'Sem acesso');
+    });
+  }
+
   function cardHTML(app, isFav){
     var dot = STATUS_COLOR[app.status] || STATUS_COLOR['Disponível'];
     var searchStr = esc((app.name + ' ' + app.desc + ' ' + app.keywords + ' ' + app.status).toLowerCase());
@@ -921,7 +954,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       +   '</div>'
       +   '<h3 class="card-title">' + esc(app.name) + '</h3>'
       +   '<p class="card-desc">' + esc(app.desc) + '</p>'
-      +   '<div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>'
+      +   '<div class="card-cta"><span>Acessar</span>' + lockHTML(app.key) + '</div>'
       + '</div>';
   }
 
@@ -1905,10 +1938,12 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     });
   }
 
-  if(sbAcessos) sbAcessos.auth.onAuthStateChange(function(){ accessVerificarSessao(); });
+  /* Não chamar o Supabase de dentro do aviso de login (trava a conexão): setTimeout. */
+  if(sbAcessos) sbAcessos.auth.onAuthStateChange(function(){ accessVerificarSessao(); setTimeout(atualizarCadeados, 0); });
 
   renderCards();
   renderSidebarFavorites();
+  atualizarCadeados();
 })();
 </script>
 </body>
