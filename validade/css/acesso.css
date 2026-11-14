@@ -1,0 +1,57 @@
+/* ============================================================
+   Múltiplos Descasados — tela de acesso (login / primeiro acesso /
+   recuperar senha / acesso negado). Usa os mesmos tokens de cor do
+   theme.css, então acompanha claro/escuro automaticamente.
+   ============================================================ */
+#telaAcesso{
+  position:fixed; inset:0; z-index:500; display:flex; align-items:center; justify-content:center;
+  background:var(--blue); padding:24px;
+}
+#telaAcesso.escondida{ display:none; }
+.acesso-caixa{ width:100%; max-width:380px; }
+.acesso-logo{ display:block; margin:0 auto 24px; height:64px; width:auto; }
+.acesso-cartao{
+  position:relative; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg);
+  box-shadow:0 20px 50px -20px rgba(0,0,0,.4); padding:24px;
+}
+.acesso-cartao h1{ margin:0 0 4px; font-size:19px; font-weight:800; color:var(--ink); }
+.acesso-cartao p.acesso-sub{ margin:0 0 18px; font-size:12.5px; color:var(--ink-soft); }
+.acesso-campo{ display:block; margin-bottom:12px; }
+.acesso-rotulo{ display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin-bottom:5px; }
+.acesso-input{
+  width:100%; box-sizing:border-box; font-family:inherit; font-size:13.5px; color:var(--ink);
+  background:var(--paper); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px;
+}
+.acesso-input:focus{ outline:none; border-color:var(--orange); box-shadow:0 0 0 3px var(--orange-light); }
+.acesso-senha-wrap{ position:relative; }
+.acesso-mostrar{
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  background:none; border:none; font-size:11.5px; font-weight:700; color:var(--orange); cursor:pointer;
+}
+.acesso-erro{ background:var(--danger-light); color:var(--danger); border-radius:var(--radius); padding:9px 12px; font-size:12.5px; margin-bottom:12px; }
+.acesso-recado{ background:var(--orange-light); color:var(--orange); border-radius:var(--radius); padding:9px 12px; font-size:12.5px; margin-bottom:12px; }
+.acesso-botao{
+  width:100%; background:var(--orange); color:#fff; border:none; border-radius:var(--radius);
+  font-family:inherit; font-size:13.5px; font-weight:700; padding:11px; cursor:pointer;
+}
+.acesso-botao:disabled{ opacity:.6; cursor:default; }
+.acesso-links{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin-top:14px; }
+.acesso-links button{ background:none; border:none; font-size:11.5px; font-weight:700; color:var(--orange); cursor:pointer; padding:0; }
+.acesso-voltar{ display:block; text-align:center; margin-top:16px; font-size:12px; color:rgba(255,255,255,.65); text-decoration:none; }
+.acesso-voltar:hover{ color:#fff; }
+
+.acesso-negado-emoji{ font-size:34px; margin-bottom:10px; text-align:center; }
+.acesso-negado-email{ font-weight:700; color:var(--ink); }
+
+/* Acesso "só visualizar": esconde o que grava dados. */
+html.somente-leitura .nav-item[data-tab="importacao"],
+html.somente-leitura .nav-item[data-tab="configuracoes"]{ display:none !important; }
+html.somente-leitura .sidebar-footer::before{
+  content:"Somente visualização"; display:block; margin-bottom:6px; font-size:11px; font-weight:700; color:var(--orange);
+}
+
+/* Acesso "só visualizar": esconde o que grava dados. */
+html.somente-leitura .so-editor{ display:none !important; }
+html.somente-leitura .sidebar-footer::before{
+  content:"Somente visualização"; display:block; margin-bottom:6px; font-size:11px; font-weight:700; color:var(--orange);
+}
