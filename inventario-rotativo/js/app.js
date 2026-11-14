@@ -253,7 +253,6 @@ async function irInit(){
     IR.bancoInfo.versao = db.version;
     db.close();
   }catch(_){}
-  window.LDM_T = window.LDM_T || {}; window.LDM_T.dados = performance.now();
   irMostrarVersao();
   /* Link direto para uma aba específica (ex.: usado pela TV LDM): #setores
      abre direto em Setores, sem passar pelo Dashboard. */
@@ -263,7 +262,6 @@ async function irInit(){
     if(irH && IR_TAB_LABELS[irH]) irHashTab = irH;
   } catch(e){}
   irSwitchTab(irHashTab);
-  window.LDM_T.tela = performance.now(); irMostrarVersao();
   // Dados compartilhados (Supabase): começa depois da tela aberta.
   try { irNuvemVigiar(); } catch(e){ console.warn('Nuvem indisponível', e); }
   // Fora do try acima e sem await: se a pasta conectada falhar (permissão
@@ -1094,16 +1092,7 @@ function irRecalcularCiclo(cicloId){
 // navegador está com a build nova depois de um deploy.
 function irMostrarVersao(){
   const el = document.getElementById('sidebarVersao');
-  if(!el) return;
-  el.textContent = IR_APP_VERSION + ' · motor ' + IR_INDICADORES_VERSION;
-  /* Quanto tempo o app levou para abrir, por etapa (desde que a página começou a carregar). */
-  const T = window.LDM_T || {}, s = x => (x/1000).toFixed(1).replace('.', ',') + ' s';
-  if(T.tela){
-    const d = document.createElement('div');
-    d.style.cssText = 'margin-top:3px;opacity:.85;line-height:1.35';
-    d.textContent = 'Abriu em ' + s(T.tela) + ' (arquivos ' + s(T.scripts || 0) + ' · acesso ' + s(T.acesso || 0) + ' · dados ' + s(T.dados || 0) + ')';
-    el.appendChild(d);
-  }
+  if(el) el.textContent = IR_APP_VERSION + ' · motor ' + IR_INDICADORES_VERSION;
 }
 // Filtro de data — só afeta a Produtividade, por isso fica logo acima do gráfico
 // dela em vez de junto com o seletor de Ciclo (que é global pro Dashboard inteiro).
