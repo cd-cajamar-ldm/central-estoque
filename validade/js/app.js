@@ -4,7 +4,7 @@
    p/ valorar) e ZBIQ0051 (múltiplos: qual componente carrega valor).
    Dados compartilhados em public.vl_dados (migração 007).
    ============================================================ */
-const VL_VERSAO = 12; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const VL_VERSAO = 13; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const VL_TAB = 'vl_dados';
 /* Cores da marca (azul #001A72 e laranja #FE5000): vermelho -> laranja -> âmbar -> azuis.
    Quanto mais perto de vencer, mais quente. */
@@ -456,7 +456,7 @@ function painelQualidade(rows){
   const q = qualAtual(), sus = rows.filter(suspeita), rom = rows.filter(r => r.qr > 0);
   const S = tot(sus), Rm = rom.reduce((a, r) => a + (r.qr || 0), 0);
   const li = (cor, tit, txt) => '<li style="--c:' + cor + '"><b>' + tit + '</b><span>' + txt + '</span></li>';
-  return '<div class="panel vl-card"><div class="vl-card-h"><h3>Qualidade da base · pontos de atenção</h3><p>Diferenças encontradas na própria QRY0390. Estão na aba "Inconsistências" do Excel.</p></div><ul class="vl-qual">' +
+  return '<div class="panel vl-card"><div class="vl-card-h"><h3>Qualidade da base · pontos de atenção</h3><p>Diferenças encontradas na própria QRY0390. Os avisos principais saem na aba "Pontos de atenção" do Excel.</p></div><ul class="vl-qual">' +
     (q ? li(VL_COR_VENC, 'Restrição WV (fora do prazo de validade) sem data', fInt(q.wv.itens) + ' itens · ' + fInt(q.wv.q) + ' peças · ' + fBRL(q.wv.valor) + ' — <b>não entram</b> nos números acima porque a 390 não traz a data.') +
       li(VL_CORES_PROX[1], 'Itens com parte do saldo sem data de validade', fInt(q.semData.itens) + ' itens · ' + fInt(q.semData.q) + ' peças · ' + fBRL(q.semData.valor) + ' em linhas sem data — também ficam de fora.')
       : li(VL_CORES_PROX[1], 'Saldo sem data de validade', 'Reimporte a QRY0390 para calcular o que ficou de fora por não ter data.')) +
@@ -647,7 +647,7 @@ function vlExportar(){
   if(!rows.length) return toast('Nenhum lote nos filtros atuais.', true);
   const per = VL.f.de || VL.f.ate ? 'Vencimento de ' + (VL.f.de ? fMesAno(VL.f.de) : 'início') + ' até ' + (VL.f.ate ? fMesAno(VL.f.ate) : 'fim') : 'Todos os meses';
   const filtroTxt = [VL.f.area ? (VL.f.area === 'E' ? 'Só estoque' : 'Só reversa') : 'Estoque e Reversa (separados)', VL.f.forn || 'Todos os fornecedores', per].join(' · ');
-  const tit = n => ['Controle de Validade — CD Cajamar · ' + n, 'Relatório de ' + fData(hojeISO()) + ' · base importada em ' + (VL.meta && VL.meta.importadoEm ? fData(VL.meta.importadoEm.slice(0, 10)) : '—') + ' · ' + filtroTxt + ' · valor = quantidade × preço de custo'];
+  const tit = n => ['Controle de Validade — CD Cajamar · ' + n, 'Relatório de ' + fData(hojeISO()) + ' · base importada em ' + (VL.meta && VL.meta.importadoEm ? fData(VL.meta.importadoEm.slice(0, 10)) : '—') + ' · ' + filtroTxt];
   const sit = ym => ym < hoje ? 'Vencido' : ym === hoje ? 'Mês atual' : 'A vencer';
     const wb = X.utils.book_new();
 
@@ -658,6 +658,19 @@ function vlExportar(){
     const t = tot(ra); resumo.push([a[1], 'TOTAL', t.itens, t.q, +t.valor.toFixed(2), 1, t.lotes]);
   });
   folha(wb, 'Resumo', ['Área', 'Faixa (dias p/ vencer)', 'Itens (SKUs)', 'Peças', 'Valor de custo (R$)', '% do valor da área', 'Lotes'], resumo, [12, 26, 13, 12, 20, 14, 10], ['', '', 'N', 'N', 'R', 'P', 'N'], tit('Resumo por faixa'));
+
+  /* Pontos de atenção: os três avisos que vão junto do relatório. Não dependem do
+     filtro de mês (a data errada e o EPI nunca caem num mês "normal"). */
+  const q = qualAtual(), noForn = r => !VL.f.forn || r.forn === VL.f.forn;
+  const area = r => VL.cfg.reversa.indexOf(r.cl) >= 0 ? 'Reversa' : 'Estoque';
+  const errada = VL.rows.filter(r => r.area === 'E' && suspeita(r) && noForn(r));
+  const epi = VL.base.filter(r => ignorado(r.lo)).map(r => Object.assign({}, r, {valor: r.q * (r.c || 0)}));
+  const wvl = q ? q.wv.lista : [];
+  const grupos = [['Data de validade errada (estoque)', 'Auditar data', errada], ['Itens no ' + (VL.cfg.ignorar || []).join(', '), 'Aguardando retorno', epi], ['WV sem data de validade', 'Cadastro sem controle de lote', wvl]];
+  const resumoAt = grupos.map(([n, o, ls]) => [n, new Set(ls.map(l => l.i)).size, ls.reduce((a, l) => a + l.q, 0), +ls.reduce((a, l) => a + l.valor, 0).toFixed(2), o]);
+  folha(wb, 'Pontos de atenção', ['Ponto', 'Itens (SKUs)', 'Peças', 'Valor de custo (R$)', 'Aviso'], resumoAt, [36, 13, 12, 20, 30], ['', 'N', 'N', 'R', ''], tit('Pontos de atenção'));
+  const det = [];
+  grupos.forEach(([n, o, ls]) => ls.slice().sort((a, b) => b.valor - a.valor).forEach(l => det.push([n, area(l), +l.i || l.i, l.d, l.lo, l.cl, l.r, l.v ? fData(l.v) : '', l.q, +(l.c || (l.q ? l.valor / l.q : 0)).toFixed(4), +l.valor.toFixed(2)])));
 
   const mes = [], loc = [];
   AREAS.forEach(a => {
@@ -675,18 +688,11 @@ function vlExportar(){
   folha(wb, 'Fornecedores', ['Área', 'Fornecedor', 'Itens (SKUs)', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido']), forn, [12, 26, 9, 11].concat(fx.map(() => 18), [18, 11]), ['', '', 'N', 'N'].concat(fx.map(() => 'R'), ['R', 'P']), tit('Por fornecedor'));
 
   const nm = {}; fx.forEach(f => { nm[f.k] = f.nome; });
-  const it = rows.slice().sort((a, b) => a.area.localeCompare(b.area) || a.dias - b.dias).map(r => [r.area === 'R' ? 'Reversa' : 'Estoque', +r.i || r.i, r.d, r.forn, r.l, fData(r.v), fMesAno(r.mes), r.dias, nm[r.faixa], r.lo, r.cl, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), [r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : ''), suspeita(r) ? 'Validade improvável' : '', r.qr ? r.qr + ' pç romaneada(s)' : ''].filter(Boolean).join(' · ')]);
+  const it = rows.slice().sort((a, b) => a.area.localeCompare(b.area) || a.dias - b.dias).map(r => [r.area === 'R' ? 'Reversa' : 'Estoque', +r.i || r.i, r.d, r.forn, r.l, fData(r.v), fMesAno(r.mes), r.dias, nm[r.faixa], r.lo, r.cl, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), [r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : ''), suspeita(r) ? 'Data errada' : ''].filter(Boolean).join(' · ')]);
   folha(wb, 'Itens', ['Área', 'Item', 'Descrição', 'Fornecedor', 'Lote', 'Validade', 'Mês de vencimento', 'Dias p/ vencer', 'Faixa (dias p/ vencer)', 'Endereço', 'Classe local', 'Restrição', 'EAN', 'Quantidade', 'Custo unitário (R$)', 'Valor de custo (R$)', 'Obs.'],
     it, [10, 10, 52, 18, 10, 11, 12, 9, 22, 18, 9, 9, 15, 11, 14, 16, 30], ['', '', '', '', '', '', '', 'N', '', '', '', '', '', 'N', 'C', 'R', ''], tit('Itens e lotes'));
-  const q = qualAtual(), inc = [], pc = r => r.area ? (r.area === 'R' ? 'Reversa' : 'Estoque') : (VL.cfg.reversa.indexOf(r.cl) >= 0 ? 'Reversa' : 'Estoque');
-  rows.filter(suspeita).forEach(r => inc.push(['Validade improvável', pc(r), +r.i || r.i, r.d, r.lo, r.cl, r.r, fData(r.v), r.q, +r.valor.toFixed(2), 'Data fora do normal — conferir cadastro do lote']));
-  if(q){
-    q.wv.lista.forEach(l => inc.push(['Restrição WV sem data', pc(l), +l.i || l.i, l.d, l.lo, l.cl, l.r, '', l.q, +l.valor.toFixed(2), 'Bloqueado por validade, mas a 390 não traz a data — fora dos números']));
-    q.semData.lista.forEach(l => inc.push(['Saldo sem data de validade', pc(l), +l.i || l.i, l.d, l.n > 1 ? l.n + ' linhas' : l.lo, l.cl, '', '', l.q, +l.valor.toFixed(2), 'Item tem validade em outras linhas; este saldo ficou fora dos números']));
-  }
-  rows.filter(r => r.qr > 0).forEach(r => inc.push(['Peças romaneadas', pc(r), +r.i || r.i, r.d, r.lo, r.cl, r.r, fData(r.v), r.q, +r.valor.toFixed(2), r.qr + ' de ' + r.q + ' peças já separadas para pedido (incluídas no saldo)']));
-  folha(wb, 'Inconsistências', ['Tipo', 'Área', 'Item', 'Descrição', 'Endereço', 'Classe local', 'Restrição', 'Validade', 'Quantidade', 'Valor de custo (R$)', 'Observação'], inc,
-    [24, 10, 10, 48, 18, 9, 9, 11, 11, 16, 58], ['', '', '', '', '', '', '', '', 'N', 'R', ''], tit('Pontos de atenção da base' + (q ? '' : ' (reimporte a 390 para ver o saldo sem data)')));
+  folha(wb, 'Pontos de atenção - itens', ['Ponto', 'Área', 'Item', 'Descrição', 'Endereço', 'Classe local', 'Restrição', 'Validade', 'Quantidade', 'Custo unitário (R$)', 'Valor de custo (R$)'], det,
+    [36, 10, 10, 50, 18, 11, 10, 12, 11, 15, 17], ['', '', '', '', '', '', '', '', 'N', 'C', 'R'], tit('Pontos de atenção · itens'));
   X.writeFile(wb, 'Controle_de_Validade_' + hojeISO() + '.xlsx');
   toast('Planilha exportada.');
 }
