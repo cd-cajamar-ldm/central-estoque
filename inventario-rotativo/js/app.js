@@ -367,6 +367,7 @@ function irApplyZoom(pct){
   const label = document.getElementById('zoomLabel');
   if(label) label.textContent = pct+'%';
   localStorage.setItem('ir-zoom', pct);
+  if(typeof irFluidAgendar==='function') irFluidAgendar();
 }
 function irZoomIn(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)||100) + IR_ZOOM_STEP); }
 function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)||100) - IR_ZOOM_STEP); }
@@ -506,6 +507,27 @@ async function irFiltrarCiclo(cicloId){
   irRenderCycleBadge();
   irRenderView();
 }
+/* Gráficos que desenham na LARGURA REAL do painel (1 unidade = 1 px), em vez de
+   esticar um desenho de largura fixa. Esticado, o texto do gráfico crescia junto com
+   o painel — e, com o zoom da tela diminuído, o painel fica largo em px e o texto do
+   gráfico ficava grande enquanto o resto do app encolhia. Medido no elemento real. */
+IR._fluid = {};
+function irFluid(key, build, altura){
+  IR._fluid[key] = build;
+  return `<div class="ir-fluid" data-k="${key}" style="min-height:${altura}px">${build(760)}</div>`;
+}
+function irFluidAjustar(){
+  document.querySelectorAll('#viewRoot .ir-fluid').forEach(el=>{
+    const b = IR._fluid[el.dataset.k];
+    const w = Math.floor(el.clientWidth);
+    if(!b || w<160 || String(w)===el.dataset.w) return;
+    el.dataset.w = w;
+    el.innerHTML = b(w);
+  });
+}
+let _irFluidT = null;
+function irFluidAgendar(){ clearTimeout(_irFluidT); _irFluidT = setTimeout(irFluidAjustar, 60); }
+window.addEventListener('resize', irFluidAgendar);
 function irRenderView(){
   const root = document.getElementById('viewRoot');
   /* A aba de Divergencias usa a identidade do modulo Projetos (roxo e
@@ -539,6 +561,7 @@ function irRenderView(){
     : (renderers[IR.currentTab] || (()=>''))();
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
   irFitKpiNumbers();
+  irFluidAjustar();
 }
 /* Encolhe o numero de cada tile de KPI ate ele caber na largura real disponivel.
    O grid dos blocos e auto-fit, entao a largura da tile muda de forma pouco previsivel
@@ -1032,7 +1055,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v274';
+const IR_APP_VERSION = 'v275';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1238,8 +1261,8 @@ function irAcuraciaMensalDoAno(){
 const IR_MES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 function irMesCurto(mes){ const i = parseInt(String(mes||'').slice(5,7),10)-1; return IR_MES_ABREV[i] || String(mes||''); }
 const IR_ACC_SERIES = [['pecas','Peças','var(--dx-pecas)'],['local','Local','var(--dx-local)'],['valor','Valor','var(--dx-valor)']];
-function irBuildAcuraciaLinhasSvg(rows, meta){
-  const W = 560, H = 290, padL = 40, padR = 24, padT = 14, padB = 30;
+function irBuildAcuraciaLinhasSvg(rows, meta, W){
+  W = W || 560; const H = 290, padL = 40, padR = 24, padT = 14, padB = 30;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const vals = rows.flatMap(r=>[r.pecas,r.local,r.valor]).filter(v=>v!=null);
   // Eixo começa logo abaixo do menor valor — de 0 a 100 as linhas ficariam
@@ -1267,7 +1290,7 @@ function irBuildAcuraciaLinhasSvg(rows, meta){
         onmouseenter="irAccTip(event,'${p[2].mes}','${k}',${p[2][k]},${meta})" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"></circle>`).join('')}`;
   }).join('');
   const xl = rows.map((r,i)=>`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="dx-ln-ax dx-ln-mes">${irMesCurto(r.mes)}</text>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" class="dx-ln" role="img" aria-label="Acurácia mensal de peças, local e valor">
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="dx-ln" role="img" aria-label="Acurácia mensal de peças, local e valor">
     ${grid}
     <line x1="${padL}" y1="${metaY}" x2="${W-padR}" y2="${metaY}" class="dx-ln-meta"/>
     ${linhas}${xl}
@@ -1311,7 +1334,7 @@ function irRenderAcuraciaMensalPanel(){
       <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span></div>
     </div>
     <div class="dx-mensal-corpo">
-      <div class="dx-mensal-graf">${irBuildAcuraciaLinhasSvg(rows, meta)}</div>
+      <div class="dx-mensal-graf">${irFluid("mensal", w=>irBuildAcuraciaLinhasSvg(rows, meta, w), 290)}</div>
       <div class="dx-mensal-ano">${resumo}</div>
     </div>
     ${irRenderTotaisAnoAcc(ac)}
@@ -1493,7 +1516,7 @@ function irRenderLogTablePanel(ind){
   const acc = (r, idx, k, rot, cor) => {
     const v = r[k];
     const ok = v!=null && v>=meta;
-    return `<div class="lc-acc ${ok?'ok':'nok'}" onmouseenter="irLogTip(event,${idx},'${k}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
+    return `<div class="lc-acc ${ok?'ok':'nok'}">
       <span class="lc-acc-rot"><i style="background:${cor};"></i>${rot}</span>
       <b>${v==null?'—':irFmtPct(v)}</b>
     </div>`;
@@ -1501,7 +1524,7 @@ function irRenderLogTablePanel(ind){
   const card = (r, idx) => {
     const orc = r.locaisOrcados||0, cont = r.locaisContados||0;
     const pct = orc>0 ? cont/orc : 0;
-    return `<div class="lc-card ${r.isTotal?'lc-total':''}">
+    return `<div class="lc-card ${r.isTotal?'lc-total':''}" onmouseenter="irLogTip(event,${idx})" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
       <div class="lc-top"><span class="lc-nome">${r.isTotal?'Total':irEsc(r.chave)}</span><span class="lc-pc">${irFmtInt(r.pecasContadas)} pç</span></div>
       <div class="lc-loc">
         <div class="lc-loc-l"><span>Contados</span><b>${irFmtInt(cont)} de ${irFmtInt(orc)}</b></div>
@@ -1527,42 +1550,43 @@ function irRenderLogTablePanel(ind){
     ${irRenderLogForaDaTabela(ind, rows)}
   </div>`;
 }
-/* Balão da acurácia no cartão do log: a conta inteira (base, divergente,
-   acurácia) e a distância até a meta, com uma régua mostrando onde está. */
-function irLogTip(ev, idx, k){
+/* Balão do cartão do log inteiro: ao passar o mouse em qualquer parte do cartão
+   aparecem as três acurácias (Peças, Posições e Valor), cada uma com a conta
+   completa, a régua da meta e a distância até ela. */
+function irLogTip(ev, idx){
   const r = (IR._logCards||[])[idx];
   const tt = document.getElementById('irChartTooltip');
   if(!r || !tt) return;
   const meta = (IR.indicadores && IR.indicadores.meta) || IR_META_ACURACIA;
-  const v = r[k];
   const nome = r.isTotal ? 'Total dos logs' : r.chave;
-  let titulo, cor, linhas;
-  if(k==='acuraciaPecas'){
-    titulo = 'Peças'; cor = 'var(--dx-pecas)';
-    const base = r.pecasSaldoLogico || r.pecasContadas || 0;
-    linhas = [['Base (saldo do sistema)', irFmtInt(base)+' pç'], ['Contadas', irFmtInt(r.pecasContadas)+' pç'], ['Divergentes', irFmtInt(r.pecasDivergentes)+' pç', 'bad']];
-  } else if(k==='acuraciaPosicoes'){
-    titulo = 'Posições'; cor = 'var(--dx-local)';
-    linhas = [['Locais orçados', irFmtInt(r.locaisOrcados)], ['Locais contados', irFmtInt(r.locaisContados)], ['Locais divergentes', irFmtInt(r.locaisDivergentes), 'bad']];
-  } else {
-    titulo = 'Valor'; cor = 'var(--dx-valor)';
-    const base = r.vlSaldoLogico || r.vlFisicoTotal || 0;
-    linhas = [['Base (saldo do sistema)', irFmtMoney(base)], ['Valor contado', irFmtMoney(r.vlFisicoTotal||0)], ['Valor divergente', irFmtMoney(r.valorDivergenteAbsoluto||0), 'bad']];
-  }
-  const d = v==null ? null : (v-meta)*100;
-  const st = d==null ? '' : (d>=0
-    ? `<span class="lt-pill ok">na meta · +${irFmtNum(d,1)} p.p.</span>`
-    : `<span class="lt-pill nok">${irFmtNum(-d,1)} p.p. abaixo da meta</span>`);
-  // Régua de 90% a 100% com a marca da meta.
   const pos = x => Math.max(0, Math.min(100, (x-0.90)/0.10*100)).toFixed(1);
-  tt.innerHTML = `<div class="lt">
-    <div class="lt-h"><span class="lt-dot" style="background:${cor};"></span><span>${irEsc(nome)} · Acurácia ${titulo}</span></div>
-    <div class="lt-v"><b class="${d!=null && d<0?'bad':''}">${v==null?'—':irFmtPct(v)}</b>${st}</div>
-    <div class="lt-regua"><i style="width:${v==null?0:pos(v)}%;background:${cor};"></i><em style="left:${pos(meta)}%;"></em></div>
-    <div class="lt-esc"><span>90%</span><span>meta ${irFmtNum(meta*100,0)}%</span><span>100%</span></div>
-    <div class="lt-rows">${linhas.map(([a,b,c])=>`<div><span>${a}</span><b class="${c||''}">${b}</b></div>`).join('')}</div>
+  const orc = r.locaisOrcados||0, cont = r.locaisContados||0, pct = orc>0 ? cont/orc : 0;
+  const bloco = (titulo, cor, v, linhas) => {
+    const d = v==null ? null : (v-meta)*100;
+    const st = d==null ? '' : (d>=0
+      ? `<span class="lt-pill ok">na meta · +${irFmtNum(d,1)} p.p.</span>`
+      : `<span class="lt-pill nok">${irFmtNum(-d,1)} p.p. abaixo da meta</span>`);
+    return `<div class="lt-col" style="--c:${cor};">
+      <div class="lt-h"><span class="lt-dot" style="background:${cor};"></span><span>Acurácia ${titulo}</span></div>
+      <div class="lt-v"><b class="${d!=null && d<0?'bad':''}">${v==null?'—':irFmtPct(v)}</b></div>
+      <div>${st}</div>
+      <div class="lt-regua"><i style="width:${v==null?0:pos(v)}%;background:${cor};"></i><em style="left:${pos(meta)}%;"></em></div>
+      <div class="lt-esc"><span>90%</span><span>meta ${irFmtNum(meta*100,0)}%</span><span>100%</span></div>
+      <div class="lt-rows">${linhas.map(([a,b,c])=>`<div><span>${a}</span><b class="${c||''}">${b}</b></div>`).join('')}</div>
+    </div>`;
+  };
+  const basePc = r.pecasSaldoLogico || r.pecasContadas || 0;
+  const baseVl = r.vlSaldoLogico || r.vlFisicoTotal || 0;
+  tt.innerHTML = `<div class="lt-big">
+    <div class="lt-big-h"><b>${irEsc(nome)}</b>
+      <span>${irFmtInt(cont)} de ${irFmtInt(orc)} locais contados · ${irFmtPct(pct)} · ${irFmtInt(r.locaisPendentes)} pendentes</span></div>
+    <div class="lt-cols">
+      ${bloco('Peças','var(--dx-pecas)', r.acuraciaPecas, [['Base do sistema', irFmtInt(basePc)+' pç'], ['Contadas', irFmtInt(r.pecasContadas)+' pç'], ['Divergentes', irFmtInt(r.pecasDivergentes)+' pç', 'bad']])}
+      ${bloco('Posições','var(--dx-local)', r.acuraciaPosicoes, [['Locais orçados', irFmtInt(r.locaisOrcados)], ['Locais contados', irFmtInt(r.locaisContados)], ['Locais divergentes', irFmtInt(r.locaisDivergentes), 'bad']])}
+      ${bloco('Valor','var(--dx-valor)', r.acuraciaValor, [['Base do sistema', irFmtMoney(baseVl)], ['Valor contado', irFmtMoney(r.vlFisicoTotal||0)], ['Valor divergente', irFmtMoney(r.valorDivergenteAbsoluto||0), 'bad']])}
+    </div>
   </div>`;
-  tt.classList.add('lt-wrap');
+  tt.classList.add('lt-wrap','lt-wrap-big');
   tt.classList.remove('hidden');
   irMoveDiaTooltip(ev);
 }
@@ -2202,7 +2226,7 @@ function irRenderPioresRuas(ind){
    fininha e clara. O rótulo da meta fica no topo do painel, longe dos números. */
 function irBuildContadosBarrasSvg(itens, opts){
   opts = opts||{};
-  const W = 760, H = 240, pL = 10, pR = 10, pT = 38, pB = 30;
+  const W = opts.W || 760, H = 240, pL = 10, pR = 10, pT = 38, pB = 30;
   const w = (W-pL-pR)/Math.max(1,itens.length);
   const mx = Math.max(1, ...itens.map(i=>Math.max(i.v, i.meta)))*1.08;
   const y = v => pT + (1-v/mx)*(H-pT-pB);
@@ -2220,7 +2244,7 @@ function irBuildContadosBarrasSvg(itens, opts){
       <text x="${cx.toFixed(1)}" y="${(y(it.v)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${ok?'var(--success)':'var(--danger)'};paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${Math.round(it.v/it.meta*100)}%</text>
       <text x="${cx.toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink-soft)">${irEsc(it.rot)}</text>`;
   });
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block">${g}</svg>`;
 }
 /* Meta mensal fixa: meta diária × 21 dias úteis (média do mês). Uma linha reta só,
    igual à do gráfico por dia — por mês exato a linha ficava quebrada. */
@@ -2244,13 +2268,14 @@ function irContadosMensalDoAno(){
 function irRenderContadosPorDiaPanel(ind){
   const rows = (ind.contadosPorDia||[]).slice(-10); // últimos 10 dias
   IR._porDiaRua = ind.porDiaRua||{};
-  const dia = rows.length ? irBuildContadosBarrasSvg(rows.map(r=>({
+  const itensDia = rows.map(r=>({
       rot: new Date(r.dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}),
-      v: r.total, meta: IR_META_DIARIA, tip: `irShowDiaTooltip(event,'${r.dia}')`})))
+      v: r.total, meta: IR_META_DIARIA, tip: `irShowDiaTooltip(event,'${r.dia}')`}));
+  const dia = rows.length ? irFluid('contDia', w=>irBuildContadosBarrasSvg(itensDia, {W:w}), 240)
     : '<p class="field-hint">Nenhuma contagem registrada ainda.</p>';
   const {ano, rows: meses} = irContadosMensalDoAno();
-  const mes = meses.length ? irBuildContadosBarrasSvg(meses.map(m=>({
-      rot: irMesCurto(m.mes), v: m.total, meta: IR_META_MENSAL})))
+  const itensMes = meses.map(m=>({rot: irMesCurto(m.mes), v: m.total, meta: IR_META_MENSAL}));
+  const mes = meses.length ? irFluid('contMes', w=>irBuildContadosBarrasSvg(itensMes, {W:w}), 240)
     : `<p class="field-hint">${IR.comparativoCiclos===null ? 'Carregando...' : 'Sem contagem por mês.'}</p>`;
   return `<div class="dx-conta-grid">
     <div class="panel">
@@ -2351,6 +2376,7 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
   // ocupar o painel todo quando os dias cabem (min-width é o piso: só rola
   // quando não cabem mais). No boletim (fixedW) o container já tem largura
   // fixa e os dias já foram truncados pra caber, então não precisa de piso.
+  if(opts.fluidW){ const svgF = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;">${svg}</svg>`; return { svgHtml: svgF, omitidos, total: rows.length, visiveis: n }; }
   const style = opts.fixedW ? `display:block;` : `width:100%;min-width:${W}px;height:${H}px;display:block;`;
   const svgHtml = `<svg width="${opts.fixedW?'100%':W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="${style}">${svg}</svg>`;
   return { svgHtml, omitidos, total: rows.length, visiveis: n };
@@ -2364,11 +2390,16 @@ function irRenderDivergentesPorDiaPanel(ind){
     <span><i style="background:var(--orange)"></i>Divergente</span>
   </div>`;
   const chart = (campoDiv, campoSist, fmt, titulo, slot, fontLbl)=>{
-    const { svgHtml } = irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, {slot, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fontLbl||9});
+    // Cada dia ocupa a largura real do painel dividida pelos dias (nada de esticar).
+    const desenha = w => {
+      const sl = Math.max(52, (w-14)/rows.length);
+      const fs = (sl>=96?10:(sl>=80?9.5:9)) - (fontLbl?1:0);
+      return irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, {slot:sl, fluidW:w, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fs}).svgHtml;
+    };
     return `<div class="panel">
       <h3>${titulo} <small class="dx-ult">últimos 7 dias</small></h3>
       ${legenda}
-      <div class="bi-vbars-scroll">${svgHtml}</div>
+      ${irFluid('div_'+campoDiv, desenha, 236)}
     </div>`;
   };
   // Os três são parecidos: ficam lado a lado, com 7 dias cada e a mesma largura por dia.
@@ -2402,12 +2433,17 @@ function irMoveDiaTooltip(ev){
   const rect = tt.getBoundingClientRect();
   if(x + rect.width > window.innerWidth) x = ev.clientX - rect.width - pad;
   if(y + rect.height > window.innerHeight) y = ev.clientY - rect.height - pad;
-  tt.style.left = x+'px';
-  tt.style.top = y+'px';
+  if(x < 4) x = 4; if(y < 4) y = 4;
+  // O balão vive dentro do body com zoom: left/top são medidos na escala do zoom,
+  // então a posição na tela (px reais do mouse) precisa ser dividida por ele —
+  // sem isso o balão aparecia deslocado do cursor quando o zoom não era 100%.
+  const z = parseFloat(document.body.style.zoom) || 1;
+  tt.style.left = (x/z)+'px';
+  tt.style.top = (y/z)+'px';
 }
 function irHideDiaTooltip(){
   const tt = document.getElementById('irChartTooltip');
-  if(tt){ tt.classList.add('hidden'); tt.classList.remove('lt-wrap'); }
+  if(tt){ tt.classList.add('hidden'); tt.classList.remove('lt-wrap','lt-wrap-big'); }
 }
 function irRenderRuasMaisDivergentesPanel(ind){
   const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>b.pecasDivergentes-a.pecasDivergentes);
