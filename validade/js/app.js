@@ -4,7 +4,7 @@
    p/ valorar) e ZBIQ0051 (múltiplos: qual componente carrega valor).
    Dados compartilhados em public.vl_dados (migração 007).
    ============================================================ */
-const VL_VERSAO = 9; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const VL_VERSAO = 10; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const VL_TAB = 'vl_dados';
 /* Cores da marca (azul #001A72 e laranja #FE5000): vermelho -> laranja -> âmbar -> azuis.
    Quanto mais perto de vencer, mais quente. */
@@ -39,7 +39,8 @@ const VL_NOISE = new Set(['AUTO', 'BLISTER', 'QUIMICA', 'RUBBER', 'PISCINAS', 'U
 
 const VL = {
   rows: [], meta: null, hist: [],
-  cfg: {faixas: [30, 60, 90], reversa: ['REV', 'AVA'], forn: {}},
+  cfg: {faixas: [30, 60, 90], reversa: ['REV', 'AVA'], forn: {}, ignorar: ['EPI ARM']},
+  base: [],
   tab: 'painel', f: {area: '', forn: '', busca: '', faixa: '', de: '', ate: ''}, sort: {k: 'valor', d: -1}, pag: 0,
   ocupado: false, msg: '', carregando: true
 };
@@ -105,9 +106,13 @@ function marcaDe(desc, ean){
 const fornDe = marca => VL.cfg.forn[marca] || (marca === 'SEM MARCA' ? 'A classificar' : marca);
 
 /* ---------- preparo das linhas (derivados) ---------- */
+/* Endereços desconsiderados (Configurações): saem de todos os números, não só da tela. */
+const ignorado = lo => { const e = String(lo || '').toUpperCase().replace(/\s+/g, ' ').trim(); return (VL.cfg.ignorar || []).some(p => p && e.indexOf(p) === 0); };
 function preparar(){
   const fx = faixas(), rev = new Set(VL.cfg.reversa);
   VL.fx = fx;
+  VL.rows = VL.base.filter(r => !ignorado(r.lo));
+  VL.ignorados = VL.base.length - VL.rows.length;
   VL.rows.forEach(r => {
     r.area = rev.has(r.cl) ? 'R' : 'E';
     r.marca = marcaDe(r.d, r.e); r.forn = fornDe(r.marca);
@@ -195,7 +200,7 @@ async function carregar(){
     const [base, cfg, hist] = await Promise.all([nuvemLer('base'), nuvemLer('cfg'), nuvemLer('hist')]);
     if(cfg && cfg.dados) Object.assign(VL.cfg, cfg.dados.cfg || {});
     VL.hist = (hist && hist.dados && hist.dados.pontos) || [];
-    VL.rows = base ? base.linhas : []; VL.meta = base ? base.meta : null;
+    VL.base = base ? base.linhas : []; VL.meta = base ? base.meta : null;
     preparar();
   } catch(e){
     VL.erro = 'Não consegui ler os dados: ' + (e.message || e) + (/relation|does not exist|vl_dados/i.test(String(e.message)) ? ' — a tabela vl_dados ainda não foi criada no banco (migração 007).' : '');
@@ -252,8 +257,8 @@ async function importar(files){
     }
     VL.msg = 'Valorando e gravando na nuvem...'; renderMsg();
     const precos = (await kvGet('precos')) || {}, est = (await kvGet('estrutura')) || {};
-    let rows = novas ? novas.dados : VL.rows.map(lerCampos);
-    if(!novas && !VL.rows.length) throw new Error('Importe primeiro a QRY0390 (estoque).');
+    let rows = novas ? novas.dados : VL.base.map(lerCampos);
+    if(!novas && !VL.base.length) throw new Error('Importe primeiro a QRY0390 (estoque).');
     valorar(rows, precos, est);
     const sessao = (await vlSupa.auth.getSession()).data.session;
     const antigo = VL.meta || {};
@@ -265,7 +270,7 @@ async function importar(files){
       preco: await kvGet('precos-meta') || null, estrutura: await kvGet('estrutura-meta') || null
     };
     await nuvemGravar('base', meta, {}, dividir(rows, 400000));
-    VL.rows = rows; VL.meta = meta; preparar();
+    VL.base = rows; VL.meta = meta; preparar();
     await registrarHist();
     toast('Importação concluída: ' + fInt(rows.length) + ' lotes com validade.');
   } catch(e){
@@ -429,7 +434,7 @@ function hero(){
   const per = VL.f.de || VL.f.ate ? 'Vencimento de ' + (VL.f.de ? fMes(VL.f.de) : 'início') + ' até ' + (VL.f.ate ? fMes(VL.f.ate) : 'fim') : '';
   return '<div class="vl-hero"><div><span class="vl-hero-tag">Controle de Validade · CD Cajamar</span><h2>Vencidos e a vencer — estoque e reversa</h2>' +
     '<p>Base QRY0390 de <b>' + (m.importadoEm ? fData(m.importadoEm.slice(0, 10)) : '—') + '</b> · situação em <b>' + fData(hojeISO()) + '</b> · valor = quantidade × preço de custo (SIGEQ278)' +
-    (VL.f.forn ? ' · fornecedor <b>' + esc(VL.f.forn) + '</b>' : '') + (per ? ' · <b>' + per + '</b>' : '') + '</p></div></div>';
+    ((VL.cfg.ignorar || []).length ? ' · desconsiderados: <b>' + esc(VL.cfg.ignorar.join(', ')) + '</b>' : '') + (VL.f.forn ? ' · fornecedor <b>' + esc(VL.f.forn) + '</b>' : '') + (per ? ' · <b>' + per + '</b>' : '') + '</p></div></div>';
 }
 function secaoArea(a, ra){
   const T = tot(ra), desc = a[0] === 'E' ? 'Itens em locais de estoque (classes fora de ' + esc(VL.cfg.reversa.join(', ')) + ').' : 'Itens em locais da reversa (classes ' + esc(VL.cfg.reversa.join(', ')) + ').';
@@ -440,8 +445,13 @@ function secaoArea(a, ra){
     '<div class="panel vl-card"><div class="vl-card-h"><h3>Fornecedores com mais valor em risco</h3><p>Vencido + vence em até ' + Math.max.apply(null, VL.cfg.faixas) + ' dias, em valor de custo. Clique para filtrar.</p></div>' + topForn(ra, 8) + '</div></div>' +
     '<div class="panel vl-card"><div class="vl-card-h"><h3>Valor de custo por mês de vencimento</h3><p>Quanto vence em cada mês. Embaixo de cada mês, o acumulado. Passe o mouse para ver itens, peças e em quais locais está.</p></div>' + graficoMensal(ra, 200, a[2]) + '</div></section>';
 }
+function qualAtual(){
+  const q = (VL.meta || {}).qual; if(!q) return null;
+  const f = b => { const lista = b.lista.filter(l => !ignorado(l.lo)); return {lista, linhas: lista.reduce((a, l) => a + (l.n || 1), 0), itens: new Set(lista.map(l => l.i)).size, q: lista.reduce((a, l) => a + l.q, 0), valor: lista.reduce((a, l) => a + l.valor, 0)}; };
+  return {wv: f(q.wv), semData: f(q.semData)};
+}
 function painelQualidade(rows){
-  const q = (VL.meta || {}).qual, sus = rows.filter(suspeita), rom = rows.filter(r => r.qr > 0);
+  const q = qualAtual(), sus = rows.filter(suspeita), rom = rows.filter(r => r.qr > 0);
   const S = tot(sus), Rm = rom.reduce((a, r) => a + (r.qr || 0), 0);
   const li = (cor, tit, txt) => '<li style="--c:' + cor + '"><b>' + tit + '</b><span>' + txt + '</span></li>';
   return '<div class="panel vl-card"><div class="vl-card-h"><h3>Qualidade da base · pontos de atenção</h3><p>Diferenças encontradas na própria QRY0390. Estão na aba "Inconsistências" do Excel.</p></div><ul class="vl-qual">' +
@@ -539,6 +549,8 @@ function viewConfig(){
     '<div class="filter-bar"><input type="text" id="cfgFaixas" value="' + esc(VL.cfg.faixas.join(', ')) + '"></div></div>' +
     '<div class="panel vl-gap"><h3>Classes de local da reversa</h3><div class="panel-sub">Separadas por vírgula (coluna Classe Local da 390). Tudo que não estiver aqui conta como estoque.</div>' +
     '<div class="filter-bar"><input type="text" id="cfgRev" value="' + esc(VL.cfg.reversa.join(', ')) + '"></div></div>' +
+    '<div class="panel vl-gap"><h3>Locais desconsiderados</h3><div class="panel-sub">Início do endereço, separados por vírgula (ex.: <code>EPI ARM</code>). Esses lotes saem de todos os números, gráficos e exportações. Hoje: ' + fInt(VL.ignorados || 0) + ' lotes fora.</div>' +
+    '<div class="filter-bar"><input type="text" id="cfgIgn" value="' + esc((VL.cfg.ignorar || []).join(', ')) + '"></div></div>' +
     '<div class="panel vl-gap"><h3>Fornecedores</h3><div class="panel-sub">A marca é lida da descrição do item. Digite o nome do fornecedor para corrigir ou agrupar marcas (ex.: <code>VOND</code> → <code>VONDER</code>). Em branco = usa a própria marca.</div>' +
     '<div class="table-wrap" style="max-height:420px;overflow:auto"><table class="vl-tab"><thead><tr><th>Marca na descrição</th><th class="n">Lotes</th><th class="n">Valor</th><th>Fornecedor</th></tr></thead><tbody>' +
     marcas.map(o => '<tr><td>' + esc(o.k) + '</td><td class="n">' + fInt(o.lotes) + '</td><td class="n">' + fBRL(o.valor) + '</td><td><input type="text" class="vl-forn" data-m="' + esc(o.k) + '" value="' + esc(VL.cfg.forn[o.k] || '') + '" placeholder="' + esc(o.k === 'SEM MARCA' ? 'A classificar' : o.k) + '"></td></tr>').join('') + '</tbody></table></div></div>' +
@@ -549,6 +561,7 @@ function vlSalvarCfg(){
   if(!f.length) return toast('Informe pelo menos uma faixa em dias.', true);
   VL.cfg.faixas = Array.from(new Set(f)).sort((a, b) => a - b).slice(0, 5);
   VL.cfg.reversa = String(document.getElementById('cfgRev').value).toUpperCase().split(/[,;\s]+/).filter(Boolean);
+  VL.cfg.ignorar = String(document.getElementById('cfgIgn').value).toUpperCase().split(/[,;]+/).map(t => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const forn = {}; document.querySelectorAll('.vl-forn').forEach(i => { const v = i.value.trim(); if(v) forn[i.dataset.m] = v; });
   VL.cfg.forn = forn;
   salvarCfg().then(renderView);
@@ -663,7 +676,7 @@ function vlExportar(){
   const it = rows.slice().sort((a, b) => a.area.localeCompare(b.area) || a.dias - b.dias).map(r => [r.area === 'R' ? 'Reversa' : 'Estoque', +r.i || r.i, r.d, r.forn, r.l, fData(r.v), fMes(r.mes), r.dias, nm[r.faixa], r.lo, r.cl, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), [r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : ''), suspeita(r) ? 'Validade improvável' : '', r.qr ? r.qr + ' pç romaneada(s)' : ''].filter(Boolean).join(' · ')]);
   folha(wb, 'Itens', ['Área', 'Item', 'Descrição', 'Fornecedor', 'Lote', 'Validade', 'Mês de vencimento', 'Dias p/ vencer', 'Faixa (dias p/ vencer)', 'Endereço', 'Classe local', 'Restrição', 'EAN', 'Quantidade', 'Custo unitário (R$)', 'Valor de custo (R$)', 'Obs.'],
     it, [10, 10, 52, 18, 10, 11, 12, 9, 22, 18, 9, 9, 15, 11, 14, 16, 30], ['', '', '', '', '', '', '', 'N', '', '', '', '', '', 'N', 'C', 'R', ''], tit('Itens e lotes'));
-  const q = (VL.meta || {}).qual, inc = [], pc = r => r.area ? (r.area === 'R' ? 'Reversa' : 'Estoque') : (VL.cfg.reversa.indexOf(r.cl) >= 0 ? 'Reversa' : 'Estoque');
+  const q = qualAtual(), inc = [], pc = r => r.area ? (r.area === 'R' ? 'Reversa' : 'Estoque') : (VL.cfg.reversa.indexOf(r.cl) >= 0 ? 'Reversa' : 'Estoque');
   rows.filter(suspeita).forEach(r => inc.push(['Validade improvável', pc(r), +r.i || r.i, r.d, r.lo, r.cl, r.r, fData(r.v), r.q, +r.valor.toFixed(2), 'Data fora do normal — conferir cadastro do lote']));
   if(q){
     q.wv.lista.forEach(l => inc.push(['Restrição WV sem data', pc(l), +l.i || l.i, l.d, l.lo, l.cl, l.r, '', l.q, +l.valor.toFixed(2), 'Bloqueado por validade, mas a 390 não traz a data — fora dos números']));
