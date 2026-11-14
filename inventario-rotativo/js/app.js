@@ -1032,7 +1032,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v269';
+const IR_APP_VERSION = 'v270';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1239,7 +1239,7 @@ const IR_MES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julh
 function irMesCurto(mes){ const i = parseInt(String(mes||'').slice(5,7),10)-1; return IR_MES_ABREV[i] || String(mes||''); }
 const IR_ACC_SERIES = [['pecas','Peças','var(--dx-pecas)'],['local','Local','var(--dx-local)'],['valor','Valor','var(--dx-valor)']];
 function irBuildAcuraciaLinhasSvg(rows, meta){
-  const W = 560, H = 290, padL = 40, padR = 100, padT = 14, padB = 30;
+  const W = 560, H = 290, padL = 40, padR = 24, padT = 14, padB = 30;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const vals = rows.flatMap(r=>[r.pecas,r.local,r.valor]).filter(v=>v!=null);
   // Eixo começa logo abaixo do menor valor — de 0 a 100 as linhas ficariam
@@ -1258,21 +1258,13 @@ function irBuildAcuraciaLinhasSvg(rows, meta){
       <text x="${padL-8}" y="${(+yy+4).toFixed(1)}" text-anchor="end" class="dx-ln-ax">${Math.round(t*100)}%</text>`;
   }
   const metaY = y(meta).toFixed(1);
-  // Rótulo na ponta da linha, sem encavalar: no mínimo 15px entre eles.
-  const fim = {};
-  IR_ACC_SERIES.map(([k])=>{
-    const ult = rows.map(r=>r[k]).filter(v=>v!=null).pop();
-    return ult==null ? null : {k, ult, yy:y(ult)};
-  }).filter(Boolean).sort((a,b)=>a.yy-b.yy).reduce((ant,o)=>{ o.yy = Math.max(o.yy, ant+15); fim[o.k]=o; return o.yy; }, -99);
   const linhas = IR_ACC_SERIES.map(([k,rot,cor])=>{
     const pts = rows.map((r,i)=>r[k]==null?null:[x(i), y(r[k]), r]).filter(Boolean);
     if(!pts.length) return '';
     const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-    const ult = pts[pts.length-1];
     return `<path d="${d}" fill="none" style="stroke:${cor}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
       ${pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="fill:${cor}" class="dx-ln-pt"
-        onmouseenter="irAccTip(event,'${p[2].mes}','${k}',${p[2][k]},${meta})" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"></circle>`).join('')}
-      ${fim[k]?`<text x="${(ult[0]+10).toFixed(1)}" y="${(fim[k].yy+4).toFixed(1)}" class="dx-ln-fim" style="fill:${cor}">${rot} ${irFmtPct(fim[k].ult)}</text>`:''}`;
+        onmouseenter="irAccTip(event,'${p[2].mes}','${k}',${p[2][k]},${meta})" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"></circle>`).join('')}`;
   }).join('');
   const xl = rows.map((r,i)=>`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="dx-ln-ax dx-ln-mes">${irMesCurto(r.mes)}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" class="dx-ln" role="img" aria-label="Acurácia mensal de peças, local e valor">
@@ -1309,7 +1301,7 @@ function irRenderAcuraciaMensalPanel(){
       const comDado = rows.filter(r=>r[k]!=null);
       const naMeta = comDado.filter(r=>r[k]>=meta).length;
       return `<div class="dx-ano" style="border-left-color:${cor};">
-        <span class="dx-ano-rot">${rot} · ${irEsc(String(ano||'ano'))}</span>
+        <span class="dx-ano-rot"><i class="dx-ano-dot" style="background:${cor};"></i>${rot} · ${irEsc(String(ano||'ano'))}</span>
         <span class="dx-ano-v ${v!=null && v<meta?'bad':''}">${v==null?'—':irFmtPct(v)}</span>
         <span class="dx-ano-h">${naMeta} de ${comDado.length} ${comDado.length===1?'mês':'meses'} na meta</span>
       </div>`;
