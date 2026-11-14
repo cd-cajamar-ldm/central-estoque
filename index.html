@@ -1857,6 +1857,18 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       if(!pessoaEl) return;
       var id = pessoaEl.dataset.id;
 
+      /* Trava de segurança: o administrador não pode desativar a si mesmo nem tirar o próprio papel de admin
+         (senão perde o acesso a esta tela e só dá para recuperar direto no banco). */
+      if((e.target.classList.contains('access-cb-ativo') || e.target.classList.contains('access-cb-admin')) && !e.target.checked){
+        var { data: { session: sessaoAtual } } = await sbAcessos.auth.getSession();
+        var { data: alvo } = await sbAcessos.schema('acessos').from('pessoas').select('user_id').eq('id', id).maybeSingle();
+        if(sessaoAtual && alvo && alvo.user_id === sessaoAtual.user.id){
+          e.target.checked = true;
+          accessMsg('Você não pode desativar a sua própria conta nem tirar o seu próprio acesso de administrador. Peça para outro administrador fazer isso.');
+          return;
+        }
+      }
+
       if(e.target.classList.contains('access-cb-ativo')){
         var { error } = await sbAcessos.schema('acessos').from('pessoas').update({ ativo: e.target.checked }).eq('id', id);
         if(error){ accessMsg(accessEmPortugues(error.message)); e.target.checked = !e.target.checked; return; }
