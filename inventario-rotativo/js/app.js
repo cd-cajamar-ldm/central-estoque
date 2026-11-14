@@ -1032,7 +1032,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v273';
+const IR_APP_VERSION = 'v274';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2222,12 +2222,10 @@ function irBuildContadosBarrasSvg(itens, opts){
   });
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
 }
-function irDiasUteisMes(mes){ // segunda a sexta (feriados não entram)
-  const [ano, m] = String(mes).split('-').map(Number);
-  let n = 0;
-  for(let d=new Date(ano, m-1, 1); d.getMonth()===m-1; d.setDate(d.getDate()+1)){ const w=d.getDay(); if(w>0 && w<6) n++; }
-  return n;
-}
+/* Meta mensal fixa: meta diária × 21 dias úteis (média do mês). Uma linha reta só,
+   igual à do gráfico por dia — por mês exato a linha ficava quebrada. */
+const IR_DIAS_UTEIS_MES = 21;
+const IR_META_MENSAL = IR_META_DIARIA * IR_DIAS_UTEIS_MES;
 // Locais contados por mês do ano do ciclo ativo, somando todos os ciclos do ano
 // (mesma fonte e mesma regra de mês da Acurácia mensal).
 function irContadosMensalDoAno(){
@@ -2252,7 +2250,7 @@ function irRenderContadosPorDiaPanel(ind){
     : '<p class="field-hint">Nenhuma contagem registrada ainda.</p>';
   const {ano, rows: meses} = irContadosMensalDoAno();
   const mes = meses.length ? irBuildContadosBarrasSvg(meses.map(m=>({
-      rot: irMesCurto(m.mes), v: m.total, meta: IR_META_DIARIA*irDiasUteisMes(m.mes)})))
+      rot: irMesCurto(m.mes), v: m.total, meta: IR_META_MENSAL})))
     : `<p class="field-hint">${IR.comparativoCiclos===null ? 'Carregando...' : 'Sem contagem por mês.'}</p>`;
   return `<div class="dx-conta-grid">
     <div class="panel">
@@ -2262,7 +2260,7 @@ function irRenderContadosPorDiaPanel(ind){
     </div>
     <div class="panel">
       <div class="dx-panel-h"><h3>Contados por Mês <small class="dx-ult">${irEsc(String(ano||''))}</small></h3>
-        <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta = ${irFmtInt(IR_META_DIARIA)} × dias úteis do mês</span></div></div>
+        <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtInt(IR_META_MENSAL)} (${irFmtInt(IR_META_DIARIA)} × ${IR_DIAS_UTEIS_MES} dias úteis)</span></div></div>
       ${mes}
     </div>
   </div>`;
