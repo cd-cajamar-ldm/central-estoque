@@ -97,32 +97,13 @@ function ldmAcessoEmPortugues(msg){
   sairNegadoBtn.addEventListener('click', function(){ ldmSupa.auth.signOut().then(ldmVerificarAcesso); });
   if(sairSidebarBtn) sairSidebarBtn.addEventListener('click', function(){ ldmSupa.auth.signOut().then(ldmVerificarAcesso); });
 
-  async function ldmVerificarAcesso(){
-    const { data: { session } } = await ldmSupa.auth.getSession();
-    if(!session){
-      telaLogin.hidden = false; telaNegado.hidden = true;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    const { data: pode, error } = await ldmSupa.rpc('ldm_pode_acessar', { p_app_key: LDM_APP_KEY });
-    if(error){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    if(!pode){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      negadoEmailEl.textContent = session.user.email;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    telaAcesso.classList.add('escondida');
-    if(!appIniciado){
+  /* Abre o app (uma vez só). */
+  function iniciarApp(){
+    if(appIniciado) return;
       appIniciado = true;
       /* Registra a visita pra contar na frequência (Configurações do hub).
          Não bloqueia o app por causa disso — se falhar, só não conta. */
-      ldmSupa.rpc('ldm_registrar_acesso', { p_app_key: LDM_APP_KEY }).catch(function(){});
+      ldmSupa.rpc('ldm_registrar_acesso', { p_app_key: LDM_APP_KEY }).then(function(){}, function(){});
       /* O app abre JÁ; o nível de acesso e a sincronização vêm em seguida. */
       if(typeof window.LDM_INICIAR === 'function') window.LDM_INICIAR();
       /* 'visualizar': lê os dados do servidor, mas não grava (o banco também recusa). */
@@ -131,7 +112,40 @@ function ldmAcessoEmPortugues(msg){
       }).catch(function(){}).then(function(){
         if(window.LDM_NUVEM && window.LDM_NUVEM_CFG) setTimeout(function(){ window.LDM_NUVEM.iniciar(window.LDM_NUVEM_CFG); }, 1200);
       });
+  }
+
+  async function ldmVerificarAcesso(){
+    const { data: { session } } = await ldmSupa.auth.getSession();
+    if(!session){
+      try { Object.keys(localStorage).forEach(function(k){ if(k.indexOf('ldm-acesso-') === 0) localStorage.removeItem(k); }); } catch(e){}
+      telaLogin.hidden = false; telaNegado.hidden = true;
+      telaAcesso.classList.remove('escondida');
+      return;
     }
+    /* Caminho rápido: se esta pessoa já foi liberada neste aparelho nas últimas 12 h, abre o app agora e confirma
+       a permissão em segundo plano (o banco continua barrando os dados de quem não tiver acesso). */
+    const CACHE_ACESSO = 'ldm-acesso-' + LDM_APP_KEY;
+    let rapido = false;
+    try { const c = JSON.parse(localStorage.getItem(CACHE_ACESSO) || 'null'); rapido = !!(c && c.u === session.user.id && Date.now() - c.t < 12 * 3600 * 1000); } catch(e){}
+    if(rapido){ telaAcesso.classList.add('escondida'); iniciarApp(); }
+    const { data: pode, error } = await ldmSupa.rpc('ldm_pode_acessar', { p_app_key: LDM_APP_KEY });
+    if(error){
+      if(rapido) return;   /* sem conexão: segue aberto com o que já foi liberado */
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
+    if(!pode){
+      try { localStorage.removeItem(CACHE_ACESSO); } catch(e){}
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      negadoEmailEl.textContent = session.user.email;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
+    telaAcesso.classList.add('escondida');
+    try { localStorage.setItem(CACHE_ACESSO, JSON.stringify({ u: session.user.id, t: Date.now() })); } catch(e){}
+    iniciarApp();
   }
 
   ldmSupa.auth.onAuthStateChange(function(){ ldmVerificarAcesso(); });

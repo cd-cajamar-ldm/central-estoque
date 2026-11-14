@@ -97,28 +97,9 @@ function vlAcessoEmPortugues(msg){
   sairNegadoBtn.addEventListener('click', function(){ vlSupa.auth.signOut().then(vlVerificarAcesso); });
   if(sairSidebarBtn) sairSidebarBtn.addEventListener('click', function(){ vlSupa.auth.signOut().then(vlVerificarAcesso); });
 
-  async function vlVerificarAcesso(){
-    const { data: { session } } = await vlSupa.auth.getSession();
-    if(!session){
-      telaLogin.hidden = false; telaNegado.hidden = true;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    const { data: pode, error } = await vlSupa.rpc('ldm_pode_acessar', { p_app_key: VL_APP_KEY });
-    if(error){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    if(!pode){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      negadoEmailEl.textContent = session.user.email;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    telaAcesso.classList.add('escondida');
-    if(!appIniciado){
+  /* Abre o app (uma vez só). */
+  function iniciarApp(){
+    if(appIniciado) return;
       appIniciado = true;
       /* O app abre JÁ, sem esperar o banco. Esperar a consulta do nível antes
          de vlInit() deixava a tela presa em "Carregando..." quando a chamada
@@ -137,8 +118,41 @@ function vlAcessoEmPortugues(msg){
       }).catch(function(){});
       /* Registra a visita pra contar na frequência (Configurações do hub).
          Não bloqueia o app por causa disso — se falhar, só não conta. */
-      vlSupa.rpc('ldm_registrar_acesso', { p_app_key: VL_APP_KEY }).catch(function(){});
+      vlSupa.rpc('ldm_registrar_acesso', { p_app_key: VL_APP_KEY }).then(function(){}, function(){});
+  }
+
+  async function vlVerificarAcesso(){
+    const { data: { session } } = await vlSupa.auth.getSession();
+    if(!session){
+      try { Object.keys(localStorage).forEach(function(k){ if(k.indexOf('ldm-acesso-') === 0) localStorage.removeItem(k); }); } catch(e){}
+      telaLogin.hidden = false; telaNegado.hidden = true;
+      telaAcesso.classList.remove('escondida');
+      return;
     }
+    /* Caminho rápido: se esta pessoa já foi liberada neste aparelho nas últimas 12 h, abre o app agora e confirma
+       a permissão em segundo plano (o banco continua barrando os dados de quem não tiver acesso). */
+    const CACHE_ACESSO = 'ldm-acesso-' + VL_APP_KEY;
+    let rapido = false;
+    try { const c = JSON.parse(localStorage.getItem(CACHE_ACESSO) || 'null'); rapido = !!(c && c.u === session.user.id && Date.now() - c.t < 12 * 3600 * 1000); } catch(e){}
+    if(rapido){ telaAcesso.classList.add('escondida'); iniciarApp(); }
+    const { data: pode, error } = await vlSupa.rpc('ldm_pode_acessar', { p_app_key: VL_APP_KEY });
+    if(error){
+      if(rapido) return;   /* sem conexão: segue aberto com o que já foi liberado */
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
+    if(!pode){
+      try { localStorage.removeItem(CACHE_ACESSO); } catch(e){}
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      negadoEmailEl.textContent = session.user.email;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
+    telaAcesso.classList.add('escondida');
+    try { localStorage.setItem(CACHE_ACESSO, JSON.stringify({ u: session.user.id, t: Date.now() })); } catch(e){}
+    iniciarApp();
   }
 
   /* Fora do callback (setTimeout): chamar o Supabase de dentro do aviso de
