@@ -1032,7 +1032,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v272';
+const IR_APP_VERSION = 'v273';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2197,25 +2197,73 @@ function irRenderPioresRuas(ind){
     </div>`).join('')}
   </div>`;
 }
+/* Contados por Dia e por Mês (modelo "opção 1" aprovado): barras laranja quando bateu
+   a meta, cinza quando ficou abaixo, com o % da meta em cada barra e linha da meta
+   fininha e clara. O rótulo da meta fica no topo do painel, longe dos números. */
+function irBuildContadosBarrasSvg(itens, opts){
+  opts = opts||{};
+  const W = 760, H = 240, pL = 10, pR = 10, pT = 38, pB = 30;
+  const w = (W-pL-pR)/Math.max(1,itens.length);
+  const mx = Math.max(1, ...itens.map(i=>Math.max(i.v, i.meta)))*1.08;
+  const y = v => pT + (1-v/mx)*(H-pT-pB);
+  const fixa = itens.every(i=>i.meta===itens[0].meta);
+  let g = fixa ? `<line x1="${pL}" x2="${W-pR}" y1="${y(itens[0].meta).toFixed(1)}" y2="${y(itens[0].meta).toFixed(1)}" style="stroke:var(--ink-soft)" stroke-width="1" stroke-dasharray="4 4" opacity=".4"/>` : '';
+  itens.forEach((it,i)=>{
+    const bw = Math.min(70, w*.6), x = pL+i*w+(w-bw)/2, ok = it.v>=it.meta, cx = x+bw/2;
+    const alt = Math.max(2, H-pB-y(it.v));
+    g += `<g ${it.tip?`onmouseenter="${it.tip}" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"`:''}>
+      <rect x="${x.toFixed(1)}" y="${y(it.v).toFixed(1)}" width="${bw.toFixed(1)}" height="${alt.toFixed(1)}" rx="5" style="fill:${ok?'var(--orange)':'#C9CEDC'}"/>
+      <rect x="${(pL+i*w).toFixed(1)}" y="${pT-30}" width="${w.toFixed(1)}" height="${H-pB-pT+30}" fill="transparent"/>
+    </g>`;
+    if(!fixa) g += `<line x1="${(pL+i*w+3).toFixed(1)}" x2="${(pL+(i+1)*w-3).toFixed(1)}" y1="${y(it.meta).toFixed(1)}" y2="${y(it.meta).toFixed(1)}" style="stroke:var(--ink-soft)" stroke-width="1" stroke-dasharray="4 4" opacity=".45"/>`;
+    g += `<text x="${cx.toFixed(1)}" y="${(y(it.v)-18).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="800" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${irFmtInt(it.v)}</text>
+      <text x="${cx.toFixed(1)}" y="${(y(it.v)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${ok?'var(--success)':'var(--danger)'};paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${Math.round(it.v/it.meta*100)}%</text>
+      <text x="${cx.toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink-soft)">${irEsc(it.rot)}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
+}
+function irDiasUteisMes(mes){ // segunda a sexta (feriados não entram)
+  const [ano, m] = String(mes).split('-').map(Number);
+  let n = 0;
+  for(let d=new Date(ano, m-1, 1); d.getMonth()===m-1; d.setDate(d.getDate()+1)){ const w=d.getDay(); if(w>0 && w<6) n++; }
+  return n;
+}
+// Locais contados por mês do ano do ciclo ativo, somando todos os ciclos do ano
+// (mesma fonte e mesma regra de mês da Acurácia mensal).
+function irContadosMensalDoAno(){
+  const c = IR.cicloAtivo, ano = c ? irCicloAno(c) : null;
+  const fontes = (IR.comparativoCiclos||[])
+    .filter(p => p.ind && irCicloAno(p.ciclo)===ano)
+    .map(p => (c && p.ciclo.id===c.id) ? IR.indicadores : p.ind);
+  if(IR.indicadores && !(IR.comparativoCiclos||[]).some(p=>c && p.ciclo.id===c.id)) fontes.push(IR.indicadores);
+  const mapa = new Map();
+  for(const ind of fontes) for(const m of (ind && ind.porMes) || []){
+    if(ano && String(m.mes).slice(0,4)!==String(ano)) continue;
+    mapa.set(m.mes, (mapa.get(m.mes)||0) + (m.locaisContados||0));
+  }
+  return {ano, rows: Array.from(mapa.entries()).sort((a,b)=>a[0].localeCompare(b[0])).map(([mes,total])=>({mes,total}))};
+}
 function irRenderContadosPorDiaPanel(ind){
-  const rows = (ind.contadosPorDia||[]).slice(-7); // só os últimos 7 dias
-  if(!rows.length) return `<div class="panel"><h3>Contados por Dia</h3><p class="field-hint">Nenhuma contagem registrada ainda.</p></div>`;
-  const max = Math.max(1, IR_META_DIARIA, ...rows.map(r=>r.total));
-  const metaPct = Math.min(100, Math.round(IR_META_DIARIA/max*100));
+  const rows = (ind.contadosPorDia||[]).slice(-10); // últimos 10 dias
   IR._porDiaRua = ind.porDiaRua||{};
-  return `<div class="panel">
-    <div class="dx-panel-h"><h3>Contados por Dia <small class="dx-ult">últimos 7 dias</small></h3>
-      <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtInt(IR_META_DIARIA)}</span></div>
+  const dia = rows.length ? irBuildContadosBarrasSvg(rows.map(r=>({
+      rot: new Date(r.dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}),
+      v: r.total, meta: IR_META_DIARIA, tip: `irShowDiaTooltip(event,'${r.dia}')`})))
+    : '<p class="field-hint">Nenhuma contagem registrada ainda.</p>';
+  const {ano, rows: meses} = irContadosMensalDoAno();
+  const mes = meses.length ? irBuildContadosBarrasSvg(meses.map(m=>({
+      rot: irMesCurto(m.mes), v: m.total, meta: IR_META_DIARIA*irDiasUteisMes(m.mes)})))
+    : `<p class="field-hint">${IR.comparativoCiclos===null ? 'Carregando...' : 'Sem contagem por mês.'}</p>`;
+  return `<div class="dx-conta-grid">
+    <div class="panel">
+      <div class="dx-panel-h"><h3>Contados por Dia <small class="dx-ult">últimos 10 dias</small></h3>
+        <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtInt(IR_META_DIARIA)}</span></div></div>
+      ${dia}
     </div>
-    <div class="bi-vbars-scroll">
-      <div class="bi-vbars bi-vbars-meta">
-        <div class="bi-vbar-meta-line" style="bottom:${metaPct}%;"></div>
-        ${rows.map(r=>`<div class="bi-vbar-col" onmouseenter="irShowDiaTooltip(event,'${r.dia}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
-          <div class="bi-vbar-val">${irFmtInt(r.total)}</div>
-          <div class="bi-vbar orange" style="height:${Math.round(r.total/max*100)}%;"></div>
-          <div class="bi-vbar-label">${new Date(r.dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</div>
-        </div>`).join('')}
-      </div>
+    <div class="panel">
+      <div class="dx-panel-h"><h3>Contados por Mês <small class="dx-ult">${irEsc(String(ano||''))}</small></h3>
+        <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta = ${irFmtInt(IR_META_DIARIA)} × dias úteis do mês</span></div></div>
+      ${mes}
     </div>
   </div>`;
 }
