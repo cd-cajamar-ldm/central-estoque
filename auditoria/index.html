@@ -294,7 +294,48 @@
     html,body{overflow:auto;}
   }
 </style>
+<link rel="stylesheet" href="css/acesso.css">
 <body>
+<div id="telaAcesso">
+  <div class="acesso-caixa">
+    <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="acesso-logo">
+
+    <div class="acesso-cartao" id="acessoLogin">
+      <h1>Central de Controle de Estoque</h1>
+      <p class="acesso-sub">CD Cajamar · acesso restrito a quem foi cadastrado pelo administrador.</p>
+      <form id="acessoForm">
+        <label class="acesso-campo">
+          <span class="acesso-rotulo">E-mail</span>
+          <input type="email" id="acessoEmail" class="acesso-input" required autocomplete="username" placeholder="nome@lojadomecanico.com.br">
+        </label>
+        <label class="acesso-campo" id="acessoSenhaCampo">
+          <span class="acesso-rotulo">Senha</span>
+          <div class="acesso-senha-wrap">
+            <input type="password" id="acessoSenha" class="acesso-input" required minlength="6" autocomplete="current-password" placeholder="pelo menos 6 caracteres">
+            <button type="button" class="acesso-mostrar" id="acessoMostrarSenha">Mostrar</button>
+          </div>
+        </label>
+        <p class="acesso-erro" id="acessoErro" hidden></p>
+        <p class="acesso-recado" id="acessoRecado" hidden></p>
+        <button type="submit" class="acesso-botao" id="acessoEnviar">Entrar</button>
+      </form>
+      <div class="acesso-links">
+        <button type="button" id="acessoModoEntrar">← Já tenho acesso</button>
+        <button type="button" id="acessoModoCriar">Primeiro acesso</button>
+        <button type="button" id="acessoModoRecuperar">Esqueci a senha</button>
+      </div>
+    </div>
+
+    <div class="acesso-cartao" id="acessoNegado" hidden>
+      <div class="acesso-negado-emoji">🔒</div>
+      <h1>Acesso negado</h1>
+      <p class="acesso-sub" id="acessoNegadoTexto">A conta <span class="acesso-negado-email" id="acessoNegadoEmail"></span> não tem permissão pra abrir o Central de Controle de Estoque. Peça pro administrador liberar em Configurações, no painel da Central.</p>
+      <button type="button" class="acesso-botao" id="acessoSairNegado">Sair</button>
+    </div>
+
+    <a href="../" class="acesso-voltar">← Voltar para a Central</a>
+  </div>
+</div>
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
@@ -2481,7 +2522,8 @@ async function deleteDash(id){
 <script src="audit/audit-rules.js"></script>
 <script src="audit/audit-app.js"></script>
 <script>
-  audModuleInit();
+  /* audModuleInit() é chamado por audit/acesso.js, depois de confirmar o acesso. */
+  window.LDM_INICIAR = audModuleInit;
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
       // updateViaCache:'none' garante que o próprio sw.js nunca seja servido
@@ -2504,5 +2546,9 @@ async function deleteDash(id){
     });
   }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>window.LDM_NUVEM_CFG = { app:'estoque', dbName:'auditoria_divergencias_v1', stores:['net_config','divergencias','indicadores','import_meta','kpi_history'] };</script>
+<script src="audit/nuvem-idb.js"></script>
+<script src="audit/acesso.js"></script>
 </body>
 </html>

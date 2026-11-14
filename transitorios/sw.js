@@ -4,12 +4,15 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'transitorios-v3';
+const CACHE_VERSION = 'transitorios-v4';
 const PRECACHE_URLS = [
   './',
   './index.html',
   './manifest.json',
   './css/theme.css',
+  './css/acesso.css',
+  './js/acesso.js',
+  './js/nuvem-idb.js',
   './js/db.js',
   './js/rules.js',
   './js/worker.js',
@@ -42,6 +45,8 @@ self.addEventListener('fetch', (event)=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
+  /* Supabase (login e dados) nunca passa pelo cache: seria devolver resposta velha ou de outra pessoa. */
+  if(url.hostname.endsWith('.supabase.co')) return;
 
   if(isSameOrigin){
     // cache:'no-cache' revalida no servidor mesmo dentro da janela de max-age. Sem

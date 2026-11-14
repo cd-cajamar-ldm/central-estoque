@@ -1013,6 +1013,7 @@ function irProcessarEst390(){
         IR.est390Processing = false; worker.terminate();
         irShowToast('Erro na QRY0390: '+msg.message, true); irRenderView(); _fim(false);
       } else if(msg.type==='done390'){
+        if(window.LDM_NUVEM) LDM_NUVEM.marcar();
         IR.est390Processing = false; worker.terminate();
         IR.est390Ficha = await irGetConfig('estoque390-ficha');
         IR._itemInfo = null;
@@ -1048,6 +1049,7 @@ function irProcessar160(){
         IR.est160Processing = false; worker.terminate();
         irShowToast('Erro na QRY0160: '+msg.message, true); irRenderView(); _fim(false);
       } else if(msg.type==='done160'){
+        if(window.LDM_NUVEM) LDM_NUVEM.marcar();
         IR.est160Processing = false; worker.terminate();
         IR.est390Meta = await irGetEstoqueMeta();
         IR.est390Locais = null; IR.est160File = null;
@@ -1082,6 +1084,7 @@ function irProcessar410(){
         IR.net410Processing=false; worker.terminate();
         irShowToast('Erro no processamento da QRY410: '+msg.message, true); irRenderView(); _fim(false);
       } else if(msg.type==='done410'){
+        if(window.LDM_NUVEM) LDM_NUVEM.marcar();
         IR.net410Processing = false; worker.terminate();
         for(const ano of msg.anos) await irSaveNet410(ano, msg.resumos[ano]);
         // Tudo que foi derivado da 410 antiga precisa cair aqui, senão a tela

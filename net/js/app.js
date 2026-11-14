@@ -243,6 +243,7 @@ async function importa(files){
     try { await dbTx('readwrite',function(st){ return st.put(atual); }); } catch(e){}
   }
   if(logArq.length) registraImportacao({em:new Date().toISOString(), arquivos:logArq, novos:totAdd, atualizados:totUpd, meses:mesesAfetados});
+  if(mesesAfetados.length) if(window.LDM_NUVEM) LDM_NUVEM.marcar();
   if(mesesAfetados.length){
     S.mesSel=mesesAfetados[mesesAfetados.length-1];
     toast('✓ QRY410 importada: '+mesesAfetados.map(mesLabel).join(', ')+'.');
@@ -300,7 +301,7 @@ function situacao(mes){
 function marcarEntrega(mes, tipo){
   var m=S.meses[mes]; if(!m) return;
   m.entregas=m.entregas||{}; m.entregas[tipo]=new Date().toISOString();
-  dbTx('readwrite',function(st){ return st.put(m); }).catch(function(){});
+  dbTx('readwrite',function(st){ return st.put(m); }).then(function(){ if(window.LDM_NUVEM) LDM_NUVEM.marcar(); }).catch(function(){});
   renderPainel();
 }
 
@@ -743,14 +744,14 @@ document.addEventListener('click', async function(e){
     var mr=b.dataset.remover;
     if(!confirm('Remover a base de '+mesLabel(mr)+' deste navegador? (Dá pra importar de novo depois.)')) return;
     delete S.meses[mr]; if(S.mesSel===mr) S.mesSel=null;
-    try { await dbTx('readwrite',function(st){ return st.delete(mr); }); } catch(err){}
+    try { await dbTx('readwrite',function(st){ return st.delete(mr); }); if(window.LDM_NUVEM) LDM_NUVEM.marcar(); } catch(err){}
     render(); toast('Base removida.'); return;
   }
   if(e.target.id==='btnExportar'){ var bt=e.target; bt.disabled=true; exporta().catch(function(err){ toast('Erro ao gerar a planilha: '+err.message, true); }).finally(function(){ bt.disabled=false; }); return; }
   if(e.target.id==='btnLimparMes'){
     if(!confirm('Remover os dados de '+mesLabel(S.mesSel)+' deste navegador? (Dá pra importar de novo depois.)')) return;
     var m=S.mesSel; delete S.meses[m]; S.mesSel=null;
-    try { await dbTx('readwrite',function(st){ return st.delete(m); }); } catch(err){}
+    try { await dbTx('readwrite',function(st){ return st.delete(m); }); if(window.LDM_NUVEM) LDM_NUVEM.marcar(); } catch(err){}
     render(); toast('Mês removido.'); return;
   }
   if((b=e.target.closest('[data-mais]'))){ S.filtro[b.dataset.mais].lim+=300; renderLogica(b.dataset.mais); return; }
@@ -801,11 +802,12 @@ window.NET_API = {
   toast: toast,
   esc: esc,
   marcarEntrega: function(m,t){ marcarEntrega(m,t); },
-  salvarMes: async function(m){ try { await dbTx('readwrite',function(st){ return st.put(S.meses[m]); }); } catch(e){} }
+  salvarMes: async function(m){ try { await dbTx('readwrite',function(st){ return st.put(S.meses[m]); }); if(window.LDM_NUVEM) LDM_NUVEM.marcar(); } catch(e){} }
 };
 
 /* ---------- início ---------- */
-(async function(){
+/* chamado por js/acesso.js, depois de confirmar o acesso */
+window.LDM_INICIAR = async function(){
   ligaDrop();
   await abreDB();
   try {
@@ -813,5 +815,5 @@ window.NET_API = {
     (todos||[]).forEach(function(m){ S.meses[m.mes]=m; });
   } catch(e){}
   render();
-})();
+};
 })();
