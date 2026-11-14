@@ -110,36 +110,32 @@ function rgAcessoEmPortugues(msg){
   async function rgVerificarAcesso(){
     const { data: { session } } = await rgSupa.auth.getSession();
     if(!session){
-      try { Object.keys(localStorage).forEach(function(k){ if(k.indexOf('ldm-acesso-') === 0) localStorage.removeItem(k); }); } catch(e){}
       telaLogin.hidden = false; telaNegado.hidden = true;
       telaAcesso.classList.remove('escondida');
       return;
     }
-    /* Caminho rápido: se esta pessoa já foi liberada neste aparelho nas últimas 12 h, abre o app agora e confirma
-       a permissão em segundo plano (o banco continua barrando os dados de quem não tiver acesso). */
-    const CACHE_ACESSO = 'ldm-acesso-' + RG_APP_KEY;
-    let rapido = false;
-    try { const c = JSON.parse(localStorage.getItem(CACHE_ACESSO) || 'null'); rapido = !!(c && c.u === session.user.id && Date.now() - c.t < 12 * 3600 * 1000); } catch(e){}
-    if(rapido){ telaAcesso.classList.add('escondida'); iniciarApp(); }
     const { data: pode, error } = await rgSupa.rpc('ldm_pode_acessar', { p_app_key: RG_APP_KEY });
     if(error){
-      if(rapido) return;   /* sem conexão: segue aberto com o que já foi liberado */
+      if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
       telaLogin.hidden = true; telaNegado.hidden = false;
       document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
       telaAcesso.classList.remove('escondida');
       return;
     }
     if(!pode){
-      try { localStorage.removeItem(CACHE_ACESSO); } catch(e){}
       telaLogin.hidden = true; telaNegado.hidden = false;
       negadoEmailEl.textContent = session.user.email;
       telaAcesso.classList.remove('escondida');
       return;
     }
     telaAcesso.classList.add('escondida');
-    try { localStorage.setItem(CACHE_ACESSO, JSON.stringify({ u: session.user.id, t: Date.now() })); } catch(e){}
     iniciarApp();
   }
+
+  /* Retirou o acesso de alguém? A permissão é conferida de novo a cada minuto (e ao voltar para a aba): a tela de
+     bloqueio volta sozinha, sem a pessoa precisar sair e entrar. */
+  setInterval(function(){ if(appIniciado && !document.hidden) rgVerificarAcesso(); }, 60000);
+  document.addEventListener('visibilitychange', function(){ if(appIniciado && !document.hidden) rgVerificarAcesso(); });
 
   rgSupa.auth.onAuthStateChange(function(){ rgVerificarAcesso(); });
   rgVerificarAcesso();
