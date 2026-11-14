@@ -4,7 +4,7 @@
    p/ valorar) e ZBIQ0051 (múltiplos: qual componente carrega valor).
    Dados compartilhados em public.vl_dados (migração 007).
    ============================================================ */
-const VL_VERSAO = 11; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const VL_VERSAO = 12; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const VL_TAB = 'vl_dados';
 /* Cores da marca (azul #001A72 e laranja #FE5000): vermelho -> laranja -> âmbar -> azuis.
    Quanto mais perto de vencer, mais quente. */
@@ -60,6 +60,8 @@ function fBRLc(n){
 const fK = n => { n = n || 0; const a = Math.abs(n); return a >= 1e6 ? (n / 1e6).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' mi' : a >= 1e3 ? (n / 1e3).toLocaleString('pt-BR', {maximumFractionDigits: a >= 1e4 ? 0 : 1}) + ' mil' : Math.round(n).toLocaleString('pt-BR'); };
 const fPct = (a, b) => b > 0 ? (a / b * 100).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%' : '—';
 const fData = iso => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
+/* Na planilha o ano vai inteiro (dez/2026): "dez/26" era lido como dia 26. */
+const fMesAno = ym => VL_MESES[+ym.slice(5, 7) - 1] + '/' + ym.slice(0, 4);
 const fMes = ym => VL_MESES[+ym.slice(5, 7) - 1] + '/' + ym.slice(2, 4);
 function toast(msg, erro){
   const t = document.getElementById('toast'); if(!t) return;
@@ -643,7 +645,7 @@ function vlExportar(){
   if(!VL.rows.length) return toast('Nada para exportar: importe a base primeiro.', true);
   const rows = filtradas(true), fx = VL.fx, X = XLSX, hoje = hojeISO().slice(0, 7);
   if(!rows.length) return toast('Nenhum lote nos filtros atuais.', true);
-  const per = VL.f.de || VL.f.ate ? 'Vencimento de ' + (VL.f.de ? fMes(VL.f.de) : 'início') + ' até ' + (VL.f.ate ? fMes(VL.f.ate) : 'fim') : 'Todos os meses';
+  const per = VL.f.de || VL.f.ate ? 'Vencimento de ' + (VL.f.de ? fMesAno(VL.f.de) : 'início') + ' até ' + (VL.f.ate ? fMesAno(VL.f.ate) : 'fim') : 'Todos os meses';
   const filtroTxt = [VL.f.area ? (VL.f.area === 'E' ? 'Só estoque' : 'Só reversa') : 'Estoque e Reversa (separados)', VL.f.forn || 'Todos os fornecedores', per].join(' · ');
   const tit = n => ['Controle de Validade — CD Cajamar · ' + n, 'Relatório de ' + fData(hojeISO()) + ' · base importada em ' + (VL.meta && VL.meta.importadoEm ? fData(VL.meta.importadoEm.slice(0, 10)) : '—') + ' · ' + filtroTxt + ' · valor = quantidade × preço de custo'];
   const sit = ym => ym < hoje ? 'Vencido' : ym === hoje ? 'Mês atual' : 'A vencer';
@@ -661,8 +663,8 @@ function vlExportar(){
   AREAS.forEach(a => {
     const ra = rows.filter(r => r.area === a[0]);
     mesesArea(ra).ms.forEach(m => {
-      mes.push([a[1], fMes(m.ym), sit(m.ym), m.its.size, m.q, +m.v.toFixed(2), +m.acc.toFixed(2), m.lotes]);
-      Object.entries(m.loc).sort((x, y) => y[1] - x[1]).forEach(l => loc.push([a[1], fMes(m.ym), sit(m.ym), l[0], +l[1].toFixed(2)]));
+      mes.push([a[1], fMesAno(m.ym), sit(m.ym), m.its.size, m.q, +m.v.toFixed(2), +m.acc.toFixed(2), m.lotes]);
+      Object.entries(m.loc).sort((x, y) => y[1] - x[1]).forEach(l => loc.push([a[1], fMesAno(m.ym), sit(m.ym), l[0], +l[1].toFixed(2)]));
     });
   });
   folha(wb, 'Mensal', ['Área', 'Mês de vencimento', 'Situação', 'Itens (SKUs)', 'Peças', 'Valor de custo (R$)', 'Acumulado (R$)', 'Lotes'], mes, [12, 18, 12, 13, 12, 20, 18, 10], ['', '', '', 'N', 'N', 'R', 'R', 'N'], tit('Visão mensal'));
@@ -673,7 +675,7 @@ function vlExportar(){
   folha(wb, 'Fornecedores', ['Área', 'Fornecedor', 'Itens (SKUs)', 'Peças'].concat(fx.map(f => f.nome + ' (R$)'), ['Total (R$)', '% vencido']), forn, [12, 26, 9, 11].concat(fx.map(() => 18), [18, 11]), ['', '', 'N', 'N'].concat(fx.map(() => 'R'), ['R', 'P']), tit('Por fornecedor'));
 
   const nm = {}; fx.forEach(f => { nm[f.k] = f.nome; });
-  const it = rows.slice().sort((a, b) => a.area.localeCompare(b.area) || a.dias - b.dias).map(r => [r.area === 'R' ? 'Reversa' : 'Estoque', +r.i || r.i, r.d, r.forn, r.l, fData(r.v), fMes(r.mes), r.dias, nm[r.faixa], r.lo, r.cl, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), [r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : ''), suspeita(r) ? 'Validade improvável' : '', r.qr ? r.qr + ' pç romaneada(s)' : ''].filter(Boolean).join(' · ')]);
+  const it = rows.slice().sort((a, b) => a.area.localeCompare(b.area) || a.dias - b.dias).map(r => [r.area === 'R' ? 'Reversa' : 'Estoque', +r.i || r.i, r.d, r.forn, r.l, fData(r.v), fMesAno(r.mes), r.dias, nm[r.faixa], r.lo, r.cl, r.r, r.e || '', r.q, +(r.c || 0).toFixed(4), +r.valor.toFixed(2), [r.m ? 'Componente de múltiplo' : (!r.c ? 'Sem preço' : ''), suspeita(r) ? 'Validade improvável' : '', r.qr ? r.qr + ' pç romaneada(s)' : ''].filter(Boolean).join(' · ')]);
   folha(wb, 'Itens', ['Área', 'Item', 'Descrição', 'Fornecedor', 'Lote', 'Validade', 'Mês de vencimento', 'Dias p/ vencer', 'Faixa (dias p/ vencer)', 'Endereço', 'Classe local', 'Restrição', 'EAN', 'Quantidade', 'Custo unitário (R$)', 'Valor de custo (R$)', 'Obs.'],
     it, [10, 10, 52, 18, 10, 11, 12, 9, 22, 18, 9, 9, 15, 11, 14, 16, 30], ['', '', '', '', '', '', '', 'N', '', '', '', '', '', 'N', 'C', 'R', ''], tit('Itens e lotes'));
   const q = qualAtual(), inc = [], pc = r => r.area ? (r.area === 'R' ? 'Reversa' : 'Estoque') : (VL.cfg.reversa.indexOf(r.cl) >= 0 ? 'Reversa' : 'Estoque');
