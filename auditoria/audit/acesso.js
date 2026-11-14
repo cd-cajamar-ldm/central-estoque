@@ -97,6 +97,23 @@ function ldmAcessoEmPortugues(msg){
   sairNegadoBtn.addEventListener('click', function(){ ldmSupa.auth.signOut().then(ldmVerificarAcesso); });
   if(sairSidebarBtn) sairSidebarBtn.addEventListener('click', function(){ ldmSupa.auth.signOut().then(ldmVerificarAcesso); });
 
+  /* Abre o app (uma vez só). */
+  function iniciarApp(){
+    if(appIniciado) return;
+      appIniciado = true;
+      /* Registra a visita pra contar na frequência (Configurações do hub).
+         Não bloqueia o app por causa disso — se falhar, só não conta. */
+      ldmSupa.rpc('ldm_registrar_acesso', { p_app_key: LDM_APP_KEY }).then(function(){}, function(){});
+      /* O app abre JÁ; o nível de acesso e a sincronização vêm em seguida. */
+      if(typeof window.LDM_INICIAR === 'function') window.LDM_INICIAR();
+      /* 'visualizar': lê os dados do servidor, mas não grava (o banco também recusa). */
+      ldmSupa.rpc('ldm_nivel_acesso', { p_app_key: LDM_APP_KEY }).then(function(r){
+        if(r && r.data === 'visualizar'){ window.LDM_SOMENTE_LEITURA = true; document.documentElement.classList.add('somente-leitura'); }
+      }).catch(function(){}).then(function(){
+        if(window.LDM_NUVEM && window.LDM_NUVEM_CFG) setTimeout(function(){ window.LDM_NUVEM.iniciar(window.LDM_NUVEM_CFG); }, 1200);
+      });
+  }
+
   async function ldmVerificarAcesso(){
     const { data: { session } } = await ldmSupa.auth.getSession();
     if(!session){
@@ -106,6 +123,7 @@ function ldmAcessoEmPortugues(msg){
     }
     const { data: pode, error } = await ldmSupa.rpc('ldm_pode_acessar', { p_app_key: LDM_APP_KEY });
     if(error){
+      if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
       telaLogin.hidden = true; telaNegado.hidden = false;
       document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
       telaAcesso.classList.remove('escondida');
@@ -118,21 +136,13 @@ function ldmAcessoEmPortugues(msg){
       return;
     }
     telaAcesso.classList.add('escondida');
-    if(!appIniciado){
-      appIniciado = true;
-      /* Registra a visita pra contar na frequência (Configurações do hub).
-         Não bloqueia o app por causa disso — se falhar, só não conta. */
-      ldmSupa.rpc('ldm_registrar_acesso', { p_app_key: LDM_APP_KEY }).catch(function(){});
-      /* O app abre JÁ; o nível de acesso e a sincronização vêm em seguida. */
-      if(typeof window.LDM_INICIAR === 'function') window.LDM_INICIAR();
-      /* 'visualizar': lê os dados do servidor, mas não grava (o banco também recusa). */
-      ldmSupa.rpc('ldm_nivel_acesso', { p_app_key: LDM_APP_KEY }).then(function(r){
-        if(r && r.data === 'visualizar'){ window.LDM_SOMENTE_LEITURA = true; document.documentElement.classList.add('somente-leitura'); }
-      }).catch(function(){}).then(function(){
-        if(window.LDM_NUVEM && window.LDM_NUVEM_CFG) setTimeout(function(){ window.LDM_NUVEM.iniciar(window.LDM_NUVEM_CFG); }, 1200);
-      });
-    }
+    iniciarApp();
   }
+
+  /* Retirou o acesso de alguém? A permissão é conferida de novo a cada minuto (e ao voltar para a aba): a tela de
+     bloqueio volta sozinha, sem a pessoa precisar sair e entrar. */
+  setInterval(function(){ if(appIniciado && !document.hidden) ldmVerificarAcesso(); }, 60000);
+  document.addEventListener('visibilitychange', function(){ if(appIniciado && !document.hidden) ldmVerificarAcesso(); });
 
   ldmSupa.auth.onAuthStateChange(function(){ ldmVerificarAcesso(); });
   ldmVerificarAcesso();

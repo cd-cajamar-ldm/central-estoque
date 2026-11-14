@@ -11,9 +11,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/acesso.css?v=4">
-<link rel="stylesheet" href="coletor.css?v=4">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap"></noscript>
+<link rel="stylesheet" href="../css/acesso.css?v=6">
+<link rel="stylesheet" href="coletor.css?v=6">
 </head>
 <body>
 <div id="telaAcesso">
@@ -77,12 +78,12 @@
 </div>
 <p class="cl-legenda">Visualização do coletor. No aparelho, a tela ocupa tudo.</p>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="../../vendor/supabase.js"></script>
+<script async src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="../../version.js"></script>
-<script src="../js/versao.js?v=4"></script>
-<script src="../js/comum.js?v=4"></script>
-<script src="coletor.js?v=4"></script>
-<script src="../js/acesso.js?v=4"></script>
+<script src="../js/versao.js?v=6"></script>
+<script src="../js/comum.js?v=6"></script>
+<script src="coletor.js?v=6"></script>
+<script src="../js/acesso.js?v=6"></script>
 </body>
 </html>

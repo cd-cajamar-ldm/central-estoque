@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Central de Controle de Estoque</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Poppins:wght@600;700;800&display=swap"></noscript>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -2517,7 +2518,7 @@ async function deleteDash(id){
 <!-- ===== Módulo de Auditoria de Divergências de Inventário =====
      100% client-side: SheetJS (parsing/exportação) + IndexedDB (persistência)
      + Web Worker (cruzamento/diagnóstico). Nenhum servidor, nenhuma API. -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script async src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="audit/audit-db.js"></script>
 <script src="audit/audit-rules.js"></script>
 <script src="audit/audit-app.js"></script>
@@ -2546,7 +2547,7 @@ async function deleteDash(id){
     });
   }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="../vendor/supabase.js"></script>
 <script>window.LDM_NUVEM_CFG = { app:'estoque', dbName:'auditoria_divergencias_v1', stores:['net_config','divergencias','indicadores','import_meta','kpi_history'] };</script>
 <script src="audit/nuvem-idb.js"></script>
 <script src="audit/acesso.js"></script>

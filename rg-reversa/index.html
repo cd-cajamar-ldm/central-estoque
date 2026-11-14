@@ -11,11 +11,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap"></noscript>
 <!-- theme.css é o mesmo design system do app de Inventário (cópia, como nos outros módulos). -->
 <link rel="stylesheet" href="css/theme.css">
-<link rel="stylesheet" href="css/acesso.css?v=4">
-<link rel="stylesheet" href="css/rg.css?v=4">
+<link rel="stylesheet" href="css/acesso.css?v=6">
+<link rel="stylesheet" href="css/rg.css?v=6">
 </head>
 <body>
 <div id="telaAcesso">
@@ -134,12 +135,12 @@
 <div id="rgPainelFundo" class="rgx-pn-fundo"></div>
 <aside id="rgPainel" class="rgx-pn" aria-label="Detalhe do local"></aside>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="../vendor/supabase.js"></script>
+<script async src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="../version.js"></script>
-<script src="js/versao.js?v=4"></script>
-<script src="js/comum.js?v=4"></script>
-<script src="js/app.js?v=4"></script>
-<script src="js/acesso.js?v=4"></script>
+<script src="js/versao.js?v=6"></script>
+<script src="js/comum.js?v=6"></script>
+<script src="js/app.js?v=6"></script>
+<script src="js/acesso.js?v=6"></script>
 </body>
 </html>

@@ -207,28 +207,34 @@ async function irInit(){
   irApplyZoom(parseInt(localStorage.getItem('ir-zoom'), 10) || 100);
 
   try{
-    IR.prioridadeConfig = await irSeedPrioridadeConfigIfEmpty();
-    IR.prodMeta = await irGetProdMetaConfig();
-    IR.net410Legenda = await irSeedNet410LegendaIfEmpty();
-    IR.net410Ignorados = await irGetNet410IgnoradosAll();
-    IR.net410Padroes = await irSeedNet410PadroesIgnoradosIfEmpty();
-    IR.ciclos = await irGetAllCiclos();
+    /* As leituras do banco local não dependem umas das outras: rodam juntas, em vez de uma esperando a outra
+       (antes eram ~15 leituras em fila antes de a tela abrir). */
+    const [prioridadeConfig, prodMeta, net410Legenda, net410Ignorados, net410Padroes, ciclos] = await Promise.all([
+      irSeedPrioridadeConfigIfEmpty(), irGetProdMetaConfig(), irSeedNet410LegendaIfEmpty(),
+      irGetNet410IgnoradosAll(), irSeedNet410PadroesIgnoradosIfEmpty(), irGetAllCiclos()
+    ]);
+    IR.prioridadeConfig = prioridadeConfig; IR.prodMeta = prodMeta; IR.net410Legenda = net410Legenda;
+    IR.net410Ignorados = net410Ignorados; IR.net410Padroes = net410Padroes; IR.ciclos = ciclos;
+    /* O ciclo ativo (a parte mais pesada) carrega ao mesmo tempo que as configurações abaixo. */
+    let pCiclo = null;
     if(IR.ciclos.length){
       IR.cicloAtivo = IR.ciclos.find(c=>irCicloStatus(c)==='aberto') || irCicloMaisNovo(IR.ciclos) || IR.ciclos[0];
-      await irLoadCicloData(IR.cicloAtivo.id);
+      pCiclo = irLoadCicloData(IR.cicloAtivo.id);
     }
-    IR.est390Meta = await irGetEstoqueMeta();
-    IR.est390Ficha = await irGetConfig('estoque390-ficha');
-    IR.boletimEmail = (await irGetConfig('boletim-email')) || {};
-    const ign = await irGetConfig('auditoria-ignorar-virtuais');
+    const [est390Meta, est390Ficha, boletimEmail, ign, audPrefixos, net410Anos] = await Promise.all([
+      irGetEstoqueMeta(), irGetConfig('estoque390-ficha'), irGetConfig('boletim-email'),
+      irGetConfig('auditoria-ignorar-virtuais'), irGetConfig('auditoria-prefixos'), irGetAllNet410Anos()
+    ]);
+    IR.est390Meta = est390Meta; IR.est390Ficha = est390Ficha; IR.boletimEmail = boletimEmail || {};
     if(ign!=null) IR.audIgnorarVirtuais = ign;
-    IR.audPrefixos = await irGetConfig('auditoria-prefixos');
-    IR.net410Anos = await irGetAllNet410Anos();
+    IR.audPrefixos = audPrefixos;
+    IR.net410Anos = net410Anos;
     if(IR.net410Anos.length){
       IR.net410AnoSel = IR.net410Anos[0];
       IR.net410Data = await irGetNet410(IR.net410AnoSel);
       irSetNet410MesDefault();
     }
+    if(pCiclo) await pCiclo;
   }catch(e){
     // Guarda o erro: sem isso, uma falha ao ABRIR o banco (dados intactos, só
     // inacessíveis) aparecia na tela como "nenhum ciclo importado ainda" — que
@@ -264,11 +270,11 @@ async function irInit(){
   irPastaCarregar().catch(()=>{});
 }
 async function irLoadCicloData(cicloId){
-  IR.indicadores = await irGetIndicadores(cicloId);
-  IR.importMeta = await irGetImportMeta(cicloId);
-  IR.divergencias = await irGetByCiclo(IR_STORES.divergencias, cicloId);
-  IR.locais = await irGetByCiclo(IR_STORES.locais, cicloId);
-  IR.contagens = await irGetByCiclo(IR_STORES.contagens, cicloId);
+  /* As cinco leituras são independentes: rodam juntas. */
+  [IR.indicadores, IR.importMeta, IR.divergencias, IR.locais, IR.contagens] = await Promise.all([
+    irGetIndicadores(cicloId), irGetImportMeta(cicloId),
+    irGetByCiclo(IR_STORES.divergencias, cicloId), irGetByCiclo(IR_STORES.locais, cicloId), irGetByCiclo(IR_STORES.contagens, cicloId)
+  ]);
   // Troca de ciclo ativo volta o escopo dos "Itens mais Divergentes" pro padrão
   // (só o ciclo atual) — senão ficaria somando um ciclo antigo com o novo ativo.
   IR.itemDivFiltro = {tipo:'ciclo'};
@@ -1026,7 +1032,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v265';
+const IR_APP_VERSION = 'v268';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.

@@ -97,6 +97,16 @@ function rgAcessoEmPortugues(msg){
   sairNegadoBtn.addEventListener('click', function(){ rgSupa.auth.signOut().then(rgVerificarAcesso); });
   if(sairSidebarBtn) sairSidebarBtn.addEventListener('click', function(){ rgSupa.auth.signOut().then(rgVerificarAcesso); });
 
+  /* Abre o app (uma vez só). */
+  function iniciarApp(){
+    if(appIniciado) return;
+      appIniciado = true;
+      /* Registra a visita pra contar na frequência (Configurações do hub).
+         Não bloqueia o app por causa disso — se falhar, só não conta. */
+      rgSupa.rpc('ldm_registrar_acesso', { p_app_key: RG_APP_KEY }).then(function(){}, function(){});
+      window.rgIniciar();
+  }
+
   async function rgVerificarAcesso(){
     const { data: { session } } = await rgSupa.auth.getSession();
     if(!session){
@@ -106,6 +116,7 @@ function rgAcessoEmPortugues(msg){
     }
     const { data: pode, error } = await rgSupa.rpc('ldm_pode_acessar', { p_app_key: RG_APP_KEY });
     if(error){
+      if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
       telaLogin.hidden = true; telaNegado.hidden = false;
       document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
       telaAcesso.classList.remove('escondida');
@@ -118,14 +129,13 @@ function rgAcessoEmPortugues(msg){
       return;
     }
     telaAcesso.classList.add('escondida');
-    if(!appIniciado){
-      appIniciado = true;
-      /* Registra a visita pra contar na frequência (Configurações do hub).
-         Não bloqueia o app por causa disso — se falhar, só não conta. */
-      rgSupa.rpc('ldm_registrar_acesso', { p_app_key: RG_APP_KEY }).catch(function(){});
-      window.rgIniciar();
-    }
+    iniciarApp();
   }
+
+  /* Retirou o acesso de alguém? A permissão é conferida de novo a cada minuto (e ao voltar para a aba): a tela de
+     bloqueio volta sozinha, sem a pessoa precisar sair e entrar. */
+  setInterval(function(){ if(appIniciado && !document.hidden) rgVerificarAcesso(); }, 60000);
+  document.addEventListener('visibilitychange', function(){ if(appIniciado && !document.hidden) rgVerificarAcesso(); });
 
   rgSupa.auth.onAuthStateChange(function(){ rgVerificarAcesso(); });
   rgVerificarAcesso();

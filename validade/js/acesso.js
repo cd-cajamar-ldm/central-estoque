@@ -97,28 +97,9 @@ function vlAcessoEmPortugues(msg){
   sairNegadoBtn.addEventListener('click', function(){ vlSupa.auth.signOut().then(vlVerificarAcesso); });
   if(sairSidebarBtn) sairSidebarBtn.addEventListener('click', function(){ vlSupa.auth.signOut().then(vlVerificarAcesso); });
 
-  async function vlVerificarAcesso(){
-    const { data: { session } } = await vlSupa.auth.getSession();
-    if(!session){
-      telaLogin.hidden = false; telaNegado.hidden = true;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    const { data: pode, error } = await vlSupa.rpc('ldm_pode_acessar', { p_app_key: VL_APP_KEY });
-    if(error){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    if(!pode){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      negadoEmailEl.textContent = session.user.email;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    telaAcesso.classList.add('escondida');
-    if(!appIniciado){
+  /* Abre o app (uma vez só). */
+  function iniciarApp(){
+    if(appIniciado) return;
       appIniciado = true;
       /* O app abre JÁ, sem esperar o banco. Esperar a consulta do nível antes
          de vlInit() deixava a tela presa em "Carregando..." quando a chamada
@@ -137,12 +118,41 @@ function vlAcessoEmPortugues(msg){
       }).catch(function(){});
       /* Registra a visita pra contar na frequência (Configurações do hub).
          Não bloqueia o app por causa disso — se falhar, só não conta. */
-      vlSupa.rpc('ldm_registrar_acesso', { p_app_key: VL_APP_KEY }).catch(function(){});
+      vlSupa.rpc('ldm_registrar_acesso', { p_app_key: VL_APP_KEY }).then(function(){}, function(){});
+  }
+
+  async function vlVerificarAcesso(){
+    const { data: { session } } = await vlSupa.auth.getSession();
+    if(!session){
+      telaLogin.hidden = false; telaNegado.hidden = true;
+      telaAcesso.classList.remove('escondida');
+      return;
     }
+    const { data: pode, error } = await vlSupa.rpc('ldm_pode_acessar', { p_app_key: VL_APP_KEY });
+    if(error){
+      if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
+    if(!pode){
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      negadoEmailEl.textContent = session.user.email;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
+    telaAcesso.classList.add('escondida');
+    iniciarApp();
   }
 
   /* Fora do callback (setTimeout): chamar o Supabase de dentro do aviso de
      login trava a conexão — documentado na biblioteca. */
+  /* Retirou o acesso de alguém? A permissão é conferida de novo a cada minuto (e ao voltar para a aba): a tela de
+     bloqueio volta sozinha, sem a pessoa precisar sair e entrar. */
+  setInterval(function(){ if(appIniciado && !document.hidden) vlVerificarAcesso(); }, 60000);
+  document.addEventListener('visibilitychange', function(){ if(appIniciado && !document.hidden) vlVerificarAcesso(); });
+
   vlSupa.auth.onAuthStateChange(function(){ setTimeout(vlVerificarAcesso, 0); });
   vlVerificarAcesso();
 })();

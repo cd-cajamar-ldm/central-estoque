@@ -9,7 +9,8 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="theme-color" content="#0B1230">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"></noscript>
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="css/player.css">
 <link rel="stylesheet" href="css/acesso.css">
@@ -231,7 +232,7 @@
 
 <script src="js/player.js"></script>
 <script src="js/app.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="../vendor/supabase.js"></script>
 <script src="js/acesso.js"></script>
 </body>
 </html>

@@ -97,28 +97,9 @@ function irAcessoEmPortugues(msg){
   sairNegadoBtn.addEventListener('click', function(){ irSupa.auth.signOut().then(irVerificarAcesso); });
   if(sairSidebarBtn) sairSidebarBtn.addEventListener('click', function(){ irSupa.auth.signOut().then(irVerificarAcesso); });
 
-  async function irVerificarAcesso(){
-    const { data: { session } } = await irSupa.auth.getSession();
-    if(!session){
-      telaLogin.hidden = false; telaNegado.hidden = true;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    const { data: pode, error } = await irSupa.rpc('ldm_pode_acessar', { p_app_key: IRA_APP_KEY });
-    if(error){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    if(!pode){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      negadoEmailEl.textContent = session.user.email;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
-    telaAcesso.classList.add('escondida');
-    if(!appIniciado){
+  /* Abre o app (uma vez só). */
+  function iniciarApp(){
+    if(appIniciado) return;
       appIniciado = true;
       /* O app abre JÁ, sem esperar o banco. Esperar a consulta do nível antes
          de irInit() deixava a tela presa em "Carregando..." quando a chamada
@@ -136,12 +117,41 @@ function irAcessoEmPortugues(msg){
       }).catch(function(){});
       /* Registra a visita pra contar na frequência (Configurações do hub).
          Não bloqueia o app por causa disso — se falhar, só não conta. */
-      irSupa.rpc('ldm_registrar_acesso', { p_app_key: IRA_APP_KEY }).catch(function(){});
+      irSupa.rpc('ldm_registrar_acesso', { p_app_key: IRA_APP_KEY }).then(function(){}, function(){});
+  }
+
+  async function irVerificarAcesso(){
+    const { data: { session } } = await irSupa.auth.getSession();
+    if(!session){
+      telaLogin.hidden = false; telaNegado.hidden = true;
+      telaAcesso.classList.remove('escondida');
+      return;
     }
+    const { data: pode, error } = await irSupa.rpc('ldm_pode_acessar', { p_app_key: IRA_APP_KEY });
+    if(error){
+      if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
+    if(!pode){
+      telaLogin.hidden = true; telaNegado.hidden = false;
+      negadoEmailEl.textContent = session.user.email;
+      telaAcesso.classList.remove('escondida');
+      return;
+    }
+    telaAcesso.classList.add('escondida');
+    iniciarApp();
   }
 
   /* Fora do callback (setTimeout): chamar o Supabase de dentro do aviso de
      login trava a conexão — documentado na biblioteca. */
+  /* Retirou o acesso de alguém? A permissão é conferida de novo a cada minuto (e ao voltar para a aba): a tela de
+     bloqueio volta sozinha, sem a pessoa precisar sair e entrar. */
+  setInterval(function(){ if(appIniciado && !document.hidden) irVerificarAcesso(); }, 60000);
+  document.addEventListener('visibilitychange', function(){ if(appIniciado && !document.hidden) irVerificarAcesso(); });
+
   irSupa.auth.onAuthStateChange(function(){ setTimeout(irVerificarAcesso, 0); });
   irVerificarAcesso();
 })();
