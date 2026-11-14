@@ -10,9 +10,9 @@
 <meta name="theme-color" content="#0B1230">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css?v=8">
-<link rel="stylesheet" href="css/acesso.css?v=8">
-<link rel="stylesheet" href="css/validade.css?v=8">
+<link rel="stylesheet" href="css/theme.css?v=9">
+<link rel="stylesheet" href="css/acesso.css?v=9">
+<link rel="stylesheet" href="css/validade.css?v=9">
 </head>
 <body>
 <div id="telaAcesso">
@@ -80,6 +80,7 @@
       <button class="nav-item so-editor" data-tab="importacao" onclick="vlTab('importacao')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Importação</span></button>
       <button class="nav-item so-editor" data-tab="configuracoes" onclick="vlTab('configuracoes')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M1 12h4M19 12h4M4.2 19.8 7 17M17 7l2.8-2.8"/></svg><span>Configurações</span></button>
       <button class="nav-item" onclick="vlExportar()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Exportar Excel</span></button>
+      <button class="nav-item" onclick="vlBaixarHTML()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Baixar HTML</span></button>
     </nav>
     <div class="sidebar-footer">
       Loja do Mecânico &middot; CD Cajamar
@@ -91,7 +92,6 @@
     <div class="topbar">
       <button class="mobile-menu-btn" onclick="vlToggleSidebar()" aria-label="Abrir menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
       <div class="topbar-titles"><h1 id="tabTitle">Painel de validade</h1><p id="tabSubtitle"></p></div>
-      <button class="btn btn-orange" onclick="vlExportar()" style="margin-left:auto">Exportar Excel</button>
       <button class="theme-switch" id="themeSwitchBtn" onclick="vlToggleTheme()" type="button" aria-label="Alternar tema claro/escuro"><span class="theme-knob"></span></button>
     </div>
     <div class="page-scroll"><div id="viewRoot"><p class="field-hint">Carregando...</p></div></div>
@@ -101,9 +101,9 @@
 <div id="toast" class="toast hidden"></div>
 <div id="vlTip" class="chart-tooltip hidden"></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-<script src="js/app.js?v=8"></script>
+<script src="js/app.js?v=9"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/acesso.js?v=8"></script>
+<script src="js/acesso.js?v=9"></script>
 <script>
   if('serviceWorker' in navigator){
     window.addEventListener('load', function(){
