@@ -51,13 +51,15 @@ self.onmessage = (e) => {
         rom: achar(cab, ['Quantidade Romaneada', 'QTDE_ROM'])
       };
       if(!c.item || !c.qtd) throw new Error('QRY0390: colunas Item/Quantidade não encontradas.');
-      const out = [], wv = [], semDataLinhas = []; let wvSemData = 0;
+      const out = [], wv = [], semDataLinhas = [], ign = []; let wvSemData = 0;
+      const pref = (e.data.ignorar || []).map(t => String(t).toUpperCase().replace(/\s+/g, ' ').trim()).filter(Boolean);
       const txt = (r, k) => String(k && r[k] != null ? r[k] : '').trim();
       for(const r of rows){
         const v = iso(r[cVal]);
         const restr = txt(r, c.restr).toUpperCase();
         const q = num(r[c.qtd]);
         const base = {i: chave(r[c.item]), d: txt(r, c.desc), lo: txt(r, c.local), cl: txt(r, c.cl).toUpperCase(), r: restr, q};
+        if(q > 0 && pref.some(p => base.lo.toUpperCase().replace(/\s+/g, ' ').indexOf(p) === 0)) ign.push(Object.assign({}, base, {v}));
         if(!v){
           // Sem data não entra na conta de validade, mas é guardado pra aparecer como inconsistência.
           if(q > 0){ if(restr === 'WV'){ wvSemData++; wv.push(base); } else semDataLinhas.push(base); }
@@ -76,7 +78,7 @@ self.onmessage = (e) => {
         if(!o){ o = {i: l.i, d: l.d, cl: l.cl, lo: l.lo, q: 0, n: 0}; sd.set(k, o); }
         o.q += l.q; o.n++;
       });
-      self.postMessage({tipo: 'ok', base: '390', nome, linhas: rows.length, dados: out, wvSemData, wv, semData: Array.from(sd.values())});
+      self.postMessage({tipo: 'ok', base: '390', nome, linhas: rows.length, dados: out, wvSemData, wv, semData: Array.from(sd.values()), ign});
     } else if(cCusto){ // SIGEQ278
       const cItem = achar(cab, ['Item']); const mapa = {}; let n = 0;
       for(const r of rows){

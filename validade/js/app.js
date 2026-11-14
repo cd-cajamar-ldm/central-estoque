@@ -4,7 +4,7 @@
    p/ valorar) e ZBIQ0051 (múltiplos: qual componente carrega valor).
    Dados compartilhados em public.vl_dados (migração 007).
    ============================================================ */
-const VL_VERSAO = 13; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const VL_VERSAO = 14; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const VL_TAB = 'vl_dados';
 /* Cores da marca (azul #001A72 e laranja #FE5000): vermelho -> laranja -> âmbar -> azuis.
    Quanto mais perto de vencer, mais quente. */
@@ -220,7 +220,7 @@ function lerArquivo(file){
       if(m.tipo === 'erro') no(new Error(m.nome + ': ' + m.msg)); else ok(m);
     };
     w.onerror = e => { w.terminate(); no(new Error(file.name + ': ' + (e.message || 'falha ao ler'))); };
-    file.arrayBuffer().then(buf => w.postMessage({nome: file.name, buf}, [buf]), no);
+    file.arrayBuffer().then(buf => w.postMessage({nome: file.name, buf, ignorar: VL.cfg.ignorar || []}, [buf]), no);
   });
 }
 /* Linhas da 390 que ficam fora da conta por não ter data — valoradas aqui pra
@@ -230,7 +230,8 @@ function qualidade(n, precos){
   const wv = (n.wv || []).map(l => Object.assign({}, l, {valor: val(l)}));
   const sd = (n.semData || []).map(l => Object.assign({}, l, {valor: val(l)}));
   const soma = ls => ({linhas: ls.reduce((a, l) => a + (l.n || 1), 0), itens: new Set(ls.map(l => l.i)).size, q: ls.reduce((a, l) => a + l.q, 0), valor: ls.reduce((a, l) => a + l.valor, 0)});
-  return {wv: Object.assign(soma(wv), {lista: wv}), semData: Object.assign(soma(sd), {lista: sd})};
+  const ig = (n.ign || []).map(l => Object.assign({}, l, {c: precos[l.i] || 0, valor: val(l)}));
+  return {wv: Object.assign(soma(wv), {lista: wv}), semData: Object.assign(soma(sd), {lista: sd}), ign: Object.assign(soma(ig), {lista: ig})};
 }
 function valorar(rows, precos, est){
   const pais = {};
@@ -450,9 +451,23 @@ function secaoArea(a, ra){
 function qualAtual(){
   const q = (VL.meta || {}).qual; if(!q) return null;
   const f = b => { const lista = b.lista.filter(l => !ignorado(l.lo)); return {lista, linhas: lista.reduce((a, l) => a + (l.n || 1), 0), itens: new Set(lista.map(l => l.i)).size, q: lista.reduce((a, l) => a + l.q, 0), valor: lista.reduce((a, l) => a + l.valor, 0)}; };
-  return {wv: f(q.wv), semData: f(q.semData)};
+  return {wv: f(q.wv), semData: f(q.semData), ign: q.ign || null};
 }
-function painelQualidade(rows){
+/* Os três pontos de atenção do relatório (mesmos números no painel, no HTML e no Excel). */
+function pontosAtencao(){
+  const q = qualAtual(), noForn = r => !VL.f.forn || r.forn === VL.f.forn;
+  const errada = VL.rows.filter(r => r.area === 'E' && suspeita(r) && noForn(r));
+  // Saldo inteiro dos locais desconsiderados (com e sem validade); sem reimportar, só o que tem data.
+  const epi = q && q.ign ? q.ign.lista : VL.base.filter(r => ignorado(r.lo)).map(r => Object.assign({}, r, {valor: r.q * (r.c || 0)}));
+  return [['Data de validade errada (estoque)', 'Auditar data', errada], ['Itens no ' + (VL.cfg.ignorar || []).join(', '), 'Aguardando autorização', epi], ['WV sem data de validade', 'Cadastro sem controle de lote', q ? q.wv.lista : []]]
+    .map(([n, a, ls]) => ({n, a, ls, itens: new Set(ls.map(l => l.i)).size, q: ls.reduce((x, l) => x + l.q, 0), valor: ls.reduce((x, l) => x + l.valor, 0)}));
+}
+function painelQualidade(){
+  const cores = [VL_COR_VENC, VL_CORES_PROX[1], VL_CORES_PROX[2]];
+  return '<div class="panel vl-card"><div class="vl-card-h"><h3>Pontos de atenção</h3></div><ul class="vl-qual">' +
+    pontosAtencao().map((p, i) => '<li style="--c:' + cores[i] + '"><b>' + esc(p.n) + ' — ' + esc(p.a) + '</b><span>' + fInt(p.itens) + ' itens · ' + fInt(p.q) + ' peças · ' + fBRL2(p.valor) + '</span></li>').join('') + '</ul></div>';
+}
+function painelQualidadeAntigo(rows){
   const q = qualAtual(), sus = rows.filter(suspeita), rom = rows.filter(r => r.qr > 0);
   const S = tot(sus), Rm = rom.reduce((a, r) => a + (r.qr || 0), 0);
   const li = (cor, tit, txt) => '<li style="--c:' + cor + '"><b>' + tit + '</b><span>' + txt + '</span></li>';
@@ -476,7 +491,7 @@ function viewPainel(){
   return hero() + (VL.snap ? '' : filtrosBarra(false)) +
     (semPreco.lotes ? '<div class="callout callout-warn"><strong>Itens sem preço</strong>' + fInt(semPreco.itens) + ' itens (' + fInt(semPreco.q) + ' peças) não têm preço de custo na SIGEQ278 e entram com valor zero.</div>' : '') +
     AREAS.filter(a => !VL.f.area || VL.f.area === a[0]).map(a => secaoArea(a, rows.filter(r => r.area === a[0]))).join('') +
-    '<div class="vl-row2">' + painelQualidade(rows) +
+    '<div class="vl-row2">' + painelQualidade() +
     '<div class="panel vl-card"><div class="vl-card-h"><h3>Evolução do valor vencido</h3><p>Valor de custo vencido em cada dia em que a QRY0390 foi importada.</p></div>' + graficoHist() + '</div></div>' +
     (VL.snap ? '' : rodapeExport());
 }
@@ -661,12 +676,8 @@ function vlExportar(){
 
   /* Pontos de atenção: os três avisos que vão junto do relatório. Não dependem do
      filtro de mês (a data errada e o EPI nunca caem num mês "normal"). */
-  const q = qualAtual(), noForn = r => !VL.f.forn || r.forn === VL.f.forn;
   const area = r => VL.cfg.reversa.indexOf(r.cl) >= 0 ? 'Reversa' : 'Estoque';
-  const errada = VL.rows.filter(r => r.area === 'E' && suspeita(r) && noForn(r));
-  const epi = VL.base.filter(r => ignorado(r.lo)).map(r => Object.assign({}, r, {valor: r.q * (r.c || 0)}));
-  const wvl = q ? q.wv.lista : [];
-  const grupos = [['Data de validade errada (estoque)', 'Auditar data', errada], ['Itens no ' + (VL.cfg.ignorar || []).join(', '), 'Aguardando retorno', epi], ['WV sem data de validade', 'Cadastro sem controle de lote', wvl]];
+  const grupos = pontosAtencao().map(p => [p.n, p.a, p.ls]);
   const resumoAt = grupos.map(([n, o, ls]) => [n, new Set(ls.map(l => l.i)).size, ls.reduce((a, l) => a + l.q, 0), +ls.reduce((a, l) => a + l.valor, 0).toFixed(2), o]);
   folha(wb, 'Pontos de atenção', ['Ponto', 'Itens (SKUs)', 'Peças', 'Valor de custo (R$)', 'Aviso'], resumoAt, [36, 13, 12, 20, 30], ['', 'N', 'N', 'R', ''], tit('Pontos de atenção'));
   const det = [];
