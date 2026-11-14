@@ -70,3 +70,7 @@
 .vl-regras p{ margin:0 0 8px; font-size:12.5px; line-height:1.5; }
 .vl-regras code, .panel-sub code{ background:var(--surface2); padding:1px 5px; border-radius:4px; font-size:11.5px; }
 @media (max-width:860px){ .vl-hrow{ grid-template-columns:90px 1fr 64px; } .vl-area-row{ justify-content:center; } }
+
+.vl-fora{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; font-size:12px; }
+.vl-fora span{ background:var(--surface2); border-radius:100px; padding:4px 12px; color:var(--ink-soft); }
+.vl-fora span.venc{ background:var(--danger-light); color:var(--danger); }

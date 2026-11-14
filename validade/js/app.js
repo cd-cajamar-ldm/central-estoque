@@ -21,7 +21,9 @@ const VL_TITULOS = {
 const VL_SEED = ('MAZA TEKBOND NORTON VONDER WURTH RADNAQ KALIPSO ONYX CARBOGRAFITE UNIPEGA QUIMATIC MOCOCA BIOLUB SCHEBOR DANNY EURODECOR NUTRIEX ' +
   'CENTRALSUL MARLUVAS TECBRIL DRYKO ORBI ESAB MAGMA RUST-OLEUM SOFT99 RADCOLOR STP CASCOLA VULCAFLEX SOUDAL BARDAHL BADEN LOCTITE WD-40 MTX VEDACIT ' +
   'PLASTCOR SANRO 3M STARRETT SHIELD BRASILUX KADESH AMAZONAS DISFLEX TRAMONTINA VOLK SAIT PULVITEC BEMFIXA LEDAN KARCHER LYNUS BOSCH ATOMOS ARCDAL ' +
-  'AUTOSHINE GRAZIA HENKEL JEFLUB GALZER KOUBE BALMER TOYAMA GEDORE').split(' ');
+  'AUTOSHINE GRAZIA HENKEL JEFLUB GALZER KOUBE BALMER TOYAMA GEDORE SUALL CHEMICOLOR MIRAX TIREBOR NOVE54 KLYO TBCC').split(' ');
+/* Trechos da descrição que identificam o fornecedor mesmo sem a marca isolada. */
+const VL_FRASES = [['MAXI RUBBER', 'MAXI RUBBER'], ['LIMPZ AUTO', 'LIMPZ AUTO'], ['SUAL PISCINAS', 'SUALL'], ['MAZA', 'MAZA']];
 const VL_ALIAS = {VOND: 'VONDER', 'RUST OLEUM': 'RUST-OLEUM'};
 const VL_NOISE = new Set(['AUTO', 'BLISTER', 'QUIMICA', 'RUBBER', 'PISCINAS', 'UNIDADE', 'KIT', 'PRETO', 'BRANCO', 'AZUL', 'CINZA', 'VERMELHO', 'PRETA']);
 
@@ -78,6 +80,9 @@ function marcaDe(desc){
   const ult = ok(toks[toks.length - 1]); if(ult) return ult;
   const pri = ok(toks[0]); if(pri) return pri;
   for(const t of toks){ const m = ok(t); if(m) return m; }
+  const D = String(desc || '').toUpperCase();
+  for(const [fr, m] of VL_FRASES) if(D.indexOf(fr) >= 0) return m;
+  for(const sd of VL_SEED) if(sd.length >= 5 && D.indexOf(sd) >= 0) return sd; // marca colada: "300MLVONDER", "NUTRIEX-61093"
   const l = toks[toks.length - 1];
   if(/^[A-Z][A-Z-]{2,}$/.test(l) && !VL_NOISE.has(l)) return VL_ALIAS[l] || l;
   return 'SEM MARCA';
@@ -309,10 +314,18 @@ function cartaoArea(nome, cor, rows){
 }
 function graficoMensal(rows, alt){
   const por = somar(rows, r => r.mes + '|' + r.area).reduce((m, o) => { const [ym, a] = o.k.split('|'); (m[ym] = m[ym] || {ym, E: 0, R: 0})[a] = o.valor; return m; }, {});
-  const meses = Object.values(por).sort((a, b) => a.ym.localeCompare(b.ym));
-  if(!meses.length) return '<p class="field-hint">Sem dados.</p>';
+  const todos = Object.values(por).sort((a, b) => a.ym.localeCompare(b.ym));
+  if(!todos.length) return '<p class="field-hint">Sem dados.</p>';
+  // Janela de 12 meses pra trás e 12 pra frente: o que fica fora vira um resumo,
+  // senão um mês distante com muito valor achata todas as colunas.
+  const desl = n => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+  const ini = desl(-12), fim = desl(12);
+  const meses = todos.filter(m => m.ym >= ini && m.ym <= fim);
+  const antes = todos.filter(m => m.ym < ini).reduce((a, m) => a + m.E + m.R, 0), depois = todos.filter(m => m.ym > fim).reduce((a, m) => a + m.E + m.R, 0);
+  const fora = '<div class="vl-fora">' + (antes ? '<span class="venc">Vencido antes de ' + fMes(ini) + ': <b>' + fBRL(antes) + '</b></span>' : '') + (depois ? '<span>Vence depois de ' + fMes(fim) + ': <b>' + fBRL(depois) + '</b></span>' : '') + '</div>';
+  if(!meses.length) return fora;
   const max = Math.max.apply(null, meses.map(m => m.E + m.R)) || 1, hoje = hojeISO().slice(0, 7);
-  return '<div class="vl-mensal" style="height:' + alt + 'px">' + meses.map(m => {
+  return fora + '<div class="vl-mensal" style="height:' + alt + 'px">' + meses.map(m => {
     const t = m.E + m.R, passado = m.ym < hoje;
     return '<div class="vl-col' + (passado ? ' passado' : '') + '"' + tip(fMes(m.ym) + ' · Estoque ' + fBRL(m.E) + ' · Reversa ' + fBRL(m.R) + ' · Total ' + fBRL(t)) + '>' +
       '<span class="vl-col-v">' + (t ? fBRLc(t).replace('R$ ', '') : '') + '</span>' +

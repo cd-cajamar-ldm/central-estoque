@@ -1,8 +1,8 @@
 /* Service Worker — Controle de Validade. Network-first (nunca esconde atualização);
    cache só como fallback offline. */
-const CACHE_VERSION = 'validade-v1';
+const CACHE_VERSION = 'validade-v3';
 const PRECACHE_URLS = ['./', './index.html', './manifest.json', './css/theme.css', './css/acesso.css', './css/validade.css',
-  './js/acesso.js', './js/app.js', './js/worker.js', './icons/icon-192.png', './brand/Logo_LDM_icon.png'];
+  './js/acesso.js', './js/app.js', './js/worker.js', './icons/icon-192.png', './brand/Logo_LDM_icon.png', './css/validade.css'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_VERSION).then(c => c.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
