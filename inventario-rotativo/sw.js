@@ -4,7 +4,7 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'inventario-rotativo-v298';
+const CACHE_VERSION = 'inventario-rotativo-v299';
 const PRECACHE_URLS = [
   './',
   './index.html',
