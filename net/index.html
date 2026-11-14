@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap"></noscript>
+<link rel="stylesheet" href="css/painel-net.css">
 <style>
   /* Mesmo padrão "Painel Oficina LDM" do hub raiz — mesmas variáveis,
      mesma sidebar (252px, logo 60px interativa, nav em pílula) e mesmo
@@ -335,6 +336,10 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
         <span>Painel de fechamento</span>
       </button>
+      <button class="sb-nav-item" type="button" data-tab="net">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="20" y2="20"/><rect x="5" y="11" width="3.5" height="9"/><rect x="10.5" y="4" width="3.5" height="16"/><rect x="16" y="14" width="3.5" height="6"/></svg>
+        <span>NET</span>
+      </button>
       <button class="sb-nav-item" type="button" data-tab="importar">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <span>Importar QRY410</span>
@@ -379,6 +384,11 @@
 
     <div class="view" data-view="painel">
       <div id="painel-corpo"></div>
+    </div>
+
+    <div class="view" data-view="net" hidden>
+      <div class="nd-barra"><div class="mes-chips" id="nd-chips"></div><div class="nd-acoes"><span class="nd-tag">FLUXO AUTOMÁTICO</span><span class="nd-em" id="nd-em"></span><button class="btn sec mini" type="button" id="nd-atualizar">↻ Atualizar</button></div></div>
+      <div id="nd-corpo"></div>
     </div>
 
     <div class="view" data-view="importar" hidden>
@@ -458,6 +468,7 @@
   function aplicar(pct){
     pct = Math.max(MIN, Math.min(MAX, pct));
     document.body.style.zoom = (pct / 100);
+    try { window.dispatchEvent(new Event('resize')); } catch(e){}
     if(label) label.textContent = pct + '%';
     try { localStorage.setItem('ldm-zoom', pct); } catch(e){}
     return pct;
@@ -480,6 +491,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
 (function(){
   var TAB_LABELS = {
+    net: ['NET', 'Valor líquido de perdas e ganhos do fluxo automático — o fechamento usa a base importada.'],
     painel: ['Fechamento NET', 'Valor líquido de perdas e ganhos do CD para a controladoria.'],
     importar: ['Importar QRY410', 'Base de perdas e ganhos do CD — Lógicas 301 e 302.'],
     fechamento: ['Fechamento do mês', 'Importa a QRY410, aplica a legenda e gera a planilha da controladoria.'],
@@ -503,6 +515,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     titleEl.textContent = TAB_LABELS[tab][0];
     subtitleEl.textContent = TAB_LABELS[tab][1];
     try { history.replaceState(null, '', '#' + tab); } catch(e){}
+    if(tab === 'net' && window.NETDASH) window.NETDASH.abrir();
   }
   window.netSwitchTab = switchTab;
 
@@ -528,6 +541,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 <script async src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script src="js/app.js"></script>
 <script src="js/relatorio.js"></script>
+<script src="js/painel-net.js"></script>
 <script src="../vendor/supabase.js"></script>
 <script>window.LDM_NUVEM_CFG = { app:'net', dbName:'ldm-net', stores:['meses'] };</script>
 <script src="js/nuvem-idb.js"></script>

@@ -397,7 +397,7 @@ function renderImportacao(){
 
 /* ---------- renderização ---------- */
 function $(id){ return document.getElementById(id); }
-function render(){ renderMeses(); renderPainel(); renderImportacao(); renderFechamento(); renderLogica('301'); renderLogica('302'); renderLegenda(); if(window.NETREL) window.NETREL.render(); }
+function render(){ renderMeses(); renderPainel(); renderImportacao(); renderFechamento(); renderLogica('301'); renderLogica('302'); renderLegenda(); if(window.NETREL) window.NETREL.render(); if(window.NETDASH) window.NETDASH.redesenha(); }
 
 function renderMeses(){
   var ms=Object.keys(S.meses).sort().reverse();
@@ -796,6 +796,7 @@ window.NET_API = {
   mesSel: function(){ return S.mesSel; },
   getMes: function(m){ return S.meses[m]||null; },
   avalia: avalia,
+  classifica: classifica,
   mesLabel: mesLabel,
   MESES: MESES,
   cfg: function(){ return CFG; },
@@ -815,5 +816,6 @@ window.LDM_INICIAR = async function(){
     (todos||[]).forEach(function(m){ S.meses[m.mes]=m; });
   } catch(e){}
   render();
+  if(window.NETDASH) window.NETDASH.pronto();
 };
 })();

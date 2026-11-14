@@ -202,7 +202,7 @@ const ALIAS_CONGELADA = {
 const ALIAS_410 = {
   item: ['Item'], nomeItem: ['Nome'], dtMov: ['Dt.Mov.','Dt Mov','Data Mov'],
   quantidade: ['Quantidade'], sentido: ['Sentido'], vlMov: ['Vl.Mov.','Vl Mov'],
-  idDeposito: ['Id Deposito','Id Depósito'], obsWms: ['Observacao WMS','Observação WMS'],
+  idDeposito: ['Id Deposito','Id Depósito'], deposito: ['Nome Deposito','Nome Depósito'], obsWms: ['Observacao WMS','Observação WMS'],
   depto: ['Nome Depto','Nome Departamento','Departamento'],
   // Lógica (301/302) e Id Depto — só usados pela tabela de detalhe "NET por
   // Lógica 301/302" (visão linha a linha da própria 410). Opcionais: se a
@@ -1882,6 +1882,9 @@ async function runPipeline410({buf410}){
         nome: String(getVal(row, r410.nomeItem)||'').trim(),
         idDepto: String(getVal(row, r410.idDepto)||'').trim(),
         depto: String(getVal(row, r410.depto)||'').trim(),
+        // Depósito (id e nome) — o painel NET do app de fechamento mostra o NET por depósito.
+        idDeposito: isNaN(idDeposito) ? '' : String(idDeposito),
+        deposito: String(getVal(row, r410.deposito)||'').trim(),
         dtMov: isoDateTime(dt),
         mes, logica: logicaVal,
         qtd, valor,
