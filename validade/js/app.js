@@ -362,7 +362,8 @@ function viewPainel(){
   return filtrosBarra(false) +
     '<p class="vl-ref">Base de ' + (m.importadoEm ? fData(m.importadoEm.slice(0, 10)) : '—') + ' · hoje é ' + fData(hojeISO()) + ' · valor = quantidade × preço de custo (SIGEQ278)' +
     (semPreco ? ' · <b class="vl-warn">' + fInt(semPreco) + ' lotes sem preço</b> (valor zerado)' : '') + '</p>' + kpis(rows) +
-    '<div class="two-col vl-gap">' + cartaoArea('Estoque', VL_COR_E, rows.filter(r => r.area === 'E')) + cartaoArea('Reversa', VL_COR_R, rows.filter(r => r.area === 'R')) + '</div>' +
+    // Com filtro de área, mostra só o cartão dela — o outro apareceria zerado e parecia erro.
+    '<div class="' + (VL.f.area ? '' : 'two-col ') + 'vl-gap">' + (VL.f.area === 'R' ? '' : cartaoArea('Estoque', VL_COR_E, rows.filter(r => r.area === 'E'))) + (VL.f.area === 'E' ? '' : cartaoArea('Reversa', VL_COR_R, rows.filter(r => r.area === 'R'))) + '</div>' +
     '<div class="panel vl-gap"><h3>Visão mensal · valor por mês de vencimento</h3><div class="panel-sub">Passe o mouse nas colunas para ver estoque × reversa.</div>' + graficoMensal(rf, 190) + '</div>' +
     '<div class="two-col vl-gap"><div class="panel"><h3>Fornecedores · maior valor em risco</h3><div class="panel-sub">Vencido + a vencer. Clique para filtrar.</div>' + topForn(rows, 10) + '</div>' +
     '<div class="panel"><h3>Evolução do valor vencido</h3><div class="panel-sub">Um ponto por dia de importação.</div>' + graficoHist() + '</div></div>';
