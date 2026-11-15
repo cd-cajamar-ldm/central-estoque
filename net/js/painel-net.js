@@ -20,6 +20,49 @@
 'use strict';
 var API = window.NET_API;
 var COR = {rm:'#001A72', rc:'#FE5000', pn:'#C0392B', gn:'#001A72'};
+/* Legenda de motivos: a MESMA do Inventário (ela decide o que entra no NET). Vem da nuvem junto com os
+   dados; sem ela, usa a última guardada ou esta, que é o padrão de fábrica do Inventário. */
+var LEG_PADRAO = [
+  {id:'ARI LOT', legenda:'Ajuste de Lote', considerarNet:true}, {id:'INS', legenda:'Baixa Insumo', considerarNet:false},
+  {id:'AIR', legenda:'Inventário Rotativo', considerarNet:true}, {id:'TID', legenda:'Troca de Identidade', considerarNet:true},
+  {id:'AIN', legenda:'Não Localizado', considerarNet:true}, {id:'INV', legenda:'Inversão de etiqueta', considerarNet:true},
+  {id:'ANF', legenda:'Nota Fiscal', considerarNet:false}, {id:'PAR', legenda:'Recebimento Parcial', considerarNet:true},
+  {id:'ARI', legenda:'Recebimento invertido', considerarNet:true}, {id:'API', legenda:'Ajuste MCL Reversa', considerarNet:true},
+  {id:'AEE', legenda:'Itens Localizados', considerarNet:true}, {id:'LOJA', legenda:'Ajuste Loja', considerarNet:true},
+  {id:'QBR', legenda:'Quebra CD', considerarNet:false}, {id:'EPI', legenda:'Baixa EPI', considerarNet:false},
+  {id:'IMP', legenda:'Ajuste Importação', considerarNet:true}, {id:'ASR', legenda:'Sobra Recebimento', considerarNet:true},
+  {id:'BAI', legenda:'Baixa Insumo', considerarNet:false}, {id:'INP', legenda:'Ajuste Pallets', considerarNet:false},
+  {id:'LIT', legenda:'Ajuste Litigio', considerarNet:true}, {id:'AUD', legenda:'Auditoria KPMG', considerarNet:true},
+  {id:'AIP', legenda:'Inventário Pontual', considerarNet:true}, {id:'ADE', legenda:'Auditorias', considerarNet:true},
+  {id:'AIC', legenda:'Inventário de Curvas', considerarNet:true}, {id:'AIT', legenda:'Inventario de Transitorios', considerarNet:true},
+  {id:'AII', legenda:'Inventário de Insumos', considerarNet:false},
+  {id:'SALDO INCLUIDO INDEVIDAMENTE', legenda:'Saldo incluído indevidamente via NF', considerarNet:false}
+];
+var LEG_KEY = 'ldm-net-leg410';
+function legendaAtual(D){
+  if(D && Array.isArray(D.legenda) && D.legenda.length){ try { localStorage.setItem(LEG_KEY, JSON.stringify(D.legenda)); } catch(e){} return D.legenda; }
+  try { var c = JSON.parse(localStorage.getItem(LEG_KEY)||'null'); if(Array.isArray(c) && c.length) return c; } catch(e){}
+  return LEG_PADRAO;
+}
+function classificaFluxo(obsRaw, leg){
+  var texto = String(obsRaw||'').trim().toUpperCase();
+  if(!texto) return {prefixo:'(sem obs)', legenda:'Sem observação', considerar:true};
+  var melhor = null;
+  leg.forEach(function(it){
+    var cod = String(it.id||'').trim().toUpperCase();
+    if(!cod) return;
+    if(texto === cod || (texto.indexOf(cod) === 0 && /[^A-Z0-9]/.test(texto.charAt(cod.length)))){
+      if(!melhor || cod.length > melhor.cod.length) melhor = {cod:cod, it:it};
+    }
+  });
+  if(melhor) return {prefixo:melhor.it.id, legenda:melhor.it.legenda||'', considerar:melhor.it.considerarNet !== false};
+  for(var k=0; k<leg.length; k++){ // observação escrita por extenso: procura a frase dentro do texto
+    var ch = String(leg[k].id||'').trim().toUpperCase();
+    if(ch.length >= 6 && texto.indexOf(ch) !== -1) return {prefixo:leg[k].id.split(' ')[0].slice(0,5), legenda:leg[k].legenda||'', considerar:leg[k].considerarNet !== false};
+  }
+  var cod = (texto.split(/[\s-]/)[0] || texto.slice(0,10)).trim();
+  return {prefixo:cod || '(sem obs)', legenda:'', considerar:true};
+}
 var TETO_KEY = 'ldm-net-teto';
 var ST = {dados:null, calc:null, carregando:false, erro:null, mes:null, ord:'valor', em:null, pronto:false, quer:false, det:{}, detBusca:{}, teto:525000};
 try { var t0 = parseFloat(localStorage.getItem(TETO_KEY)); if(t0 > 0) ST.teto = t0; } catch(e){}
@@ -56,7 +99,8 @@ function nIt(n){ return fInt.format(n)+(n===1?' item':' itens'); }
 function calcula(){
   var D = ST.dados || {}, meses = D.meses || [], itens = D.itens || [], deps = D.depositos || [], obs = D.obs || [];
   var NM = meses.length;
-  var cls = obs.map(function(o){ return API.classifica(o); });
+  var leg = legendaAtual(D);
+  var cls = obs.map(function(o){ return classificaFluxo(o, leg); });
   var M = meses.map(function(m){
     return {mes:m, net:0, g:0, p:0, rm:0, rc:0, rmG:0, rmP:0, rcPos:0, rcNeg:0, nG:0, nP:0, nRc:0, oRc:{}, mot:{}, dep:{}, itens:[]};
   });
@@ -196,9 +240,7 @@ function ponte(m, ant){
   }
   return '<div class="nd-ponte">'
     + card('nd-b-net '+(m.net<0?'neg':'pos'), 'NET de '+esc(mesLongo(m.mes)), sgn(m.net), [ant ? sgn(m.net-ant.net)+' vs '+mesCurto(ant.mes) : ''])
-    + '<div class="nd-op">=</div>'
     + card('nd-b-rm', 'Resultado do mês', sgn(rm), ['ganhos '+compacto(m.rmG)+' · '+nIt(m.nG), 'perdas '+compacto(m.rmP)+' · '+nIt(m.nP)])
-    + '<div class="nd-op">+</div>'
     + card('nd-b-rc', 'Recuperação do acumulado', sgn(rc), ['perdas devolvidas '+compacto(m.rcPos), 'ganhos estornados '+compacto(m.rcNeg), nIt(m.nRc)+(oRc?' · de '+oRc:'')])
     + '</div>';
 }
@@ -273,20 +315,27 @@ function listaItens(m, sinal){
   var ord = ST.ord;
   var lista = m.itens.filter(function(x){ return sinal<0 ? x.n < -0.5 : x.n > 0.5; });
   lista.sort(function(a,b){ return ord==='pecas' ? Math.abs(b.q)-Math.abs(a.q) : Math.abs(b.n)-Math.abs(a.n); });
-  return lista.slice(0, 8);
+  return lista.slice(0, 150);
 }
 function renderItens(lista){
   var C = ST.calc;
   if(!lista.length) return '<div class="nd-vazio">Sem itens</div>';
-  return lista.map(function(x){
+  return '<div class="nd-scroll" title="Clique para rolar">'+lista.map(function(x){
     var cod = C.itens[x.i] || '', nome = C.nomes[cod] || '';
     var unit = Math.abs(x.q) > 0.5 ? Math.abs(x.n/x.q) : null;
     return '<div class="nd-it" data-cod="'+esc(cod)+'"><div class="nd-it-t"><b>'+esc(cod)+'</b>'+esc(nome)+'</div>'
       + '<div class="nd-it-q">'+fInt.format(Math.round(x.q))+' pç</div>'
       + '<div class="nd-it-u">'+(unit!=null ? brl(unit)+'<small>/pç</small>' : '—')+'</div>'
       + '<div class="nd-it-v" style="color:'+cor(x.n)+'">'+sgn(x.n)+'</div></div>';
-  }).join('');
+  }).join('')+'</div>';
 }
+/* a lista só rola depois de um clique; sem clique, a roda do mouse rola a página */
+document.addEventListener('mousedown', function(e){
+  var s = e.target.closest && e.target.closest('.nd-scroll'); if(s) s.classList.add('ativo');
+});
+document.addEventListener('mouseover', function(e){
+  document.querySelectorAll('.nd-scroll.ativo').forEach(function(x){ if(!x.contains(e.target)) x.classList.remove('ativo'); });
+});
 
 /* ---------- balões ---------- */
 var TIP = null, HOV = null;
@@ -316,7 +365,7 @@ function itemDoMes(cod){
   return null;
 }
 function lancamentoHtml(l){
-  var c = API.classifica(l.obs), us = String(l.usuario||'').replace(/^MECA_/,'');
+  var c = classificaFluxo(l.obs, legendaAtual(ST.dados)), us = String(l.usuario||'').replace(/^MECA_/,'');
   var un = Math.abs(l.qtd) > 0.5 ? Math.abs(l.valor/l.qtd) : null;
   return '<div class="nd-tl"><div class="nd-tl-o">'+esc(l.obs||c.prefixo)+'</div>'
     + '<div class="nd-tl-g"><span>Documento</span><b>'+esc(l.doc||'—')+'</b><span>Usuário</span><b>'+esc(us||'—')+'</b>'
@@ -345,10 +394,13 @@ function mostraTip(ev, cod){
   var mes = ST.mes, k = mes+'|'+cod;
   if(!ST.det[k] && !ST.detBusca[k]){
     ST.detBusca[k] = 1;
-    window.ldmSupa.rpc('net_fluxo_linhas', {p_mes:mes, p_itens:[cod]}).then(function(r){
-      if(r.error) throw r.error;
-      ST.det[k] = (r.data || []).filter(function(l){ return l.item === cod; });
-    }).catch(function(){ ST.det[k] = []; delete ST.detBusca[k]; }).then(function(){
+    var busca = ST.fonte === 'pasta' && window.NETPASTA
+      ? window.NETPASTA.detalhe(mes).then(function(arr){ ST.det[k] = arr.filter(function(l){ return l.item === cod; }); })
+      : window.ldmSupa.rpc('net_fluxo_linhas', {p_mes:mes, p_itens:[cod]}).then(function(r){
+          if(r.error) throw r.error;
+          ST.det[k] = (r.data || []).filter(function(l){ return l.item === cod; });
+        });
+    busca.catch(function(){ ST.det[k] = []; delete ST.detBusca[k]; }).then(function(){
       if(HOV === cod && ST.mes === mes && TIP){ TIP.innerHTML = tipHtml(cod); }
     });
   }
@@ -375,10 +427,18 @@ document.addEventListener('mousemove', function(e){ if(HOV) moveTip(e); });
 document.addEventListener('mouseleave', somaTip);
 
 /* ---------- tela ---------- */
+function preencheFiltros(C){
+  var sa = $('nd-ano'), sm = $('nd-mes'); if(!sa || !sm) return;
+  var anos = []; C.meses.forEach(function(x){ var a = x.mes.slice(0,4); if(anos.indexOf(a) < 0) anos.push(a); });
+  anos.sort().reverse();
+  var ano = ST.mes.slice(0,4);
+  sa.innerHTML = anos.map(function(a){ return '<option value="'+a+'"'+(a===ano?' selected':'')+'>'+a+'</option>'; }).join('');
+  sm.innerHTML = mesesDoAno(ano).map(function(x){ return '<option value="'+x.mes+'"'+(x.mes===ST.mes?' selected':'')+'>'+mesLongo(x.mes)+'</option>'; }).join('');
+}
 function desenha(){
-  var corpo = $('nd-corpo'), chips = $('nd-chips'), em = $('nd-em');
+  var corpo = $('nd-corpo'), chips = null, em = $('nd-em');
   if(!corpo) return;
-  if(em) em.textContent = ST.em ? 'atualizado '+ST.em.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+  if(em) em.textContent = ST.fonteTxt || (ST.em ? 'nuvem · '+ST.em.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '');
   if(ST.carregando && !ST.calc){
     corpo.innerHTML = '<div class="nd-ponte"><div class="nd-skel"></div><div></div><div class="nd-skel"></div><div></div><div class="nd-skel"></div></div><div class="nd-grid nd-g2"><div class="nd-skel" style="height:340px"></div><div class="nd-skel" style="height:340px"></div></div>';
     if(chips) chips.innerHTML = '';
@@ -399,9 +459,7 @@ function desenha(){
   }
   var idx = C.meses.findIndex(function(x){ return x.mes === ST.mes; });
   var m = C.meses[idx], ant = idx>0 ? C.meses[idx-1] : null;
-  if(chips) chips.innerHTML = C.meses.slice(-12).map(function(x){
-    return '<button type="button" class="mes-chip'+(x.mes===ST.mes?' on':'')+'" data-nd-mes="'+x.mes+'">'+mesChip(x.mes)+'</button>';
-  }).join('');
+  preencheFiltros(C);
   var dep = C.semDeposito
     ? '<div class="nd-vazio"><b>Depósito indisponível</b>Reimporte a QRY410 no Inventário.</div>'
     : tabelaDep(m.dep);
@@ -418,8 +476,8 @@ function desenha(){
     + '<div class="painel nd-p"><h3>NET por depósito <small>'+esc(mesLongo(m.mes))+'</small></h3>'+dep+'</div>'
     + '</div>'
     + '<div class="painel nd-p" style="margin-top:14px"><h3>Itens mais divergentes <small><span class="nd-ord"><button type="button" data-nd-ord="valor" class="'+(ST.ord==='valor'?'on':'')+'">Valor</button><button type="button" data-nd-ord="pecas" class="'+(ST.ord==='pecas'?'on':'')+'">Peças</button></span></small></h3>'
-    + '<div class="nd-grid nd-g3" style="margin:0"><div><div class="nd-k-rot nd-it-h" style="color:'+COR.pn+'">Perdas</div>'+renderItens(lp)+'</div>'
-    + '<div><div class="nd-k-rot nd-it-h" style="color:'+COR.gn+'">Ganhos</div>'+renderItens(lg)+'</div></div></div>';
+    + '<div class="nd-grid nd-g3" style="margin:0"><div><div class="nd-k-rot nd-it-h" style="color:'+COR.pn+'">Perdas · '+fInt.format(lp.length)+' itens</div>'+renderItens(lp)+'</div>'
+    + '<div><div class="nd-k-rot nd-it-h" style="color:'+COR.gn+'">Ganhos · '+fInt.format(lg.length)+' itens</div>'+renderItens(lg)+'</div></div></div>';
   ajusta();
 }
 
@@ -428,15 +486,32 @@ async function carregar(forcar){
   if(ST.calc && !forcar){ desenha(); return; }
   ST.carregando = true; ST.erro = null; if(forcar){ ST.det = {}; ST.detBusca = {}; } desenha();
   try {
-    var r = await window.ldmSupa.rpc('net_fluxo');
-    if(r.error) throw r.error;
-    ST.dados = r.data; calcula(); ST.em = new Date();
+    var NP = window.NETPASTA, loc = null;
+    // 1) arquivo da pasta conectada (se houver) — 2) nuvem (a base que o Inventário guarda)
+    if(NP){
+      if(forcar && NP.conectada()) loc = await NP.sincronizar(true);
+      if(!loc) loc = await NP.dadosLocais();
+    }
+    if(loc){ ST.dados = loc.dados; ST.fonte = 'pasta'; ST.fonteTxt = loc.txt; }
+    else {
+      var r = await window.ldmSupa.rpc('net_fluxo');
+      if(r.error) throw r.error;
+      ST.dados = r.data; ST.fonte = 'nuvem'; ST.fonteTxt = '';
+    }
+    calcula(); ST.em = new Date();
+    if(ST.fonte === 'nuvem') ST.fonteTxt = 'nuvem · '+ST.em.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   } catch(e){ ST.erro = (e && (e.message || e.details)) || String(e); }
   ST.carregando = false; desenha();
 }
 
+document.addEventListener('change', function(e){
+  if(e.target.id === 'nd-ano'){
+    var ms = mesesDoAno(e.target.value); if(!ms.length) return;
+    var igual = ms.find(function(x){ return x.mes.slice(5) === ST.mes.slice(5); });
+    ST.mes = (igual || ms[ms.length-1]).mes; desenha();
+  } else if(e.target.id === 'nd-mes'){ ST.mes = e.target.value; desenha(); }
+});
 document.addEventListener('click', function(e){
-  var c = e.target.closest('[data-nd-mes]'); if(c){ ST.mes = c.dataset.ndMes; desenha(); return; }
   var g = e.target.closest('.nd-col'); if(g && /^\d{4}-\d{2}$/.test(g.dataset.m)){ ST.mes = g.dataset.m; desenha(); return; }
   var o = e.target.closest('[data-nd-ord]'); if(o){ ST.ord = o.dataset.ndOrd; desenha(); return; }
   if(e.target.closest('#nd-teto-ed')){
@@ -449,11 +524,18 @@ document.addEventListener('click', function(e){
 });
 
 window.NETDASH = {
+  /* dados novos vindos da pasta conectada (ou null ao desconectar) */
+  usarDados: function(loc){
+    if(!loc){ ST.calc = null; ST.dados = null; ST.det = {}; ST.detBusca = {}; if(ST.pronto && ST.quer) carregar(false); return; }
+    ST.dados = loc.dados; ST.fonte = 'pasta'; ST.fonteTxt = loc.txt; ST.det = {}; ST.detBusca = {};
+    calcula(); ST.em = new Date(); desenha();
+  },
   abrir: function(){ ST.quer = true; if(ST.pronto) carregar(false); },
   // A aba pode já ter sido aberta antes deste arquivo carregar (endereço terminando em #net):
   // por isso, ao ficar pronto, confere se a aba NET está à vista e carrega do mesmo jeito.
   pronto: function(){
     ST.pronto = true;
+    if(window.NETPASTA) window.NETPASTA.iniciar();
     var v = document.querySelector('.view[data-view="net"]');
     if(ST.quer || (v && !v.hidden)) carregar(false);
   },

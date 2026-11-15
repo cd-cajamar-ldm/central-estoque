@@ -797,6 +797,8 @@ window.NET_API = {
   getMes: function(m){ return S.meses[m]||null; },
   avalia: avalia,
   classifica: classifica,
+  lePlanilha: lePlanilha,
+  extraiLinhas: extraiLinhas,
   mesLabel: mesLabel,
   MESES: MESES,
   cfg: function(){ return CFG; },
