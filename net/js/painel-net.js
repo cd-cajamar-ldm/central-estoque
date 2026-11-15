@@ -450,7 +450,13 @@ document.addEventListener('click', function(e){
 
 window.NETDASH = {
   abrir: function(){ ST.quer = true; if(ST.pronto) carregar(false); },
-  pronto: function(){ ST.pronto = true; if(ST.quer) carregar(false); },
+  // A aba pode já ter sido aberta antes deste arquivo carregar (endereço terminando em #net):
+  // por isso, ao ficar pronto, confere se a aba NET está à vista e carrega do mesmo jeito.
+  pronto: function(){
+    ST.pronto = true;
+    var v = document.querySelector('.view[data-view="net"]');
+    if(ST.quer || (v && !v.hidden)) carregar(false);
+  },
   redesenha: function(){ if(ST.calc){ calcula(); desenha(); } },
   _estado: function(){ return ST; }
 };
