@@ -64,7 +64,7 @@ function classificaFluxo(obsRaw, leg){
   return {prefixo:cod || '(sem obs)', legenda:'', considerar:true};
 }
 var TETO_KEY = 'ldm-net-teto';
-var ST = {dados:null, calc:null, carregando:false, erro:null, mes:null, ord:'valor', em:null, pronto:false, quer:false, det:{}, detBusca:{}, teto:525000};
+var ST = {escopo:'mes', dados:null, calc:null, carregando:false, erro:null, mes:null, ord:'valor', em:null, pronto:false, quer:false, det:{}, detBusca:{}, teto:525000};
 try { var t0 = parseFloat(localStorage.getItem(TETO_KEY)); if(t0 > 0) ST.teto = t0; } catch(e){}
 var FLUID = {};
 
@@ -102,9 +102,11 @@ function calcula(){
   var leg = legendaAtual(D);
   var cls = obs.map(function(o){ return classificaFluxo(o, leg); });
   var M = meses.map(function(m){
-    return {mes:m, net:0, g:0, p:0, rm:0, rc:0, rmG:0, rmP:0, rcPos:0, rcNeg:0, nG:0, nP:0, nRc:0, oRc:{}, mot:{}, dep:{}, itens:[]};
+    return {mes:m, net:0, g:0, p:0, rm:0, rc:0, rmG:0, rmP:0, rcPos:0, rcNeg:0, nG:0, nP:0, nRc:0, oRc:{}, mot:{}, dep:{}, itens:[], abNeg:{}, abPos:{}};
   });
-  var porItem = new Map(), porIM = new Map();
+  var porItem = new Map(), porIM = new Map(), itemObs = new Map(), fin = new Map();
+  var criado = {neg:{}, pos:{}}, recup = {neg:{}, pos:{}}; // histórico: quanto nasceu e quanto voltou, por observação
+  var velho = NM-3; // só entra no histórico o que nasceu há 2+ meses (deu tempo de voltar)
   (D.linhas || []).forEach(function(t){
     var c = cls[t[3]-1]; if(!c || !c.considerar) return;
     var m = t[0]-1, i = t[1]-1, gp = t[4], pp = t[5], q = t[6], n = gp+pp;
@@ -120,27 +122,50 @@ function calcula(){
     a.n[m] += n; a.q[m] += q;
     var kim = i*NM+m, d = porIM.get(kim); if(!d){ d = {}; porIM.set(kim, d); }
     d[c.prefixo] = (d[c.prefixo]||0) + n;
+    var ol = itemObs.get(kim); if(!ol){ ol = []; itemObs.set(kim, ol); }
+    ol.push({pref:c.prefixo, legenda:c.legenda, txt:obs[t[3]-1], dep:dn, n:n});
   });
+  function pesos(i, m, sinal){
+    var dim = porIM.get(i*NM+m); if(!dim) return null;
+    var ks = Object.keys(dim).filter(function(k){ return dim[k]*sinal > 0; }), tw = ks.reduce(function(s,k){ return s+dim[k]; }, 0);
+    if(!tw) return null;
+    var w = {}; ks.forEach(function(k){ w[k] = dim[k]/tw; }); return w;
+  }
+  function fecha(i, ano, fila){
+    var tot = 0;
+    fila.forEach(function(e){
+      tot += e.v;
+      if(!e.w) return;
+      Object.keys(e.w).forEach(function(k){ soma(e.v<0 ? M[e.m].abNeg : M[e.m].abPos, k, Math.abs(e.v)*e.w[k]); });
+    });
+    var f = fin.get(i) || {}; f[ano] = tot; fin.set(i, f);
+  }
   porItem.forEach(function(a, i){
     var fila = [], anoAtual = '';
     for(var m=0; m<NM; m++){
       var ano = meses[m].slice(0,4);
-      if(ano !== anoAtual){ fila = []; anoAtual = ano; } // o acumulado zera a cada ano
+      if(ano !== anoAtual){ if(anoAtual) fecha(i, anoAtual, fila); fila = []; anoAtual = ano; } // o acumulado zera a cada ano
       var n = a.n[m];
       if(Math.abs(n) < 0.005) continue;
       var rem = n, comp = 0, orig = {};
       if(n > 0){
         while(rem > 0.005 && fila.length && fila[0].v < 0){
           var t1 = Math.min(rem, -fila[0].v); comp += t1; soma(orig, meses[fila[0].m], t1);
+          if(fila[0].velho && fila[0].w) Object.keys(fila[0].w).forEach(function(k){ soma(recup.neg, k, t1*fila[0].w[k]); });
           fila[0].v += t1; rem -= t1; if(fila[0].v > -0.005) fila.shift();
         }
       } else {
         while(rem < -0.005 && fila.length && fila[0].v > 0){
           var t2 = Math.min(-rem, fila[0].v); comp -= t2; soma(orig, meses[fila[0].m], t2);
+          if(fila[0].velho && fila[0].w) Object.keys(fila[0].w).forEach(function(k){ soma(recup.pos, k, t2*fila[0].w[k]); });
           fila[0].v -= t2; rem += t2; if(fila[0].v < 0.005) fila.shift();
         }
       }
-      if(Math.abs(rem) > 0.005) fila.push({m:m, v:rem});
+      if(Math.abs(rem) > 0.005){
+        var ent = {m:m, v:rem, w:pesos(i, m, rem>0?1:-1), velho:m <= velho};
+        fila.push(ent);
+        if(ent.velho && ent.w) Object.keys(ent.w).forEach(function(k){ soma(rem<0 ? criado.neg : criado.pos, k, Math.abs(rem)*ent.w[k]); });
+      }
       var real = n - comp, mm = M[m];
       mm.rm += real; mm.rc += comp;
       if(real > 0.005){ mm.rmG += real; mm.nG++; } else if(real < -0.005){ mm.rmP += real; mm.nP++; }
@@ -154,8 +179,19 @@ function calcula(){
         if(tw) ks.forEach(function(k){ var f = dim[k]/tw, mo = mm.mot[k]; if(mo){ mo.rm += real*f; mo.rc += comp*f; } });
       }
     }
+    if(anoAtual) fecha(i, anoAtual, fila);
   });
-  ST.calc = {meses:M, itens:itens, nomes:D.nomes || {}, semDeposito: deps.length<=1 && (deps[0]||'')===''};
+  // taxa histórica: quanto do que nasceu (perda ou ganho) voltou depois; pouca base → usa a taxa geral
+  var gl = {neg:[0,0], pos:[0,0]};
+  ['neg','pos'].forEach(function(sg){ Object.keys(criado[sg]).forEach(function(k){ gl[sg][0] += criado[sg][k]; gl[sg][1] += recup[sg][k]||0; }); });
+  function taxa(sg, k){
+    var c = criado[sg][k]||0, r = recup[sg][k]||0;
+    if(c >= 2000) return {t:Math.min(1, r/c), base:c, volta:r};
+    return {t:gl[sg][0] ? Math.min(1, gl[sg][1]/gl[sg][0]) : 0, base:gl[sg][0], volta:gl[sg][1], geral:true};
+  }
+  var idxItem = {}; itens.forEach(function(c, j){ idxItem[c] = j; });
+  ST.calc = {meses:M, itens:itens, nomes:D.nomes || {}, semDeposito: deps.length<=1 && (deps[0]||'')==='', NM:NM,
+             porItem:porItem, itemObs:itemObs, fin:fin, taxa:taxa, idxItem:idxItem};
   if(!ST.mes || !meses.includes(ST.mes)) ST.mes = meses.length ? meses[meses.length-1] : null;
 }
 /* junta vários meses: observações uma vez cada */
@@ -264,24 +300,35 @@ function painelTeto(mes){
 }
 /* tabela por observação: resultado do mês, recuperação e NET */
 function tabelaObs(m){
+  var C = ST.calc;
   var arr = junta([m]).obs.filter(function(o){ return Math.abs(o.g) >= 0.5 || Math.abs(o.p) >= 0.5; });
   if(!arr.length) return '<div class="nd-vazio">Sem movimento</div>';
+  // previsão: o que ainda está em aberto (perda sem ganho / ganho sem perda) e a chance histórica de voltar
+  arr.forEach(function(o){
+    var ab = (m.abPos[o.id]||0) - (m.abNeg[o.id]||0);
+    var sg = ab < 0 ? 'neg' : 'pos', t = C.taxa(sg, o.id);
+    o.ab = ab; o.t = t.t; o.rev = Math.abs(ab) * t.t;           // o que tende a reverter
+    o.prov = o.v + (ab < 0 ? o.rev : -o.rev);                    // NET provável
+  });
   var top = arr.slice(0, 10);
   if(arr.length > 10){
-    var r = arr.slice(10).reduce(function(s,o){ s.v += o.v; s.rm += o.rm; s.rc += o.rc; return s; }, {id:'Outras', legenda:'', v:0, rm:0, rc:0});
-    top.push(r);
+    var r = arr.slice(10).reduce(function(s,o){ s.v += o.v; s.rev += (o.ab<0?o.rev:-o.rev); s.prov += o.prov; return s; }, {id:'Outras', legenda:'', v:0, rev:0, prov:0, t:null});
+    r.revAbs = r.rev; top.push(r);
   }
   var mx = Math.max(1, Math.max.apply(null, top.map(function(o){ return Math.abs(o.v); })));
-  var tot = top.reduce(function(s,o){ s.v += o.v; s.rm += o.rm; s.rc += o.rc; return s; }, {v:0, rm:0, rc:0});
+  var tot = top.reduce(function(s,o){ s.v += o.v; s.rev += (o.id==='Outras' ? o.rev : (o.ab<0?o.rev:-o.rev)); s.prov += o.prov; return s; }, {v:0, rev:0, prov:0, t:null});
   function lin(o, extra, nome){
     var w = Math.min(50, Math.abs(o.v)/mx*50);
     var est = o.v>=0 ? 'left:50%;width:'+w+'%;' : 'left:'+(50-w)+'%;width:'+w+'%;';
+    var rev = o.id==='Outras' || nome ? o.rev : (o.ab<0 ? o.rev : -o.rev);
+    var chance = o.t==null ? '' : '<span class="nd-n" style="text-align:right">'+Math.round(o.t*100)+'% '+(o.ab<0?'volta':'estorna')+'</span>';
     return '<div class="nd-pg nd-pg3 '+(extra||'')+'"><div class="nd-lab">'+(nome || '<b>'+esc(o.id)+'</b>'+esc(o.legenda||''))+'</div>'
       + '<div class="nd-trk"><i style="'+est+'background:'+(o.v<0?COR.pn:COR.gn)+'"></i></div>'
-      + '<div class="nd-gn" style="color:'+cor(o.rm)+'">'+sgn(o.rm)+'</div><div class="nd-gn" style="color:'+cor(o.rc)+'">'+sgn(o.rc)+'</div>'
-      + '<div class="nd-val" style="color:'+cor(o.v)+'">'+sgn(o.v)+'</div></div>';
+      + '<div class="nd-val" style="color:'+cor(o.v)+'">'+sgn(o.v)+'</div>'
+      + '<div class="nd-gn" style="color:'+cor(rev)+'">'+(Math.abs(rev)<0.5?'—':sgn(rev))+chance+'</div>'
+      + '<div class="nd-val" style="color:'+cor(o.prov)+'">'+sgn(o.prov)+'</div></div>';
   }
-  return '<div class="nd-pg nd-pg3 nd-pg-h"><div></div><div class="nd-trk-h"><span style="color:'+COR.pn+'">◀ perda</span><span style="color:'+COR.gn+'">ganho ▶</span></div><div>Do mês</div><div>Recup.</div><div>NET</div></div>'
+  return '<div class="nd-pg nd-pg3 nd-pg-h"><div></div><div class="nd-trk-h"><span style="color:'+COR.pn+'">◀ perda</span><span style="color:'+COR.gn+'">ganho ▶</span></div><div>NET</div><div>Pode mudar</div><div>NET provável</div></div>'
     + top.map(function(o){ return lin(o); }).join('')
     + lin(tot, 'nd-pg-t', 'Total');
 }
@@ -312,8 +359,17 @@ function dataBr(dh, dt){
   return m[3]+'/'+m[2]+(m[4] && (m[4]!=='00' || m[5]!=='00') ? ' '+m[4]+':'+m[5] : '');
 }
 function listaItens(m, sinal){
-  var ord = ST.ord;
-  var lista = m.itens.filter(function(x){ return sinal<0 ? x.n < -0.5 : x.n > 0.5; });
+  var ord = ST.ord, C = ST.calc, base = m.itens;
+  if(ST.escopo === 'ano'){ // acumulado de janeiro até o mês escolhido
+    var ano = m.mes.slice(0,4), ate = C.meses.findIndex(function(x){ return x.mes === m.mes; }), acc = [];
+    C.porItem.forEach(function(a, i){
+      var n = 0, q = 0;
+      for(var k=0; k<=ate; k++){ if(C.meses[k].mes.slice(0,4) === ano){ n += a.n[k]; q += a.q[k]; } }
+      if(Math.abs(n) >= 0.005) acc.push({i:i, n:n, q:q});
+    });
+    base = acc;
+  }
+  var lista = base.filter(function(x){ return sinal<0 ? x.n < -0.5 : x.n > 0.5; });
   lista.sort(function(a,b){ return ord==='pecas' ? Math.abs(b.q)-Math.abs(a.q) : Math.abs(b.n)-Math.abs(a.n); });
   return lista.slice(0, 150);
 }
@@ -329,13 +385,21 @@ function renderItens(lista){
       + '<div class="nd-it-v" style="color:'+cor(x.n)+'">'+sgn(x.n)+'</div></div>';
   }).join('')+'</div>';
 }
-/* a lista só rola depois de um clique; sem clique, a roda do mouse rola a página */
+/* a lista tem barra de rolagem discreta; a roda do mouse só rola a lista depois de um clique nela
+   (antes disso a roda continua rolando a página). Arrastar a barra funciona sempre. */
 document.addEventListener('mousedown', function(e){
   var s = e.target.closest && e.target.closest('.nd-scroll'); if(s) s.classList.add('ativo');
 });
-document.addEventListener('mouseover', function(e){
-  document.querySelectorAll('.nd-scroll.ativo').forEach(function(x){ if(!x.contains(e.target)) x.classList.remove('ativo'); });
+document.addEventListener('mouseout', function(e){
+  var s = e.target.closest && e.target.closest('.nd-scroll');
+  if(s && s.classList.contains('ativo') && !(e.relatedTarget && s.contains(e.relatedTarget))) s.classList.remove('ativo');
 });
+document.addEventListener('wheel', function(e){
+  var s = e.target.closest && e.target.closest('.nd-scroll');
+  if(!s || s.classList.contains('ativo') || e.ctrlKey) return;
+  e.preventDefault();
+  window.scrollBy(0, e.deltaY);
+}, {passive:false});
 
 /* ---------- balões ---------- */
 var TIP = null, HOV = null;
@@ -374,20 +438,61 @@ function lancamentoHtml(l){
     + '<span>Quantidade</span><b>'+fInt.format(Math.round(l.qtd))+' pç'+(un!=null?' × '+brl(un):'')+'</b>'
     + '<span>Valor</span><b style="color:'+cor(l.valor)+'">'+sgn(l.valor)+'</b></div></div>';
 }
+/* tudo o que se sabe do item no mês escolhido: posição, previsão e de onde veio */
+function ficha(cod){
+  var C = ST.calc, i = C.idxItem[cod], a = i == null ? null : C.porItem.get(i);
+  if(!a) return null;
+  var mi = C.meses.findIndex(function(x){ return x.mes === ST.mes; }), ano = ST.mes.slice(0,4);
+  var antes = 0, depois = 0;
+  for(var k=0; k<C.NM; k++){ if(C.meses[k].mes.slice(0,4) !== ano) continue; if(k < mi) antes += a.n[k]; else if(k > mi) depois += a.n[k]; }
+  var reg = itemDoMes(cod) || {n:a.n[mi], q:a.q[mi], real:a.n[mi], comp:0, orig:{}};
+  var aberto = (C.fin.get(i) || {})[ano] || 0;
+  var obsMap = {};
+  (C.itemObs.get(i*C.NM+mi) || []).forEach(function(o){ var k = o.txt || '', r = obsMap[k] || (obsMap[k] = {pref:o.pref, legenda:o.legenda, txt:o.txt, n:0, deps:{}}); r.n += o.n; if(o.dep) r.deps[o.dep] = 1; });
+  var obsL = Object.keys(obsMap).map(function(k){ var r = obsMap[k]; r.dep = Object.keys(r.deps).join(', '); return r; }).sort(function(x,y){ return Math.abs(y.n)-Math.abs(x.n); });
+  return {cod:cod, antes:antes, depois:depois, reg:reg, aberto:aberto, obsL:obsL, n:a.n[mi], q:a.q[mi]};
+}
+function cicloDe(txt){ var m = String(txt||'').match(/(\d+)\s*[ºo°]?\s*CICLO/i); return m ? m[1]+'º ciclo' : ''; }
 function tipHtml(cod){
-  var C = ST.calc, x = itemDoMes(cod); if(!x) return '';
-  var nome = C.nomes[cod] || '';
-  var unit = Math.abs(x.q) > 0.5 ? Math.abs(x.n/x.q) : null;
+  var C = ST.calc, f = ficha(cod); if(!f) return '';
+  var nome = C.nomes[cod] || '', x = f.reg, n = f.n, q = f.q;
+  var unit = Math.abs(q) > 0.5 ? Math.abs(n/q) : null;
+  // previsão: o que está em aberto hoje e a chance histórica de voltar
+  var ab = f.aberto, prev = '';
+  if(Math.abs(ab) < 0.5){
+    prev = '<div class="nd-pv nd-pv-ok"><b>Compensado</b><span>o que saiu voltou — sem perda nem ganho em aberto</span></div>';
+  } else {
+    var sg = ab < 0 ? 'neg' : 'pos';
+    var dom = f.obsL.filter(function(o){ return ab < 0 ? o.n < 0 : o.n > 0; })[0];
+    var t = C.taxa(sg, dom ? dom.pref : '');
+    var reaparece = Math.abs(ab) * t.t, fica = Math.abs(ab) - reaparece;
+    prev = '<div class="nd-pv '+(ab<0?'nd-pv-neg':'nd-pv-pos')+'">'
+      + '<div class="nd-pv-h"><b>'+(ab<0 ? 'Perda em aberto' : 'Ganho em aberto')+' '+sgn(ab)+'</b><span>'+(ab<0 ? 'nenhum ganho do item em contrapartida' : 'nenhuma perda do item em contrapartida')+'</span></div>'
+      + '<div class="nd-pv-g"><span>'+(ab<0 ? 'Chance de reaparecer' : 'Chance de estorno (duplicado/ajuste)')+'</span><b>'+Math.round(t.t*100)+'%</b>'
+      + '<span>'+(ab<0 ? 'Recuperável' : 'Risco de estorno')+'</span><b style="color:'+cor(ab<0 ? reaparece : -reaparece)+'">'+sgn(ab<0 ? reaparece : -reaparece)+'</b>'
+      + '<span>'+(ab<0 ? 'Perda provável' : 'Ganho que deve ficar')+'</span><b style="color:'+cor(ab<0 ? -fica : fica)+'">'+sgn(ab<0 ? -fica : fica)+'</b></div>'
+      + '<div class="nd-pv-b">base histórica'+(t.geral?' (geral)':' ('+esc(dom?dom.pref:'')+')')+': '+brl(t.volta)+' de '+brl(t.base)+' '+(ab<0?'voltaram':'foram estornados')+'</div></div>';
+  }
+  var pos = '<div class="nd-tp-n nd-tp-n4"><div><span>Antes do mês</span><strong style="color:'+cor(f.antes)+'">'+(Math.abs(f.antes)<0.5?'—':sgn(f.antes))+'</strong></div>'
+    + '<div><span>Neste mês</span><strong style="color:'+cor(n)+'">'+sgn(n)+'</strong></div>'
+    + '<div><span>Depois</span><strong style="color:'+cor(f.depois)+'">'+(Math.abs(f.depois)<0.5?'—':sgn(f.depois))+'</strong></div>'
+    + '<div><span>Em aberto hoje</span><strong style="color:'+cor(ab)+'">'+(Math.abs(ab)<0.5?'—':sgn(ab))+'</strong></div></div>';
+  var comp = Math.abs(x.comp) > 0.5 ? '<div class="nd-tp-c" style="--c:'+(x.comp>0?COR.rc:'#E7A096')+'">'+(x.comp>0?'Devolve perda de ':'Estorna ganho de ')+esc(origens(x.orig, 4))+'</div>' : '';
+  var leg = legendaAtual(ST.dados);
+  var obsH = f.obsL.length ? '<div class="nd-ob"><div class="nd-ob-t">Observação e inventário</div>'+f.obsL.slice(0,2).map(function(o){
+      var ci = cicloDe(o.txt), cl = classificaFluxo(o.txt, leg);
+      return '<div class="nd-ob-l"><div><b>'+esc(cl.prefixo)+'</b> '+esc(cl.legenda||'')+(ci?' <span class="nd-ob-c">'+esc(ci)+'</span>':'')+'</div>'
+        + '<div class="nd-ob-x">'+esc(o.txt||'(sem observação)')+'</div>'
+        + '<div class="nd-ob-v"><span>'+(o.dep?esc(o.dep):'')+'</span><b style="color:'+cor(o.n)+'">'+sgn(o.n)+'</b></div></div>';
+    }).join('')+'</div>' : '';
   var L = ST.det[ST.mes+'|'+cod];
   var lan = !L ? '<div class="nd-tl-p">carregando lançamentos…</div>'
-    : (L.length ? L.slice(0, 4).map(lancamentoHtml).join('') + (L.length>4 ? '<div class="nd-tl-p">+'+(L.length-4)+' lançamentos</div>' : '') : '<div class="nd-tl-p">sem lançamento detalhado</div>');
-  var split = '<div class="nd-tp-n nd-tp-n2"><div><span>Resultado do mês</span><strong style="color:'+cor(x.real)+'">'+sgn(x.real)+'</strong></div>'
-    + '<div><span>Recuperação do acumulado</span><strong style="color:'+cor(x.comp)+'">'+sgn(x.comp)+'</strong></div></div>'
-    + (Math.abs(x.comp) > 0.5 ? '<div class="nd-tp-c">'+(x.comp>0?'Devolve perda de ':'Estorna ganho de ')+esc(origens(x.orig, 4))+'</div>' : '');
+    : (L.length ? L.slice(0, 1).map(lancamentoHtml).join('') + (L.length>1 ? '<div class="nd-tl-p">+'+(L.length-1)+' lançamento'+(L.length>2?'s':'')+'</div>' : '') : '');
   return '<div class="nd-tp-h"><b>'+esc(cod)+'</b> '+esc(nome)+'</div>'
-    + '<div class="nd-tp-n"><div><span>NET no mês</span><strong style="color:'+cor(x.n)+'">'+sgn(x.n)+'</strong></div>'
-    + '<div><span>Peças</span><strong>'+fInt.format(Math.round(x.q))+'</strong></div>'
-    + '<div><span>Custo/peça</span><strong>'+(unit!=null?brl(unit):'—')+'</strong></div></div>' + split + lan;
+    + '<div class="nd-tp-n"><div><span>NET no mês</span><strong style="color:'+cor(n)+'">'+sgn(n)+'</strong></div>'
+    + '<div><span>Peças</span><strong>'+fInt.format(Math.round(q))+'</strong></div>'
+    + '<div><span>Custo/peça</span><strong>'+(unit!=null?brl(unit):'—')+'</strong></div></div>'
+    + pos + comp + prev + obsH + lan;
 }
 function mostraTip(ev, cod){
   criaTip(); HOV = cod; TIP.className = 'nd-tip'; TIP.innerHTML = tipHtml(cod); TIP.style.display = 'block'; moveTip(ev);
@@ -410,7 +515,7 @@ function moveTip(ev){
   var pad = 16, r = TIP.getBoundingClientRect();
   var x = ev.clientX + pad, y = ev.clientY + pad;
   if(x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - pad;
-  if(y + r.height > window.innerHeight - 8) y = window.innerHeight - r.height - 8;
+  if(y + r.height > window.innerHeight - 8) y = Math.max(8, window.innerHeight - r.height - 8);
   if(x < 8) x = 8; if(y < 8) y = 8;
   var z = parseFloat(document.body.style.zoom) || 1; // o balão fica dentro do body com zoom
   TIP.style.left = (x/z)+'px'; TIP.style.top = (y/z)+'px';
@@ -475,7 +580,7 @@ function desenha(){
     + '<div class="painel nd-p"><h3>NET por observação <small>'+esc(mesLongo(m.mes))+'</small></h3>'+tabelaObs(m)+'</div>'
     + '<div class="painel nd-p"><h3>NET por depósito <small>'+esc(mesLongo(m.mes))+'</small></h3>'+dep+'</div>'
     + '</div>'
-    + '<div class="painel nd-p" style="margin-top:14px"><h3>Itens mais divergentes <small><span class="nd-ord"><button type="button" data-nd-ord="valor" class="'+(ST.ord==='valor'?'on':'')+'">Valor</button><button type="button" data-nd-ord="pecas" class="'+(ST.ord==='pecas'?'on':'')+'">Peças</button></span></small></h3>'
+    + '<div class="painel nd-p" style="margin-top:14px"><h3>Itens mais divergentes <small>'+(ST.escopo==='ano' ? 'jan–'+mesCurto(m.mes)+'/'+m.mes.slice(2,4) : esc(mesLongo(m.mes))+'/'+m.mes.slice(0,4))+' <span class="nd-ord"><button type="button" data-nd-esc="mes" class="'+(ST.escopo!=='ano'?'on':'')+'">Mês</button><button type="button" data-nd-esc="ano" class="'+(ST.escopo==='ano'?'on':'')+'">Ano</button></span> <span class="nd-ord"><button type="button" data-nd-ord="valor" class="'+(ST.ord==='valor'?'on':'')+'">Valor</button><button type="button" data-nd-ord="pecas" class="'+(ST.ord==='pecas'?'on':'')+'">Peças</button></span></small></h3>'
     + '<div class="nd-grid nd-g3" style="margin:0"><div><div class="nd-k-rot nd-it-h" style="color:'+COR.pn+'">Perdas · '+fInt.format(lp.length)+' itens</div>'+renderItens(lp)+'</div>'
     + '<div><div class="nd-k-rot nd-it-h" style="color:'+COR.gn+'">Ganhos · '+fInt.format(lg.length)+' itens</div>'+renderItens(lg)+'</div></div></div>';
   ajusta();
@@ -514,6 +619,7 @@ document.addEventListener('change', function(e){
 document.addEventListener('click', function(e){
   var g = e.target.closest('.nd-col'); if(g && /^\d{4}-\d{2}$/.test(g.dataset.m)){ ST.mes = g.dataset.m; desenha(); return; }
   var o = e.target.closest('[data-nd-ord]'); if(o){ ST.ord = o.dataset.ndOrd; desenha(); return; }
+  var es = e.target.closest('[data-nd-esc]'); if(es){ ST.escopo = es.dataset.ndEsc; desenha(); return; }
   if(e.target.closest('#nd-teto-ed')){
     var v = prompt('Teto anual do NET (R$):', String(ST.teto));
     var n = v ? parseFloat(String(v).replace(/\./g,'').replace(',','.')) : NaN;
