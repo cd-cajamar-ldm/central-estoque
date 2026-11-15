@@ -198,23 +198,6 @@ function dataBr(dh, dt){
   if(!m) return '';
   return m[3]+'/'+m[2]+(m[4] && (m[4]!=='00' || m[5]!=='00') ? ' '+m[4]+':'+m[5] : '');
 }
-function fatos(cod){
-  var L = ST.det[ST.mes+'|'+cod];
-  if(!L) return '<span class="nd-f nd-f-pend">carregando lançamento…</span>';
-  var cs = L.filter(function(l){ return API.classifica(l.obs).considerar; });
-  if(!cs.length) cs = L;
-  if(!cs.length) return '<span class="nd-f nd-f-pend">sem lançamento</span>';
-  var l = cs[0], c = API.classifica(l.obs);
-  var us = String(l.usuario||'').replace(/^MECA_/,'');
-  var out = '<span class="nd-f nd-f-o" title="'+esc(l.obs)+'"><b>'+esc(c.prefixo)+'</b>'+(c.legenda?' '+esc(c.legenda):'')+'</span>'
-    + (l.doc ? '<span class="nd-f">Doc '+esc(l.doc)+'</span>' : '')
-    + (us ? '<span class="nd-f">'+esc(us)+'</span>' : '')
-    + (dataBr(l.dh, l.dt) ? '<span class="nd-f">'+dataBr(l.dh, l.dt)+'</span>' : '')
-    + (l.deposito ? '<span class="nd-f">'+esc(l.deposito)+'</span>' : '')
-    + (l.depto ? '<span class="nd-f">'+esc(l.depto)+'</span>' : '');
-  if(cs.length > 1) out += '<span class="nd-f nd-f-mais">+'+(cs.length-1)+' lançamento'+(cs.length>2?'s':'')+'</span>';
-  return out;
-}
 function listaItens(m, sinal){
   var ord = ST.ord;
   var lista = m.itens.filter(function(x){ return sinal<0 ? x.n < -0.5 : x.n > 0.5; });
@@ -227,14 +210,80 @@ function renderItens(lista){
   return lista.map(function(x){
     var cod = C.itens[x.i] || '', nome = C.nomes[cod] || '';
     var unit = Math.abs(x.q) > 0.5 ? Math.abs(x.n/x.q) : null;
-    var orig = Math.abs(x.comp) > 0.5 ? '<span class="nd-f nd-f-c" style="--c:'+(x.comp>0?COR.dev:COR.est)+'">'+(x.comp>0?'devolve perda de ':'estorna ganho de ')+esc(origens(x.orig, 3))+'</span>' : '';
-    return '<div class="nd-it"><div class="nd-it-n"><div class="nd-it-t"><b>'+esc(cod)+'</b>'+esc(nome)+'</div>'
-      + '<div class="nd-fs">'+fatos(cod)+orig+'</div></div>'
+    return '<div class="nd-it" data-cod="'+esc(cod)+'"><div class="nd-it-t"><b>'+esc(cod)+'</b>'+esc(nome)+'</div>'
       + '<div class="nd-it-q">'+fInt.format(Math.round(x.q))+' pç</div>'
       + '<div class="nd-it-u">'+(unit!=null ? brl(unit)+'<small>/pç</small>' : '—')+'</div>'
       + '<div class="nd-it-v" style="color:'+cor(x.n)+'">'+sgn(x.n)+'</div></div>';
   }).join('');
 }
+
+/* ---------- balão do item (passe o mouse na linha) ---------- */
+var TIP = null, HOV = null;
+function itemDoMes(cod){
+  var C = ST.calc, m = C && C.meses.find(function(x){ return x.mes === ST.mes; });
+  if(!m) return null;
+  for(var k=0; k<m.itens.length; k++){ if(C.itens[m.itens[k].i] === cod) return m.itens[k]; }
+  return null;
+}
+function lancamentoHtml(l){
+  var c = API.classifica(l.obs), us = String(l.usuario||'').replace(/^MECA_/,'');
+  var un = Math.abs(l.qtd) > 0.5 ? Math.abs(l.valor/l.qtd) : null;
+  return '<div class="nd-tl"><div class="nd-tl-o">'+esc(l.obs||c.prefixo)+'</div>'
+    + '<div class="nd-tl-g"><span>Documento</span><b>'+esc(l.doc||'—')+'</b><span>Usuário</span><b>'+esc(us||'—')+'</b>'
+    + '<span>Data</span><b>'+(dataBr(l.dh, l.dt)||'—')+'</b><span>Departamento</span><b>'+esc(l.depto||'—')+'</b>'
+    + (l.deposito ? '<span>Depósito</span><b>'+esc(l.deposito)+'</b>' : '')
+    + '<span>Quantidade</span><b>'+fInt.format(Math.round(l.qtd))+' pç'+(un!=null?' × '+brl(un):'')+'</b>'
+    + '<span>Valor</span><b style="color:'+cor(l.valor)+'">'+sgn(l.valor)+'</b></div></div>';
+}
+function tipHtml(cod){
+  var C = ST.calc, x = itemDoMes(cod); if(!x) return '';
+  var nome = C.nomes[cod] || '';
+  var unit = Math.abs(x.q) > 0.5 ? Math.abs(x.n/x.q) : null;
+  var L = ST.det[ST.mes+'|'+cod];
+  var lan = !L ? '<div class="nd-tl-p">carregando lançamentos…</div>'
+    : (L.length ? L.slice(0, 4).map(lancamentoHtml).join('') + (L.length>4 ? '<div class="nd-tl-p">+'+(L.length-4)+' lançamentos</div>' : '') : '<div class="nd-tl-p">sem lançamento detalhado</div>');
+  var comp = Math.abs(x.comp) > 0.5 ? '<div class="nd-tp-c" style="--c:'+(x.comp>0?COR.dev:COR.est)+'">'+(x.comp>0?'Devolve perda de ':'Estorna ganho de ')+esc(origens(x.orig, 4))+'</div>' : '';
+  return '<div class="nd-tp-h"><b>'+esc(cod)+'</b> '+esc(nome)+'</div>'
+    + '<div class="nd-tp-n"><div><span>NET no mês</span><strong style="color:'+cor(x.n)+'">'+sgn(x.n)+'</strong></div>'
+    + '<div><span>Peças</span><strong>'+fInt.format(Math.round(x.q))+'</strong></div>'
+    + '<div><span>Custo/peça</span><strong>'+(unit!=null?brl(unit):'—')+'</strong></div></div>'
+    + comp + lan;
+}
+function mostraTip(ev, cod){
+  if(!TIP){ TIP = document.createElement('div'); TIP.className = 'nd-tip'; document.body.appendChild(TIP); }
+  HOV = cod;
+  TIP.innerHTML = tipHtml(cod);
+  TIP.style.display = 'block';
+  moveTip(ev);
+  var mes = ST.mes, k = mes+'|'+cod;
+  if(!ST.det[k] && !ST.detBusca[k]){
+    ST.detBusca[k] = 1;
+    window.ldmSupa.rpc('net_fluxo_linhas', {p_mes:mes, p_itens:[cod]}).then(function(r){
+      if(r.error) throw r.error;
+      ST.det[k] = (r.data || []).filter(function(l){ return l.item === cod; });
+    }).catch(function(){ ST.det[k] = []; delete ST.detBusca[k]; }).then(function(){
+      if(HOV === cod && ST.mes === mes && TIP){ TIP.innerHTML = tipHtml(cod); }
+    });
+  }
+}
+function moveTip(ev){
+  if(!TIP || TIP.style.display === 'none') return;
+  var pad = 16, r = TIP.getBoundingClientRect();
+  var x = ev.clientX + pad, y = ev.clientY + pad;
+  if(x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - pad;
+  if(y + r.height > window.innerHeight - 8) y = window.innerHeight - r.height - 8;
+  if(x < 8) x = 8; if(y < 8) y = 8;
+  var z = parseFloat(document.body.style.zoom) || 1; // o balão fica dentro do body com zoom
+  TIP.style.left = (x/z)+'px'; TIP.style.top = (y/z)+'px';
+}
+function somaTip(){ if(TIP) TIP.style.display = 'none'; HOV = null; }
+document.addEventListener('mouseover', function(e){
+  var it = e.target.closest && e.target.closest('.nd-it');
+  if(it){ if(HOV !== it.dataset.cod) mostraTip(e, it.dataset.cod); }
+  else if(HOV) somaTip();
+});
+document.addEventListener('mousemove', function(e){ if(HOV) moveTip(e); });
+document.addEventListener('mouseleave', somaTip);
 
 /* ---------- tela ---------- */
 function desenha(){
@@ -290,25 +339,6 @@ function desenha(){
     + '<div class="nd-grid nd-g3" style="margin:0"><div><div class="nd-k-rot nd-it-h" style="color:'+COR.pn+'">Perdas</div>'+renderItens(lp)+'</div>'
     + '<div><div class="nd-k-rot nd-it-h" style="color:'+COR.gn+'">Ganhos</div>'+renderItens(lg)+'</div></div></div>';
   ajusta();
-  buscaFatos(lp.concat(lg));
-}
-
-/* lançamentos dos itens listados (documento, usuário, data, observação) */
-async function buscaFatos(lista){
-  var C = ST.calc, mes = ST.mes;
-  var cods = lista.map(function(x){ return C.itens[x.i]; }).filter(function(c){ return c && !ST.det[mes+'|'+c] && !ST.detBusca[mes+'|'+c]; });
-  if(!cods.length) return;
-  cods.forEach(function(c){ ST.detBusca[mes+'|'+c] = 1; });
-  try {
-    var r = await window.ldmSupa.rpc('net_fluxo_linhas', {p_mes:mes, p_itens:cods});
-    if(r.error) throw r.error;
-    var porCod = {};
-    (r.data || []).forEach(function(l){ (porCod[l.item] = porCod[l.item] || []).push(l); });
-    cods.forEach(function(c){ ST.det[mes+'|'+c] = porCod[c] || []; });
-  } catch(e){
-    cods.forEach(function(c){ ST.det[mes+'|'+c] = []; delete ST.detBusca[mes+'|'+c]; });
-  }
-  if(ST.mes === mes) desenha();
 }
 
 async function carregar(forcar){
