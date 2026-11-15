@@ -6,18 +6,29 @@
    os itens mais divergentes, com os lançamentos de cada um (net_fluxo_linhas).
    O fechamento da controladoria continua saindo SÓ da base importada à mão.
 
-   Como o NET do mês é aberto (tudo em R$, a soma fecha no NET):
-   - Do próprio mês: ganho novo e perda nova — itens que não tinham perda/ganho
-     em aberto de meses anteriores.
-   - De meses anteriores: devolve perda (o item perdeu antes e agora voltou) e
-     estorna ganho (o item ganhou antes e agora saiu). Cada centavo é ligado ao
-     mês de origem, do mais antigo para o mais novo (PEPS).
+   Tudo é fato, em R$: NET = soma dos lançamentos que entram no NET (Lógica 301
+   e 302, legenda "considerar NET"). Cada observação (código de 3 letras) aparece
+   uma vez só e as observações são agrupadas pelo que significam:
+   Inventário, Fora de ciclo, Auditoria, Reversa e Outros.
+   O teto anual (R$ 525 mil) é comparado com o NET acumulado do ano.
    ========================================================================= */
 (function(){
 'use strict';
 var API = window.NET_API;
-var COR = {gn:'#001A72', pn:'#C0392B', dev:'#FE5000', est:'#E7A096'};
-var ST = {dados:null, calc:null, carregando:false, erro:null, mes:null, ord:'valor', em:null, pronto:false, quer:false, det:{}, detBusca:{}};
+var GRUPOS = [
+  {id:'inv', nome:'Inventário',    cor:'#001A72', obs:['AIR','AIC','AIP','AIT','AII']},
+  {id:'fc',  nome:'Fora de ciclo', cor:'#FE5000', obs:['AIN','AEE']},
+  {id:'aud', nome:'Auditoria',     cor:'#7B5EA7', obs:['ADE','AUD']},
+  {id:'rev', nome:'Reversa',       cor:'#0E9AA7', obs:['INV','PAR','API']},
+  {id:'out', nome:'Outros',        cor:'#9AA1BD', obs:[]}
+];
+var GRUPO_DE = {};
+GRUPOS.forEach(function(g){ g.obs.forEach(function(o){ GRUPO_DE[o] = g; }); });
+function grupoDe(cod){ return GRUPO_DE[String(cod).toUpperCase()] || GRUPOS[GRUPOS.length-1]; }
+var COR = {pn:'#C0392B', gn:'#001A72'};
+var TETO_KEY = 'ldm-net-teto';
+var ST = {dados:null, calc:null, carregando:false, erro:null, mes:null, ord:'valor', em:null, pronto:false, quer:false, det:{}, detBusca:{}, teto:525000};
+try { var t0 = parseFloat(localStorage.getItem(TETO_KEY)); if(t0 > 0) ST.teto = t0; } catch(e){}
 var FLUID = {};
 
 function $(id){ return document.getElementById(id); }
@@ -33,92 +44,61 @@ function compacto(v){
   if(a>=1e3) return s+(a/1e3).toFixed(1).replace('.',',')+' mil';
   return s+Math.round(a);
 }
+function pct(v, base){ return base ? (v/base*100).toFixed(1).replace('.',',')+'%' : '—'; }
 var MES3 = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 function mesCurto(m){ return MES3[+m.slice(5,7)-1]; }
 function mesChip(m){ return MES3[+m.slice(5,7)-1]+'/'+m.slice(2,4); }
 function mesLongo(m){ return API.MESES[+m.slice(5,7)-1]; }
-function origens(mapa, max){
-  var e = Object.keys(mapa).filter(function(k){ return Math.abs(mapa[k])>0.5; }).sort(function(a,b){ return mapa[b]-mapa[a]; });
-  if(!e.length) return '';
-  var t = e.slice(0, max||3).map(function(k){ return mesChip(k)+' '+compacto(Math.abs(mapa[k])).replace(/^[+-]/,''); }).join(' · ');
-  return t + (e.length>(max||3) ? ' · +'+(e.length-(max||3)) : '');
-}
-function soma(o, k, v){ o[k] = (o[k]||0) + v; }
 
 /* ---------- cálculo ---------- */
 function calcula(){
   var D = ST.dados || {}, meses = D.meses || [], itens = D.itens || [], deps = D.depositos || [], obs = D.obs || [];
   var NM = meses.length;
   var cls = obs.map(function(o){ return API.classifica(o); });
-  // Área do lançamento: Reversa quando a legenda é da reversa, o texto cita reversa ou o depósito é a reversa.
-  var areaObs = obs.map(function(o, k){ return (cls[k] && /REVERSA/i.test(cls[k].setor||'')) || /REVERS/i.test(o) ? 'Reversa' : 'Estoque'; });
-  var M = meses.map(function(m){
-    return {mes:m, net:0, g:0, p:0, gn:0, pn:0, dev:0, est:0, nGn:0, nPn:0, nDev:0, nEst:0, oDev:{}, oEst:{}, mot:{}, dep:{}, itens:[],
-            es:{gn:{}, pn:{}, dev:{}, est:{}}};
-  });
-  var porItem = new Map(), porIM = new Map();
+  var M = meses.map(function(m){ return {mes:m, net:0, g:0, p:0, mot:{}, dep:{}, itens:[]}; });
+  var porItem = new Map();
   (D.linhas || []).forEach(function(t){
     var c = cls[t[3]-1]; if(!c || !c.considerar) return;
-    var m = t[0]-1, i = t[1]-1, gp = t[4], pp = t[5], q = t[6], n = gp+pp;
+    var m = t[0]-1, i = t[1]-1, gp = t[4], pp = t[5], q = t[6];
     var mm = M[m];
     var mo = mm.mot[c.prefixo] || (mm.mot[c.prefixo] = {id:c.prefixo, legenda:c.legenda, g:0, p:0});
     mo.g += gp; mo.p += pp;
     var dn = deps[t[2]-1] || '';
-    var area = /REVERS/i.test(dn) ? 'Reversa' : areaObs[t[3]-1];
-    var kim = i*NM+m, dim = porIM.get(kim) || (porIM.set(kim, {}), porIM.get(kim));
-    var ko = area+'|'+c.prefixo; dim[ko] = (dim[ko]||0) + n;
     var dp = mm.dep[dn] || (mm.dep[dn] = {rot:dn, g:0, p:0});
     dp.g += gp; dp.p += pp;
-    mm.g += gp; mm.p += pp;
+    mm.g += gp; mm.p += pp; mm.net += gp+pp;
     var a = porItem.get(i);
     if(!a){ a = {n:new Float64Array(NM), q:new Float64Array(NM)}; porItem.set(i, a); }
-    a.n[m] += n; a.q[m] += q;
+    a.n[m] += gp+pp; a.q[m] += q;
   });
   porItem.forEach(function(a, i){
-    var fila = []; // posições em aberto do item: {m, v} (mesmo sinal)
-    for(var m=0; m<NM; m++){
-      var n = a.n[m];
-      if(Math.abs(n) < 0.005) continue;
-      var rem = n, comp = 0, orig = {};
-      if(n > 0){
-        while(rem > 0.005 && fila.length && fila[0].v < 0){
-          var t1 = Math.min(rem, -fila[0].v); comp += t1; soma(orig, meses[fila[0].m], t1);
-          fila[0].v += t1; rem -= t1; if(fila[0].v > -0.005) fila.shift();
-        }
-      } else {
-        while(rem < -0.005 && fila.length && fila[0].v > 0){
-          var t2 = Math.min(-rem, fila[0].v); comp -= t2; soma(orig, meses[fila[0].m], t2);
-          fila[0].v -= t2; rem += t2; if(fila[0].v < 0.005) fila.shift();
-        }
-      }
-      if(Math.abs(rem) > 0.005) fila.push({m:m, v:rem});
-      var real = n - comp, mm = M[m];
-      mm.net += n;
-      if(real > 0.005){ mm.gn += real; mm.nGn++; } else if(real < -0.005){ mm.pn += real; mm.nPn++; }
-      if(comp > 0.005){ mm.dev += comp; mm.nDev++; Object.keys(orig).forEach(function(k){ soma(mm.oDev, k, orig[k]); }); }
-      else if(comp < -0.005){ mm.est += comp; mm.nEst++; Object.keys(orig).forEach(function(k){ soma(mm.oEst, k, orig[k]); }); }
-      mm.itens.push({i:i, n:n, q:a.q[m], real:real, comp:comp, orig:orig});
-      // quebra por área × observação: só as observações que empurram no mesmo sentido do item
-      var dim = porIM.get(i*NM+m);
-      if(dim){
-        var ks = Object.keys(dim).filter(function(k){ return dim[k]*n > 0; }), tw = ks.reduce(function(s,k){ return s+dim[k]; }, 0);
-        if(tw){
-          var parts = [[Math.abs(real)>0.005 ? (real>0?'gn':'pn') : null, real], [Math.abs(comp)>0.005 ? (comp>0?'dev':'est') : null, comp]];
-          parts.forEach(function(pt){
-            if(!pt[0]) return;
-            ks.forEach(function(k){
-              var f = dim[k]/tw, ar = k.split('|')[0], ob = k.split('|')[1];
-              var A = mm.es[pt[0]][ar] || (mm.es[pt[0]][ar] = {});
-              A[ob] = (A[ob]||0) + pt[1]*f;
-            });
-          });
-        }
-      }
-    }
+    for(var m=0; m<NM; m++){ if(Math.abs(a.n[m]) >= 0.005) M[m].itens.push({i:i, n:a.n[m], q:a.q[m]}); }
   });
   ST.calc = {meses:M, itens:itens, nomes:D.nomes || {}, semDeposito: deps.length<=1 && (deps[0]||'')===''};
   if(!ST.mes || !meses.includes(ST.mes)) ST.mes = meses.length ? meses[meses.length-1] : null;
 }
+/* junta vários meses: observações (uma vez cada), grupos e total */
+function junta(lista){
+  var mot = {}, net = 0;
+  lista.forEach(function(m){
+    net += m.net;
+    Object.keys(m.mot).forEach(function(k){
+      var o = m.mot[k], a = mot[k] || (mot[k] = {id:o.id, legenda:o.legenda, g:0, p:0});
+      a.g += o.g; a.p += o.p;
+    });
+  });
+  var gr = {};
+  GRUPOS.forEach(function(g){ gr[g.id] = {g:g, v:0, obs:[]}; });
+  Object.keys(mot).forEach(function(k){
+    var o = mot[k], v = o.g + o.p, G = gr[grupoDe(o.id).id];
+    G.v += v; G.obs.push({id:o.id, legenda:o.legenda, g:o.g, p:o.p, v:v});
+  });
+  var abs = 0;
+  GRUPOS.forEach(function(g){ gr[g.id].obs.sort(function(a,b){ return Math.abs(b.v)-Math.abs(a.v); }); gr[g.id].obs.forEach(function(o){ abs += Math.abs(o.v); }); });
+  return {net:net, grupos:GRUPOS.map(function(g){ return gr[g.id]; }), abs:abs};
+}
+function mesesDoAno(ano){ return ST.calc.meses.filter(function(m){ return m.mes.slice(0,4) === ano; }); }
+function acumulado(mes){ return mesesDoAno(mes.slice(0,4)).filter(function(m){ return m.mes <= mes; }); }
 
 /* ---------- gráficos que desenham na largura real do painel ---------- */
 function fluid(key, build, altura){
@@ -136,27 +116,35 @@ function ajusta(){
 var tAj = null;
 window.addEventListener('resize', function(){ clearTimeout(tAj); tAj = setTimeout(ajusta, 60); });
 
+/* NET mensal: cada coluna é o NET do mês aberto por grupo (cheio = positivo, para baixo = negativo); última coluna = total do ano */
 function svgMensal(W){
-  var C = ST.calc, sel = ST.mes;
-  var rows = C.meses.slice(-12);
-  var H = 390, padL = 6, padR = 6, padT = 38, padB = 26, n = Math.max(1, rows.length);
+  var ano = ST.mes.slice(0,4);
+  var ms = mesesDoAno(ano), colunas = ms.map(function(m){ return {k:m.mes, rot:mesCurto(m.mes), J:junta([m]), on:m.mes===ST.mes}; });
+  colunas.push({k:'total:'+ano, rot:'Total', J:junta(ms), tot:true});
+  var H = 400, padL = 6, padR = 6, padT = 40, padB = 26, n = colunas.length;
   var cw = (W-padL-padR)/n, bw = Math.min(54, cw*.62);
-  var mx = Math.max(1, Math.max.apply(null, rows.map(function(m){ return Math.max(m.gn+m.dev, -(m.pn+m.est)); })));
+  // cada grupo entra com o NET dele (positivo para cima, negativo para baixo); o Total do ano tem escala própria
+  function lados(J){ var up = 0, dn = 0; J.grupos.forEach(function(G){ if(G.v>0) up += G.v; else dn += G.v; }); return {up:up, dn:dn}; }
+  var mxM = 1, mxT = 1;
+  colunas.forEach(function(c){ c.L = lados(c.J); var m = Math.max(c.L.up, -c.L.dn); if(c.tot) mxT = Math.max(mxT, m); else mxM = Math.max(mxM, m); });
   var base = padT + (H-padT-padB)/2, half = (H-padT-padB)/2 - 4;
-  function sc(v){ return Math.abs(v)/mx*half; }
   var g = '<line x1="'+padL+'" x2="'+(W-padR)+'" y1="'+base+'" y2="'+base+'" stroke="currentColor" opacity=".25"/>';
-  rows.forEach(function(m,i){
-    var cx = padL + (i+.5)*cw, x = cx-bw/2, on = m.mes === sel;
-    var hg = sc(m.gn), hr = sc(m.dev), hp = sc(m.pn), hd = sc(m.est);
-    g += '<g class="nd-col" data-m="'+m.mes+'" style="cursor:pointer">'
-      + '<rect x="'+(cx-cw/2+1)+'" y="'+(padT-26)+'" width="'+(cw-2)+'" height="'+(H-padT-padB+30)+'" rx="9" fill="'+(on?'rgba(254,80,0,.10)':'transparent')+'"/>'
-      + '<rect x="'+x+'" y="'+(base-hg)+'" width="'+bw+'" height="'+hg+'" rx="3" fill="'+COR.gn+'"/>'
-      + '<rect x="'+x+'" y="'+(base-hg-hr)+'" width="'+bw+'" height="'+hr+'" rx="3" fill="'+COR.dev+'"/>'
-      + '<rect x="'+x+'" y="'+base+'" width="'+bw+'" height="'+hp+'" rx="3" fill="'+COR.pn+'"/>'
-      + '<rect x="'+x+'" y="'+(base+hp)+'" width="'+bw+'" height="'+hd+'" rx="3" fill="'+COR.est+'"/>'
-      + '<path d="M'+cx+' '+(base-(m.net>=0?1:-1)*sc(m.net)-6)+' l6 6 l-6 6 l-6 -6 Z" fill="#fff" stroke="#0B1230" stroke-width="2"/>'
-      + '<text x="'+cx+'" y="'+(padT-14)+'" text-anchor="middle" font-size="'+(cw<62?11:12.5)+'" font-weight="800" fill="'+cor(m.net)+'">'+esc(compacto(m.net))+'</text>'
-      + '<text x="'+cx+'" y="'+(H-7)+'" text-anchor="middle" font-size="12" font-weight="'+(on?800:600)+'" fill="currentColor" opacity="'+(on?1:.6)+'">'+mesCurto(m.mes)+'</text>'
+  colunas.forEach(function(c,i){
+    var cx = padL + (i+.5)*cw, x = cx-bw/2, mx = c.tot ? mxT : mxM;
+    function sc(v){ return Math.abs(v)/mx*half; }
+    var yu = base, yd = base, cel = '';
+    c.J.grupos.forEach(function(G){
+      if(G.v > 0.5){ var h = sc(G.v); yu -= h; cel += '<rect x="'+x+'" y="'+yu+'" width="'+bw+'" height="'+h+'" fill="'+G.g.cor+'"/>'; }
+      else if(G.v < -0.5){ var h2 = sc(G.v); cel += '<rect x="'+x+'" y="'+yd+'" width="'+bw+'" height="'+h2+'" fill="'+G.g.cor+'" opacity=".62"/>'; yd += h2; }
+    });
+    var net = c.J.net, ny = base - (net>=0?1:-1)*sc(net);
+    if(c.tot) g += '<line x1="'+(cx-cw/2)+'" x2="'+(cx-cw/2)+'" y1="'+(padT-26)+'" y2="'+(H-padB+2)+'" stroke="currentColor" opacity=".2" stroke-dasharray="3 3"/>';
+    g += '<g class="nd-col" data-m="'+c.k+'" style="cursor:pointer">'
+      + '<rect x="'+(cx-cw/2+1)+'" y="'+(padT-28)+'" width="'+(cw-2)+'" height="'+(H-padT-padB+32)+'" rx="9" fill="'+(c.on?'rgba(254,80,0,.10)':(c.tot?'rgba(11,18,48,.05)':'transparent'))+'"/>'
+      + cel
+      + '<path d="M'+cx+' '+(ny-6)+' l6 6 l-6 6 l-6 -6 Z" fill="#fff" stroke="#0B1230" stroke-width="2"/>'
+      + '<text x="'+cx+'" y="'+(padT-14)+'" text-anchor="middle" font-size="'+(cw<62?11:12.5)+'" font-weight="800" fill="'+cor(net)+'">'+esc(compacto(net))+'</text>'
+      + '<text x="'+cx+'" y="'+(H-7)+'" text-anchor="middle" font-size="12" font-weight="'+((c.on||c.tot)?800:600)+'" fill="currentColor" opacity="'+((c.on||c.tot)?1:.6)+'">'+(c.tot?'Total '+ano:c.rot)+'</text>'
       + '</g>';
   });
   return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block">'+g+'</svg>';
@@ -166,27 +154,28 @@ function svgMensal(W){
 function kpi(c, rot, val, sub, extra){
   return '<div class="nd-k '+(extra||'')+'" style="--c:'+c+'"><span class="nd-k-rot">'+rot+'</span><strong>'+val+'</strong>'+(sub?'<span class="nd-k-sub">'+sub+'</span>':'')+'</div>';
 }
-function nIt(n){ return fInt.format(n)+(n===1?' item':' itens'); }
-/* NET aberto em 2 grupos que somam o total */
-function estrLinha(rot, v, max, cl, n, extra){
-  var w = Math.min(50, Math.abs(v)/max*50);
-  var est = v>=0 ? 'left:50%;width:'+w+'%;' : 'left:'+(50-w)+'%;width:'+w+'%;';
-  return '<div class="nd-row '+(extra||'')+'"><div class="nd-lab">'+rot+(n!=null?'<span class="nd-n">'+nIt(n)+'</span>':'')+'</div>'
-    + '<div class="nd-trk"><i style="'+est+'background:'+cl+'"></i></div>'
-    + '<div class="nd-val" style="color:'+cor(v)+'">'+sgn(v)+'</div></div>';
+function subObs(G){
+  return G.obs.slice(0,3).map(function(o){ return esc(o.id)+' '+compacto(o.v); }).join(' · ') || '—';
 }
-function estratificacao(m){
-  var max = Math.max(1, Math.abs(m.gn), Math.abs(m.pn), Math.abs(m.dev), Math.abs(m.est), Math.abs(m.net));
-  var proprio = m.gn + m.pn, anterior = m.dev + m.est;
-  return '<div class="nd-sub">Do próprio mês</div>'
-    + estrLinha('Ganho novo', m.gn, max, COR.gn, m.nGn)
-    + estrLinha('Perda nova', m.pn, max, COR.pn, m.nPn)
-    + estrLinha('Subtotal do mês', proprio, max, '#5B6485', null, 'nd-subt')
-    + '<div class="nd-sub">De meses anteriores</div>'
-    + estrLinha('Devolve perda', m.dev, max, COR.dev, m.nDev)
-    + estrLinha('Estorna ganho', m.est, max, COR.est, m.nEst)
-    + estrLinha('Subtotal anteriores', anterior, max, '#5B6485', null, 'nd-subt')
-    + estrLinha('= NET', m.net, max, '#0B1230', null, 'nd-tot');
+/* teto anual: quanto do teto o NET do ano já consumiu e o peso de cada grupo */
+function painelTeto(mes){
+  var ano = mes.slice(0,4), ac = acumulado(mes), J = junta(ac), net = J.net, teto = ST.teto;
+  var uso = net < 0 ? -net : 0, usoPct = Math.min(100, uso/teto*100);
+  var linhas = J.grupos.filter(function(G){ return Math.abs(G.v) >= 0.5; }).sort(function(a,b){ return Math.abs(b.v)-Math.abs(a.v); }).map(function(G){
+    var w = Math.min(50, Math.abs(G.v)/teto*100*1.6);
+    var est = G.v>=0 ? 'left:50%;width:'+w+'%;' : 'left:'+(50-w)+'%;width:'+w+'%;';
+    return '<div class="nd-row"><div class="nd-lab"><i class="nd-dot" style="background:'+G.g.cor+'"></i>'+G.g.nome+'<span class="nd-n">'+esc(G.obs.slice(0,4).map(function(o){ return o.id; }).join(' · '))+'</span></div>'
+      + '<div class="nd-trk"><i style="'+est+'background:'+G.g.cor+'"></i></div>'
+      + '<div class="nd-val" style="color:'+cor(G.v)+'">'+sgn(G.v)+'<span class="nd-n" style="text-align:right">'+pct(G.v, teto)+' do teto</span></div></div>';
+  }).join('');
+  var inv = J.grupos[0].v;
+  return '<div class="painel nd-p nd-estr"><h3>Teto anual <small>jan–'+mesCurto(mes)+'/'+ano.slice(2)+'</small></h3>'
+    + '<div class="nd-teto"><div class="nd-teto-v"><span>Teto</span><button type="button" id="nd-teto-ed" title="Alterar o teto">'+brl(teto)+' ✎</button></div>'
+    + '<div class="nd-teto-v"><span>NET acumulado</span><b style="color:'+cor(net)+'">'+sgn(net)+'</b></div>'
+    + '<div class="nd-teto-v"><span>Teto usado</span><b>'+pct(uso, teto)+'</b></div></div>'
+    + '<div class="nd-teto-b"><i style="width:'+usoPct+'%"></i></div>'
+    + '<div class="nd-sub">NET acumulado por grupo</div><div class="nd-estr-c">'+linhas+'</div>'
+    + '<div class="nd-pg nd-pg-t" style="grid-template-columns:1fr auto;margin-top:6px"><div class="nd-lab">Inventário no teto</div><div class="nd-val" style="color:'+cor(inv)+'">'+sgn(inv)+' · '+pct(inv, teto)+'</div></div></div>';
 }
 /* perda / ganho / NET, com a barra do NET e cabeçalho dizendo o lado de cada coisa */
 function tabelaPG(mapa, max, vazio, nomeFn){
@@ -213,7 +202,6 @@ function tabelaPG(mapa, max, vazio, nomeFn){
     + top.map(function(x){ return lin(x); }).join('')
     + lin({rot:'Total', g:tot.g, p:tot.p, v:tot.v}, 'nd-pg-t');
 }
-/* itens: fatos de cada lançamento (observação, documento, usuário, data, depto) */
 function dataBr(dh, dt){
   var s = String(dh || dt || '');
   var m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
@@ -239,58 +227,28 @@ function renderItens(lista){
   }).join('');
 }
 
-/* ---------- balão do mês: por que o NET puxa para cima e para baixo ---------- */
-function ladoMes(m, cats, titulo, cl){
-  var areas = {}, total = 0, partes = [];
-  cats.forEach(function(c){
-    var tc = 0;
-    Object.keys(m.es[c[0]]).forEach(function(ar){
-      Object.keys(m.es[c[0]][ar]).forEach(function(ob){
-        var v = m.es[c[0]][ar][ob]; tc += v;
-        var A = areas[ar] || (areas[ar] = {v:0, o:{}}); A.v += v; A.o[ob] = (A.o[ob]||0) + v;
-      });
-    });
-    total += tc; partes.push(c[1]+' '+brl(Math.abs(tc)));
-  });
-  var arr = Object.keys(areas).sort(function(a,b){ return Math.abs(areas[b].v)-Math.abs(areas[a].v); });
-  var h = '<div class="nd-tm-s"><div class="nd-tm-t" style="color:'+cl+'">'+titulo+' <b>'+sgn(total)+'</b></div>'
-    + '<div class="nd-tm-sub">'+partes.join(' · ')+'</div>';
-  if(!arr.length || Math.abs(total) < 0.5) return h + '<div class="nd-tl-p">sem movimento</div></div>';
-  arr.forEach(function(ar){
-    var A = areas[ar], pa = A.v/total*100;
-    var obsOrd = Object.keys(A.o).sort(function(a,b){ return Math.abs(A.o[b])-Math.abs(A.o[a]); });
-    h += '<div class="nd-ar"><div class="nd-ar-h"><span>'+ar+'</span><i><u style="width:'+Math.min(100,Math.abs(pa))+'%;background:'+cl+'"></u></i><b>'+Math.round(pa)+'%</b><em>'+brl(Math.abs(A.v))+'</em></div>';
-    obsOrd.slice(0, 4).forEach(function(ob){
-      h += '<div class="nd-ar-o"><span><b>'+esc(ob)+'</b></span><span>'+Math.round(A.o[ob]/total*100)+'%</span><em>'+brl(Math.abs(A.o[ob]))+'</em></div>';
-    });
-    if(obsOrd.length > 4){
-      var rs = obsOrd.slice(4).reduce(function(s,ob){ return s+A.o[ob]; }, 0);
-      h += '<div class="nd-ar-o"><span>Outras</span><span>'+Math.round(rs/total*100)+'%</span><em>'+brl(Math.abs(rs))+'</em></div>';
-    }
-    h += '</div>';
-  });
-  return h + '</div>';
-}
-function tipMesHtml(mes){
-  var C = ST.calc, m = C && C.meses.find(function(x){ return x.mes === mes; });
-  if(!m) return '';
-  return '<div class="nd-tm-h"><b>'+esc(mesLongo(mes))+'/'+mes.slice(0,4)+'</b><span style="color:'+cor(m.net)+'">NET '+sgn(m.net)+'</span></div>'
-    + '<div class="nd-tm-c">'
-    + ladoMes(m, [['gn','Ganho novo'],['dev','Devolve perda']], '▲ PUXA PARA CIMA', COR.gn)
-    + ladoMes(m, [['pn','Perda nova'],['est','Estorna ganho']], '▼ PUXA PARA BAIXO', COR.pn)
-    + '</div>';
-}
-function mostraTipMes(ev, mes){
-  if(!TIP){ TIP = document.createElement('div'); TIP.className = 'nd-tip'; document.body.appendChild(TIP); }
-  HOV = 'mes:'+mes;
-  TIP.className = 'nd-tip nd-tip-mes';
-  TIP.innerHTML = tipMesHtml(mes);
-  TIP.style.display = 'block';
-  moveTip(ev);
-}
-
-/* ---------- balão do item (passe o mouse na linha) ---------- */
+/* ---------- balões ---------- */
 var TIP = null, HOV = null;
+function criaTip(){ if(!TIP){ TIP = document.createElement('div'); TIP.className = 'nd-tip'; document.body.appendChild(TIP); } }
+/* balão do mês (ou do total do ano): cada observação aparece uma vez, agrupada, com perda, ganho, NET e % */
+function tipMesHtml(chave){
+  var C = ST.calc, J, titulo;
+  if(chave.indexOf('total:') === 0){ var ano = chave.slice(6); J = junta(mesesDoAno(ano)); titulo = 'Total '+ano; }
+  else { var m = C.meses.find(function(x){ return x.mes === chave; }); if(!m) return ''; J = junta([m]); titulo = mesLongo(chave)+'/'+chave.slice(0,4); }
+  var h = '<div class="nd-tm-h"><b>'+esc(titulo)+'</b><span style="color:'+cor(J.net)+'">NET '+sgn(J.net)+'</span></div>'
+    + '<div class="nd-tg nd-tg-h"><span>Observação</span><span>Perda</span><span>Ganho</span><span>NET</span><span>%</span></div>';
+  J.grupos.filter(function(G){ return G.obs.length; }).sort(function(a,b){ return Math.abs(b.v)-Math.abs(a.v); }).forEach(function(G){
+    h += '<div class="nd-tg nd-tg-g"><span><i class="nd-dot" style="background:'+G.g.cor+'"></i>'+G.g.nome+'</span><span></span><span></span><span style="color:'+cor(G.v)+'">'+sgn(G.v)+'</span><span>'+pct(Math.abs(G.v), J.abs)+'</span></div>';
+    G.obs.slice(0, 6).forEach(function(o){
+      h += '<div class="nd-tg"><span class="nd-tg-o"><b>'+esc(o.id)+'</b> '+esc(o.legenda||'')+'</span><span style="color:#D83C1E">'+brl(o.p)+'</span><span style="color:#1F8A52">'+sgn(o.g)+'</span><span style="color:'+cor(o.v)+'">'+sgn(o.v)+'</span><span>'+pct(Math.abs(o.v), J.abs)+'</span></div>';
+    });
+  });
+  return h;
+}
+function mostraTipMes(ev, chave){
+  criaTip(); HOV = 'mes:'+chave; TIP.className = 'nd-tip nd-tip-mes'; TIP.innerHTML = tipMesHtml(chave); TIP.style.display = 'block'; moveTip(ev);
+}
+/* balão do item: o lançamento por trás do número */
 function itemDoMes(cod){
   var C = ST.calc, m = C && C.meses.find(function(x){ return x.mes === ST.mes; });
   if(!m) return null;
@@ -314,20 +272,13 @@ function tipHtml(cod){
   var L = ST.det[ST.mes+'|'+cod];
   var lan = !L ? '<div class="nd-tl-p">carregando lançamentos…</div>'
     : (L.length ? L.slice(0, 4).map(lancamentoHtml).join('') + (L.length>4 ? '<div class="nd-tl-p">+'+(L.length-4)+' lançamentos</div>' : '') : '<div class="nd-tl-p">sem lançamento detalhado</div>');
-  var comp = Math.abs(x.comp) > 0.5 ? '<div class="nd-tp-c" style="--c:'+(x.comp>0?COR.dev:COR.est)+'">'+(x.comp>0?'Devolve perda de ':'Estorna ganho de ')+esc(origens(x.orig, 4))+'</div>' : '';
   return '<div class="nd-tp-h"><b>'+esc(cod)+'</b> '+esc(nome)+'</div>'
     + '<div class="nd-tp-n"><div><span>NET no mês</span><strong style="color:'+cor(x.n)+'">'+sgn(x.n)+'</strong></div>'
     + '<div><span>Peças</span><strong>'+fInt.format(Math.round(x.q))+'</strong></div>'
-    + '<div><span>Custo/peça</span><strong>'+(unit!=null?brl(unit):'—')+'</strong></div></div>'
-    + comp + lan;
+    + '<div><span>Custo/peça</span><strong>'+(unit!=null?brl(unit):'—')+'</strong></div></div>' + lan;
 }
 function mostraTip(ev, cod){
-  if(!TIP){ TIP = document.createElement('div'); TIP.className = 'nd-tip'; document.body.appendChild(TIP); }
-  HOV = cod;
-  TIP.className = 'nd-tip';
-  TIP.innerHTML = tipHtml(cod);
-  TIP.style.display = 'block';
-  moveTip(ev);
+  criaTip(); HOV = cod; TIP.className = 'nd-tip'; TIP.innerHTML = tipHtml(cod); TIP.style.display = 'block'; moveTip(ev);
   var mes = ST.mes, k = mes+'|'+cod;
   if(!ST.det[k] && !ST.detBusca[k]){
     ST.detBusca[k] = 1;
@@ -384,30 +335,30 @@ function desenha(){
     return;
   }
   var idx = C.meses.findIndex(function(x){ return x.mes === ST.mes; });
-  var m = C.meses[idx], ant = idx>0 ? C.meses[idx-1] : null;
+  var m = C.meses[idx], ant = idx>0 ? C.meses[idx-1] : null, J = junta([m]);
   if(chips) chips.innerHTML = C.meses.slice(-12).map(function(x){
     return '<button type="button" class="mes-chip'+(x.mes===ST.mes?' on':'')+'" data-nd-mes="'+x.mes+'">'+mesChip(x.mes)+'</button>';
   }).join('');
   var dep = C.semDeposito
     ? '<div class="nd-vazio"><b>Depósito indisponível</b>Reimporte a QRY410 no Inventário.</div>'
     : tabelaPG(m.dep, 8, 'Sem movimento', function(o){ return esc(o.rot || '(sem depósito)'); });
-  var mot = tabelaPG(m.mot, 9, 'Sem movimento', function(o){ return '<b>'+esc(o.id)+'</b>'+esc(o.legenda||''); });
+  var mot = tabelaPG(m.mot, 10, 'Sem movimento', function(o){ return '<i class="nd-dot" style="background:'+grupoDe(o.id).cor+'"></i><b>'+esc(o.id)+'</b>'+esc(o.legenda||''); });
   var lp = listaItens(m, -1), lg = listaItens(m, 1);
+  var grupoCards = J.grupos.map(function(G){
+    return kpi(G.g.cor, G.g.nome, sgn(G.v), subObs(G));
+  }).join('');
   corpo.innerHTML =
     '<div class="nd-kpis">'
     + kpi('var(--orange)', 'NET de '+esc(mesLongo(m.mes)), sgn(m.net), ant ? sgn(m.net-ant.net)+' vs '+mesCurto(ant.mes) : '', 'nd-net '+(m.net<0?'neg':'pos'))
-    + kpi(COR.gn, 'Ganho novo', sgn(m.gn), nIt(m.nGn)+' sem perda anterior')
-    + kpi(COR.pn, 'Perda nova', sgn(m.pn), nIt(m.nPn)+' sem ganho anterior')
-    + kpi(COR.dev, 'Devolve perda anterior', sgn(m.dev), nIt(m.nDev)+(origens(m.oDev,2)?' · '+origens(m.oDev,2):''))
-    + kpi(COR.est, 'Estorna ganho anterior', sgn(m.est), nIt(m.nEst)+(origens(m.oEst,2)?' · '+origens(m.oEst,2):''))
+    + grupoCards
     + '</div>'
     + '<div class="nd-grid nd-g2">'
-    + '<div class="painel nd-p"><h3>NET mensal <small>clique num mês</small></h3>'+fluid('mensal', svgMensal, 390)
-    + '<div class="nd-leg"><span><i style="background:'+COR.gn+'"></i>Ganho novo</span><span><i style="background:'+COR.dev+'"></i>Devolve perda anterior</span><span><i style="background:'+COR.pn+'"></i>Perda nova</span><span><i style="background:'+COR.est+'"></i>Estorna ganho anterior</span><span>◆ NET</span></div></div>'
-    + '<div class="painel nd-p nd-estr"><h3>NET aberto <small>'+esc(mesLongo(m.mes))+'</small></h3><div class="nd-estr-c">'+estratificacao(m)+'</div></div>'
+    + '<div class="painel nd-p"><h3>NET mensal <small>passe o mouse num mês</small></h3>'+fluid('mensal', svgMensal, 400)
+    + '<div class="nd-leg">'+GRUPOS.map(function(g){ return '<span><i style="background:'+g.cor+'"></i>'+g.nome+'</span>'; }).join('')+'<span>◆ NET</span></div></div>'
+    + painelTeto(m.mes)
     + '</div>'
     + '<div class="nd-grid nd-g3">'
-    + '<div class="painel nd-p"><h3>NET por motivo <small>'+esc(mesLongo(m.mes))+'</small></h3>'+mot+'</div>'
+    + '<div class="painel nd-p"><h3>NET por observação <small>'+esc(mesLongo(m.mes))+'</small></h3>'+mot+'</div>'
     + '<div class="painel nd-p"><h3>NET por depósito <small>'+esc(mesLongo(m.mes))+'</small></h3>'+dep+'</div>'
     + '</div>'
     + '<div class="painel nd-p" style="margin-top:14px"><h3>Itens mais divergentes <small><span class="nd-ord"><button type="button" data-nd-ord="valor" class="'+(ST.ord==='valor'?'on':'')+'">Valor</button><button type="button" data-nd-ord="pecas" class="'+(ST.ord==='pecas'?'on':'')+'">Peças</button></span></small></h3>'
@@ -430,8 +381,14 @@ async function carregar(forcar){
 
 document.addEventListener('click', function(e){
   var c = e.target.closest('[data-nd-mes]'); if(c){ ST.mes = c.dataset.ndMes; desenha(); return; }
-  var g = e.target.closest('.nd-col'); if(g){ ST.mes = g.dataset.m; desenha(); return; }
+  var g = e.target.closest('.nd-col'); if(g && /^\d{4}-\d{2}$/.test(g.dataset.m)){ ST.mes = g.dataset.m; desenha(); return; }
   var o = e.target.closest('[data-nd-ord]'); if(o){ ST.ord = o.dataset.ndOrd; desenha(); return; }
+  if(e.target.closest('#nd-teto-ed')){
+    var v = prompt('Teto anual do NET (R$):', String(ST.teto));
+    var n = v ? parseFloat(String(v).replace(/\./g,'').replace(',','.')) : NaN;
+    if(n > 0){ ST.teto = n; try { localStorage.setItem(TETO_KEY, String(n)); } catch(x){} desenha(); }
+    return;
+  }
   if(e.target.closest('#nd-atualizar')){ carregar(true); }
 });
 

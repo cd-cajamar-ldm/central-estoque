@@ -143,3 +143,23 @@ body.theme-dark .nd-tip{background:#14182E;}
 .nd-ar-o b{font-family:'SFMono-Regular',Consolas,monospace;color:var(--ink);}
 .nd-ar-o span:nth-child(2){text-align:right;}
 .nd-ar-o em{font-style:normal;text-align:right;color:var(--ink);}
+
+/* v3: grupos, teto anual e balão por observação */
+.nd-kpis{grid-template-columns:1.35fr repeat(5,minmax(0,1fr));}
+.nd-k strong{font-size:20px;}
+.nd-k.nd-net strong{font-size:29px;}
+.nd-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:0;}
+.nd-teto{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.nd-teto-v span{display:block;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);}
+.nd-teto-v b,.nd-teto-v button{font-family:'Poppins',sans-serif;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);background:none;border:0;padding:0;cursor:pointer;text-align:left;}
+.nd-teto-v button:hover{color:var(--orange);}
+.nd-teto-b{height:12px;border-radius:6px;background:var(--chip-bg);margin:12px 0 4px;overflow:hidden;}
+.nd-teto-b i{display:block;height:100%;background:linear-gradient(90deg,var(--orange),#C0392B);border-radius:6px;}
+.nd-tip.nd-tip-mes{width:640px;}
+.nd-tg{display:grid;grid-template-columns:minmax(0,1fr) 96px 96px 104px 52px;gap:6px;padding:3px 0;font-size:12px;font-variant-numeric:tabular-nums;align-items:baseline;}
+.nd-tg > span:nth-child(n+2){text-align:right;}
+.nd-tg-h{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);border-bottom:1px solid var(--line);padding-bottom:6px;}
+.nd-tg-g{font-weight:800;margin-top:7px;border-top:1px dashed var(--line);padding-top:7px;}
+.nd-tg-o{padding-left:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);}
+.nd-tg-o b{font-family:'SFMono-Regular',Consolas,monospace;}
+.nd-estr-c .nd-row{padding:8px 0;}
