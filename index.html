@@ -1833,11 +1833,20 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   }
 
   async function accessCarregarTudo(){
-    var [{ data: pessoas, error: errP }, { data: permissoes, error: errPerm }, { data: log, error: errLog }] = await Promise.all([
-      sbAcessos.schema('acessos').from('pessoas').select('*').order('nome'),
-      sbAcessos.schema('acessos').from('permissoes').select('*'),
-      sbAcessos.schema('acessos').from('log').select('pessoa_id,app_key,acessado_em')
-    ]);
+    var pessoas, errP, permissoes, errPerm, log, errLog;
+    try {
+      var resultados = await comLimite(Promise.all([
+        sbAcessos.schema('acessos').from('pessoas').select('*').order('nome'),
+        sbAcessos.schema('acessos').from('permissoes').select('*'),
+        sbAcessos.schema('acessos').from('log').select('pessoa_id,app_key,acessado_em')
+      ]), 12);
+      pessoas = resultados[0].data; errP = resultados[0].error;
+      permissoes = resultados[1].data; errPerm = resultados[1].error;
+      log = resultados[2].data; errLog = resultados[2].error;
+    } catch(falha){
+      accessMsg(accessEmPortugues(falha && falha.message));
+      return;
+    }
     if(errP || errPerm){ accessMsg(accessEmPortugues((errP || errPerm).message)); return; }
     accessPessoasCache = pessoas || [];
     accessPermissoesCache = {};
@@ -1983,9 +1992,17 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       return;
     }
     if(!session){ accessMostrar('login'); return; }
-    var { data: pessoa, error } = await sbAcessos.schema('acessos').from('pessoas')
-      .select('papel,ativo').eq('user_id', session.user.id).maybeSingle();
+    var pessoa, error;
     var textoEl = document.getElementById('accessDeniedTexto');
+    try {
+      var resultado = await comLimite(sbAcessos.schema('acessos').from('pessoas')
+        .select('papel,ativo').eq('user_id', session.user.id).maybeSingle(), 12);
+      pessoa = resultado.data; error = resultado.error;
+    } catch(falha){
+      textoEl.textContent = accessEmPortugues(falha && falha.message);
+      accessMostrar('negado');
+      return;
+    }
     if(error){
       /* Erro de verdade (ex.: schema "acessos" ainda não liberado em
          Settings → Data API → Exposed schemas) — nunca confundir com
