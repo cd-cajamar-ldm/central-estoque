@@ -51,7 +51,7 @@ function view(){
       '<div class="cl-rel-rota"><b>'+esc(RG.localNorm(rel.origem))+'</b><span>→</span><b>'+esc(RG.localNorm(rel.destino))+'</b></div>'+
       (rel.salvo?'':'<div class="cl-msg bad" style="margin-bottom:8px">Sem conexão: o histórico será enviado depois.</div>')+
       '<button class="cl-pri cl-copiar'+(rel.usado?' feito':'')+'" data-act="rel-copy">'+(rel.usado?'✔ Copiado — copiar de novo':'📋 Copiar relatório')+'</button>'+
-      '<div class="cl-rel-dica">Copie, cole no PuTTY e faça a movimentação. Depois toque em Finalizar.</div>'+
+      '<div class="cl-rel-dica">Copia só os códigos da transferência (origem · RG · destino), uma linha por RG. Cole no PuTTY, faça a movimentação e toque em Finalizar.</div>'+
       '<div class="cl-tabw"><table class="cl-tab"><thead><tr><th>Local de origem</th><th>RG</th><th>Local de destino</th></tr></thead><tbody>'+
       rel.rgs.map(function(r){ return '<tr><td>'+esc(RG.localNorm(rel.origem))+'</td><td class="rg">'+esc(r.rg)+'</td><td>'+esc(RG.localNorm(rel.destino))+'</td></tr>'; }).join('')+'</tbody></table></div>'+
       '<button class="cl-lnk" data-act="rel-xlsx">⬇ Baixar Excel (opcional)</button></div>'+
