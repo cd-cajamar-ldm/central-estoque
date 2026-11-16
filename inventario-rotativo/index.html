@@ -233,9 +233,11 @@
           if(!novo) return;
           novo.addEventListener('statechange', ()=>{
             if(novo.state !== 'activated' || !tinhaControle) return;
-            // Até 10s depois de abrir ainda é "carregamento": recarrega direto.
-            if(Date.now() - carregadoEm < 10000) window.location.reload();
-            else avisar();
+            /* Na abertura não recarrega: os arquivos já vêm da internet primeiro
+               (sw.js), então a página aberta já é a versão nova. Recarregar aqui
+               fazia o app carregar duas vezes logo depois de cada atualização. */
+            if(Date.now() - carregadoEm < 10000) return;
+            avisar();
           });
         });
         const checar = ()=>{ reg.update().catch(()=>{}); };

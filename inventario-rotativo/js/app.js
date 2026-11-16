@@ -629,7 +629,7 @@ function irRenderView(){
 /* "Foto" do Dashboard: a última tela desenhada fica guardada no aparelho e
    aparece na hora na próxima abertura (logo depois da permissão), enquanto os
    dados são lidos; em seguida a tela de verdade é desenhada por cima. Só o
-   Dashboard, e só se for do mesmo ciclo e da mesma versão do app. */
+   Dashboard. */
 const IR_FOTO_KEY = 'ir-foto-dash';
 let _irFotoT = null;
 function irGuardarFotoDash(){
@@ -650,7 +650,7 @@ function irMostrarFotoDash(){
     try{ const h = decodeURIComponent(location.hash.slice(1)); if(h) alvo = h; }catch(e){}
     if(alvo!=='dashboard') return;
     const f = JSON.parse(localStorage.getItem(IR_FOTO_KEY)||'null');
-    if(!f || f.v!==IR_APP_VERSION || !f.h) return;
+    if(!f || !f.h) return; // vale mesmo de versão anterior: é só a imagem até a tela nova chegar
     const root = document.getElementById('viewRoot');
     if(root && /Carregando/.test(root.textContent||'')){ root.innerHTML = f.h; irMarca('foto da última tela'); }
   }catch(e){}
@@ -1149,7 +1149,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v280';
+const IR_APP_VERSION = 'v281';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
