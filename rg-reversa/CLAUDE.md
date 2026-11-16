@@ -8,3 +8,8 @@
   mostra, no aparelho, se a alteração já subiu. Não dependa do `version.js` da raiz: o GitHub Pages
   desta conta também publica a branch crua, e isso apaga o carimbo do deploy.
 - Depois de publicar, confira que a execução "pages build and deployment" do commit mesclado terminou com sucesso.
+- **Níveis de acesso** (definidos por pessoa em Configurações do hub): *Pode editar* faz tudo (importar relatórios,
+  apagar dados, coletor). *Só visualizar* consulta o dashboard e usa o **coletor** (as bipagens continuam sendo
+  gravadas), mas não vê a Importação e o banco recusa importar/apagar. É um desvio consciente da regra geral do
+  repositório, porque os assistentes usam o coletor. As políticas estão em
+  `rg-reversa/supabase/migrations/004_nivel_visualizar.sql` (rodar à mão no SQL Editor do Supabase).
