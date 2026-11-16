@@ -1929,3 +1929,14 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .as-qt small{ font-weight:500; color:var(--ink-soft); }
 .as-pct{ text-align:right; font-weight:800; font-variant-numeric:tabular-nums; }
 .as-pct.good{ color:var(--success); } .as-pct.bad{ color:var(--danger); }
+
+/* Seção Produtividade (PR1): faixa com foto da equipe sob azul LDM + fundo próprio */
+.dx-secao{background:#EEF1F7;border:1px solid var(--card-border,#C9CFDC);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+.dx-secao-h{position:relative;height:130px;display:flex;align-items:center;gap:16px;padding:0 28px;
+  background:linear-gradient(90deg,rgba(0,26,114,.95) 0%,rgba(0,26,114,.75) 45%,rgba(0,26,114,.15) 100%),url('../brand/secao-produtividade.jpg') center 40%/cover}
+.dx-secao-traco{width:6px;height:54px;background:#FE5000;border-radius:3px;flex:none}
+.dx-secao-h h2{margin:0;font-family:Poppins,Inter,system-ui,sans-serif;font-size:40px;font-weight:800;color:#FFFFFF;letter-spacing:.01em}
+.dx-secao-corpo{padding:20px;display:flex;flex-direction:column;gap:18px}
+.dx-secao-corpo>.panel{margin:0}
+[data-theme="dark"] .dx-secao{background:rgba(255,255,255,.03)}
+@media (max-width:700px){.dx-secao-h{height:96px;padding:0 18px}.dx-secao-h h2{font-size:28px}.dx-secao-corpo{padding:12px}}
