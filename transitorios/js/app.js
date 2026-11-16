@@ -746,7 +746,7 @@ function irRenderTransitorios(){
       <button class="btn btn-primary" onclick="irBaixarBoletimTransitorios()">✉️ Reportar por e-mail</button>
     </div>
     ${irRenderTransEmailForm()}
-    ${c.lista.filter(g=>g.setor && g.setor!=='IGN').map(g=>irTransPainelSetor(g, logs)).join('')}
+    ${irTransBoletimHtml('rp-tela')}
     ${naoClass ? `<div class="panel"><div class="ofe-head">
       <h3>Não classificado</h3>
       <span class="field-hint">${irFmtMoney(naoClass.valor)} · ${irFmtInt(naoClass.locais.length)} endereços · ${irFmtInt(naoClass.prefixos.size)} transitórios. ${
@@ -1046,12 +1046,15 @@ function irTransRenderOfensores(ofensores){
     </div>
   </div>`;
 }
-async function irBaixarBoletimTransitorios(){
+/* Layout único do relatório: o boletim por e-mail e a tela do app usam esta mesma
+   montagem (hero com KPIs, locais ofensores, um bloco por setor). `classe` troca só
+   a largura: rp-page-wide é a folha fixa da imagem; rp-tela se adapta à janela. */
+function irTransBoletimHtml(classe){
   const c = irTransCalc();
   const m = IR.est390Meta || {};
   const setores = c.lista.filter(g=>g.setor && g.setor!=='IGN');
   const ofensores = irTransOfensores(setores, 4);
-  const html = `<div class="rp-page rp-page-wide">
+  return `<div class="rp-page ${classe}">
     <div class="rp-hero">
       <div class="rp-hero-top">
         <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="rp-hero-logo">
@@ -1077,7 +1080,10 @@ async function irBaixarBoletimTransitorios(){
       ${setores.map(g=>irTransPainelSetorReport(g)).join('')}
       <p class="rp-footer">Prazo do transitório: ${IR_TRANS_PRAZO_H}h — verde está no prazo, laranja passou. D+${IR_TRANS_FAIXA_MAX} é acumulativo: sete dias ou mais.<br>Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · Controle de Transitórios.</p>
     </div>
-  </div>`;
+  </div>`
+}
+async function irBaixarBoletimTransitorios(){
+  const html = irTransBoletimHtml('rp-page-wide');
   irBaixarBoletimImagem(html, 'Transitorios_'+new Date().toISOString().slice(0,10)+'.png',
     Object.assign({}, irTransEmailCfg(), {corpo: irTransCorpoEmail()}));
 }
