@@ -1149,7 +1149,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v283';
+const IR_APP_VERSION = 'v284';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2501,7 +2501,7 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
   // <linearGradient> com o mesmo id em dois deles faz um pisar no do outro.
   const gradId = 'irDivGrad'+Math.random().toString(36).slice(2,9);
   const diaLabel = (dia)=> new Date(dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-  const H = 236, padT = 54, padB = 28, padL = 4, padR = 10;
+  const H = opts.semana ? 254 : 236, padT = 54, padB = opts.semana ? 46 : 28, padL = 4, padR = 10;
   const plotH = H - padT - padB;
   let rowsVisiveis = rows, omitidos = 0;
   if(opts.fixedW){
@@ -2553,7 +2553,11 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
     if(div>maxS) svg += corteMark(xD+barW/2);
     svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="${fLbl}" font-weight="700" style="fill:${cores.sist}">${fmt(sist)}</text>`;
     svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="${fLbl}" font-weight="700" style="fill:${cores.div}">${fmt(div)}</text>`;
-    svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:${cores.axis}">${diaLabel(r.dia)}</text>`;
+    svg += `<text x="${cx}" y="${H-(opts.semana?26:8)}" text-anchor="middle" font-size="10.5" style="fill:${cores.axis}">${diaLabel(r.dia)}</text>`;
+    if(opts.semana){
+      const dw = new Date(r.dia+'T00:00:00').getDay();
+      svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="11.5" font-weight="700" letter-spacing=".06em" style="fill:${dw===0||dw===6?'var(--orange)':'var(--dx-local,#001A72)'};font-family:Poppins,Inter,system-ui,sans-serif;text-transform:uppercase">${['dom','seg','ter','qua','qui','sex','sáb'][dw]}</text>`;
+    }
   });
   // preserveAspectRatio="none": o desenho estica pra preencher a largura do
   // elemento (100%) sem mexer na altura. No Dashboard isso faz o gráfico
@@ -2579,12 +2583,12 @@ function irRenderDivergentesPorDiaPanel(ind){
     const desenha = w => {
       const sl = Math.max(52, (w-14)/rowsG.length);
       const fs = (sl>=96?10:(sl>=80?9.5:9)) - (fontLbl?1:0);
-      return irBuildDivergentesComboSvg(rowsG, campoDiv, campoSist, fmt, {slot:sl, fluidW:w, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fs}).svgHtml;
+      return irBuildDivergentesComboSvg(rowsG, campoDiv, campoSist, fmt, {slot:sl, fluidW:w, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fs, semana:true}).svgHtml;
     };
     return `<div class="panel">
       <h3>${titulo}</h3>
       ${legenda}
-      ${irFluid('div_'+campoDiv, desenha, 236)}
+      ${irFluid('div_'+campoDiv, desenha, 254)}
     </div>`;
   };
   // Os três são parecidos: ficam lado a lado, com 7 dias cada e a mesma largura por dia.
