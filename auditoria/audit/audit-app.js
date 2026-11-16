@@ -275,6 +275,7 @@ async function audProcessar(){
         renderView();
       } else if(msg.type==='done'){
         AUD.processing = false;
+        if(window.LDM_NUVEM) LDM_NUVEM.marcar();
         worker.terminate();
         AUD.files = {f0114:null, f390:null, f845:null};
         await audLoadAnosDisponiveis();

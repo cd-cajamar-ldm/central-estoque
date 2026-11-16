@@ -23,20 +23,6 @@ function mdAcessoEmPortugues(msg){
   return msg || 'Não consegui completar a operação.';
 }
 
-/* "Invalid login credentials" é a mesma mensagem genérica tanto pra senha
-   errada quanto pra um e-mail que o admin liberou mas que ainda não criou
-   senha (Primeiro acesso) -- aqui a tela pergunta ao banco qual é o caso
-   certo, pra não parecer que o acesso liberado "não funcionou". */
-async function mdDicaDeEmail(email){
-  try {
-    const { data, error } = await mdSupa.rpc('ldm_situacao_email', { p_email: email });
-    if(error || !data) return null;
-    if(data === 'sem_conta') return 'Este e-mail já foi liberado pelo administrador, mas ainda não tem senha criada. Clique em "Primeiro acesso" e crie sua senha.';
-    if(data === 'nao_cadastrado') return 'Este e-mail ainda não foi liberado. Peça pro administrador cadastrar em Configurações, no painel da Central.';
-    return null;
-  } catch(e){ return null; }
-}
-
 (function(){
   const telaAcesso = document.getElementById('telaAcesso');
   const telaLogin = document.getElementById('acessoLogin');
@@ -101,12 +87,7 @@ async function mdDicaDeEmail(email){
       }
       await mdVerificarAcesso();
     } catch(falha){
-      var mensagem = mdAcessoEmPortugues(falha && falha.message);
-      if(modo === 'entrar' && String(falha && falha.message || '').toLowerCase().includes('invalid login credentials')){
-        var dica = await mdDicaDeEmail(email);
-        if(dica) mensagem = dica;
-      }
-      erroEl.textContent = mensagem;
+      erroEl.textContent = mdAcessoEmPortugues(falha && falha.message);
       erroEl.hidden = false;
     } finally {
       enviarBtn.disabled = false;
@@ -115,6 +96,29 @@ async function mdDicaDeEmail(email){
 
   sairNegadoBtn.addEventListener('click', function(){ mdSupa.auth.signOut().then(mdVerificarAcesso); });
   if(sairSidebarBtn) sairSidebarBtn.addEventListener('click', function(){ mdSupa.auth.signOut().then(mdVerificarAcesso); });
+
+  /* Abre o app (uma vez só). */
+  function iniciarApp(){
+    if(appIniciado) return;
+      appIniciado = true;
+      /* O app abre JÁ, sem esperar o banco. Esperar a consulta do nível antes
+         de irInit() deixava a tela presa em "Carregando..." quando a chamada
+         não voltava (ex.: disparada de dentro do aviso de login do Supabase,
+         que segura a conexão até o aviso terminar). */
+      irInit();
+      /* Nível de acesso: 'visualizar' esconde importação/configuração e não
+         grava na nuvem (o banco também recusa). Se a consulta falhar ou
+         demorar, segue como editor — quem decide de verdade é o banco. */
+      mdSupa.rpc('ldm_nivel_acesso', { p_app_key: MD_APP_KEY }).then(function(r){
+        if(r && r.data === 'visualizar'){
+          window.LDM_SOMENTE_LEITURA = true;
+          document.documentElement.classList.add('somente-leitura');
+        }
+      }).catch(function(){});
+      /* Registra a visita pra contar na frequência (Configurações do hub).
+         Não bloqueia o app por causa disso — se falhar, só não conta. */
+      mdSupa.rpc('ldm_registrar_acesso', { p_app_key: MD_APP_KEY }).then(function(){}, function(){});
+  }
 
   async function mdVerificarAcesso(){
     const { data: { session } } = await mdSupa.auth.getSession();
@@ -125,6 +129,7 @@ async function mdDicaDeEmail(email){
     }
     const { data: pode, error } = await mdSupa.rpc('ldm_pode_acessar', { p_app_key: MD_APP_KEY });
     if(error){
+      if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
       telaLogin.hidden = true; telaNegado.hidden = false;
       document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
       telaAcesso.classList.remove('escondida');
@@ -137,25 +142,16 @@ async function mdDicaDeEmail(email){
       return;
     }
     telaAcesso.classList.add('escondida');
-    if(!appIniciado){
-      appIniciado = true;
-      /* Registra a visita pra contar na frequência (Configurações do hub).
-         Não bloqueia o app por causa disso — se falhar, só não conta. */
-      mdSupa.rpc('ldm_registrar_acesso', { p_app_key: MD_APP_KEY }).catch(function(){});
-      /* acesso.js agora carrega antes do app.js (pra checar o acesso logo,
-         sem esperar as libs pesadas) — então irInit pode ainda não existir
-         no instante em que a permissão é confirmada. */
-      mdChamarInit();
-    }
+    iniciarApp();
   }
 
-  function mdChamarInit(){
-    if(typeof irInit === 'function'){ irInit(); return; }
-    window.addEventListener('load', function(){
-      if(typeof irInit === 'function') irInit();
-    });
-  }
+  /* Fora do callback (setTimeout): chamar o Supabase de dentro do aviso de
+     login trava a conexão — documentado na biblioteca. */
+  /* Retirou o acesso de alguém? A permissão é conferida de novo a cada minuto (e ao voltar para a aba): a tela de
+     bloqueio volta sozinha, sem a pessoa precisar sair e entrar. */
+  setInterval(function(){ if(appIniciado && !document.hidden) mdVerificarAcesso(); }, 60000);
+  document.addEventListener('visibilitychange', function(){ if(appIniciado && !document.hidden) mdVerificarAcesso(); });
 
-  mdSupa.auth.onAuthStateChange(function(){ mdVerificarAcesso(); });
+  mdSupa.auth.onAuthStateChange(function(){ setTimeout(mdVerificarAcesso, 0); });
   mdVerificarAcesso();
 })();

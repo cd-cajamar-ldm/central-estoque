@@ -106,7 +106,7 @@
 html,body{ height:100%; }
 body{
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,Arial,sans-serif;
-  background:var(--paper); color:var(--ink); font-size:13.5px; line-height:1.5;
+  background:var(--page-bg, var(--paper)); color:var(--ink); font-size:13.5px; line-height:1.5;
 }
 /* Mesma fonte de título da Oficina LDM em todo o app (antes só o h1 do topbar). */
 h1,h2,h3,h4{ font-family:'Poppins',sans-serif; font-weight:700; }
@@ -202,7 +202,7 @@ button{ font-family:inherit; cursor:pointer; }
 .nav-section-label{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6B74A8; padding:14px 12px 6px; white-space:nowrap; }
 .sidebar-footer{ padding:16px 16px 18px; margin-top:auto; border-top:1px solid rgba(255,255,255,.08); flex-shrink:0; font-size:11px; color:#6B74A8; }
 
-.content{ flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--paper); }
+.content{ flex:1; display:flex; flex-direction:column; overflow:hidden; background:var(--page-bg, var(--paper)); }
 /* Sem faixa de cor: o topbar fica no mesmo fundo do conteúdo, igual ao
    Painel raiz da Oficina LDM (lá a cor de marca só existe na sidebar). */
 .topbar{
@@ -305,7 +305,7 @@ button{ font-family:inherit; cursor:pointer; }
 
 /* ---------- CARDS / PANEL (relevo suave, estilo relatório) ---------- */
 .panel{
-  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); padding:16px 18px; margin-bottom:16px;
+  background:var(--surface); border:1px solid var(--card-border, var(--line)); border-radius:var(--radius-lg); padding:16px 18px; margin-bottom:16px;
   box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 8px 18px -14px rgba(20,24,40,.2);
 }
 :root[data-theme="dark"] .panel{ box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 8px 18px -14px rgba(0,0,0,.5); }
@@ -1693,9 +1693,9 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
    Foto do CD no topo, cartões brancos sobrepostos à foto, faixa com os
    demais indicadores e os painéis do ciclo em cartões arredondados.
    ============================================================ */
-.dx{ --dx-pecas:#FE5000; --dx-local:#001A72; --dx-valor:#8A93B8; }
-:root[data-theme="dark"] .dx{ --dx-local:#7D93E8; --dx-valor:#C3C8DC; }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .dx{ --dx-local:#7D93E8; --dx-valor:#C3C8DC; } }
+:root, .dx{ --dx-pecas:#FE5000; --dx-local:#001A72; --dx-valor:#1D1F2A; }
+:root[data-theme="dark"], :root[data-theme="dark"] .dx{ --dx-local:#7D93E8; --dx-valor:#E6E8F0; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]), :root:not([data-theme="light"]) .dx{ --dx-local:#7D93E8; --dx-valor:#E6E8F0; } }
 .dx-hero{
   margin:-20px -24px 0; padding:20px 24px 96px; color:#fff;
   background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.82) 50%, rgba(0,18,82,.35) 100%), url(../brand/dash-hero.jpg);
@@ -1712,10 +1712,10 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .dx-hero-tit h2{ margin:0; font-family:Poppins,sans-serif; font-size:32px; font-weight:700; color:#fff; }
 .dx-tag{ font-size:15px; color:#DCE1F7; }
 .dx-body{ margin:-70px 0 0; position:relative; display:flex; flex-direction:column; gap:16px; }
-.dx-body .panel{ margin-bottom:0; border-radius:14px; border-color:transparent; }
+.dx-body .panel{ margin-bottom:0; border-radius:14px; }
 .dx-body .bi-grid-2{ gap:16px; }
 .dx-cards{ display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:14px; }
-.dx-card{ background:var(--surface); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; box-shadow:0 16px 34px -18px rgba(0,26,114,.35); }
+.dx-card{ background:var(--surface); border:1px solid var(--card-border, var(--line)); border-radius:14px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; box-shadow:0 16px 34px -18px rgba(0,26,114,.35); }
 .dx-card-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
 .dx-card-rot{ font-size:13px; font-weight:700; color:var(--ink-soft); }
 .dx-chip{ font-size:11px; font-weight:800; border-radius:6px; padding:3px 8px; white-space:nowrap; }
@@ -1732,7 +1732,7 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .dx-bar i{ display:block; height:100%; border-radius:999px; }
 .dx-bar b{ position:absolute; top:-4px; width:2px; height:14px; background:var(--ink); }
 .dx-card-hint{ font-size:12px; color:var(--ink-soft); }
-.dx-faixa{ background:var(--surface); border-radius:14px; padding:6px 4px; display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
+.dx-faixa{ background:var(--surface); border:1px solid var(--card-border, var(--line)); box-shadow:var(--card-shadow, none); border-radius:14px; padding:6px 4px; display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
 .dx-tile{ padding:12px 16px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:3px; min-width:0; }
 .dx-tile:last-child{ border-right:0; }
 .dx-tile-rot{ font-size:12px; color:var(--ink-soft); }
@@ -1745,17 +1745,28 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .dx-ln-grid{ stroke:var(--line); stroke-width:1; }
 .dx-ln-ax{ font-size:12px; fill:var(--ink-soft); }
 .dx-ln-mes{ font-weight:700; fill:var(--ink); }
-.dx-ln-meta{ stroke:var(--ink); stroke-width:1.5; stroke-dasharray:6 5; }
-.dx-ln-pt{ stroke:var(--surface); stroke-width:2; }
-.dx-meta-leg{ display:inline-block; width:18px; border-top:2px dashed var(--ink); }
-.dx-grid-mensal{ grid-template-columns:1.35fr 1fr; }
+.dx-ln-meta{ stroke:var(--ink-soft); stroke-opacity:.55; stroke-width:1.2; stroke-dasharray:5 5; }
+.dx-ln-pt{ stroke:var(--surface); stroke-width:2; cursor:pointer; }
+.dx-ln-pt:hover{ r:7; }
+.dx-ln-fim{ font-size:12.5px; font-weight:800; }
+.dx-mensal-corpo{ display:grid; grid-template-columns:minmax(0,1fr) 180px; gap:16px; align-items:stretch; }
+.dx-mensal-graf{ display:flex; align-items:flex-start; }
+.dx-mensal-graf svg{ width:100%; }
+/* Cartões do ano ocupam a mesma altura da área do gráfico: o de cima alinha com
+   a linha de 100% e o de baixo com a base do eixo (sem os nomes dos meses). */
+.dx-mensal-ano{ display:flex; flex-direction:column; gap:8px; padding:2px 0 4px; }
+.dx-ano{ flex:1; display:flex; flex-direction:column; justify-content:flex-start; gap:2px; padding:12px 12px 8px; border-radius:10px; background:var(--surface2); border-left:4px solid; }
+.dx-ano-rot{ font-size:14px; font-weight:700; color:var(--ink); }
+.dx-ano-v{ font-size:25px; line-height:1.15; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
+.dx-ano-v.bad{ color:var(--danger); }
+.dx-ano-h{ font-size:13px; color:var(--ink-soft); }
+@media(max-width:700px){ .dx-mensal-corpo{ grid-template-columns:1fr; } .dx-mensal-ano{ flex-direction:row; flex-wrap:wrap; } .dx-ano{ flex:1; min-width:120px; } }
+.dx-tip-v{ font-size:18px; font-weight:800; color:var(--ink); }
+.dx-tip-s{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+.dx-tip-s .good{ color:var(--success); font-weight:700; } .dx-tip-s .bad{ color:var(--danger); font-weight:700; }
+.dx-meta-leg{ display:inline-block; width:18px; border-top:2px dashed var(--ink-soft); opacity:.7; }
+.dx-grid-mensal{ grid-template-columns:1.6fr 1fr; }
 @media(max-width:1000px){ .dx-grid-mensal{ grid-template-columns:1fr; } }
-.dx-mensal-tab{ margin-top:8px; font-size:12px; table-layout:fixed; }
-.dx-mensal-tab thead th{ font-size:10.5px; padding:7px 3px; letter-spacing:0; cursor:default; }
-.dx-mensal-tab th, .dx-mensal-tab td{ text-align:right; padding:6px 3px; }
-.dx-mensal-tab th:first-child, .dx-mensal-tab td:first-child{ width:48px; padding-left:8px; }
-.dx-mensal-tab th:first-child, .dx-mensal-tab td:first-child{ text-align:left; color:var(--ink-soft); font-weight:700; }
-.dx-mensal-tab td.bad{ color:var(--danger); font-weight:700; }
 @media(max-width:640px){
   .dx-hero{ margin:-14px -14px 0; padding:16px 16px 90px; }
   .dx-hero-tit h2{ font-size:24px; }
@@ -1775,10 +1786,146 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .nav-top > .nav-group-h:hover{ background:rgba(255,255,255,.06); }
 .nav-top > .nav-group-h .ng-tit{ display:flex; align-items:center; gap:11px; }
 .nav-top > .nav-group-h .ng-tit svg{ color:var(--orange); }
-.nav-sub{ margin:2px 0 2px 14px; padding-left:8px; border-left:1px solid rgba(255,255,255,.12); }
+.nav-sub{ margin:2px 0 2px 10px; padding-left:4px; border-left:1px solid rgba(255,255,255,.12); }
 .nav-sub > .nav-group-h{ padding:8px 10px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:#C9D0F2; }
 .nav-sub > .nav-group-h:hover{ color:#fff; background:rgba(255,255,255,.04); }
-.nav-sub .nav-item{ padding:8px 10px; font-size:12.5px; }
+.nav-sub .nav-item{ padding:8px 8px; gap:9px; font-size:12.5px; }
+.nav-item span{ overflow:hidden; text-overflow:ellipsis; }
 .sidebar.collapsed .nav-group-h{ height:0; padding:0 !important; margin:10px 14px; overflow:hidden; border-top:1px solid rgba(255,255,255,.16); }
 .sidebar.collapsed .nav-sub{ margin:0; padding:0; border-left:0; }
 .sidebar.collapsed .nav-group.fechado > .nav-group-body{ display:block; }
+
+/* Menu modelo "N2": cabeçalho com foto do corredor do CD, marca no topo e o
+   nome da área embaixo. Recolhido, a foto vira só a faixa da logo. */
+.sb-foto{
+  position:relative; flex-shrink:0; height:170px; display:flex; flex-direction:column; justify-content:space-between;
+  background-image:linear-gradient(180deg, rgba(0,18,82,.35) 0%, rgba(11,18,48,1) 100%), url(../brand/menu-corredor.jpg);
+  background-size:cover; background-position:center 40%;
+}
+.sidebar .sb-foto .brand{ border-bottom:0; }
+.sb-foto-tit{ display:flex; flex-direction:column; gap:2px; padding:0 16px 14px; }
+.sb-foto-tit b{ font-family:'Poppins',sans-serif; font-size:18px; font-weight:700; color:#fff; }
+.sb-foto-tit span{ font-size:12px; color:#DCE1F7; }
+.sidebar .sb-foto .brand-sub{ color:#DCE1F7; }
+.sidebar.collapsed .sb-foto{ height:auto; }
+.sidebar.collapsed .sb-foto-tit{ display:none; }
+.sb-foto + .brand-back{ margin-top:8px; }
+/* Carrinho da logo maior dentro do selo laranja. */
+.brand-logo img{ width:86%; height:86%; }
+
+/* Totais do ano abaixo do gráfico de Acurácia mensal (modelo "T1"). */
+.dx-totais{ display:flex; flex-direction:column; gap:12px; margin-top:16px; padding-top:14px; border-top:1px dashed var(--line); }
+.dx-tot{ display:grid; grid-template-columns:64px minmax(90px,1fr) minmax(90px,1fr) minmax(0,2fr) 56px; gap:14px; align-items:center; }
+.dx-tot-rot{ font-size:14px; font-weight:800; }
+.dx-tot-n{ display:flex; flex-direction:column; min-width:0; }
+.dx-tot-n span{ font-size:11px; color:var(--ink-soft); }
+.dx-tot-n b{ font-size:17px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.dx-tot-n b.bad{ color:var(--danger); }
+.dx-tot-bar{ display:flex; height:12px; border-radius:999px; overflow:hidden; background:var(--surface2); }
+.dx-tot-bar i{ flex:1; opacity:.85; }
+.dx-tot-bar em{ min-width:4px; background:var(--danger); }
+.dx-tot-p{ font-size:13px; font-weight:800; color:var(--danger); text-align:right; font-variant-numeric:tabular-nums; }
+@media(max-width:700px){ .dx-tot{ grid-template-columns:56px 1fr 1fr; } .dx-tot-bar{ grid-column:1 / 3; } }
+
+/* Contraste fundo × cartões (modelo "B7"): fundo da página mais escuro, cartões
+   brancos com borda e sombra leve — dá pra separar em qualquer monitor ou TV.
+   Só no tema padrão claro; no escuro e nos temas alternativos fica como era. */
+:root{ --page-bg:#DFE3EC; --card-border:#C9CFDC; --card-shadow:0 2px 6px -2px rgba(15,21,48,.12); }
+:root[data-theme="dark"], :root[data-app-theme]{ --page-bg:var(--paper); --card-border:var(--line); --card-shadow:none; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --page-bg:var(--paper); --card-border:var(--line); --card-shadow:none; } }
+:root:not([data-theme="dark"]):not([data-app-theme]) .panel{ box-shadow:var(--card-shadow); }
+
+/* Acurácia por Log (modelo "L1"): um cartão por log + Total. */
+.lc-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; }
+.lc-card{ border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:10px; background:var(--surface); }
+.lc-card.lc-total{ background:var(--surface2); }
+.lc-top{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.lc-nome{ font-family:'Poppins',sans-serif; font-size:17px; font-weight:700; color:var(--ink); }
+.lc-pc{ font-size:12px; color:var(--ink-soft); white-space:nowrap; }
+.lc-loc{ display:flex; flex-direction:column; gap:4px; }
+.lc-loc-l{ display:flex; justify-content:space-between; gap:8px; font-size:11.5px; color:var(--ink-soft); }
+.lc-loc-l b{ color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.lc-loc-l.lc-sub{ font-size:11px; }
+.lc-bar{ height:6px; background:var(--surface2); border-radius:999px; overflow:hidden; }
+.lc-total .lc-bar{ background:var(--line); }
+.lc-bar i{ display:block; height:100%; background:var(--dx-local); border-radius:999px; }
+.lc-acc{ display:flex; justify-content:space-between; align-items:center; padding:7px 10px; border-radius:8px; cursor:help; transition:transform .12s, box-shadow .12s; }
+.lc-acc:hover{ transform:translateY(-1px); box-shadow:0 4px 12px -6px rgba(15,21,48,.35); }
+.lc-acc.ok{ background:var(--success-light); } .lc-acc.nok{ background:var(--danger-light); }
+.lc-acc-rot{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-soft); }
+.lc-acc-rot i{ width:8px; height:8px; border-radius:50%; }
+.lc-acc b{ font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; }
+.lc-acc.ok b{ color:var(--success); } .lc-acc.nok b{ color:var(--danger); }
+.lc-div{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 8px; font-size:11.5px; color:var(--ink-soft); border-top:1px dashed var(--line); padding-top:8px; }
+.lc-div b{ color:var(--danger); }
+
+/* Balão da acurácia do log. */
+.chart-tooltip.lt-wrap{ padding:0; max-width:300px; width:290px; border-radius:12px; overflow:hidden; box-shadow:0 18px 40px -12px rgba(15,21,48,.45), 0 2px 6px rgba(15,21,48,.12); }
+.lt{ display:flex; flex-direction:column; gap:8px; padding:12px 14px 12px; }
+.lt-h{ display:flex; align-items:center; gap:8px; font-size:12px; font-weight:800; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; }
+.lt-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.lt-v{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.lt-v b{ font-family:'Poppins',sans-serif; font-size:26px; font-weight:700; color:var(--ink); line-height:1; font-variant-numeric:tabular-nums; }
+.lt-v b.bad{ color:var(--danger); }
+.lt-pill{ font-size:11px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; }
+.lt-pill.ok{ color:var(--success); background:var(--success-light); }
+.lt-pill.nok{ color:var(--danger); background:var(--danger-light); }
+.lt-regua{ position:relative; height:8px; background:var(--surface2); border-radius:999px; margin-top:2px; }
+.lt-regua i{ display:block; height:100%; border-radius:999px; }
+.lt-regua em{ position:absolute; top:-4px; width:2px; height:16px; background:var(--ink); border-radius:1px; }
+.lt-esc{ display:flex; justify-content:space-between; font-size:10px; color:var(--ink-soft); margin-top:-4px; }
+.lt-rows{ display:flex; flex-direction:column; border-top:1px solid var(--line); padding-top:6px; }
+.lt-rows div{ display:flex; justify-content:space-between; gap:12px; padding:4px 0; font-size:12px; color:var(--ink-soft); }
+.lt-rows div + div{ border-top:1px dashed var(--line); }
+.lt-rows b{ color:var(--ink); font-weight:800; font-variant-numeric:tabular-nums; }
+.lt-rows b.bad{ color:var(--danger); }
+.lc-div > span:last-child{ white-space:nowrap; }
+
+/* Dashboard: Status do Inventário preenche o painel (rosca maior, números à direita,
+   ranking de ruas ocupando o espaço que sobrava). */
+.dx-status{ display:flex; flex-direction:column; }
+.dx-status .status-donut-row{ justify-content:space-evenly; gap:24px; }
+.dx-status .status-donut-row > svg{ max-width:100%; height:auto; flex:none; }
+.dx-status .status-donut-stats{ flex:0 0 auto; min-width:200px; padding-left:28px; gap:20px; }
+.dx-status .pior-ruas{ flex:1; display:flex; flex-direction:column; }
+.dx-status .pior-rua{ flex:1; margin:0; align-content:center; }
+/* Contados por dia: meta fininha e clara, o rótulo da meta vai para o topo do painel. */
+.dx-body .bi-vbar-meta-line{ border-top-width:1px; opacity:.16; }
+.dx-ult{ font-size:11px; font-weight:600; color:var(--ink-soft); margin-left:6px; text-transform:none; letter-spacing:0; }
+/* Peças / Valor / Locais divergentes por dia: lado a lado. */
+.dx-div-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(520px, 1fr)); gap:16px; }
+.dx-div-grid > *{ min-width:0; }
+/* Contados por dia e por mês: lado a lado. */
+.dx-conta-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.dx-conta-grid > *{ min-width:0; }
+@media(max-width:1000px){ .dx-conta-grid{ grid-template-columns:1fr; } }
+
+/* Gráficos que desenham na largura real do painel. */
+.ir-fluid{ width:100%; min-width:0; overflow:hidden; }
+.dx-mensal-graf .ir-fluid{ flex:1; }
+/* Balão grande do cartão do log: as três acurácias lado a lado. */
+.chart-tooltip.lt-wrap.lt-wrap-big{ width:740px; max-width:calc(100vw - 24px); border-radius:14px; }
+.lt-big-h{ display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap; padding:12px 16px; background:var(--surface2); border-bottom:1px solid var(--line); }
+.lt-big-h b{ font-family:'Poppins',sans-serif; font-size:17px; color:var(--ink); }
+.lt-big-h span{ font-size:11.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+.lt-cols{ display:grid; grid-template-columns:repeat(3,1fr); }
+.lt-col{ display:flex; flex-direction:column; gap:8px; padding:12px 16px 14px; border-top:3px solid var(--c); }
+.lt-col + .lt-col{ border-left:1px solid var(--line); }
+
+/* Assertividade das contagens por colaborador. */
+.as-topo{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:10px; margin-bottom:12px; }
+.as-kpi{ display:flex; flex-direction:column; gap:2px; background:var(--surface2); border-radius:10px; padding:10px 14px; }
+.as-kpi span{ font-size:12px; color:var(--ink-soft); }
+.as-kpi b{ font-size:22px; font-weight:800; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.as-kpi b.good{ color:var(--success); } .as-kpi b.bad{ color:var(--danger); }
+.as-kpi small{ font-size:11.5px; color:var(--ink-soft); }
+.as-lista{ display:flex; flex-direction:column; gap:6px; max-height:420px; overflow-y:auto; padding-right:4px; }
+.as-lin{ display:grid; grid-template-columns:26px minmax(120px, 200px) minmax(0,1fr) 92px 64px; gap:10px; align-items:center; font-size:13px; }
+.as-pos{ width:24px; height:24px; border-radius:50%; background:var(--surface2); font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; color:var(--ink-soft); }
+.as-nome{ font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.as-bar{ display:flex; height:10px; background:var(--surface2); border-radius:999px; overflow:hidden; }
+.as-bar i.ok{ background:var(--success); } .as-bar i.nok{ background:var(--danger); }
+.as-qt{ text-align:right; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+.as-qt small{ font-weight:500; color:var(--ink-soft); }
+.as-pct{ text-align:right; font-weight:800; font-variant-numeric:tabular-nums; }
+.as-pct.good{ color:var(--success); } .as-pct.bad{ color:var(--danger); }

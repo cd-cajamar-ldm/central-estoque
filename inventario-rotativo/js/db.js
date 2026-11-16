@@ -209,31 +209,17 @@ async function irBulkPutTudo(storeKey, rows, onProgress){
     if(onProgress) onProgress(Math.min(i+BLOCO, rows.length), rows.length);
   }
 }
+/* Leitura em bloco (getAll): o cursor linha a linha leva vários segundos com
+   centenas de milhares de registros; o getAll devolve o mesmo resultado bem mais rápido. */
 async function irGetByCiclo(storeKey, cicloId){
-  const store = await irTx(storeKey, 'readonly');
-  return new Promise((resolve, reject)=>{
-    const idx = store.index('cicloId');
-    const out = [];
-    const req = idx.openCursor(IDBKeyRange.only(cicloId));
-    req.onsuccess = (e)=>{
-      const cursor = e.target.result;
-      if(cursor){ out.push(cursor.value); cursor.continue(); }
-      else resolve(out);
-    };
-    req.onerror = ()=>reject(req.error);
-  });
+  return irGetAllByIndex(storeKey, 'cicloId', cicloId);
 }
 async function irGetAllByIndex(storeKey, indexName, value){
   const store = await irTx(storeKey, 'readonly');
   return new Promise((resolve, reject)=>{
     const idx = store.index(indexName);
-    const out = [];
-    const req = idx.openCursor(IDBKeyRange.only(value));
-    req.onsuccess = (e)=>{
-      const cursor = e.target.result;
-      if(cursor){ out.push(cursor.value); cursor.continue(); }
-      else resolve(out);
-    };
+    const req = idx.getAll(IDBKeyRange.only(value));
+    req.onsuccess = ()=>resolve(req.result || []);
     req.onerror = ()=>reject(req.error);
   });
 }

@@ -85,23 +85,32 @@ export default function App() {
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex shrink-0 items-center gap-4 border-b-[3px] border-laranja bg-papel px-6 py-4">
+        {/* Faixa do topo com foto de planejamento ao fundo e degrade azul da
+            marca (igual ao painel do Inventario Rotativo): o titulo fica no
+            azul solido a esquerda e os post-its aparecem a direita. */}
+        <header
+          className="flex shrink-0 items-center gap-4 border-b-[3px] border-laranja bg-marca bg-cover px-6 py-5"
+          style={{
+            backgroundImage: 'linear-gradient(90deg, rgba(0,18,82,.96) 0%, rgba(0,18,82,.85) 45%, rgba(0,18,82,.35) 100%), url(./fotos/projetos-faixa.jpg)',
+            backgroundPosition: 'center 40%',
+          }}
+        >
           <button
             type="button" aria-label="Abrir menu" onClick={() => setMobileAberto(true)}
-            className="shrink-0 p-1 text-tinta sm:hidden"
+            className="shrink-0 p-1 text-white sm:hidden"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
           <div className="min-w-0">
-            <h1 className="truncate font-titulo text-lg font-extrabold leading-tight text-tinta">{titulo}</h1>
-            {sub && <p className="truncate text-xs text-tinta-suave">{sub}</p>}
+            <h1 className="truncate font-titulo text-2xl font-extrabold leading-tight text-white">{titulo}</h1>
+            {sub && <p className="mt-0.5 truncate text-sm text-[#DCE1F7]">{sub}</p>}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-3 text-right text-xs">
             <div>
-              <p className="font-bold text-tinta">{sessao.pessoa.nome}</p>
-              <p className="text-tinta-suave">{rotuloPapel[sessao.pessoa.papel]}</p>
+              <p className="font-bold text-white">{sessao.pessoa.nome}</p>
+              <p className="text-[#C9D0F2]">{rotuloPapel[sessao.pessoa.papel]}</p>
             </div>
-            <button className="font-bold text-laranja-escuro hover:underline" onClick={() => void sair()}>Sair</button>
+            <button className="rounded-lg bg-white/10 px-2.5 py-1.5 font-bold text-white backdrop-blur-sm hover:bg-laranja" onClick={() => void sair()}>Sair</button>
           </div>
         </header>
 

@@ -4,12 +4,15 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'transitorios-v3';
+const CACHE_VERSION = 'transitorios-v7';
 const PRECACHE_URLS = [
   './',
   './index.html',
   './manifest.json',
   './css/theme.css',
+  './css/acesso.css',
+  './js/acesso.js',
+  './js/nuvem-idb.js',
   './js/db.js',
   './js/rules.js',
   './js/worker.js',
@@ -20,7 +23,9 @@ const PRECACHE_URLS = [
   './brand/Logo_LDM_hor_2.png',
   './brand/Logo_LDM_vert.png',
   './brand/Logo_LDM_hor_branco.png',
-  './brand/Logo_LDM_vert_branco.png'
+  './brand/Logo_LDM_vert_branco.png',
+  './brand/Logo_LDM_icon.png',
+  './brand/menu-corredor.jpg'
 ];
 
 self.addEventListener('install', (event)=>{
@@ -42,6 +47,8 @@ self.addEventListener('fetch', (event)=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
+  /* Supabase (login e dados) nunca passa pelo cache: seria devolver resposta velha ou de outra pessoa. */
+  if(url.hostname.endsWith('.supabase.co')) return;
 
   if(isSameOrigin){
     // cache:'no-cache' revalida no servidor mesmo dentro da janela de max-age. Sem

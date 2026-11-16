@@ -198,6 +198,51 @@ function irEmptyState(title, desc, onclickFn, btnLabel){
 /* ============================================================
    INIT / TEMA / NAVEGAÇÃO
    ============================================================ */
+/* Abertura rápida.
+   1) irPreCarregar() lê do banco local só o que a primeira tela precisa (ciclos,
+      configurações e os indicadores do ciclo ativo). Ela começa já enquanto o
+      login confere a permissão na internet (acesso.js) — as duas esperas correm
+      juntas em vez de uma depois da outra. Nada aparece antes da permissão: a
+      tela de acesso continua por cima.
+   2) A tela abre com isso. O que é pesado (contagens, divergências e locais do
+      ciclo — dezenas de milhares de linhas —, NET e a checagem do banco) carrega
+      depois, em segundo plano, e a tela se refaz quando chega. */
+let _irPreCarga = null;
+function irPreCarregar(){
+  if(!_irPreCarga) _irPreCarga = irCarregarEssencial();
+  return _irPreCarga;
+}
+async function irCarregarEssencial(){
+  try{
+    const [prioridadeConfig, prodMeta, net410Legenda, net410Ignorados, net410Padroes, ciclos] = await Promise.all([
+      irSeedPrioridadeConfigIfEmpty(), irGetProdMetaConfig(), irSeedNet410LegendaIfEmpty(),
+      irGetNet410IgnoradosAll(), irSeedNet410PadroesIgnoradosIfEmpty(), irGetAllCiclos()
+    ]);
+    IR.prioridadeConfig = prioridadeConfig; IR.prodMeta = prodMeta; IR.net410Legenda = net410Legenda;
+    IR.net410Ignorados = net410Ignorados; IR.net410Padroes = net410Padroes; IR.ciclos = ciclos;
+    let pCiclo = null;
+    if(IR.ciclos.length){
+      IR.cicloAtivo = IR.ciclos.find(c=>irCicloStatus(c)==='aberto') || irCicloMaisNovo(IR.ciclos) || IR.ciclos[0];
+      pCiclo = irLoadCicloData(IR.cicloAtivo.id, {rapido:true});
+    }
+    const [est390Meta, est390Ficha, boletimEmail, ign, audPrefixos, net410Anos] = await Promise.all([
+      irGetEstoqueMeta(), irGetConfig('estoque390-ficha'), irGetConfig('boletim-email'),
+      irGetConfig('auditoria-ignorar-virtuais'), irGetConfig('auditoria-prefixos'), irGetAllNet410Anos()
+    ]);
+    IR.est390Meta = est390Meta; IR.est390Ficha = est390Ficha; IR.boletimEmail = boletimEmail || {};
+    if(ign!=null) IR.audIgnorarVirtuais = ign;
+    IR.audPrefixos = audPrefixos;
+    IR.net410Anos = net410Anos;
+    if(IR.net410Anos.length) IR.net410AnoSel = IR.net410Anos[0];
+    if(pCiclo) await pCiclo;
+  }catch(e){
+    // Guarda o erro: sem isso, uma falha ao ABRIR o banco (dados intactos, só
+    // inacessíveis) aparecia na tela como "nenhum ciclo importado ainda" — que
+    // manda o usuário reimportar tudo pra resolver um problema que não é esse.
+    console.error('Falha ao iniciar', e);
+    IR.initErro = (e && (e.name ? e.name+': '+e.message : e.message)) || String(e);
+  }
+}
 async function irInit(){
   const savedTheme = localStorage.getItem('ir-theme');
   if(savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
@@ -206,47 +251,7 @@ async function irInit(){
   irUpdateThemeLabel();
   irApplyZoom(parseInt(localStorage.getItem('ir-zoom'), 10) || 100);
 
-  try{
-    IR.prioridadeConfig = await irSeedPrioridadeConfigIfEmpty();
-    IR.prodMeta = await irGetProdMetaConfig();
-    IR.net410Legenda = await irSeedNet410LegendaIfEmpty();
-    IR.net410Ignorados = await irGetNet410IgnoradosAll();
-    IR.net410Padroes = await irSeedNet410PadroesIgnoradosIfEmpty();
-    IR.ciclos = await irGetAllCiclos();
-    if(IR.ciclos.length){
-      IR.cicloAtivo = IR.ciclos.find(c=>irCicloStatus(c)==='aberto') || irCicloMaisNovo(IR.ciclos) || IR.ciclos[0];
-      await irLoadCicloData(IR.cicloAtivo.id);
-    }
-    IR.est390Meta = await irGetEstoqueMeta();
-    IR.est390Ficha = await irGetConfig('estoque390-ficha');
-    IR.boletimEmail = (await irGetConfig('boletim-email')) || {};
-    const ign = await irGetConfig('auditoria-ignorar-virtuais');
-    if(ign!=null) IR.audIgnorarVirtuais = ign;
-    IR.audPrefixos = await irGetConfig('auditoria-prefixos');
-    IR.net410Anos = await irGetAllNet410Anos();
-    if(IR.net410Anos.length){
-      IR.net410AnoSel = IR.net410Anos[0];
-      IR.net410Data = await irGetNet410(IR.net410AnoSel);
-      irSetNet410MesDefault();
-    }
-  }catch(e){
-    // Guarda o erro: sem isso, uma falha ao ABRIR o banco (dados intactos, só
-    // inacessíveis) aparecia na tela como "nenhum ciclo importado ainda" — que
-    // manda o usuário reimportar tudo pra resolver um problema que não é esse.
-    console.error('Falha ao iniciar', e);
-    IR.initErro = (e && (e.name ? e.name+': '+e.message : e.message)) || String(e);
-  }
-  // Sem isso o navegador pode descartar o banco sozinho quando o disco aperta —
-  // e o app perde ciclos inteiros sem nenhum aviso. Só pede; se negar, segue.
-  IR.bancoInfo = {};
-  try{
-    if(navigator.storage && navigator.storage.persist){
-      IR.bancoInfo.persistente = await navigator.storage.persisted() || await navigator.storage.persist();
-    }
-    const db = await irOpenDB();
-    IR.bancoInfo.versao = db.version;
-    db.close();
-  }catch(_){}
+  await irPreCarregar();
   irMostrarVersao();
   /* Link direto para uma aba específica (ex.: usado pela TV LDM): #setores
      abre direto em Setores, sem passar pelo Dashboard. */
@@ -256,27 +261,66 @@ async function irInit(){
     if(irH && IR_TAB_LABELS[irH]) irHashTab = irH;
   } catch(e){}
   irSwitchTab(irHashTab);
+
+  // Daqui pra baixo nada segura a tela.
+  if(IR.net410AnoSel){
+    irGetNet410(IR.net410AnoSel).then(d=>{
+      IR.net410Data = d; irSetNet410MesDefault();
+      if(IR.currentTab==='ciclo') irRenderView();
+    }).catch(e=>console.warn('NET não carregou', e));
+  }
+  // Sem isso o navegador pode descartar o banco sozinho quando o disco aperta —
+  // e o app perde ciclos inteiros sem nenhum aviso. Só pede; se negar, segue.
+  IR.bancoInfo = {};
+  (async ()=>{
+    try{
+      if(navigator.storage && navigator.storage.persist){
+        IR.bancoInfo.persistente = await navigator.storage.persisted() || await navigator.storage.persist();
+      }
+      const db = await irOpenDB();
+      IR.bancoInfo.versao = db.version;
+      db.close();
+    }catch(_){}
+  })();
+  // Dados compartilhados (Supabase): começa depois da tela aberta.
+  try { irNuvemVigiar(); } catch(e){ console.warn('Nuvem indisponível', e); }
   // Fora do try acima e sem await: se a pasta conectada falhar (permissão
   // revogada, política nova, arquivo só na nuvem), isso não pode impedir o app
   // de abrir — é conveniência, não dependência.
   irPastaCarregar().catch(()=>{});
 }
-async function irLoadCicloData(cicloId){
-  IR.indicadores = await irGetIndicadores(cicloId);
-  IR.importMeta = await irGetImportMeta(cicloId);
-  IR.divergencias = await irGetByCiclo(IR_STORES.divergencias, cicloId);
-  IR.locais = await irGetByCiclo(IR_STORES.locais, cicloId);
-  IR.contagens = await irGetByCiclo(IR_STORES.contagens, cicloId);
+async function irLoadCicloData(cicloId, opts){
+  /* Primeiro o leve (indicadores — é o que o Dashboard desenha); o pesado
+     (divergências, locais e contagens) vem em seguida. Na abertura (rapido) a
+     tela não espera o pesado: abre e se refaz quando ele chega. */
+  [IR.indicadores, IR.importMeta] = await Promise.all([irGetIndicadores(cicloId), irGetImportMeta(cicloId)]);
   // Troca de ciclo ativo volta o escopo dos "Itens mais Divergentes" pro padrão
   // (só o ciclo atual) — senão ficaria somando um ciclo antigo com o novo ativo.
   IR.itemDivFiltro = {tipo:'ciclo'};
-  IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
   IR.comparativoCiclos = null; // recarrega no próximo render do Dashboard (irCarregarComparativoCiclos)
   // O cache por ano (Mês/Ano/De-Até na aba Divergências) só é montado uma vez por
   // ano na sessão e nunca mais revalidado — se o ciclo recém-carregado trouxer dia
   // novo (reimportação com dados mais recentes), o filtro "De/Até" continuava preso
   // no último dia do cache antigo, mesmo com o gráfico já mostrando o dia novo.
   IR.divAnoCache = null;
+  IR._cicloPesadoId = null;
+  const pesado = Promise.all([
+    irGetByCiclo(IR_STORES.divergencias, cicloId), irGetByCiclo(IR_STORES.locais, cicloId), irGetByCiclo(IR_STORES.contagens, cicloId)
+  ]).then(([divergencias, locais, contagens])=>{
+    if((IR.cicloAtivo||{}).id !== cicloId) return false; // trocou de ciclo no meio
+    IR.divergencias = divergencias; IR.locais = locais; IR.contagens = contagens;
+    IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
+    IR._cicloPesadoId = cicloId;
+    return true;
+  });
+  if(opts && opts.rapido){
+    IR.divergencias = []; IR.locais = []; IR.contagens = [];
+    IR.itemDivSaldo = irCalcItemSaldo([]);
+    pesado.then(ok=>{ if(ok && !['importacao','configuracoes','exportar'].includes(IR.currentTab)) irRenderView(); })
+      .catch(e=>console.error('Falha ao carregar o ciclo', e));
+  } else {
+    await pesado;
+  }
   // Sem await: a tela abre com o que tem e se refaz quando o recálculo terminar.
   irRecalcularSeMotorAntigo();
 }
@@ -359,12 +403,13 @@ function irApplyZoom(pct){
   const label = document.getElementById('zoomLabel');
   if(label) label.textContent = pct+'%';
   localStorage.setItem('ir-zoom', pct);
+  if(typeof irFluidAgendar==='function') irFluidAgendar();
 }
 function irZoomIn(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)||100) + IR_ZOOM_STEP); }
 function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)||100) - IR_ZOOM_STEP); }
 
 const IR_TAB_LABELS = {
-  dashboard:['Dashboard Executivo','Visão geral do ciclo ativo.'],
+  dashboard:['Dashboard Inventário','Visão geral do ciclo ativo.'],
   ciclo:['NET','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
   produtividade:['Produtividade','Aba em reconstrução.'],
   setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
@@ -389,29 +434,21 @@ function irTabEhAreaExtra(tab){ return /^(reversa|insumo)_/.test(tab||''); }
    ciclo e mês do topo não tem sobre o que agir. Hoje nenhuma aba está nesse
    caso — Transitórios, que era a única, virou módulo próprio (../transitorios/). */
 const IR_TAB_SEM_CICLO = new Set(['exportar']);
-/* Menu separado por área (Inventário Rotativo, Insumo, Reversa). Cada grupo abre
-   e fecha pelo título; o estado fica salvo no navegador. O grupo da aba aberta
-   sempre fica aberto, senão a aba ativa sumiria do menu. */
+/* Menu Inventário > Rotativo / Reversa / Insumos. Ao abrir o app tudo começa
+   recolhido (pedido do usuário); cada grupo abre e fecha pelo título. O estado
+   vale só enquanto a página está aberta — não é lembrado no próximo acesso. */
+IR.menuAbertos = new Set();
 function irAplicarGrupos(){
-  let fechados = [];
-  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
   document.querySelectorAll('.nav-group').forEach(g=>{
-    const temAtiva = !!g.querySelector('.nav-item.active');
-    const fechado = fechados.includes(g.dataset.grupo) && !temAtiva;
-    g.classList.toggle('fechado', fechado);
+    const aberto = IR.menuAbertos.has(g.dataset.grupo);
+    g.classList.toggle('fechado', !aberto);
     const h = g.querySelector(':scope > .nav-group-h');
-    if(h) h.setAttribute('aria-expanded', String(!fechado));
+    if(h) h.setAttribute('aria-expanded', String(aberto));
   });
 }
 function irToggleGrupo(chave){
-  let fechados = [];
-  try{ fechados = JSON.parse(localStorage.getItem('ir-menu-fechados2')||'["reversa","insumo"]'); }catch(_){}
-  const g = document.querySelector(`.nav-group[data-grupo="${chave}"]`);
-  const fechar = g && !g.classList.contains('fechado');
-  fechados = fechados.filter(k=>k!==chave);
-  if(fechar) fechados.push(chave);
-  try{ localStorage.setItem('ir-menu-fechados2', JSON.stringify(fechados)); }catch(_){}
-  if(g){ g.classList.toggle('fechado', fechar); g.querySelector(':scope > .nav-group-h').setAttribute('aria-expanded', String(!fechar)); }
+  if(IR.menuAbertos.has(chave)) IR.menuAbertos.delete(chave); else IR.menuAbertos.add(chave);
+  irAplicarGrupos();
 }
 function irRenderEmConstrucao(area){
   return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores desta aba vão aparecer aqui.</p></div>`;
@@ -506,6 +543,27 @@ async function irFiltrarCiclo(cicloId){
   irRenderCycleBadge();
   irRenderView();
 }
+/* Gráficos que desenham na LARGURA REAL do painel (1 unidade = 1 px), em vez de
+   esticar um desenho de largura fixa. Esticado, o texto do gráfico crescia junto com
+   o painel — e, com o zoom da tela diminuído, o painel fica largo em px e o texto do
+   gráfico ficava grande enquanto o resto do app encolhia. Medido no elemento real. */
+IR._fluid = {};
+function irFluid(key, build, altura){
+  IR._fluid[key] = build;
+  return `<div class="ir-fluid" data-k="${key}" style="min-height:${altura}px">${build(760)}</div>`;
+}
+function irFluidAjustar(){
+  document.querySelectorAll('#viewRoot .ir-fluid').forEach(el=>{
+    const b = IR._fluid[el.dataset.k];
+    const w = Math.floor(el.clientWidth);
+    if(!b || w<160 || String(w)===el.dataset.w) return;
+    el.dataset.w = w;
+    el.innerHTML = b(w);
+  });
+}
+let _irFluidT = null;
+function irFluidAgendar(){ clearTimeout(_irFluidT); _irFluidT = setTimeout(irFluidAjustar, 60); }
+window.addEventListener('resize', irFluidAgendar);
 function irRenderView(){
   const root = document.getElementById('viewRoot');
   /* A aba de Divergencias usa a identidade do modulo Projetos (roxo e
@@ -539,6 +597,7 @@ function irRenderView(){
     : (renderers[IR.currentTab] || (()=>''))();
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
   irFitKpiNumbers();
+  irFluidAjustar();
 }
 /* Encolhe o numero de cada tile de KPI ate ele caber na largura real disponivel.
    O grid dos blocos e auto-fit, entao a largura da tile muda de forma pouco previsivel
@@ -1032,7 +1091,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v256';
+const IR_APP_VERSION = 'v277';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1186,7 +1245,7 @@ function irRenderDashboard(){
         </div>
         <div class="dx-hero-row">
           <div class="dx-hero-tit">
-            <h2>Dashboard Executivo</h2>
+            <h2>Dashboard Inventário</h2>
             <span class="dx-tag">Loja do Mecânico · Lugar de quem faz</span>
           </div>
         </div>
@@ -1200,10 +1259,91 @@ function irRenderDashboard(){
         ${irRenderStatusInventarioPanel(ind)}
       </div>
       ${irRenderCiclosCards()}
+      ${irRenderLogTablePanel(ind)}
       ${irRenderContadosPorDiaPanel(ind)}
       ${irRenderDivergentesPorDiaPanel(ind)}
-      ${irRenderLogTablePanel(ind)}
+      ${irRenderAssertividadePanel()}
     </div>
+  </div>`;
+}
+/* ============================================================
+   ASSERTIVIDADE DAS CONTAGENS POR COLABORADOR
+   A rodada 1 é o sistema (saldo lógico), não uma pessoa. Cada contagem física
+   (rodada 2 em diante) é julgada contra a quantidade ACEITA do item no local:
+   a da rodada final, desde que ela tenha sido confirmada por outra rodada
+   (o sistema ou outra contagem chegou ao mesmo número). Acertou = contou o
+   mesmo que a quantidade aceita. Item × local sem confirmação (a última
+   contagem não bateu com nada) fica de fora — não dá pra saber quem errou.
+   Exemplos (sistema → contagens):
+     10 → 10            : 1ª contagem acertou (bateu com o sistema)
+     10 → 8 → 8         : as duas acertaram (sistema estava errado)
+     10 → 8 → 10        : a 1ª errou, a 2ª acertou
+   ============================================================ */
+const IR_ASSERT_MIN = 30; // contagens mínimas para entrar no ranking
+function irAssertividade(){
+  const cid = (IR.cicloAtivo||{}).id;
+  if(!cid || IR._cicloPesadoId !== cid) return null;
+  if(IR._assertCache && IR._assertCache.cid===cid && IR._assertCache.n===IR.contagens.length) return IR._assertCache.r;
+  const grupos = new Map(); // local|item -> Map(rodada -> {q, u})
+  for(const c of IR.contagens||[]){
+    if(!c.item) continue;
+    const k = c.local+'|'+c.item;
+    let g = grupos.get(k); if(!g){ g = new Map(); grupos.set(k, g); }
+    g.set(c.idConferencia, {q:c.qtFis||0, u:c.usuario||''});
+  }
+  const porUsuario = new Map();
+  let julgadas = 0, acertos = 0, inconclusivos = 0;
+  for(const g of grupos.values()){
+    const rodadas = Array.from(g.keys()).sort((a,b)=>a-b);
+    const fisicas = rodadas.filter(r=>r>=2);
+    if(!fisicas.length) continue;
+    const ult = rodadas[rodadas.length-1];
+    const aceita = g.get(ult).q;
+    // Confirmada: alguma rodada anterior (sistema incluído) chegou ao mesmo número.
+    const confirmada = rodadas.some(r=>r!==ult && g.get(r).q===aceita);
+    if(!confirmada){ inconclusivos++; continue; }
+    for(const r of fisicas){
+      const {q, u} = g.get(r);
+      if(!u) continue;
+      const certo = q===aceita;
+      const pu = porUsuario.get(u) || {usuario:u, contagens:0, acertos:0};
+      pu.contagens++; if(certo) pu.acertos++;
+      porUsuario.set(u, pu);
+      julgadas++; if(certo) acertos++;
+    }
+  }
+  const lista = Array.from(porUsuario.values()).map(p=>({...p, erros:p.contagens-p.acertos, pct:p.contagens?p.acertos/p.contagens:0}));
+  const r = {lista, julgadas, acertos, inconclusivos, pct: julgadas?acertos/julgadas:null};
+  IR._assertCache = {cid, n:(IR.contagens||[]).length, r};
+  return r;
+}
+function irRenderAssertividadePanel(){
+  const a = irAssertividade();
+  const head = `<div class="dx-panel-h"><h3>Assertividade das contagens</h3>
+    <div class="cmp-legend"><span><span class="cmp-dot" style="background:var(--success);"></span>acertou</span><span><span class="cmp-dot" style="background:var(--danger);"></span>errou</span><span><span class="dx-meta-leg"></span>meta 97%</span></div></div>`;
+  if(!a) return `<div class="panel">${head}<p class="field-hint">Carregando as contagens do ciclo...</p></div>`;
+  if(!a.julgadas) return `<div class="panel">${head}<p class="field-hint">Ainda não há contagens físicas confirmadas neste ciclo.</p></div>`;
+  const meta = IR_META_ACURACIA;
+  const ranking = a.lista.filter(p=>p.contagens>=IR_ASSERT_MIN).sort((x,y)=> y.pct-x.pct || y.contagens-x.contagens);
+  const poucas = a.lista.length - ranking.length;
+  const mx = Math.max(1, ...ranking.map(p=>p.contagens));
+  const lin = (p, i) => `<div class="as-lin" title="${irEsc(p.usuario)}: ${irFmtInt(p.acertos)} de ${irFmtInt(p.contagens)} contagens certas">
+      <span class="as-pos">${i+1}</span>
+      <span class="as-nome">${irEsc(p.usuario)}</span>
+      <div class="as-bar"><i class="ok" style="width:${(p.acertos/mx*100).toFixed(1)}%;"></i><i class="nok" style="width:${(p.erros/mx*100).toFixed(1)}%;"></i></div>
+      <span class="as-qt">${irFmtInt(p.contagens)} <small>cont.</small></span>
+      <span class="as-pct ${p.pct>=meta?'good':'bad'}">${irFmtPct(p.pct)}</span>
+    </div>`;
+  const melhor = ranking[0];
+  return `<div class="panel as-panel">
+    ${head}
+    <div class="as-topo">
+      <div class="as-kpi"><span>Assertividade geral</span><b class="${a.pct>=meta?'good':'bad'}">${irFmtPct(a.pct)}</b><small>${irFmtInt(a.acertos)} de ${irFmtInt(a.julgadas)} contagens certas</small></div>
+      ${melhor?`<div class="as-kpi"><span>Mais efetivo</span><b>${irEsc(melhor.usuario)}</b><small>${irFmtPct(melhor.pct)} em ${irFmtInt(melhor.contagens)} contagens</small></div>`:''}
+      <div class="as-kpi"><span>Colaboradores no ranking</span><b>${irFmtInt(ranking.length)}</b><small>com ${IR_ASSERT_MIN}+ contagens no ciclo</small></div>
+    </div>
+    <div class="as-lista">${ranking.map(lin).join('')}</div>
+    <p class="field-hint" style="margin-top:8px;">Contagem certa = bateu com a quantidade aceita do item no local (a final, confirmada pelo sistema ou por outra contagem). A 1ª rodada é o sistema e não entra. ${a.inconclusivos?irFmtInt(a.inconclusivos)+' item(ns) sem confirmação ficaram de fora.':''}${poucas?' '+irFmtInt(poucas)+' colaborador(es) com menos de '+IR_ASSERT_MIN+' contagens não aparecem.':''}</p>
   </div>`;
 }
 /* Acurácia mensal em LINHAS — um ponto por mês do ano do ciclo ativo, somando
@@ -1231,12 +1371,19 @@ function irAcuraciaMensalDoAno(){
   return {ano, rows: Array.from(mapa.values()).sort((a,b)=>a.mes.localeCompare(b.mes))
     .map(g => ({mes:g.mes, pecas:acc(g.pb,g.pd), local:acc(g.lb,g.ld), valor:acc(g.vb,g.vd)}))};
 }
-function irBuildAcuraciaLinhasSvg(rows, meta){
-  const W = 760, H = 260, padL = 44, padR = 24, padT = 12, padB = 30;
+/* Gráfico de Acurácia mensal (modelo "A8" aprovado): linhas com o nome e o
+   último valor na ponta de cada uma, meta tracejada clara, mês sem o ano no
+   eixo e balão com o detalhe ao passar o mouse no ponto. Cores padrão do app:
+   Peças laranja, Local azul, Valor preto. */
+const IR_MES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function irMesCurto(mes){ const i = parseInt(String(mes||'').slice(5,7),10)-1; return IR_MES_ABREV[i] || String(mes||''); }
+const IR_ACC_SERIES = [['pecas','Peças','var(--dx-pecas)'],['local','Local','var(--dx-local)'],['valor','Valor','var(--dx-valor)']];
+function irBuildAcuraciaLinhasSvg(rows, meta, W){
+  W = W || 560; const H = 290, padL = 40, padR = 24, padT = 14, padB = 30;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const vals = rows.flatMap(r=>[r.pecas,r.local,r.valor]).filter(v=>v!=null);
-  // Eixo começa logo abaixo do menor valor (mínimo 80%) — de 0 a 100 as linhas
-  // ficariam coladas no topo e a distância até a meta sumiria.
+  // Eixo começa logo abaixo do menor valor — de 0 a 100 as linhas ficariam
+  // coladas no topo e a distância até a meta sumiria.
   const menor = Math.min(meta, ...vals);
   let min = menor >= 0.95 ? Math.floor((menor-0.01)*100)/100 : Math.floor((menor-0.005)*20)/20;
   min = Math.max(0, Math.min(min, 0.95));
@@ -1251,20 +1398,33 @@ function irBuildAcuraciaLinhasSvg(rows, meta){
       <text x="${padL-8}" y="${(+yy+4).toFixed(1)}" text-anchor="end" class="dx-ln-ax">${Math.round(t*100)}%</text>`;
   }
   const metaY = y(meta).toFixed(1);
-  const series = [['pecas','Peças','var(--dx-pecas)'],['local','Local','var(--dx-local)'],['valor','Valor','var(--dx-valor)']];
-  const linhas = series.map(([k,rot,cor])=>{
+  const linhas = IR_ACC_SERIES.map(([k,rot,cor])=>{
     const pts = rows.map((r,i)=>r[k]==null?null:[x(i), y(r[k]), r]).filter(Boolean);
     if(!pts.length) return '';
     const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
-    return `<path d="${d}" fill="none" style="stroke:${cor}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-      ${pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="fill:${cor}" class="dx-ln-pt"><title>${rot} ${irMesLabel(p[2].mes)}: ${irFmtPct(p[2][k])}</title></circle>`).join('')}`;
+    return `<path d="${d}" fill="none" style="stroke:${cor}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" style="fill:${cor}" class="dx-ln-pt"
+        onmouseenter="irAccTip(event,'${p[2].mes}','${k}',${p[2][k]},${meta})" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"></circle>`).join('')}`;
   }).join('');
-  const xl = rows.map((r,i)=>`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="dx-ln-ax dx-ln-mes">${irMesLabel(r.mes)}</text>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" class="dx-ln" role="img" aria-label="Acurácia mensal de peças, local e valor">
+  const xl = rows.map((r,i)=>`<text x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle" class="dx-ln-ax dx-ln-mes">${irMesCurto(r.mes)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="dx-ln" role="img" aria-label="Acurácia mensal de peças, local e valor">
     ${grid}
     <line x1="${padL}" y1="${metaY}" x2="${W-padR}" y2="${metaY}" class="dx-ln-meta"/>
     ${linhas}${xl}
   </svg>`;
+}
+// Balão do ponto: mês por extenso · indicador, valor e distância da meta.
+function irAccTip(ev, mes, k, v, meta){
+  const tt = document.getElementById('irChartTooltip');
+  if(!tt) return;
+  const rot = ({pecas:'Peças', local:'Local', valor:'Valor'})[k] || k;
+  const i = parseInt(String(mes).slice(5,7),10)-1;
+  const d = (v-meta)*100;
+  const st = d >= 0 ? `<span class="good">na meta</span>` : `<span class="bad">${irFmtNum(-d,1)} p.p. abaixo da meta</span>`;
+  tt.innerHTML = `<div class="ct-title">${irEsc((IR_MES_NOME[i]||mes)+' · '+rot)}</div>
+    <div class="dx-tip-v">${irFmtPct(v)}</div><div class="dx-tip-s">${st} · meta ${irFmtNum(meta*100,0)}%</div>`;
+  tt.classList.remove('hidden');
+  irMoveDiaTooltip(ev);
 }
 function irRenderAcuraciaMensalPanel(){
   const meta = (IR.indicadores && IR.indicadores.meta) || IR_META_ACURACIA;
@@ -1274,26 +1434,49 @@ function irRenderAcuraciaMensalPanel(){
     return `<div class="panel"><h3>Acurácia mensal</h3><p class="field-hint">${irEsc(msg)}</p></div>`;
   }
   const ac = irAcuraciaDoAno(ano);
-  const cel = v => `<td class="mono ${v==null?'':(v>=meta?'':'bad')}">${v==null?'—':irFmtPct(v)}</td>`;
+  // Resumo do ano ao lado do gráfico: acumulado (mesma conta do resto do app) e
+  // em quantos meses o indicador fechou na meta.
+  const resumo = [['pecas','Peças','var(--dx-pecas)', ac&&ac.pecas],['local','Local','var(--dx-local)', ac&&ac.locais],['valor','Valor','var(--dx-valor)', ac&&ac.valor]]
+    .map(([k,rot,cor,v])=>{
+      const comDado = rows.filter(r=>r[k]!=null);
+      const naMeta = comDado.filter(r=>r[k]>=meta).length;
+      return `<div class="dx-ano" style="border-left-color:${cor};">
+        <span class="dx-ano-rot">${rot}</span>
+        <span class="dx-ano-v ${v!=null && v<meta?'bad':''}">${v==null?'—':irFmtPct(v)}</span>
+        <span class="dx-ano-h">${naMeta} de ${comDado.length} ${comDado.length===1?'mês':'meses'} na meta</span>
+      </div>`;
+    }).join('');
   return `<div class="panel dx-mensal">
     <div class="dx-panel-h"><h3>Acurácia mensal</h3>
-      <div class="cmp-legend">
-        <span><span class="cmp-dot" style="background:var(--dx-pecas);"></span>Peças</span>
-        <span><span class="cmp-dot" style="background:var(--dx-local);"></span>Local</span>
-        <span><span class="cmp-dot" style="background:var(--dx-valor);"></span>Valor</span>
-        <span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span>
-      </div>
+      <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span></div>
     </div>
-    ${irBuildAcuraciaLinhasSvg(rows, meta)}
-    <div class="table-wrap"><table class="dx-mensal-tab">
-      <thead><tr><th></th>${rows.map(r=>`<th>${irEsc(irMesLabel(r.mes))}</th>`).join('')}${ac?`<th>${irEsc(String(ano))}</th>`:''}</tr></thead>
-      <tbody>
-        <tr><td>Peças</td>${rows.map(r=>cel(r.pecas)).join('')}${ac?cel(ac.pecas):''}</tr>
-        <tr><td>Local</td>${rows.map(r=>cel(r.local)).join('')}${ac?cel(ac.locais):''}</tr>
-        <tr><td>Valor</td>${rows.map(r=>cel(r.valor)).join('')}${ac?cel(ac.valor):''}</tr>
-      </tbody>
-    </table></div>
+    <div class="dx-mensal-corpo">
+      <div class="dx-mensal-graf">${irFluid("mensal", w=>irBuildAcuraciaLinhasSvg(rows, meta, w), 290)}</div>
+      <div class="dx-mensal-ano">${resumo}</div>
+    </div>
+    ${irRenderTotaisAnoAcc(ac)}
   </div>`;
+}
+/* Totais do ano abaixo do gráfico (modelo "T1"): por indicador, o inventariado
+   (base da acurácia) e o divergente, com a barra na proporção real. Mesmos
+   totais de irAcuraciaDoAno — o % aqui é exatamente 100% − acurácia do ano. */
+function irRenderTotaisAnoAcc(ac){
+  if(!ac) return '';
+  const linhas = [
+    ['Peças','var(--dx-pecas)', ac.pecasBase, ac.pecasDivergentes, irFmtInt],
+    ['Local','var(--dx-local)', ac.locaisBase, ac.locaisDivergentes, irFmtInt],
+    ['Valor','var(--dx-valor)', ac.valorBase, ac.valorDivergente, irFmtMoneyCompact]
+  ].filter(([,,base])=>base!=null && base>0).map(([rot,cor,base,div,fmt])=>{
+    const p = Math.max(0, Math.min(1, (div||0)/base));
+    return `<div class="dx-tot">
+      <span class="dx-tot-rot" style="color:${cor};">${rot}</span>
+      <div class="dx-tot-n"><span>Inventariado</span><b>${fmt(base)}</b></div>
+      <div class="dx-tot-n"><span>Divergente</span><b class="bad">${fmt(div||0)}</b></div>
+      <div class="dx-tot-bar"><i style="background:${cor};"></i><em style="width:${(p*100).toFixed(2)}%;"></em></div>
+      <span class="dx-tot-p">${irFmtPct(p)}</span>
+    </div>`;
+  }).join('');
+  return linhas ? `<div class="dx-totais">${linhas}</div>` : '';
 }
 /* ============================================================
    Acurácia mensal — Peças, Locais e Valor (modelo "A3" aprovado)
@@ -1442,32 +1625,87 @@ function irRenderLogTablePanel(ind){
   }
   const total = irCalcLogTotal(rows);
   total.locaisPendentes = rows.reduce((s,r)=>s+r.locaisPendentes, 0);
-  const rowsComTotal = [...rows, total];
   const meta = ind.meta;
+  // Guarda cada linha para o balão (irLogTip) achar os números pelo índice.
+  IR._logCards = [...rows, total];
+  // Modelo "L1": um cartão por log + um de Total. Mesmos números da tabela
+  // antiga; o detalhe de cada acurácia aparece no balão ao passar o mouse.
+  const acc = (r, idx, k, rot, cor) => {
+    const v = r[k];
+    const ok = v!=null && v>=meta;
+    return `<div class="lc-acc ${ok?'ok':'nok'}">
+      <span class="lc-acc-rot"><i style="background:${cor};"></i>${rot}</span>
+      <b>${v==null?'—':irFmtPct(v)}</b>
+    </div>`;
+  };
+  const card = (r, idx) => {
+    const orc = r.locaisOrcados||0, cont = r.locaisContados||0;
+    const pct = orc>0 ? cont/orc : 0;
+    return `<div class="lc-card ${r.isTotal?'lc-total':''}" onmouseenter="irLogTip(event,${idx})" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
+      <div class="lc-top"><span class="lc-nome">${r.isTotal?'Total':irEsc(r.chave)}</span><span class="lc-pc">${irFmtInt(r.pecasContadas)} pç</span></div>
+      <div class="lc-loc">
+        <div class="lc-loc-l"><span>Contados</span><b>${irFmtInt(cont)} de ${irFmtInt(orc)}</b></div>
+        <div class="lc-bar"><i style="width:${(Math.min(1,pct)*100).toFixed(1)}%;"></i></div>
+        <div class="lc-loc-l lc-sub"><span>${irFmtPct(pct)} contado</span><span>${irFmtInt(r.locaisPendentes)} pendentes</span></div>
+      </div>
+      ${acc(r, idx, 'acuraciaPecas', 'Peças', 'var(--dx-pecas)')}
+      ${acc(r, idx, 'acuraciaPosicoes', 'Posições', 'var(--dx-local)')}
+      ${acc(r, idx, 'acuraciaValor', 'Valor', 'var(--dx-valor)')}
+      <div class="lc-div"><span>Divergentes</span><span><b>${irFmtInt(r.locaisDivergentes)}</b> locais · <b>${irFmtInt(r.pecasDivergentes)}</b> pç</span></div>
+    </div>`;
+  };
   return `<div class="panel">
-    <h3>Acurácia por Log</h3>
-    <p class="panel-sub">Locais orçados x contados (Grupo Classe da base congelada), peças e acurácias por log — só locais CONCLUÍDOS (mesma regra do KPI "Acurácia Peças/Valor" do topo).</p>
-    <div class="table-wrap"><table>
-      <thead><tr>
-        <th>Log</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Pendentes</th><th>Locais Divergentes</th>
-        <th>Peças Contadas</th><th>Peças Divergentes</th>
-        <th>Acurácia Peças</th><th>Acurácia Posições</th><th>Acurácia Valor</th>
-      </tr></thead>
-      <tbody>${rowsComTotal.map(r=>`<tr${r.isTotal?' style="font-weight:700;border-top:2px solid var(--line);"':''}>
-        <td class="mono">${r.isTotal?'Total':irEsc(r.chave)}</td>
-        <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
-        <td class="mono">${irFmtInt(r.locaisContados)}</td>
-        <td class="mono">${irFmtInt(r.locaisPendentes)}</td>
-        <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
-        <td class="mono">${irFmtInt(r.pecasContadas)}</td>
-        <td class="mono">${irFmtInt(r.pecasDivergentes)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaPecas, meta)}">${irFmtPct(r.acuraciaPecas)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaPosicoes, meta)}">${irFmtPct(r.acuraciaPosicoes)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaValor, meta)}">${irFmtPct(r.acuraciaValor)}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>
+    <div class="dx-panel-h"><h3>Acurácia por Log</h3>
+      <div class="cmp-legend">
+        <span><span class="cmp-dot" style="background:var(--dx-pecas);"></span>Peças</span>
+        <span><span class="cmp-dot" style="background:var(--dx-local);"></span>Posições</span>
+        <span><span class="cmp-dot" style="background:var(--dx-valor);"></span>Valor</span>
+        <span><span class="dx-meta-leg"></span>Meta ${irFmtNum(meta*100,0)}%</span>
+      </div>
+    </div>
+    <div class="lc-grid">${IR._logCards.map((r,i)=>card(r,i)).join('')}</div>
     ${irRenderLogForaDaTabela(ind, rows)}
   </div>`;
+}
+/* Balão do cartão do log inteiro: ao passar o mouse em qualquer parte do cartão
+   aparecem as três acurácias (Peças, Posições e Valor), cada uma com a conta
+   completa, a régua da meta e a distância até ela. */
+function irLogTip(ev, idx){
+  const r = (IR._logCards||[])[idx];
+  const tt = document.getElementById('irChartTooltip');
+  if(!r || !tt) return;
+  const meta = (IR.indicadores && IR.indicadores.meta) || IR_META_ACURACIA;
+  const nome = r.isTotal ? 'Total dos logs' : r.chave;
+  const pos = x => Math.max(0, Math.min(100, (x-0.90)/0.10*100)).toFixed(1);
+  const orc = r.locaisOrcados||0, cont = r.locaisContados||0, pct = orc>0 ? cont/orc : 0;
+  const bloco = (titulo, cor, v, linhas) => {
+    const d = v==null ? null : (v-meta)*100;
+    const st = d==null ? '' : (d>=0
+      ? `<span class="lt-pill ok">na meta · +${irFmtNum(d,1)} p.p.</span>`
+      : `<span class="lt-pill nok">${irFmtNum(-d,1)} p.p. abaixo da meta</span>`);
+    return `<div class="lt-col" style="--c:${cor};">
+      <div class="lt-h"><span class="lt-dot" style="background:${cor};"></span><span>Acurácia ${titulo}</span></div>
+      <div class="lt-v"><b class="${d!=null && d<0?'bad':''}">${v==null?'—':irFmtPct(v)}</b></div>
+      <div>${st}</div>
+      <div class="lt-regua"><i style="width:${v==null?0:pos(v)}%;background:${cor};"></i><em style="left:${pos(meta)}%;"></em></div>
+      <div class="lt-esc"><span>90%</span><span>meta ${irFmtNum(meta*100,0)}%</span><span>100%</span></div>
+      <div class="lt-rows">${linhas.map(([a,b,c])=>`<div><span>${a}</span><b class="${c||''}">${b}</b></div>`).join('')}</div>
+    </div>`;
+  };
+  const basePc = r.pecasSaldoLogico || r.pecasContadas || 0;
+  const baseVl = r.vlSaldoLogico || r.vlFisicoTotal || 0;
+  tt.innerHTML = `<div class="lt-big">
+    <div class="lt-big-h"><b>${irEsc(nome)}</b>
+      <span>${irFmtInt(cont)} de ${irFmtInt(orc)} locais contados · ${irFmtPct(pct)} · ${irFmtInt(r.locaisPendentes)} pendentes</span></div>
+    <div class="lt-cols">
+      ${bloco('Peças','var(--dx-pecas)', r.acuraciaPecas, [['Base do sistema', irFmtInt(basePc)+' pç'], ['Contadas', irFmtInt(r.pecasContadas)+' pç'], ['Divergentes', irFmtInt(r.pecasDivergentes)+' pç', 'bad']])}
+      ${bloco('Posições','var(--dx-local)', r.acuraciaPosicoes, [['Locais orçados', irFmtInt(r.locaisOrcados)], ['Locais contados', irFmtInt(r.locaisContados)], ['Locais divergentes', irFmtInt(r.locaisDivergentes), 'bad']])}
+      ${bloco('Valor','var(--dx-valor)', r.acuraciaValor, [['Base do sistema', irFmtMoney(baseVl)], ['Valor contado', irFmtMoney(r.vlFisicoTotal||0)], ['Valor divergente', irFmtMoney(r.valorDivergenteAbsoluto||0), 'bad']])}
+    </div>
+  </div>`;
+  tt.classList.add('lt-wrap','lt-wrap-big');
+  tt.classList.remove('hidden');
+  irMoveDiaTooltip(ev);
 }
 /* O que a tabela deixou de fora, com nome e número.
 
@@ -2055,11 +2293,11 @@ function irRenderStatusInventarioPanel(ind){
   const total = ind.locaisCongelados||0, concluidos = ind.locaisConcluidos||0;
   const pct = total>0 ? concluidos/total : 0;
 
-  return `<div class="panel">
+  return `<div class="panel dx-status">
     <h3>Status do Inventário</h3>
     <p class="panel-sub">Percentual de locais concluídos em relação ao total orçado do ciclo.</p>
     <div class="status-donut-row">
-      ${irDonutSvg(pct)}
+      ${irDonutSvg(pct, {size:250, stroke:36})}
       <div class="status-donut-stats">
         <div class="status-donut-stat"><div class="n mono">${irFmtInt(total)}</div><div class="l">Locais totais (orçados)</div></div>
         <div class="status-donut-stat"><div class="n mono good">${irFmtInt(concluidos)}</div><div class="l">Locais concluídos</div></div>
@@ -2100,24 +2338,72 @@ function irRenderPioresRuas(ind){
     </div>`).join('')}
   </div>`;
 }
+/* Contados por Dia e por Mês (modelo "opção 1" aprovado): barras laranja quando bateu
+   a meta, cinza quando ficou abaixo, com o % da meta em cada barra e linha da meta
+   fininha e clara. O rótulo da meta fica no topo do painel, longe dos números. */
+function irBuildContadosBarrasSvg(itens, opts){
+  opts = opts||{};
+  const W = opts.W || 760, H = 240, pL = 10, pR = 10, pT = 38, pB = 30;
+  const w = (W-pL-pR)/Math.max(1,itens.length);
+  const mx = Math.max(1, ...itens.map(i=>Math.max(i.v, i.meta)))*1.08;
+  const y = v => pT + (1-v/mx)*(H-pT-pB);
+  const fixa = itens.every(i=>i.meta===itens[0].meta);
+  let g = fixa ? `<line x1="${pL}" x2="${W-pR}" y1="${y(itens[0].meta).toFixed(1)}" y2="${y(itens[0].meta).toFixed(1)}" style="stroke:var(--ink-soft)" stroke-width="1" stroke-dasharray="4 4" opacity=".4"/>` : '';
+  itens.forEach((it,i)=>{
+    const bw = Math.min(70, w*.6), x = pL+i*w+(w-bw)/2, ok = it.v>=it.meta, cx = x+bw/2;
+    const alt = Math.max(2, H-pB-y(it.v));
+    g += `<g ${it.tip?`onmouseenter="${it.tip}" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"`:''}>
+      <rect x="${x.toFixed(1)}" y="${y(it.v).toFixed(1)}" width="${bw.toFixed(1)}" height="${alt.toFixed(1)}" rx="5" style="fill:${ok?'var(--orange)':'#C9CEDC'}"/>
+      <rect x="${(pL+i*w).toFixed(1)}" y="${pT-30}" width="${w.toFixed(1)}" height="${H-pB-pT+30}" fill="transparent"/>
+    </g>`;
+    if(!fixa) g += `<line x1="${(pL+i*w+3).toFixed(1)}" x2="${(pL+(i+1)*w-3).toFixed(1)}" y1="${y(it.meta).toFixed(1)}" y2="${y(it.meta).toFixed(1)}" style="stroke:var(--ink-soft)" stroke-width="1" stroke-dasharray="4 4" opacity=".45"/>`;
+    g += `<text x="${cx.toFixed(1)}" y="${(y(it.v)-18).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="800" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${irFmtInt(it.v)}</text>
+      <text x="${cx.toFixed(1)}" y="${(y(it.v)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${ok?'var(--success)':'var(--danger)'};paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${Math.round(it.v/it.meta*100)}%</text>
+      <text x="${cx.toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink-soft)">${irEsc(it.rot)}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block">${g}</svg>`;
+}
+/* Meta mensal fixa: meta diária × 21 dias úteis (média do mês). Uma linha reta só,
+   igual à do gráfico por dia — por mês exato a linha ficava quebrada. */
+const IR_DIAS_UTEIS_MES = 21;
+const IR_META_MENSAL = IR_META_DIARIA * IR_DIAS_UTEIS_MES;
+// Locais contados por mês do ano do ciclo ativo, somando todos os ciclos do ano
+// (mesma fonte e mesma regra de mês da Acurácia mensal).
+function irContadosMensalDoAno(){
+  const c = IR.cicloAtivo, ano = c ? irCicloAno(c) : null;
+  const fontes = (IR.comparativoCiclos||[])
+    .filter(p => p.ind && irCicloAno(p.ciclo)===ano)
+    .map(p => (c && p.ciclo.id===c.id) ? IR.indicadores : p.ind);
+  if(IR.indicadores && !(IR.comparativoCiclos||[]).some(p=>c && p.ciclo.id===c.id)) fontes.push(IR.indicadores);
+  const mapa = new Map();
+  for(const ind of fontes) for(const m of (ind && ind.porMes) || []){
+    if(ano && String(m.mes).slice(0,4)!==String(ano)) continue;
+    mapa.set(m.mes, (mapa.get(m.mes)||0) + (m.locaisContados||0));
+  }
+  return {ano, rows: Array.from(mapa.entries()).sort((a,b)=>a[0].localeCompare(b[0])).map(([mes,total])=>({mes,total}))};
+}
 function irRenderContadosPorDiaPanel(ind){
-  const rows = ind.contadosPorDia||[];
-  if(!rows.length) return `<div class="panel"><h3>Contados por Dia</h3><p class="field-hint">Nenhuma contagem registrada ainda.</p></div>`;
-  const max = Math.max(1, IR_META_DIARIA, ...rows.map(r=>r.total));
-  const metaPct = Math.min(100, Math.round(IR_META_DIARIA/max*100));
+  const rows = (ind.contadosPorDia||[]).slice(-10); // últimos 10 dias
   IR._porDiaRua = ind.porDiaRua||{};
-  return `<div class="panel">
-    <h3>Contados por Dia</h3>
-    <div class="bi-vbars-scroll">
-      <div class="bi-vbars bi-vbars-meta">
-        <div class="bi-vbar-meta-line" style="bottom:${metaPct}%;"></div>
-        <div class="bi-vbar-meta-tag" style="bottom:${metaPct}%;">Meta ${irFmtInt(IR_META_DIARIA)}</div>
-        ${rows.map(r=>`<div class="bi-vbar-col" onmouseenter="irShowDiaTooltip(event,'${r.dia}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()">
-          <div class="bi-vbar-val">${irFmtInt(r.total)}</div>
-          <div class="bi-vbar orange" style="height:${Math.round(r.total/max*100)}%;"></div>
-          <div class="bi-vbar-label">${new Date(r.dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</div>
-        </div>`).join('')}
-      </div>
+  const itensDia = rows.map(r=>({
+      rot: new Date(r.dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}),
+      v: r.total, meta: IR_META_DIARIA, tip: `irShowDiaTooltip(event,'${r.dia}')`}));
+  const dia = rows.length ? irFluid('contDia', w=>irBuildContadosBarrasSvg(itensDia, {W:w}), 240)
+    : '<p class="field-hint">Nenhuma contagem registrada ainda.</p>';
+  const {ano, rows: meses} = irContadosMensalDoAno();
+  const itensMes = meses.map(m=>({rot: irMesCurto(m.mes), v: m.total, meta: IR_META_MENSAL}));
+  const mes = meses.length ? irFluid('contMes', w=>irBuildContadosBarrasSvg(itensMes, {W:w}), 240)
+    : `<p class="field-hint">${IR.comparativoCiclos===null ? 'Carregando...' : 'Sem contagem por mês.'}</p>`;
+  return `<div class="dx-conta-grid">
+    <div class="panel">
+      <div class="dx-panel-h"><h3>Contados por Dia <small class="dx-ult">últimos 10 dias</small></h3>
+        <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtInt(IR_META_DIARIA)}</span></div></div>
+      ${dia}
+    </div>
+    <div class="panel">
+      <div class="dx-panel-h"><h3>Contados por Mês <small class="dx-ult">${irEsc(String(ano||''))}</small></h3>
+        <div class="cmp-legend"><span><span class="dx-meta-leg"></span>Meta ${irFmtInt(IR_META_MENSAL)} (${irFmtInt(IR_META_DIARIA)} × ${IR_DIAS_UTEIS_MES} dias úteis)</span></div></div>
+      ${mes}
     </div>
   </div>`;
 }
@@ -2173,7 +2459,7 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
     const mediana = sorted.length%2 ? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
     if(mediana>0 && trueMax > mediana*3) maxS = mediana*3;
   }
-  const barW = slot*0.3, gap = slot*0.08;
+  const barW = slot*(opts.barFrac||0.3), gap = slot*(opts.gapFrac||0.08), fLbl = opts.fontLbl||10;
   const base = padT + plotH;
   const corteMark = (xCentro)=> `<path d="M ${(xCentro-7).toFixed(1)} ${(padT+5).toFixed(1)} l 5 -6 l 4 6 l 5 -6" style="stroke:${cores.axis};stroke-width:1.4;fill:none;opacity:.6"/>`;
   let svg = `<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -2198,8 +2484,8 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
     svg += `<rect x="${xD}" y="${base-hD}" width="${barW}" height="${hD}" rx="3" style="fill:${cores.div}"/>`;
     if(sist>maxS) svg += corteMark(xS+barW/2);
     if(div>maxS) svg += corteMark(xD+barW/2);
-    svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${cores.sist}">${fmt(sist)}</text>`;
-    svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${cores.div}">${fmt(div)}</text>`;
+    svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="${fLbl}" font-weight="700" style="fill:${cores.sist}">${fmt(sist)}</text>`;
+    svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="${fLbl}" font-weight="700" style="fill:${cores.div}">${fmt(div)}</text>`;
     svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:${cores.axis}">${diaLabel(r.dia)}</text>`;
   });
   // preserveAspectRatio="none": o desenho estica pra preencher a largura do
@@ -2207,32 +2493,74 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
   // ocupar o painel todo quando os dias cabem (min-width é o piso: só rola
   // quando não cabem mais). No boletim (fixedW) o container já tem largura
   // fixa e os dias já foram truncados pra caber, então não precisa de piso.
+  if(opts.fluidW){ const svgF = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;">${svg}</svg>`; return { svgHtml: svgF, omitidos, total: rows.length, visiveis: n }; }
   const style = opts.fixedW ? `display:block;` : `width:100%;min-width:${W}px;height:${H}px;display:block;`;
   const svgHtml = `<svg width="${opts.fixedW?'100%':W}" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="${style}">${svg}</svg>`;
   return { svgHtml, omitidos, total: rows.length, visiveis: n };
 }
 function irRenderDivergentesPorDiaPanel(ind){
-  const rows = ind.divergentesPorDia||[];
+  const rows = (ind.divergentesPorDia||[]).slice(-7); // só os últimos 7 dias
   if(!rows.length) return '';
   const META = ind.meta;
   const legenda = `<div class="bi-combo-legend">
     <span><i style="background:var(--blue)"></i>Sistêmica</span>
     <span><i style="background:var(--orange)"></i>Divergente</span>
   </div>`;
-  const chart = (campoDiv, campoSist, fmt, titulo, slot)=>{
-    const { svgHtml } = irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, {slot, meta:META});
+  const chart = (campoDiv, campoSist, fmt, titulo, slot, fontLbl, linhas)=>{
+    const rowsG = linhas || rows;
+    // Cada dia ocupa a largura real do painel dividida pelos dias (nada de esticar).
+    const desenha = w => {
+      const sl = Math.max(52, (w-14)/rowsG.length);
+      const fs = (sl>=96?10:(sl>=80?9.5:9)) - (fontLbl?1:0);
+      return irBuildDivergentesComboSvg(rowsG, campoDiv, campoSist, fmt, {slot:sl, fluidW:w, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fs}).svgHtml;
+    };
     return `<div class="panel">
       <h3>${titulo}</h3>
       ${legenda}
-      <div class="bi-vbars-scroll">${svgHtml}</div>
+      ${irFluid('div_'+campoDiv, desenha, 236)}
     </div>`;
   };
-  // Largura por dia IGUAL nos 3 (a mesma do gráfico de valor, que precisa de
-  // mais espaço pro rótulo em R$): senão peças e locais mostravam mais dias
-  // na tela que valor ao mesmo tempo, quebrando o padrão visual entre eles.
-  return chart('pecas','sistema',irFmtInt,'Peças Divergentes por Dia (abs.)',104)
-    + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente por Dia (abs.)',104)
-    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes por Dia',104);
+  // Os três são parecidos: ficam lado a lado, com 7 dias cada e a mesma largura por dia.
+  return `<div class="dx-div-grid">`
+    + chart('pecas','sistema',irFmtInt,'Peças Divergentes (abs.)',66)
+    + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente (abs.)',66,8)
+    + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes',66)
+    + irRenderItensDivPorDia(rows, chart)
+    + `</div>`;
+}
+/* Itens divergentes por dia (item × local). O motor não grava esse número por
+   dia, então ele sai daqui: cada local entra no dia da Data Situação da sua
+   rodada final (mesma regra do motor para peças/valor/locais por dia) e cada
+   par local × item do dia conta como 1 item; divergente quando a diferença ≠ 0.
+   Precisa das contagens e divergências do ciclo, que carregam logo depois da
+   tela abrir — até lá o quadro mostra "carregando". */
+function irItensPorDiaMapa(){
+  const cid = (IR.cicloAtivo||{}).id;
+  if(!cid || IR._cicloPesadoId !== cid) return null;
+  if(IR._itensDiaCache && IR._itensDiaCache.cid===cid && IR._itensDiaCache.n===IR.divergencias.length) return IR._itensDiaCache.mapa;
+  const diaFinal = new Map(); // local -> {dia, rodada}
+  for(const c of IR.contagens||[]){
+    if(!(c.idConferencia>1) || !c.dataSituacao) continue;
+    const at = diaFinal.get(c.local);
+    if(!at || c.idConferencia>at.rodada) diaFinal.set(c.local, {dia:String(c.dataSituacao).slice(0,10), rodada:c.idConferencia});
+  }
+  const mapa = new Map(); // dia -> {itens, itensTotal}
+  for(const d of IR.divergencias||[]){
+    const f = diaFinal.get(d.local);
+    if(!f) continue;
+    const g = mapa.get(f.dia) || {itens:0, itensTotal:0};
+    g.itensTotal++;
+    if(d.diferenca!==0) g.itens++;
+    mapa.set(f.dia, g);
+  }
+  IR._itensDiaCache = {cid, n:(IR.divergencias||[]).length, mapa};
+  return mapa;
+}
+function irRenderItensDivPorDia(rows, chart){
+  const mapa = irItensPorDiaMapa();
+  if(!mapa) return `<div class="panel"><h3>Itens Divergentes</h3><p class="field-hint">Carregando itens do ciclo...</p></div>`;
+  const comItens = rows.map(r=>({...r, itens:(mapa.get(r.dia)||{}).itens||0, itensTotal:(mapa.get(r.dia)||{}).itensTotal||0}));
+  return chart.call(null, 'itens', 'itensTotal', irFmtInt, 'Itens Divergentes', 66, null, comItens);
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];
@@ -2258,12 +2586,17 @@ function irMoveDiaTooltip(ev){
   const rect = tt.getBoundingClientRect();
   if(x + rect.width > window.innerWidth) x = ev.clientX - rect.width - pad;
   if(y + rect.height > window.innerHeight) y = ev.clientY - rect.height - pad;
-  tt.style.left = x+'px';
-  tt.style.top = y+'px';
+  if(x < 4) x = 4; if(y < 4) y = 4;
+  // O balão vive dentro do body com zoom: left/top são medidos na escala do zoom,
+  // então a posição na tela (px reais do mouse) precisa ser dividida por ele —
+  // sem isso o balão aparecia deslocado do cursor quando o zoom não era 100%.
+  const z = parseFloat(document.body.style.zoom) || 1;
+  tt.style.left = (x/z)+'px';
+  tt.style.top = (y/z)+'px';
 }
 function irHideDiaTooltip(){
   const tt = document.getElementById('irChartTooltip');
-  if(tt) tt.classList.add('hidden');
+  if(tt){ tt.classList.add('hidden'); tt.classList.remove('lt-wrap','lt-wrap-big'); }
 }
 function irRenderRuasMaisDivergentesPanel(ind){
   const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>b.pecasDivergentes-a.pecasDivergentes);
