@@ -23,6 +23,20 @@ function rgAcessoEmPortugues(msg){
   return msg || 'Não consegui completar a operação.';
 }
 
+/* "E-mail ou senha incorretos" vale tanto para senha errada quanto para quem o administrador liberou mas ainda não
+   criou a senha (Primeiro acesso) ou nem foi liberado. Depois de um login que falhou, pergunta ao banco qual é o caso
+   para trocar a mensagem genérica por uma explicação certa (mesma função dos outros apps: ldm_situacao_email). */
+async function rgDicaDeEmail(email){
+  try {
+    const { data, error } = await rgSupa.rpc('ldm_situacao_email', { p_email: email });
+    if(error || !data) return null;
+    if(data === 'sem_conta') return 'Este e-mail já foi liberado pelo administrador, mas ainda não tem senha criada. Clique em "Primeiro acesso" e crie sua senha.';
+    if(data === 'nao_cadastrado') return 'Este e-mail ainda não foi liberado. Peça pro administrador cadastrar em Configurações, no painel da Central.';
+    if(data === 'tem_conta') return 'Senha incorreta para este e-mail. Se esqueceu a senha, clique em "Esqueci a senha".';
+    return null;
+  } catch(e){ return null; }
+}
+
 (function(){
   const telaAcesso = document.getElementById('telaAcesso');
   const telaLogin = document.getElementById('acessoLogin');
@@ -87,7 +101,12 @@ function rgAcessoEmPortugues(msg){
       }
       await rgVerificarAcesso();
     } catch(falha){
-      erroEl.textContent = rgAcessoEmPortugues(falha && falha.message);
+      var mensagem = rgAcessoEmPortugues(falha && falha.message);
+      if(modo === 'entrar' && String(falha && falha.message || '').toLowerCase().includes('invalid login credentials')){
+        var dica = await rgDicaDeEmail(email);
+        if(dica) mensagem = dica;
+      }
+      erroEl.textContent = mensagem;
       erroEl.hidden = false;
     } finally {
       enviarBtn.disabled = false;
