@@ -928,11 +928,65 @@ function irRenderTransEmailForm(){
     <div class="form-actions"><button class="btn btn-secondary" onclick="irTransToggleDestinatarios()">Fechar</button></div>
   </div>`;
 }
+/* Pior idade (em dias) dentro de um grupo de endereços — mesmo critério do
+   D+7 do gráfico: sem porDia nenhum (a 160 nunca viu) é o pior caso, não "sem
+   informação". Usada só pro ranking de ofensores, não entra no cálculo normal. */
+function irTransIdadeMaxDias(locais){
+  const hoje = Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00');
+  let max = null;
+  for(const l of locais){
+    const pd = l.porDia;
+    if(!pd || !Object.keys(pd).length){ max = IR_TRANS_FAIXA_MAX; continue; }
+    for(const dia in pd){
+      if(!pd[dia]) continue;
+      const d = Math.max(0, Math.round((hoje - Date.parse(dia+'T00:00:00')) / 86400000));
+      if(max===null || d>max) max = d;
+    }
+  }
+  return max;
+}
+/* Os transitórios mais velhos do CD inteiro, cruzando todos os setores — é o
+   que puxa mais risco de virar perda, então entra antes de qualquer tabela
+   por setor, sem precisar abrir uma por uma pra achar. */
+function irTransOfensores(setores, topN){
+  const todos = [];
+  for(const g of setores){
+    const porPrefixo = new Map();
+    for(const l of g.locais){
+      const chave = irTransChave(l);
+      if(!porPrefixo.has(chave)) porPrefixo.set(chave, {chave, valor:0, locais:[]});
+      const p = porPrefixo.get(chave);
+      p.valor += l.valor; p.locais.push(l);
+    }
+    for(const p of porPrefixo.values()){
+      todos.push({chave:p.chave, setor:g.setor, valor:p.valor, idade: irTransIdadeMaxDias(p.locais)});
+    }
+  }
+  todos.sort((a,b)=> (b.idade??0)-(a.idade??0) || b.valor-a.valor);
+  return todos.slice(0, topN);
+}
+function irTransRenderOfensores(ofensores){
+  if(!ofensores.length) return '';
+  return `<div class="rp-ofensores">
+    <h3>Locais ofensores</h3>
+    <div class="rp-ofensores-grid">
+      ${ofensores.map(o=>`<div class="rp-ofensor-card">
+        <div class="rp-ofensor-top">
+          <span class="rp-ofensor-cod">${irEsc(o.chave)}</span>
+          <span class="rp-ofensor-dias">${o.idade>=IR_TRANS_FAIXA_MAX?IR_TRANS_FAIXA_MAX+'d+':irFmtInt(o.idade)+'d'}</span>
+        </div>
+        <span class="rp-ofensor-setor">${irEsc(IR_TRANS_SETOR_NOME[o.setor]||o.setor)}</span>
+        <span class="rp-ofensor-valor">${irFmtMoney(o.valor)}</span>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
 async function irBaixarBoletimTransitorios(){
   const c = irTransCalc();
   const m = IR.est390Meta || {};
   const logs = irTransLogsPresentes();
   const setores = c.lista.filter(g=>g.setor && g.setor!=='IGN');
+  const ofensores = irTransOfensores(setores, 4);
   const html = `<div class="rp-page rp-page-wide">
     <div class="rp-hero">
       <div class="rp-hero-top">
@@ -942,9 +996,15 @@ async function irBaixarBoletimTransitorios(){
       <div class="rp-hero-badge">Pendência de Movimentação</div>
       <h1>Transitórios por setor</h1>
       <p>Loja do Mecânico · Centro de Distribuição Cajamar</p>
-      <div class="rp-hero-meta"><span>${irFmtMoney(c.valorTotal)} parados · ${irFmtInt(c.pecasTotal)} peças · ${irFmtInt(c.nLocais)} endereços</span></div>
+      <div class="rp-hero-kpis">
+        <div><span class="rp-hero-kpi-lbl">Parado</span><strong>${irFmtMoney(c.valorTotal)}</strong></div>
+        <div><span class="rp-hero-kpi-lbl">Peças</span><strong>${irFmtInt(c.pecasTotal)}</strong></div>
+        <div><span class="rp-hero-kpi-lbl">Endereços</span><strong>${irFmtInt(c.nLocais)}</strong></div>
+        <div><span class="rp-hero-kpi-lbl">Setores</span><strong>${irFmtInt(setores.length)}</strong></div>
+      </div>
     </div>
     <div class="rp-body">
+      ${irTransRenderOfensores(ofensores)}
       ${/* Só os setores da legenda (TSF, C.E, INB, OUT, TRP, REV). O endereço sem
             classe não entra: "sem classe" aqui é o CD inteiro — picking, pulmão,
             armazenagem normal —, dezenas de milhares de endereços que não são

@@ -999,7 +999,11 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 #irPrintArea{ display:none; }
 .rp-page{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; color:#1D1F2A; background:#E7EAF1; padding:0 0 28px; max-width:920px; }
 
-.rp-hero{ background:#001A72; color:#fff; padding:34px 40px 26px; position:relative; }
+.rp-hero{
+  color:#fff; padding:34px 40px 26px; position:relative;
+  background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.86) 55%, rgba(0,18,82,.5) 100%), url(../brand/menu-corredor.jpg);
+  background-size:cover; background-position:center 42%;
+}
 .rp-hero::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:4px; background:linear-gradient(90deg,#FA4616,#FF7A4D,#FA4616); }
 .rp-hero-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
 /* Arquivo branco de verdade em vez de filter: o html2canvas, que gera a imagem
@@ -1010,8 +1014,23 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-hero-badge{ display:inline-block; color:#FF7A4D; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-bottom:12px; }
 .rp-hero h1{ font-size:24px; font-weight:700; letter-spacing:-.01em; line-height:1.2; }
 .rp-hero p{ font-size:12.5px; color:#AEBBD6; margin-top:5px; }
-.rp-hero-meta{ display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
-.rp-hero-meta span{ font-size:10.5px; color:#D7DEEC; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.1); padding:5px 10px; border-radius:6px; }
+.rp-hero-kpis{ display:flex; flex-wrap:wrap; gap:30px; margin-top:20px; }
+.rp-hero-kpis div{ display:flex; flex-direction:column; gap:3px; }
+.rp-hero-kpi-lbl{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#C9D0F2; }
+.rp-hero-kpis strong{ font-family:'Poppins',sans-serif; font-size:25px; font-weight:700; }
+
+/* Os endereços mais velhos do CD inteiro, cruzando setor — vem antes de
+   qualquer tabela, pra não precisar abrir uma por uma pra achar quem puxa
+   risco de virar perda. */
+.rp-ofensores{ margin-bottom:28px; }
+.rp-ofensores h3{ font-size:13px; font-weight:800; color:#1D1F2A; margin-bottom:10px; }
+.rp-ofensores-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.rp-ofensor-card{ background:#fff; border:1px solid #F0DDC9; background-color:#FFF8F0; border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; }
+.rp-ofensor-top{ display:flex; justify-content:space-between; align-items:center; }
+.rp-ofensor-cod{ font-weight:800; font-size:13px; color:#1D1F2A; }
+.rp-ofensor-dias{ background:#C83812; color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:100px; }
+.rp-ofensor-setor{ font-size:11px; color:#6B7280; }
+.rp-ofensor-valor{ font-family:'Poppins',sans-serif; font-size:16px; font-weight:700; color:#1D1F2A; }
 
 .rp-body{ padding:28px 40px 4px; }
 
