@@ -256,6 +256,23 @@ $('clHist').addEventListener('click', function(){ S.tela = S.tela==='hist' ? 'co
 /* o leitor às vezes tira o foco ao tocar na tela: um toque fora dos campos devolve o foco ao campo da vez */
 document.addEventListener('click', function(ev){ if(!ev.target.closest('button,input,a')) foco(); });
 
+/* Zoom só do coletor: chave própria (rg-coletor-zoom). Nunca lê nem grava 'ldm-zoom', que é o zoom do dashboard e da Central. */
+var ZOOM_KEY='rg-coletor-zoom', ZOOM_MIN=70, ZOOM_MAX=200, ZOOM_PASSO=10;
+function zoomAtual(){ try { return parseInt(localStorage.getItem(ZOOM_KEY),10)||100; } catch(e){ return 100; } }
+function aplicaZoom(p){
+  p=Math.max(ZOOM_MIN,Math.min(ZOOM_MAX,p));
+  var z=p/100;
+  document.body.style.zoom=z;
+  document.documentElement.style.setProperty('--zoom',z);
+  $('clZoomLabel').textContent=p+'%';
+  $('clZoom').style.zoom=1/z;   /* o controle não cresce nem encolhe junto */
+  try { localStorage.setItem(ZOOM_KEY,p); } catch(e){}
+  return p;
+}
+aplicaZoom(zoomAtual());
+$('clZoomMenos').addEventListener('click', function(){ aplicaZoom(zoomAtual()-ZOOM_PASSO); foco(); });
+$('clZoomMais').addEventListener('click', function(){ aplicaZoom(zoomAtual()+ZOOM_PASSO); foco(); });
+
 $('clVersao').textContent=RG.versaoTxt();
 S.col=novo();
 render();
