@@ -236,7 +236,8 @@
   .access-login-input{flex:1;min-width:160px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:9px 12px;}
   .access-login-msg{margin:12px 0 0;font-size:12.5px;color:#C83812;}
 
-  .access-admin{position:relative;z-index:2;margin-top:20px;max-width:760px;}
+  .access-admin{position:relative;z-index:2;margin-top:20px;max-width:1180px;display:grid;grid-template-columns:minmax(0,760px) minmax(260px,340px);gap:24px;align-items:start;}
+  .access-admin-main{min-width:0;}
   .access-admin-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
   .access-busca{flex:1;min-width:200px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:9px 16px;}
   .access-filtro-semapp{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
@@ -269,6 +270,36 @@
   .access-app-chip-icon{width:20px;height:20px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
   .access-app-chip-icon svg{width:11px;height:11px;}
   .access-empty{color:var(--ink-soft);font-size:12.5px;font-style:italic;}
+
+  /* CONFIGURAÇÕES — painel lateral: resumo, apps mais usados, atividade recente */
+  .access-atividade{display:flex;flex-direction:column;gap:16px;position:sticky;top:24px;}
+  .access-atividade-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;}
+  .access-atividade-card h3{margin:0 0 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);}
+  .access-resumo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .access-resumo-tile{background:var(--chip-bg);border-radius:12px;padding:10px 12px;}
+  .access-resumo-num{display:block;font-family:'Poppins',sans-serif;font-size:19px;font-weight:700;color:var(--ink);line-height:1.2;}
+  .access-resumo-label{display:block;font-size:10.5px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
+  .access-ranking{display:flex;flex-direction:column;gap:10px;}
+  .access-ranking-row{display:flex;align-items:center;gap:9px;}
+  .access-ranking-icon{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-ranking-icon svg{width:12px;height:12px;}
+  .access-ranking-info{min-width:0;flex:1;}
+  .access-ranking-nome{display:block;font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .access-ranking-bar-wrap{background:var(--chip-bg);border-radius:999px;height:5px;margin-top:4px;overflow:hidden;}
+  .access-ranking-bar{height:100%;border-radius:999px;background:var(--accent);}
+  .access-ranking-num{font-size:11px;font-weight:700;color:var(--ink-soft);flex-shrink:0;white-space:nowrap;}
+  .access-feed{display:flex;flex-direction:column;gap:12px;}
+  .access-feed-row{display:flex;align-items:flex-start;gap:9px;}
+  .access-feed-icon{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;margin-top:1px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-feed-icon svg{width:12px;height:12px;}
+  .access-feed-texto{font-size:12px;color:var(--ink);line-height:1.4;}
+  .access-feed-texto b{font-weight:700;}
+  .access-feed-quando{display:block;font-size:10.5px;color:var(--ink-soft);margin-top:1px;}
+
+  @media(max-width:1020px){
+    .access-admin{grid-template-columns:1fr;}
+    .access-atividade{position:static;}
+  }
 
   /* MODAL DE EDIÇÃO */
   .modal-overlay{position:fixed;inset:0;background:rgba(8,10,24,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
@@ -544,20 +575,37 @@
       </div>
 
       <div class="access-admin" id="accessAdmin" hidden>
-        <div class="access-admin-head">
-          <input type="text" id="accessBusca" class="access-busca" placeholder="Buscar por nome ou e-mail...">
-          <label class="access-filtro-semapp"><input type="checkbox" id="accessFiltroSemApp"> Só sem nenhum app liberado</label>
-          <button type="button" class="btn-secondary" id="accessLogoutBtn">Sair</button>
+        <div class="access-admin-main">
+          <div class="access-admin-head">
+            <input type="text" id="accessBusca" class="access-busca" placeholder="Buscar por nome ou e-mail...">
+            <label class="access-filtro-semapp"><input type="checkbox" id="accessFiltroSemApp"> Só sem nenhum app liberado</label>
+            <button type="button" class="btn-secondary" id="accessLogoutBtn">Sair</button>
+          </div>
+          <button type="button" class="btn-primary access-nova-pessoa-btn" id="accessNovaPessoaBtn">+ Nova pessoa</button>
+          <div class="access-nova-pessoa" id="accessNovaPessoaForm" hidden>
+            <input type="text" id="accessNovoNome" class="access-login-input" placeholder="Nome completo">
+            <input type="email" id="accessNovoEmail" class="access-login-input" placeholder="E-mail corporativo">
+            <button type="button" class="btn-primary" id="accessNovaPessoaSalvar">Cadastrar</button>
+            <button type="button" class="btn-secondary" id="accessNovaPessoaCancelar">Cancelar</button>
+          </div>
+          <p class="access-admin-msg" id="accessAdminMsg" hidden></p>
+          <div class="access-people-admin" id="accessPeopleAdmin"></div>
         </div>
-        <button type="button" class="btn-primary access-nova-pessoa-btn" id="accessNovaPessoaBtn">+ Nova pessoa</button>
-        <div class="access-nova-pessoa" id="accessNovaPessoaForm" hidden>
-          <input type="text" id="accessNovoNome" class="access-login-input" placeholder="Nome completo">
-          <input type="email" id="accessNovoEmail" class="access-login-input" placeholder="E-mail corporativo">
-          <button type="button" class="btn-primary" id="accessNovaPessoaSalvar">Cadastrar</button>
-          <button type="button" class="btn-secondary" id="accessNovaPessoaCancelar">Cancelar</button>
-        </div>
-        <p class="access-admin-msg" id="accessAdminMsg" hidden></p>
-        <div class="access-people-admin" id="accessPeopleAdmin"></div>
+
+        <aside class="access-atividade">
+          <div class="access-atividade-card">
+            <h3>Resumo</h3>
+            <div class="access-resumo-grid" id="accessResumoGrid"></div>
+          </div>
+          <div class="access-atividade-card">
+            <h3>Apps mais usados</h3>
+            <div class="access-ranking" id="accessRankingApps"></div>
+          </div>
+          <div class="access-atividade-card">
+            <h3>Atividade recente</h3>
+            <div class="access-feed" id="accessFeedRecente"></div>
+          </div>
+        </aside>
       </div>
     </section>
   </main>
@@ -1725,7 +1773,11 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var accessPessoasCache = [];
   var accessPermissoesCache = {};
   var accessLogCache = {};
+  var accessLogRaw = [];
   var accessAbertas = {};
+  var accessResumoEl = document.getElementById('accessResumoGrid');
+  var accessRankingEl = document.getElementById('accessRankingApps');
+  var accessFeedEl = document.getElementById('accessFeedRecente');
 
   function accessMostrar(estado){
     accessLoginBox.hidden = estado !== 'login';
@@ -1756,8 +1808,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
        A tabela de log é nova — se ainda não existir (migração não rodada),
        só não mostra frequência, sem travar o resto do painel. */
     accessLogCache = {};
+    accessLogRaw = errLog ? [] : (log || []);
     if(!errLog){
-      (log || []).forEach(function(l){
+      accessLogRaw.forEach(function(l){
         if(!accessLogCache[l.pessoa_id]) accessLogCache[l.pessoa_id] = {};
         var atual = accessLogCache[l.pessoa_id][l.app_key];
         if(!atual) atual = accessLogCache[l.pessoa_id][l.app_key] = { total: 0, ultimo: null };
@@ -1766,6 +1819,71 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       });
     }
     accessRenderPessoas();
+    accessRenderAtividade();
+  }
+
+  /* Painel lateral: resumo, ranking de apps mais usados e atividade
+     recente -- tudo calculado em cima do que accessCarregarTudo já buscou,
+     sem nenhuma consulta extra ao banco. */
+  function accessRenderAtividade(){
+    if(!accessResumoEl) return;
+    var apps = getAllApps();
+    var appPorChave = {};
+    apps.forEach(function(a){ appPorChave[a.key] = a; });
+    var pessoaPorId = {};
+    accessPessoasCache.forEach(function(p){ pessoaPorId[p.id] = p; });
+
+    var ativas = accessPessoasCache.filter(function(p){ return p.ativo; });
+    var semApp = ativas.filter(function(p){
+      var marcados = accessPermissoesCache[p.id] || {};
+      return Object.keys(marcados).length === 0;
+    });
+    var totalAcessos = accessLogRaw.length;
+
+    accessResumoEl.innerHTML = [
+      { num: ativas.length, label: 'Pessoas ativas' },
+      { num: semApp.length, label: 'Sem nenhum app' },
+      { num: apps.length, label: 'Apps no catálogo' },
+      { num: totalAcessos, label: 'Acessos registrados' }
+    ].map(function(t){
+      return '<div class="access-resumo-tile"><span class="access-resumo-num">' + t.num + '</span><span class="access-resumo-label">' + t.label + '</span></div>';
+    }).join('');
+
+    /* Ranking: total de acessos por app, maior primeiro. Só entram apps com
+       pelo menos 1 acesso registrado -- sem poluir com todo o catálogo. */
+    var totalPorApp = {};
+    accessLogRaw.forEach(function(l){ totalPorApp[l.app_key] = (totalPorApp[l.app_key] || 0) + 1; });
+    var ranking = Object.keys(totalPorApp)
+      .map(function(key){ return { app: appPorChave[key], total: totalPorApp[key] }; })
+      .filter(function(r){ return r.app; })
+      .sort(function(a, b){ return b.total - a.total; })
+      .slice(0, 8);
+    var maiorTotal = ranking.length ? ranking[0].total : 1;
+    accessRankingEl.innerHTML = ranking.length ? ranking.map(function(r){
+      var pct = Math.max(8, Math.round((r.total / maiorTotal) * 100));
+      return ''
+        + '<div class="access-ranking-row" style="--accent:' + r.app.color + ';">'
+        +   '<span class="access-ranking-icon">' + r.app.icon + '</span>'
+        +   '<span class="access-ranking-info"><span class="access-ranking-nome">' + esc(r.app.name) + '</span><span class="access-ranking-bar-wrap"><span class="access-ranking-bar" style="width:' + pct + '%;"></span></span></span>'
+        +   '<span class="access-ranking-num">' + r.total + '</span>'
+        + '</div>';
+    }).join('') : '<p class="access-empty">Ainda sem acessos registrados.</p>';
+
+    /* Atividade recente: últimos acessos de qualquer pessoa, em qualquer app. */
+    var recentes = accessLogRaw.slice().sort(function(a, b){
+      return a.acessado_em < b.acessado_em ? 1 : -1;
+    }).slice(0, 10);
+    accessFeedEl.innerHTML = recentes.length ? recentes.map(function(l){
+      var pessoa = pessoaPorId[l.pessoa_id];
+      var app = appPorChave[l.app_key];
+      if(!pessoa || !app) return '';
+      var quando = new Date(l.acessado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return ''
+        + '<div class="access-feed-row" style="--accent:' + app.color + ';">'
+        +   '<span class="access-feed-icon">' + app.icon + '</span>'
+        +   '<span class="access-feed-texto"><b>' + esc(pessoa.nome) + '</b> acessou ' + esc(app.name) + '<span class="access-feed-quando">' + quando + '</span></span>'
+        + '</div>';
+    }).join('') : '<p class="access-empty">Ainda sem atividade registrada.</p>';
   }
 
   function accessRenderPessoas(){
