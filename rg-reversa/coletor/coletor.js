@@ -1,5 +1,7 @@
 /* Coletor de mão — RG Reversa.
- * Fluxo: bipa o local de origem → bipa cada RG (um por linha, numerados) → bipa o local de destino → Finalizar.
+ * Fluxo: bipa o local de origem → bipa cada RG (um por linha, numerados) → bipa o local de destino → finaliza sozinho.
+ * O destino pode ser bipado no próprio campo de RG: RG tem 16 dígitos (ano, mês, dia, filial e sequência do dia) e
+ * local tem no máximo 12, então o app reconhece o local, preenche o destino e finaliza.
  * Ao finalizar, abre a tela do relatório (origem · RG · destino): a pessoa copia, faz a movimentação no WMS e
  * toca em "Finalizar movimentação" para voltar à tela do coletor. O Excel é opcional (botão). Nada é importado aqui: o nome do local vem da lista que o dashboard
  * mantém no Supabase (public.rg_locais) e que o aparelho guarda para funcionar até sem internet. */
@@ -90,7 +92,7 @@ function view(){
     else h+=campo('clOrigem','bipe o local de origem',c,'origem');
     h+='</div>';
     /* 2 · RGs */
-    h+='<div class="cl-box'+(c.origem?(c.rgs.length?' ok':' on'):' off')+'"><label for="clRg"><span class="cl-n">2</span>RGs<span class="cl-qtd">Qtd <b>'+c.rgs.length+'</b></span></label>'+campo('clRg','bipe o RG',c,'rg',!c.origem)+
+    h+='<div class="cl-box'+(c.origem?(c.rgs.length?' ok':' on'):' off')+'"><label for="clRg"><span class="cl-n">2</span>RGs<span class="cl-qtd">Qtd <b>'+c.rgs.length+'</b></span></label>'+campo('clRg','bipe o RG ou o destino',c,'rg',!c.origem)+
       '<div class="cl-list" id="clList">'+(c.rgs.length?c.rgs.map(function(r,i){ return '<div class="cl-li"><span>'+(i+1)+'</span><b>'+esc(r.rg)+'</b><button data-act="del" data-i="'+i+'" aria-label="Remover">✕</button></div>'; }).join(''):'<div class="cl-vazio">Os RGs bipados aparecem aqui, um por linha.</div>')+'</div>'+
       '</div>';
     /* 3 · destino */
@@ -128,6 +130,13 @@ function commit(campoNome, el){
   }
   var rg=String(v).replace(/[^0-9A-Za-z]/g,'');   /* o leitor às vezes manda um "+" ou outro símbolo na frente */
   if(!rg){ el.value=''; return; }
+  /* Local ou RG? RG tem 16 dígitos; local tem no máximo 12 (6 ou 7 do WMS, 10 da etiqueta, 12 com zeros na frente).
+     Quem bipa o local de destino no campo de RG já preenche o destino e finaliza, sem voltar para tocar na tela. */
+  if(/^\d{5,12}$/.test(rg)){
+    if(!c.rgs.length){ el.value=''; return erro('Bipe pelo menos um RG antes do local de destino.','rg'); }
+    if(RG.localCodigo(rg)===RG.localCodigo(c.origem)){ el.value=''; return erro('O destino é igual à origem.','rg'); }
+    c.destino=v; bip(true); return finaliza();
+  }
   if(c.rgs.some(function(r){ return r.rg===rg; })){ el.value=''; return erro('RG '+rg+' já foi bipado neste palete.','rg'); }
   c.rgs.push({rg:rg}); c.foco='rg'; bip(true); render();
 }
