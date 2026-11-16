@@ -198,28 +198,32 @@ function irEmptyState(title, desc, onclickFn, btnLabel){
 /* ============================================================
    INIT / TEMA / NAVEGAÇÃO
    ============================================================ */
-async function irInit(){
-  const savedTheme = localStorage.getItem('ir-theme');
-  if(savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
-  const savedAppTheme = localStorage.getItem('ir-app-theme');
-  if(savedAppTheme && savedAppTheme!=='padrao') document.documentElement.setAttribute('data-app-theme', savedAppTheme);
-  irUpdateThemeLabel();
-  irApplyZoom(parseInt(localStorage.getItem('ir-zoom'), 10) || 100);
-
+/* Abertura rápida.
+   1) irPreCarregar() lê do banco local só o que a primeira tela precisa (ciclos,
+      configurações e os indicadores do ciclo ativo). Ela começa já enquanto o
+      login confere a permissão na internet (acesso.js) — as duas esperas correm
+      juntas em vez de uma depois da outra. Nada aparece antes da permissão: a
+      tela de acesso continua por cima.
+   2) A tela abre com isso. O que é pesado (contagens, divergências e locais do
+      ciclo — dezenas de milhares de linhas —, NET e a checagem do banco) carrega
+      depois, em segundo plano, e a tela se refaz quando chega. */
+let _irPreCarga = null;
+function irPreCarregar(){
+  if(!_irPreCarga) _irPreCarga = irCarregarEssencial();
+  return _irPreCarga;
+}
+async function irCarregarEssencial(){
   try{
-    /* As leituras do banco local não dependem umas das outras: rodam juntas, em vez de uma esperando a outra
-       (antes eram ~15 leituras em fila antes de a tela abrir). */
     const [prioridadeConfig, prodMeta, net410Legenda, net410Ignorados, net410Padroes, ciclos] = await Promise.all([
       irSeedPrioridadeConfigIfEmpty(), irGetProdMetaConfig(), irSeedNet410LegendaIfEmpty(),
       irGetNet410IgnoradosAll(), irSeedNet410PadroesIgnoradosIfEmpty(), irGetAllCiclos()
     ]);
     IR.prioridadeConfig = prioridadeConfig; IR.prodMeta = prodMeta; IR.net410Legenda = net410Legenda;
     IR.net410Ignorados = net410Ignorados; IR.net410Padroes = net410Padroes; IR.ciclos = ciclos;
-    /* O ciclo ativo (a parte mais pesada) carrega ao mesmo tempo que as configurações abaixo. */
     let pCiclo = null;
     if(IR.ciclos.length){
       IR.cicloAtivo = IR.ciclos.find(c=>irCicloStatus(c)==='aberto') || irCicloMaisNovo(IR.ciclos) || IR.ciclos[0];
-      pCiclo = irLoadCicloData(IR.cicloAtivo.id);
+      pCiclo = irLoadCicloData(IR.cicloAtivo.id, {rapido:true});
     }
     const [est390Meta, est390Ficha, boletimEmail, ign, audPrefixos, net410Anos] = await Promise.all([
       irGetEstoqueMeta(), irGetConfig('estoque390-ficha'), irGetConfig('boletim-email'),
@@ -229,11 +233,7 @@ async function irInit(){
     if(ign!=null) IR.audIgnorarVirtuais = ign;
     IR.audPrefixos = audPrefixos;
     IR.net410Anos = net410Anos;
-    if(IR.net410Anos.length){
-      IR.net410AnoSel = IR.net410Anos[0];
-      IR.net410Data = await irGetNet410(IR.net410AnoSel);
-      irSetNet410MesDefault();
-    }
+    if(IR.net410Anos.length) IR.net410AnoSel = IR.net410Anos[0];
     if(pCiclo) await pCiclo;
   }catch(e){
     // Guarda o erro: sem isso, uma falha ao ABRIR o banco (dados intactos, só
@@ -242,17 +242,16 @@ async function irInit(){
     console.error('Falha ao iniciar', e);
     IR.initErro = (e && (e.name ? e.name+': '+e.message : e.message)) || String(e);
   }
-  // Sem isso o navegador pode descartar o banco sozinho quando o disco aperta —
-  // e o app perde ciclos inteiros sem nenhum aviso. Só pede; se negar, segue.
-  IR.bancoInfo = {};
-  try{
-    if(navigator.storage && navigator.storage.persist){
-      IR.bancoInfo.persistente = await navigator.storage.persisted() || await navigator.storage.persist();
-    }
-    const db = await irOpenDB();
-    IR.bancoInfo.versao = db.version;
-    db.close();
-  }catch(_){}
+}
+async function irInit(){
+  const savedTheme = localStorage.getItem('ir-theme');
+  if(savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+  const savedAppTheme = localStorage.getItem('ir-app-theme');
+  if(savedAppTheme && savedAppTheme!=='padrao') document.documentElement.setAttribute('data-app-theme', savedAppTheme);
+  irUpdateThemeLabel();
+  irApplyZoom(parseInt(localStorage.getItem('ir-zoom'), 10) || 100);
+
+  await irPreCarregar();
   irMostrarVersao();
   /* Link direto para uma aba específica (ex.: usado pela TV LDM): #setores
      abre direto em Setores, sem passar pelo Dashboard. */
@@ -262,6 +261,27 @@ async function irInit(){
     if(irH && IR_TAB_LABELS[irH]) irHashTab = irH;
   } catch(e){}
   irSwitchTab(irHashTab);
+
+  // Daqui pra baixo nada segura a tela.
+  if(IR.net410AnoSel){
+    irGetNet410(IR.net410AnoSel).then(d=>{
+      IR.net410Data = d; irSetNet410MesDefault();
+      if(IR.currentTab==='ciclo') irRenderView();
+    }).catch(e=>console.warn('NET não carregou', e));
+  }
+  // Sem isso o navegador pode descartar o banco sozinho quando o disco aperta —
+  // e o app perde ciclos inteiros sem nenhum aviso. Só pede; se negar, segue.
+  IR.bancoInfo = {};
+  (async ()=>{
+    try{
+      if(navigator.storage && navigator.storage.persist){
+        IR.bancoInfo.persistente = await navigator.storage.persisted() || await navigator.storage.persist();
+      }
+      const db = await irOpenDB();
+      IR.bancoInfo.versao = db.version;
+      db.close();
+    }catch(_){}
+  })();
   // Dados compartilhados (Supabase): começa depois da tela aberta.
   try { irNuvemVigiar(); } catch(e){ console.warn('Nuvem indisponível', e); }
   // Fora do try acima e sem await: se a pasta conectada falhar (permissão
@@ -269,22 +289,38 @@ async function irInit(){
   // de abrir — é conveniência, não dependência.
   irPastaCarregar().catch(()=>{});
 }
-async function irLoadCicloData(cicloId){
-  /* As cinco leituras são independentes: rodam juntas. */
-  [IR.indicadores, IR.importMeta, IR.divergencias, IR.locais, IR.contagens] = await Promise.all([
-    irGetIndicadores(cicloId), irGetImportMeta(cicloId),
-    irGetByCiclo(IR_STORES.divergencias, cicloId), irGetByCiclo(IR_STORES.locais, cicloId), irGetByCiclo(IR_STORES.contagens, cicloId)
-  ]);
+async function irLoadCicloData(cicloId, opts){
+  /* Primeiro o leve (indicadores — é o que o Dashboard desenha); o pesado
+     (divergências, locais e contagens) vem em seguida. Na abertura (rapido) a
+     tela não espera o pesado: abre e se refaz quando ele chega. */
+  [IR.indicadores, IR.importMeta] = await Promise.all([irGetIndicadores(cicloId), irGetImportMeta(cicloId)]);
   // Troca de ciclo ativo volta o escopo dos "Itens mais Divergentes" pro padrão
   // (só o ciclo atual) — senão ficaria somando um ciclo antigo com o novo ativo.
   IR.itemDivFiltro = {tipo:'ciclo'};
-  IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
   IR.comparativoCiclos = null; // recarrega no próximo render do Dashboard (irCarregarComparativoCiclos)
   // O cache por ano (Mês/Ano/De-Até na aba Divergências) só é montado uma vez por
   // ano na sessão e nunca mais revalidado — se o ciclo recém-carregado trouxer dia
   // novo (reimportação com dados mais recentes), o filtro "De/Até" continuava preso
   // no último dia do cache antigo, mesmo com o gráfico já mostrando o dia novo.
   IR.divAnoCache = null;
+  IR._cicloPesadoId = null;
+  const pesado = Promise.all([
+    irGetByCiclo(IR_STORES.divergencias, cicloId), irGetByCiclo(IR_STORES.locais, cicloId), irGetByCiclo(IR_STORES.contagens, cicloId)
+  ]).then(([divergencias, locais, contagens])=>{
+    if((IR.cicloAtivo||{}).id !== cicloId) return false; // trocou de ciclo no meio
+    IR.divergencias = divergencias; IR.locais = locais; IR.contagens = contagens;
+    IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
+    IR._cicloPesadoId = cicloId;
+    return true;
+  });
+  if(opts && opts.rapido){
+    IR.divergencias = []; IR.locais = []; IR.contagens = [];
+    IR.itemDivSaldo = irCalcItemSaldo([]);
+    pesado.then(ok=>{ if(ok && !['importacao','configuracoes','exportar'].includes(IR.currentTab)) irRenderView(); })
+      .catch(e=>console.error('Falha ao carregar o ciclo', e));
+  } else {
+    await pesado;
+  }
   // Sem await: a tela abre com o que tem e se refaz quando o recálculo terminar.
   irRecalcularSeMotorAntigo();
 }
@@ -1055,7 +1091,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v276';
+const IR_APP_VERSION = 'v277';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1226,7 +1262,88 @@ function irRenderDashboard(){
       ${irRenderLogTablePanel(ind)}
       ${irRenderContadosPorDiaPanel(ind)}
       ${irRenderDivergentesPorDiaPanel(ind)}
+      ${irRenderAssertividadePanel()}
     </div>
+  </div>`;
+}
+/* ============================================================
+   ASSERTIVIDADE DAS CONTAGENS POR COLABORADOR
+   A rodada 1 é o sistema (saldo lógico), não uma pessoa. Cada contagem física
+   (rodada 2 em diante) é julgada contra a quantidade ACEITA do item no local:
+   a da rodada final, desde que ela tenha sido confirmada por outra rodada
+   (o sistema ou outra contagem chegou ao mesmo número). Acertou = contou o
+   mesmo que a quantidade aceita. Item × local sem confirmação (a última
+   contagem não bateu com nada) fica de fora — não dá pra saber quem errou.
+   Exemplos (sistema → contagens):
+     10 → 10            : 1ª contagem acertou (bateu com o sistema)
+     10 → 8 → 8         : as duas acertaram (sistema estava errado)
+     10 → 8 → 10        : a 1ª errou, a 2ª acertou
+   ============================================================ */
+const IR_ASSERT_MIN = 30; // contagens mínimas para entrar no ranking
+function irAssertividade(){
+  const cid = (IR.cicloAtivo||{}).id;
+  if(!cid || IR._cicloPesadoId !== cid) return null;
+  if(IR._assertCache && IR._assertCache.cid===cid && IR._assertCache.n===IR.contagens.length) return IR._assertCache.r;
+  const grupos = new Map(); // local|item -> Map(rodada -> {q, u})
+  for(const c of IR.contagens||[]){
+    if(!c.item) continue;
+    const k = c.local+'|'+c.item;
+    let g = grupos.get(k); if(!g){ g = new Map(); grupos.set(k, g); }
+    g.set(c.idConferencia, {q:c.qtFis||0, u:c.usuario||''});
+  }
+  const porUsuario = new Map();
+  let julgadas = 0, acertos = 0, inconclusivos = 0;
+  for(const g of grupos.values()){
+    const rodadas = Array.from(g.keys()).sort((a,b)=>a-b);
+    const fisicas = rodadas.filter(r=>r>=2);
+    if(!fisicas.length) continue;
+    const ult = rodadas[rodadas.length-1];
+    const aceita = g.get(ult).q;
+    // Confirmada: alguma rodada anterior (sistema incluído) chegou ao mesmo número.
+    const confirmada = rodadas.some(r=>r!==ult && g.get(r).q===aceita);
+    if(!confirmada){ inconclusivos++; continue; }
+    for(const r of fisicas){
+      const {q, u} = g.get(r);
+      if(!u) continue;
+      const certo = q===aceita;
+      const pu = porUsuario.get(u) || {usuario:u, contagens:0, acertos:0};
+      pu.contagens++; if(certo) pu.acertos++;
+      porUsuario.set(u, pu);
+      julgadas++; if(certo) acertos++;
+    }
+  }
+  const lista = Array.from(porUsuario.values()).map(p=>({...p, erros:p.contagens-p.acertos, pct:p.contagens?p.acertos/p.contagens:0}));
+  const r = {lista, julgadas, acertos, inconclusivos, pct: julgadas?acertos/julgadas:null};
+  IR._assertCache = {cid, n:(IR.contagens||[]).length, r};
+  return r;
+}
+function irRenderAssertividadePanel(){
+  const a = irAssertividade();
+  const head = `<div class="dx-panel-h"><h3>Assertividade das contagens</h3>
+    <div class="cmp-legend"><span><span class="cmp-dot" style="background:var(--success);"></span>acertou</span><span><span class="cmp-dot" style="background:var(--danger);"></span>errou</span><span><span class="dx-meta-leg"></span>meta 97%</span></div></div>`;
+  if(!a) return `<div class="panel">${head}<p class="field-hint">Carregando as contagens do ciclo...</p></div>`;
+  if(!a.julgadas) return `<div class="panel">${head}<p class="field-hint">Ainda não há contagens físicas confirmadas neste ciclo.</p></div>`;
+  const meta = IR_META_ACURACIA;
+  const ranking = a.lista.filter(p=>p.contagens>=IR_ASSERT_MIN).sort((x,y)=> y.pct-x.pct || y.contagens-x.contagens);
+  const poucas = a.lista.length - ranking.length;
+  const mx = Math.max(1, ...ranking.map(p=>p.contagens));
+  const lin = (p, i) => `<div class="as-lin" title="${irEsc(p.usuario)}: ${irFmtInt(p.acertos)} de ${irFmtInt(p.contagens)} contagens certas">
+      <span class="as-pos">${i+1}</span>
+      <span class="as-nome">${irEsc(p.usuario)}</span>
+      <div class="as-bar"><i class="ok" style="width:${(p.acertos/mx*100).toFixed(1)}%;"></i><i class="nok" style="width:${(p.erros/mx*100).toFixed(1)}%;"></i></div>
+      <span class="as-qt">${irFmtInt(p.contagens)} <small>cont.</small></span>
+      <span class="as-pct ${p.pct>=meta?'good':'bad'}">${irFmtPct(p.pct)}</span>
+    </div>`;
+  const melhor = ranking[0];
+  return `<div class="panel as-panel">
+    ${head}
+    <div class="as-topo">
+      <div class="as-kpi"><span>Assertividade geral</span><b class="${a.pct>=meta?'good':'bad'}">${irFmtPct(a.pct)}</b><small>${irFmtInt(a.acertos)} de ${irFmtInt(a.julgadas)} contagens certas</small></div>
+      ${melhor?`<div class="as-kpi"><span>Mais efetivo</span><b>${irEsc(melhor.usuario)}</b><small>${irFmtPct(melhor.pct)} em ${irFmtInt(melhor.contagens)} contagens</small></div>`:''}
+      <div class="as-kpi"><span>Colaboradores no ranking</span><b>${irFmtInt(ranking.length)}</b><small>com ${IR_ASSERT_MIN}+ contagens no ciclo</small></div>
+    </div>
+    <div class="as-lista">${ranking.map(lin).join('')}</div>
+    <p class="field-hint" style="margin-top:8px;">Contagem certa = bateu com a quantidade aceita do item no local (a final, confirmada pelo sistema ou por outra contagem). A 1ª rodada é o sistema e não entra. ${a.inconclusivos?irFmtInt(a.inconclusivos)+' item(ns) sem confirmação ficaram de fora.':''}${poucas?' '+irFmtInt(poucas)+' colaborador(es) com menos de '+IR_ASSERT_MIN+' contagens não aparecem.':''}</p>
   </div>`;
 }
 /* Acurácia mensal em LINHAS — um ponto por mês do ano do ciclo ativo, somando
@@ -2389,15 +2506,16 @@ function irRenderDivergentesPorDiaPanel(ind){
     <span><i style="background:var(--blue)"></i>Sistêmica</span>
     <span><i style="background:var(--orange)"></i>Divergente</span>
   </div>`;
-  const chart = (campoDiv, campoSist, fmt, titulo, slot, fontLbl)=>{
+  const chart = (campoDiv, campoSist, fmt, titulo, slot, fontLbl, linhas)=>{
+    const rowsG = linhas || rows;
     // Cada dia ocupa a largura real do painel dividida pelos dias (nada de esticar).
     const desenha = w => {
-      const sl = Math.max(52, (w-14)/rows.length);
+      const sl = Math.max(52, (w-14)/rowsG.length);
       const fs = (sl>=96?10:(sl>=80?9.5:9)) - (fontLbl?1:0);
-      return irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, {slot:sl, fluidW:w, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fs}).svgHtml;
+      return irBuildDivergentesComboSvg(rowsG, campoDiv, campoSist, fmt, {slot:sl, fluidW:w, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fs}).svgHtml;
     };
     return `<div class="panel">
-      <h3>${titulo} <small class="dx-ult">últimos 7 dias</small></h3>
+      <h3>${titulo}</h3>
       ${legenda}
       ${irFluid('div_'+campoDiv, desenha, 236)}
     </div>`;
@@ -2407,7 +2525,42 @@ function irRenderDivergentesPorDiaPanel(ind){
     + chart('pecas','sistema',irFmtInt,'Peças Divergentes (abs.)',66)
     + chart('valor','sistemaValor',irFmtMoneyCompact,'Valor Divergente (abs.)',66,8)
     + chart('locais','locaisTotal',irFmtInt,'Locais Divergentes',66)
+    + irRenderItensDivPorDia(rows, chart)
     + `</div>`;
+}
+/* Itens divergentes por dia (item × local). O motor não grava esse número por
+   dia, então ele sai daqui: cada local entra no dia da Data Situação da sua
+   rodada final (mesma regra do motor para peças/valor/locais por dia) e cada
+   par local × item do dia conta como 1 item; divergente quando a diferença ≠ 0.
+   Precisa das contagens e divergências do ciclo, que carregam logo depois da
+   tela abrir — até lá o quadro mostra "carregando". */
+function irItensPorDiaMapa(){
+  const cid = (IR.cicloAtivo||{}).id;
+  if(!cid || IR._cicloPesadoId !== cid) return null;
+  if(IR._itensDiaCache && IR._itensDiaCache.cid===cid && IR._itensDiaCache.n===IR.divergencias.length) return IR._itensDiaCache.mapa;
+  const diaFinal = new Map(); // local -> {dia, rodada}
+  for(const c of IR.contagens||[]){
+    if(!(c.idConferencia>1) || !c.dataSituacao) continue;
+    const at = diaFinal.get(c.local);
+    if(!at || c.idConferencia>at.rodada) diaFinal.set(c.local, {dia:String(c.dataSituacao).slice(0,10), rodada:c.idConferencia});
+  }
+  const mapa = new Map(); // dia -> {itens, itensTotal}
+  for(const d of IR.divergencias||[]){
+    const f = diaFinal.get(d.local);
+    if(!f) continue;
+    const g = mapa.get(f.dia) || {itens:0, itensTotal:0};
+    g.itensTotal++;
+    if(d.diferenca!==0) g.itens++;
+    mapa.set(f.dia, g);
+  }
+  IR._itensDiaCache = {cid, n:(IR.divergencias||[]).length, mapa};
+  return mapa;
+}
+function irRenderItensDivPorDia(rows, chart){
+  const mapa = irItensPorDiaMapa();
+  if(!mapa) return `<div class="panel"><h3>Itens Divergentes</h3><p class="field-hint">Carregando itens do ciclo...</p></div>`;
+  const comItens = rows.map(r=>({...r, itens:(mapa.get(r.dia)||{}).itens||0, itensTotal:(mapa.get(r.dia)||{}).itensTotal||0}));
+  return chart.call(null, 'itens', 'itensTotal', irFmtInt, 'Itens Divergentes', 66, null, comItens);
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];

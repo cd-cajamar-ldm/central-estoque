@@ -127,6 +127,9 @@ function irAcessoEmPortugues(msg){
       telaAcesso.classList.remove('escondida');
       return;
     }
+    /* Enquanto a permissão é conferida na internet, os dados locais já vão sendo
+       lidos (sem mostrar nada: a tela de acesso continua por cima). */
+    if(!appIniciado && typeof irPreCarregar === 'function') irPreCarregar();
     const { data: pode, error } = await irSupa.rpc('ldm_pode_acessar', { p_app_key: IRA_APP_KEY });
     if(error){
       if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
