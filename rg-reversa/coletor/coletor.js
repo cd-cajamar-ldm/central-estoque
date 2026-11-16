@@ -1,6 +1,7 @@
 /* Coletor de mão — RG Reversa.
  * Fluxo: bipa o local de origem → bipa cada RG (um por linha, numerados) → bipa o local de destino → Finalizar.
- * Ao finalizar, o Excel sobe sozinho. Nada é importado aqui: o nome do local vem da lista que o dashboard
+ * Ao finalizar, abre a tela do relatório (origem · RG · destino): a pessoa copia, faz a movimentação no WMS e
+ * toca em "Finalizar movimentação" para voltar à tela do coletor. O Excel é opcional (botão). Nada é importado aqui: o nome do local vem da lista que o dashboard
  * mantém no Supabase (public.rg_locais) e que o aparelho guarda para funcionar até sem internet. */
 (function(){
 'use strict';
@@ -28,7 +29,7 @@ function bip(ok){
   try { if(navigator.vibrate) navigator.vibrate(ok?30:[80,60,80]); } catch(e){}
 }
 function pendentes(){ return lsGet(PEND_KEY); }
-function novo(ultimo, hist, rel){ return { origem:'', rgs:[], destino:'', msg:'', erro:false, ultimo:ultimo||'', hist:hist||[], rel:rel||null, salvando:false, foco:'origem' }; }
+function novo(ultimo, hist, rel){ return { origem:'', rgs:[], destino:'', msg:'', erro:false, ultimo:ultimo||'', hist:hist||[], rel:rel||null, relAberto:false, salvando:false, foco:'origem' }; }
 
 /* ---------- tela ---------- */
 function nomeBox(raw){
@@ -42,14 +43,19 @@ function campo(id, ph, c, onde, desligado){
 function view(){
   var c=S.col, pend=pendentes(), h='';
   if(pend.length) h+='<div class="cl-pend"><span>⚠ <b>'+int(pend.reduce(function(s,p){ return s+p.rows.length; },0))+'</b> bipagens aguardando envio.</span><button data-act="sync">Enviar</button></div>';
-  var rel=(!c.origem && !c.rgs.length && !c.destino) ? c.rel : null;
+  /* Relatório da movimentação que acabou de ser finalizada: copiar → movimentar no WMS → Finalizar movimentação. */
+  var rel=c.relAberto ? c.rel : null;
   if(rel){
-    h+='<div class="cl-box on"><label for="clOrigem"><span class="cl-n">1</span>Próxima movimentação · local de origem</label>'+campo('clOrigem','bipe o local',c,'origem')+'</div>';
-    h+='<div class="cl-box"><div class="cl-rel-h"><b>✔ Relatório gerado</b><span class="cl-pill">'+int(rel.rgs.length)+' RG'+(rel.rgs.length===1?'':'s')+' · '+esc(rel.hora)+'</span></div>'+
-      '<div class="cl-btns"><button class="cl-pri" data-act="rel-xlsx">⬇ Excel</button><button class="cl-sec" data-act="rel-copy">📋 Copiar</button></div>'+
+    var n=rel.rgs.length;
+    h+='<div class="cl-box on cl-relbox"><div class="cl-rel-h"><b>✔ Movimentação registrada</b><span class="cl-rel-n">'+int(n)+' RG'+(n===1?'':'s')+' · '+esc(rel.hora)+'</span></div>'+
+      '<div class="cl-rel-rota"><b>'+esc(RG.localNorm(rel.origem))+'</b><span>→</span><b>'+esc(RG.localNorm(rel.destino))+'</b></div>'+
       (rel.salvo?'':'<div class="cl-msg bad" style="margin-bottom:8px">Sem conexão: o histórico será enviado depois.</div>')+
+      '<button class="cl-pri cl-copiar'+(rel.usado?' feito':'')+'" data-act="rel-copy">'+(rel.usado?'✔ Copiado — copiar de novo':'📋 Copiar relatório')+'</button>'+
+      '<div class="cl-rel-dica">Copie, cole no PuTTY e faça a movimentação. Depois toque em Finalizar.</div>'+
       '<div class="cl-tabw"><table class="cl-tab"><thead><tr><th>Local de origem</th><th>RG</th><th>Local de destino</th></tr></thead><tbody>'+
-      rel.rgs.map(function(r){ return '<tr><td>'+esc(RG.localNorm(rel.origem))+'</td><td class="rg">'+esc(r.rg)+'</td><td>'+esc(RG.localNorm(rel.destino))+'</td></tr>'; }).join('')+'</tbody></table></div></div>';
+      rel.rgs.map(function(r){ return '<tr><td>'+esc(RG.localNorm(rel.origem))+'</td><td class="rg">'+esc(r.rg)+'</td><td>'+esc(RG.localNorm(rel.destino))+'</td></tr>'; }).join('')+'</tbody></table></div>'+
+      '<button class="cl-lnk" data-act="rel-xlsx">⬇ Baixar Excel (opcional)</button></div>'+
+      '<button class="cl-final cl-fim" id="clFim" data-act="fim-mov">✔ Finalizar movimentação</button>';
   } else {
     var pode=c.origem && c.rgs.length && c.destino && !c.salvando;
     /* 1 · origem */
@@ -124,8 +130,8 @@ function finaliza(){
     var p=pendentes(); p.push({lote:lote, rows:rows}); lsSet(PEND_KEY,p);
     hist.unshift(hora+' · '+resumo+' (pendente)'); toast('Sem conexão — guardei no aparelho e envio depois.', true);
   }).then(function(){
-    S.col=novo(ultimo, hist, rel); render();
-    try { xlsx(); } catch(e){}   /* o Excel já sobe sozinho ao finalizar */
+    S.col=novo(ultimo, hist, rel); S.col.relAberto=true; S.col.foco='nenhum'; render();
+    var sc=document.querySelector('.cl-scroll'); if(sc) sc.scrollTop=0;   /* abre o relatório pelo topo */
   });
 }
 
@@ -134,12 +140,12 @@ function blocoRel(r){ return { origem:r.origem, destino:r.destino, rgs:r.rgs, ho
 function xlsx(){
   var r=S.col.rel; if(!r) return;
   RG.xlsx([blocoRel(r)], { data:r.data+' '+r.hora, operador:S.user }, 'rg-reversa-movimentacao-'+r.hora.replace(':','h')+'-'+Date.now().toString(36)+'.xlsx');
-  marca(r);
+  r.usado=true; marca(r); render();
 }
 function copia(){
   var r=S.col.rel; if(!r) return;
   var linhas=RG.linhasBlocos([blocoRel(r)]);
-  RG.copia(linhas.join('\n')).then(function(){ toast(int(linhas.length)+' linhas copiadas — cole no PuTTY.'); marca(r); });
+  RG.copia(linhas.join('\n')).then(function(){ r.usado=true; toast(int(linhas.length)+' linhas copiadas — cole no PuTTY.'); marca(r); render(); });
 }
 /* Exportou o relatório: marca o lote como exportado (se já chegou ao banco). */
 function marca(r){
@@ -169,6 +175,10 @@ document.addEventListener('click', function(ev){
   if(a==='sync') return sync();
   if(a==='rel-xlsx') return xlsx();
   if(a==='rel-copy') return copia();
+  if(a==='fim-mov'){
+    if(c.rel && !c.rel.usado && !confirm('Você ainda não copiou o relatório. Finalizar mesmo assim?')) return;
+    c.relAberto=false; c.rel=null; c.foco='origem'; toast('Pronto para a próxima movimentação.'); return render();
+  }
 });
 var timer;
 document.addEventListener('input', function(ev){
