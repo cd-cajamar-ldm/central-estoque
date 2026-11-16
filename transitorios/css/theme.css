@@ -1091,6 +1091,33 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-cols2{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
 .rp-footer{ margin-top:28px; padding:14px 16px 0; border-top:1px solid #E4E7EE; font-size:9.5px; color:#9AA1B4; text-align:center; }
 
+/* Bloco por setor do boletim — formato próprio do relatório, não o .panel/
+   .trans-table da tela: sem gráfico, sem edição, sem coluna de duplicidade,
+   direto do KPI pra tabela. */
+.rp-setor{ background:#fff; border-radius:14px; padding:18px 20px; margin-bottom:14px; box-shadow:0 10px 24px -18px rgba(0,26,114,.3); }
+.rp-setor-head{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:14px; }
+.rp-setor-tit{ display:flex; align-items:center; gap:10px; }
+.rp-setor-bar{ width:10px; height:26px; border-radius:4px; display:inline-block; }
+.rp-setor-tit h2{ font-family:'Poppins',sans-serif; font-size:17px; font-weight:700; color:#1D1F2A; }
+.rp-setor-kpis{ display:flex; gap:22px; flex-wrap:wrap; }
+.rp-setor-kpis div{ text-align:right; }
+.rp-setor-kpi-lbl{ display:block; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6B7280; }
+.rp-setor-kpis strong{ font-family:'Poppins',sans-serif; font-size:17px; font-weight:700; color:#1D1F2A; }
+table.rp-setor-table{ width:100%; border-collapse:collapse; font-size:11.5px; }
+table.rp-setor-table thead tr:first-child th{ background:#001A72; color:#fff; text-align:left; padding:7px 10px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+table.rp-setor-table thead tr:first-child th.num{ text-align:right; }
+table.rp-setor-table thead tr:last-child th{ text-align:center; padding:5px 6px; font-size:9.5px; font-weight:700; color:#fff; }
+table.rp-setor-table th.ok{ background:#1F8A52; }
+table.rp-setor-table th.atraso{ background:#FE5000; }
+table.rp-setor-table td{ padding:6px 10px; border-bottom:1px solid #EEF0F4; }
+table.rp-setor-table td.cod{ font-weight:800; white-space:nowrap; }
+table.rp-setor-table td.desc{ color:#6B7280; white-space:nowrap; }
+table.rp-setor-table td.num{ text-align:center; font-variant-numeric:tabular-nums; }
+table.rp-setor-table td.num.atraso{ color:#C83812; font-weight:800; }
+table.rp-setor-table td.valor{ text-align:right; font-weight:700; white-space:nowrap; }
+table.rp-setor-table tfoot td{ padding:8px 10px; font-weight:800; background:#F4F5F7; font-variant-numeric:tabular-nums; }
+table.rp-setor-table tfoot td.valor{ text-align:right; }
+
 /* ============================================================
    Tema "Projetos" — só na aba de Divergências.
 

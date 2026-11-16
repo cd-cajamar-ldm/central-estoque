@@ -252,6 +252,13 @@ const IR_TRANS_SETOR_NOME = {
   'C.E':'Controle de Estoque', INB:'Inbound', OUT:'Outbound',
   TRP:'Transporte', REV:'Reversa', TSF:'Transferência', IGN:'Desconsiderado'
 };
+// Só pro boletim (barra de cor ao lado do nome do setor) — a tela usa o azul/
+// laranja de marca pra tudo, mas o boletim precisa diferenciar setor por cor
+// pra quem olha rápido na imagem achar o bloco certo.
+const IR_TRANS_SETOR_COR = {
+  'C.E':'#001A72', INB:'#2E6F9E', OUT:'#B3261E',
+  TRP:'#1F8A52', REV:'#B8860B', TSF:'#6B4EA6'
+};
 /* O setor dono do endereço vem da CLASSE LOCAL do WMS: TSF, C.E, INB, OUT, TRP e
    REV são os códigos que a operação cadastra. Endereço novo com a classe certa
    entra no dashboard sozinho, sem ninguém mexer em configuração.
@@ -758,7 +765,7 @@ function irRenderTransitorios(){
 }
 /* Uma tabela por setor, no formato do relatório de pendência: uma linha por
    transitório, peças abertas por LOG e o valor parado no endereço. */
-function irTransPainelSetor(g, logs, estatico){
+function irTransPainelSetor(g, logs){
   const porPrefixo = new Map();
   for(const l of g.locais){
     const chave = irTransChave(l);
@@ -799,7 +806,7 @@ function irTransPainelSetor(g, logs, estatico){
         ganhoSetor>0 ? irFmtPct(g.valor?ganhoSetor/g.valor:0)+' do saldo · ganho no NET do ano' : irTransDiagDuplicidade(),
         ganhoSetor>0 ? 'trans-kpi-dup' : '')}
     </div>
-    ${estatico ? '' : irTransGraficos(totCol, totValFaixa)}
+    ${irTransGraficos(totCol, totValFaixa)}
     <div class="table-wrap"><table class="trans-table">
       <thead>
         <tr><th rowspan="2" class="tt-local">Local transitório</th><th rowspan="2" class="tt-desc">Descrição</th>
@@ -810,9 +817,8 @@ function irTransPainelSetor(g, logs, estatico){
       </thead>
       <tbody>${linhas.map(p=>`<tr>
         <td class="mono">${irEsc(p.x1||'(vazio)')}</td>
-        <td>${estatico ? irEsc(irTransNome(p.x1))
-          : `<input class="trans-nome" value="${irEsc(irTransNome(p.x1))}" title="Nome do transitório — dá pra editar"
-             onchange="irTransSetNome('${irEsc(p.x1)}', this.value)">`}</td>
+        <td><input class="trans-nome" value="${irEsc(irTransNome(p.x1))}" title="Nome do transitório — dá pra editar"
+             onchange="irTransSetNome('${irEsc(p.x1)}', this.value)"></td>
         ${cols.map(l=>`<td class="mono tt-c-dia ${p.cel[l]?(irTransDentroDoPrazo(l)?'trans-ok':'trans-atraso'):''}">${
           p.cel[l] ? irFmtInt(p.cel[l])+'<span class="trans-cel-val">'+irTransValorCel(p.celValor[l]||0)+'</span>' : '0'}</td>`).join('')}
         <td class="mono tt-c-num">${irFmtMoney(p.valor)}</td>
@@ -825,6 +831,65 @@ function irTransPainelSetor(g, logs, estatico){
           totCol[l]?'<span class="trans-cel-val">'+irTransValorCel(totValFaixa[l]||0)+'</span>':''}</td>`).join('')}
         <td class="mono tt-c-num"><strong>${irFmtMoney(g.valor)}</strong></td>
         <td class="mono tt-c-num"><strong>${ganhoSetor>0?irFmtMoney(ganhoSetor):'—'}</strong></td>
+      </tr></tfoot>
+    </table></div>
+  </div>`;
+}
+/* Mesma conta do painel da tela (irTransPainelSetor), mas num bloco próprio do
+   boletim — formato "E": vai direto do KPI pra tabela D0-D+7, sem gráfico, sem
+   campo editável, sem a coluna de duplicidade (é diagnóstico de tela, não de
+   relatório). Setor por setor, mais denso, cabe mais gente por rolada. */
+function irTransPainelSetorReport(g){
+  const porPrefixo = new Map();
+  for(const l of g.locais){
+    const chave = irTransChave(l);
+    if(!porPrefixo.has(chave)) porPrefixo.set(chave, {x1:chave, valor:0, qtd:0, locais:[]});
+    const p = porPrefixo.get(chave);
+    p.valor += l.valor; p.qtd += l.qtd; p.locais.push(l);
+  }
+  const linhas = Array.from(porPrefixo.values()).sort((a,b)=>b.valor-a.valor);
+  const cols = IR_TRANS_FAIXAS;
+  const totValFaixa = {};
+  for(const p of linhas){
+    const id = irTransIdade(p.locais);
+    p.cel = id.faixas; p.celValor = id.valores;
+    for(const f of cols) totValFaixa[f] = (totValFaixa[f]||0) + (id.valores[f]||0);
+  }
+  const totCol = {};
+  for(const p of linhas) for(const k in p.cel) totCol[k] = (totCol[k]||0) + p.cel[k];
+  let foraValor = 0;
+  for(const f of cols) if(!irTransDentroDoPrazo(f)) foraValor += totValFaixa[f]||0;
+  const foraPct = g.valor ? Math.round(foraValor/g.valor*100) : 0;
+  const corSeveridade = foraPct>=50 ? '#C83812' : (foraPct>=25 ? '#FE5000' : '#1F8A52');
+  const kpi = (rot, val, cor) => `<div><span class="rp-setor-kpi-lbl">${irEsc(rot)}</span><strong${cor?` style="color:${cor}"`:''}>${val}</strong></div>`;
+  return `<div class="rp-setor">
+    <div class="rp-setor-head">
+      <div class="rp-setor-tit"><span class="rp-setor-bar" style="background:${IR_TRANS_SETOR_COR[g.setor]||'#001A72'}"></span>
+        <h2>${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</h2></div>
+      <div class="rp-setor-kpis">
+        ${kpi('Parado', irFmtMoney(g.valor))}
+        ${kpi('Peças', irFmtInt(g.qtd))}
+        ${kpi('Endereços', irFmtInt(g.locais.length))}
+        ${kpi('Fora do prazo', foraPct+'%', corSeveridade)}
+      </div>
+    </div>
+    <div class="table-wrap"><table class="rp-setor-table">
+      <thead>
+        <tr><th rowspan="2">Local</th><th rowspan="2">Descrição</th>
+            <th colspan="${cols.length}">Peças paradas há — prazo de ${IR_TRANS_PRAZO_H}h</th>
+            <th rowspan="2" class="num">Valor</th></tr>
+        <tr>${cols.map(l=>`<th class="num ${irTransDentroDoPrazo(l)?'ok':'atraso'}">${irEsc(l)}</th>`).join('')}</tr>
+      </thead>
+      <tbody>${linhas.map(p=>`<tr>
+        <td class="cod">${irEsc(p.x1||'(vazio)')}</td>
+        <td class="desc">${irEsc(irTransNome(p.x1))}</td>
+        ${cols.map(l=>`<td class="num ${p.cel[l]?(irTransDentroDoPrazo(l)?'ok':'atraso'):''}">${p.cel[l]?irFmtInt(p.cel[l]):'0'}</td>`).join('')}
+        <td class="num valor">${irFmtMoney(p.valor)}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr>
+        <td colspan="2">Total ${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</td>
+        ${cols.map(l=>`<td class="num">${totCol[l]?irFmtInt(totCol[l]):'0'}</td>`).join('')}
+        <td class="num valor">${irFmtMoney(g.valor)}</td>
       </tr></tfoot>
     </table></div>
   </div>`;
@@ -984,7 +1049,6 @@ function irTransRenderOfensores(ofensores){
 async function irBaixarBoletimTransitorios(){
   const c = irTransCalc();
   const m = IR.est390Meta || {};
-  const logs = irTransLogsPresentes();
   const setores = c.lista.filter(g=>g.setor && g.setor!=='IGN');
   const ofensores = irTransOfensores(setores, 4);
   const html = `<div class="rp-page rp-page-wide">
@@ -1010,8 +1074,8 @@ async function irBaixarBoletimTransitorios(){
             armazenagem normal —, dezenas de milhares de endereços que não são
             transitório e afogariam o relatório. Ele continua visível na tela,
             que é onde se resolve o cadastro. */''}
-      ${setores.map(g=>irTransPainelSetor(g, logs, true)).join('')}
-      <p class="rp-footer">Prazo do transitório: ${IR_TRANS_PRAZO_H}h — verde está no prazo, laranja passou. D+${IR_TRANS_FAIXA_MAX} é acumulativo: sete dias ou mais.<br>"Prov. duplicidade" é o saldo de itens que fecharam o ano com ganho no NET da QRY410 — movimentar resolve, procurar não.<br>Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · Controle de Transitórios.</p>
+      ${setores.map(g=>irTransPainelSetorReport(g)).join('')}
+      <p class="rp-footer">Prazo do transitório: ${IR_TRANS_PRAZO_H}h — verde está no prazo, laranja passou. D+${IR_TRANS_FAIXA_MAX} é acumulativo: sete dias ou mais.<br>Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · Controle de Transitórios.</p>
     </div>
   </div>`;
   irBaixarBoletimImagem(html, 'Transitorios_'+new Date().toISOString().slice(0,10)+'.png',
