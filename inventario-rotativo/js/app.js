@@ -1149,7 +1149,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v282';
+const IR_APP_VERSION = 'v283';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2406,7 +2406,8 @@ function irRenderPioresRuas(ind){
    fininha e clara. O rótulo da meta fica no topo do painel, longe dos números. */
 function irBuildContadosBarrasSvg(itens, opts){
   opts = opts||{};
-  const W = opts.W || 760, H = 240, pL = 10, pR = 10, pT = 38, pB = 30;
+  const temSem = itens.some(it=>it.sem);
+  const W = opts.W || 760, H = temSem ? 256 : 240, pL = 10, pR = 10, pT = 38, pB = temSem ? 46 : 30;
   const w = (W-pL-pR)/Math.max(1,itens.length);
   const mx = Math.max(1, ...itens.map(i=>Math.max(i.v, i.meta)))*1.08;
   const y = v => pT + (1-v/mx)*(H-pT-pB);
@@ -2422,7 +2423,8 @@ function irBuildContadosBarrasSvg(itens, opts){
     if(!fixa) g += `<line x1="${(pL+i*w+3).toFixed(1)}" x2="${(pL+(i+1)*w-3).toFixed(1)}" y1="${y(it.meta).toFixed(1)}" y2="${y(it.meta).toFixed(1)}" style="stroke:var(--ink-soft)" stroke-width="1" stroke-dasharray="4 4" opacity=".45"/>`;
     g += `<text x="${cx.toFixed(1)}" y="${(y(it.v)-18).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="800" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${irFmtInt(it.v)}</text>
       <text x="${cx.toFixed(1)}" y="${(y(it.v)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${ok?'var(--success)':'var(--danger)'};paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${Math.round(it.v/it.meta*100)}%</text>
-      <text x="${cx.toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink-soft)">${irEsc(it.rot)}</text>`;
+      <text x="${cx.toFixed(1)}" y="${H-(it.sem?27:10)}" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink-soft)">${irEsc(it.rot)}</text>${it.sem?`
+      <text x="${cx.toFixed(1)}" y="${H-9}" text-anchor="middle" font-size="11.5" font-weight="700" letter-spacing=".06em" style="fill:${it.fds?'var(--orange)':'var(--dx-local,#001A72)'};font-family:Poppins,Inter,system-ui,sans-serif;text-transform:uppercase">${irEsc(it.sem)}</text>`:''}`;
   });
   return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block">${g}</svg>`;
 }
@@ -2450,8 +2452,10 @@ function irRenderContadosPorDiaPanel(ind){
   IR._porDiaRua = ind.porDiaRua||{};
   const itensDia = rows.map(r=>({
       rot: new Date(r.dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}),
+      sem: ['dom','seg','ter','qua','qui','sex','sáb'][new Date(r.dia+'T00:00:00').getDay()],
+      fds: [0,6].includes(new Date(r.dia+'T00:00:00').getDay()),
       v: r.total, meta: IR_META_DIARIA, tip: `irShowDiaTooltip(event,'${r.dia}')`}));
-  const dia = rows.length ? irFluid('contDia', w=>irBuildContadosBarrasSvg(itensDia, {W:w}), 240)
+  const dia = rows.length ? irFluid('contDia', w=>irBuildContadosBarrasSvg(itensDia, {W:w}), 256)
     : '<p class="field-hint">Nenhuma contagem registrada ainda.</p>';
   const {ano, rows: meses} = irContadosMensalDoAno();
   const itensMes = meses.map(m=>({rot: irMesCurto(m.mes), v: m.total, meta: IR_META_MENSAL}));
