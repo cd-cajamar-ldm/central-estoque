@@ -76,6 +76,21 @@ function baixaLocais(supa){
   }
   return pagina(0);
 }
+/* Local fora da lista do aparelho (criado ou importado depois do último download, que vale por 6 horas):
+   pergunta ao servidor só por ele e guarda na memória. Sem isso, o local novo aparecia como "não encontrado"
+   até a lista vencer ou alguém tocar em atualizar. */
+RG.buscaLocal = function(supa, raw){
+  var c = RG.localCodigo(raw);
+  if(!c) return Promise.resolve(null);
+  if(LOC.mapa.has(c)) return Promise.resolve(LOC.mapa.get(c));
+  return supa.from('rg_locais').select('codigo,descricao,classe').eq('codigo', c).limit(1).then(function(r){
+    if(r.error || !r.data || !r.data.length) return null;
+    var x = r.data[0], v = { d: x.descricao || '', c: x.classe || '' };
+    LOC.mapa.set(String(x.codigo), v);
+    return v;
+  }, function(){ return null; });
+};
+
 /* Dashboard: depois de importar a QRY0390, manda a lista de locais (todas as classes) para o coletor enxergar. */
 RG.subeLocais = function(supa, rows){
   if(!rows || !rows.length) return Promise.resolve(0);
