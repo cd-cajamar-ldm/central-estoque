@@ -1593,3 +1593,14 @@ table.bt-table tfoot td{
   position:sticky; bottom:0; z-index:2; background:var(--surface); border-top:2px solid var(--line);
   border-bottom:none; font-size:12.5px;
 }
+
+/* Layout do boletim aplicado na tela do app: mesma folha, mas adaptável à janela. */
+.rp-page.rp-tela{ max-width:none; width:100%; margin-bottom:18px; border-radius:12px; overflow:hidden; }
+.rp-tela .rp-hero{ padding:24px 28px 20px; }
+.rp-tela .rp-body{ padding:22px 28px 4px; }
+.rp-tela .table-wrap{ overflow-x:auto; }
+@media (max-width:900px){
+  .rp-tela .rp-ofensores-grid{ grid-template-columns:repeat(2,1fr); }
+  .rp-tela .rp-hero, .rp-tela .rp-body{ padding-left:16px; padding-right:16px; }
+  .rp-tela .rp-hero-kpis{ gap:18px; }
+}
