@@ -193,7 +193,10 @@ var GRUPOS=['rgs','est','mult','hist'];
 function valorLocal(g){ return g==='rgs' ? S.rgs : g==='est' ? S.est : g==='mult' ? S.mult : S.hist; }
 function temLocal(g){ var v=valorLocal(g); return (g==='rgs'||g==='hist') ? v.length>0 : !!v; }
 function poeLocal(g,v){ if(g==='rgs') S.rgs=v||[]; else if(g==='est') S.est=v; else if(g==='mult') S.mult=v; else S.hist=v||[]; }
+/* Acesso "só visualizar": consulta e coletor, mas não importa nem apaga dados. */
+function leitura(){ return !!window.LDM_SOMENTE_LEITURA; }
 function empurra(g){
+  if(leitura()) return Promise.resolve();
   return RG.nuvem.salvaGrupo(window.rgSupa, g, valorLocal(g), S.user).then(function(em){ S.stamps[g]=em; });
 }
 function msgNuvem(e){
@@ -217,7 +220,7 @@ function sincroniza(){
             return dbSet(g, valorLocal(g));
           });
         }
-        if(!m && temLocal(g)) return empurra(g);
+        if(!m && temLocal(g) && !leitura()) return empurra(g);
       });
     });
     return seq;
@@ -234,6 +237,7 @@ function sincroniza(){
 }
 
 function importar(files){
+  if(leitura()){ toast('Seu acesso não permite importar relatórios.', true); return; }
   S.classe=''; S.ritmo=null; S.anima=true;
   if(!files || !files.length) return;
   if(typeof XLSX==='undefined'){ toast('A leitura de planilhas não carregou. Verifique a internet e atualize a página.', true); return; }
@@ -679,7 +683,7 @@ function vPainel(){
     return hero+'<div class="rv-body"><div class="panel rgx-vazio"><div class="rgx-vazio-ic">⏳</div><h3>Carregando a última importação…</h3></div></div>';
   }
   if(!tem){
-    return hero+'<div class="rv-body"><div class="panel rgx-vazio"><div class="rgx-vazio-ic">⇄</div><h3>Falta importar '+(S.rgs.length?'a QRY0390':'a QRY0100 e a QRY0390')+'</h3><button class="btn btn-orange" data-act="tab" data-tab="importacao">Importar relatórios</button></div></div>';
+    return hero+'<div class="rv-body"><div class="panel rgx-vazio"><div class="rgx-vazio-ic">⇄</div><h3>'+(leitura()?'Ainda não há dados importados':'Falta importar '+(S.rgs.length?'a QRY0390':'a QRY0100 e a QRY0390'))+'</h3><button class="btn btn-orange so-editor" data-act="tab" data-tab="importacao">Importar relatórios</button></div></div>';
   }
   var ritmo=ritmoAtual(), prev=previsao(ritmo);
   var cob=T.saldo?T.comRg/T.saldo*100:0;
@@ -772,7 +776,7 @@ function tabela(id, cols, linhas, cfg){
   if(linhas.length>lim) h+='<div class="rgx-mais"><button class="btn btn-secondary" data-act="mais" data-tb="'+id+'">Mostrar mais · '+int(linhas.length-lim)+'</button></div>';
   return h;
 }
-function semDados(q){ return '<div class="panel rgx-vazio"><div class="rgx-vazio-ic">⇄</div><h3>Falta importar '+q+'</h3><button class="btn btn-orange" data-act="tab" data-tab="importacao">Importar relatórios</button></div>'; }
+function semDados(q){ return '<div class="panel rgx-vazio"><div class="rgx-vazio-ic">⇄</div><h3>'+(leitura()?'Ainda não há dados importados':'Falta importar '+q)+'</h3><button class="btn btn-orange so-editor" data-act="tab" data-tab="importacao">Importar relatórios</button></div>'; }
 
 function covFiltrada(){
   var q=norm(S.cobQ);
@@ -1024,6 +1028,7 @@ function renderFoco(id){
 }
 function vaiPara(tab){
   if(!TABS[tab]) return;
+  if(tab==='importacao' && leitura()) tab='painel';
   S.tab=tab; S.anima=true; fechaPainel();
   try { history.replaceState(null,'','#'+tab); } catch(e){}
   $('sidebar').classList.remove('mobile-open');
@@ -1079,8 +1084,9 @@ function acao(el, ev){
   if(a==='fecha-ficha') return fechaFicha();
   if(a==='exporta-rgs') return exportaRgs();
   if(a==='exporta-cov') return exporta('RG_Reversa_Estoque_x_RG', CAB_COV, linhasCov(covFiltrada()));
-  if(a==='escolher'){ $('fileInput').click(); return; }
+  if(a==='escolher'){ if(leitura()) return toast('Seu acesso não permite importar relatórios.', true); $('fileInput').click(); return; }
   if(a==='limpa'){
+    if(leitura()) return toast('Seu acesso não permite apagar dados.', true);
     var k=el.dataset.k;
     if(!confirm('Apagar '+({rgs:'os RGs',est:'o estoque',mult:'os múltiplos',hist:'o histórico de evolução'}[k])+' deste navegador?')) return;
     if(k==='rgs') S.rgs=[]; if(k==='est') S.est=null; if(k==='mult') S.mult=null; if(k==='hist') S.hist=[];
@@ -1152,6 +1158,9 @@ function inicia(){
   if(TABS[h]) S.tab=h;
   deriva(); render();
 }
+
+/* Chamado pela trava de acesso quando descobre que o nível é "só visualizar": sai da Importação e redesenha. */
+window.rgAplicaNivel=function(){ if(S.tab==='importacao') vaiPara('painel'); else render(); };
 
 /* Chamado pela trava de acesso (acesso.js) depois que o login e a permissão passam. */
 var iniciado=false;
