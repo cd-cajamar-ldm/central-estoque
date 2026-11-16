@@ -1919,19 +1919,28 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         + '</div>';
     }).join('') : '<p class="access-empty">Ainda sem acessos registrados.</p>';
 
-    /* Atividade recente: últimos acessos de qualquer pessoa, em qualquer app. */
-    var recentes = accessLogRaw.slice().sort(function(a, b){
-      return a.acessado_em < b.acessado_em ? 1 : -1;
+    /* Atividade recente: uma linha por pessoa+app (a última vez, com o total
+       de acessos ao lado) -- não cada evento bruto. Quem fica entrando e
+       saindo do mesmo app várias vezes por hora (ex.: coletor recarregando)
+       não devia tomar a lista inteira com a mesma pessoa repetida. */
+    var recentes = Object.keys(accessLogCache).reduce(function(lista, pessoaId){
+      Object.keys(accessLogCache[pessoaId]).forEach(function(appKey){
+        lista.push({ pessoaId: pessoaId, appKey: appKey, freq: accessLogCache[pessoaId][appKey] });
+      });
+      return lista;
+    }, []).sort(function(a, b){
+      return a.freq.ultimo < b.freq.ultimo ? 1 : -1;
     }).slice(0, 10);
-    accessFeedEl.innerHTML = recentes.length ? recentes.map(function(l){
-      var pessoa = pessoaPorId[l.pessoa_id];
-      var app = appPorChave[l.app_key];
+    accessFeedEl.innerHTML = recentes.length ? recentes.map(function(r){
+      var pessoa = pessoaPorId[r.pessoaId];
+      var app = appPorChave[r.appKey];
       if(!pessoa || !app) return '';
-      var quando = new Date(l.acessado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      var quando = new Date(r.freq.ultimo).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      var vezes = r.freq.total > 1 ? ' · ' + r.freq.total + ' vezes' : '';
       return ''
         + '<div class="access-feed-row" style="--accent:' + app.color + ';">'
         +   '<span class="access-feed-icon">' + app.icon + '</span>'
-        +   '<span class="access-feed-texto"><b>' + esc(pessoa.nome) + '</b> acessou ' + esc(app.name) + '<span class="access-feed-quando">' + quando + '</span></span>'
+        +   '<span class="access-feed-texto"><b>' + esc(pessoa.nome) + '</b> acessou ' + esc(app.name) + '<span class="access-feed-quando">' + quando + vezes + '</span></span>'
         + '</div>';
     }).join('') : '<p class="access-empty">Ainda sem atividade registrada.</p>';
   }
