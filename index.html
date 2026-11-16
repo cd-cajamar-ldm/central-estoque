@@ -1724,6 +1724,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     ? window.supabase.createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: true, autoRefreshToken: true } })
     : null;
 
+  /* E-mail sem espaço e sem caractere invisível (vem junto ao copiar do Outlook/Teams e faz o e-mail "não bater"). */
+  function accessLimpaEmail(s){ return String(s || '').replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g, '').toLowerCase(); }
+
   function accessEmPortugues(msg){
     var m = String(msg || '').toLowerCase();
     if(m.indexOf('invalid login credentials') !== -1) return 'E-mail ou senha incorretos.';
@@ -1864,7 +1867,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     accessLoginForm.addEventListener('submit', async function(e){
       e.preventDefault();
       accessLoginMsg.hidden = true;
-      var email = document.getElementById('accessLoginEmail').value.trim().toLowerCase();
+      var email = accessLimpaEmail(document.getElementById('accessLoginEmail').value);
       var senha = document.getElementById('accessLoginSenha').value;
       var { error } = await sbAcessos.auth.signInWithPassword({ email: email, password: senha });
       if(error){ accessLoginMsg.textContent = accessEmPortugues(error.message); accessLoginMsg.hidden = false; return; }
@@ -1889,7 +1892,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       var nomeEl = document.getElementById('accessNovoNome');
       var emailEl = document.getElementById('accessNovoEmail');
       var nome = nomeEl.value.trim().toUpperCase();
-      var email = emailEl.value.trim().toLowerCase();
+      var email = accessLimpaEmail(emailEl.value);
       if(!nome || !email){ accessMsg('Preencha nome e e-mail.'); return; }
       var { error } = await sbAcessos.schema('acessos').from('pessoas').insert({ nome: nome, email: email });
       if(error){ accessMsg(accessEmPortugues(error.message)); return; }

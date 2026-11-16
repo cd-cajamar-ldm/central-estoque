@@ -15,6 +15,10 @@ window.rgSupa = window.supabase.createClient(RG_SUPA_URL, RG_SUPA_ANON, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 });
 
+/* E-mail sem espaço e sem caractere invisível (vem junto ao copiar do Outlook/Teams e faz o e-mail "não bater"). */
+const RG_INVISIVEIS = /[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g;
+function rgLimpaEmail(s){ return String(s || '').replace(RG_INVISIVEIS, '').toLowerCase(); }
+
 function rgAcessoEmPortugues(msg){
   const m = String(msg || '').toLowerCase();
   if(m.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
@@ -102,6 +106,9 @@ async function rgDicaDeEmail(email){
     }
   });
 
+  /* Tira espaço e caractere invisível já na hora de digitar/colar (o navegador recusaria o e-mail com eles). */
+  emailEl.addEventListener('input', function(){ const v = emailEl.value.replace(RG_INVISIVEIS, ''); if(v !== emailEl.value) emailEl.value = v; });
+
   let modo = 'entrar';
   let appIniciado = false;
 
@@ -128,7 +135,7 @@ async function rgDicaDeEmail(email){
     e.preventDefault();
     erroEl.hidden = true; recadoEl.hidden = true;
     enviarBtn.disabled = true;
-    const email = emailEl.value.trim().toLowerCase();
+    const email = rgLimpaEmail(emailEl.value);
     const senha = senhaEl.value;
     try {
       if(modo === 'entrar'){
