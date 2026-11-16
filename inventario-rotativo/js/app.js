@@ -316,7 +316,20 @@ async function irLoadCicloData(cicloId, opts){
   if(opts && opts.rapido){
     IR.divergencias = []; IR.locais = []; IR.contagens = [];
     IR.itemDivSaldo = irCalcItemSaldo([]);
-    pesado.then(ok=>{ if(ok && !['importacao','configuracoes','exportar'].includes(IR.currentTab)) irRenderView(); })
+    pesado.then(ok=>{
+      if(!ok || ['importacao','configuracoes','exportar'].includes(IR.currentTab)) return;
+      /* No Dashboard só dois quadros dependem do pesado: troca só eles, em vez de
+         redesenhar a tela inteira de novo (era a maior trava depois de abrir). */
+      if(IR.currentTab==='dashboard' && document.getElementById('dxItensDiv') && document.getElementById('dxAssert')){
+        const rows = ((IR.indicadores||{}).divergentesPorDia||[]).slice(-7);
+        const tmp = document.createElement('div');
+        tmp.innerHTML = irRenderDivergentesPorDiaPanel(IR.indicadores);
+        const novoItens = tmp.querySelector('#dxItensDiv');
+        if(novoItens) document.getElementById('dxItensDiv').replaceWith(novoItens);
+        document.getElementById('dxAssert').outerHTML = irRenderAssertividadePanel();
+        irFluidAgendar();
+      } else irRenderView();
+    })
       .catch(e=>console.error('Falha ao carregar o ciclo', e));
   } else {
     await pesado;
@@ -1091,7 +1104,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v277';
+const IR_APP_VERSION = 'v278';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1321,8 +1334,8 @@ function irRenderAssertividadePanel(){
   const a = irAssertividade();
   const head = `<div class="dx-panel-h"><h3>Assertividade das contagens</h3>
     <div class="cmp-legend"><span><span class="cmp-dot" style="background:var(--success);"></span>acertou</span><span><span class="cmp-dot" style="background:var(--danger);"></span>errou</span><span><span class="dx-meta-leg"></span>meta 97%</span></div></div>`;
-  if(!a) return `<div class="panel">${head}<p class="field-hint">Carregando as contagens do ciclo...</p></div>`;
-  if(!a.julgadas) return `<div class="panel">${head}<p class="field-hint">Ainda não há contagens físicas confirmadas neste ciclo.</p></div>`;
+  if(!a) return `<div class="panel" id="dxAssert">${head}<p class="field-hint">Carregando as contagens do ciclo...</p></div>`;
+  if(!a.julgadas) return `<div class="panel" id="dxAssert">${head}<p class="field-hint">Ainda não há contagens físicas confirmadas neste ciclo.</p></div>`;
   const meta = IR_META_ACURACIA;
   const ranking = a.lista.filter(p=>p.contagens>=IR_ASSERT_MIN).sort((x,y)=> y.pct-x.pct || y.contagens-x.contagens);
   const poucas = a.lista.length - ranking.length;
@@ -1335,7 +1348,7 @@ function irRenderAssertividadePanel(){
       <span class="as-pct ${p.pct>=meta?'good':'bad'}">${irFmtPct(p.pct)}</span>
     </div>`;
   const melhor = ranking[0];
-  return `<div class="panel as-panel">
+  return `<div class="panel as-panel" id="dxAssert">
     ${head}
     <div class="as-topo">
       <div class="as-kpi"><span>Assertividade geral</span><b class="${a.pct>=meta?'good':'bad'}">${irFmtPct(a.pct)}</b><small>${irFmtInt(a.acertos)} de ${irFmtInt(a.julgadas)} contagens certas</small></div>
@@ -2558,9 +2571,9 @@ function irItensPorDiaMapa(){
 }
 function irRenderItensDivPorDia(rows, chart){
   const mapa = irItensPorDiaMapa();
-  if(!mapa) return `<div class="panel"><h3>Itens Divergentes</h3><p class="field-hint">Carregando itens do ciclo...</p></div>`;
+  if(!mapa) return `<div class="panel" id="dxItensDiv"><h3>Itens Divergentes</h3><p class="field-hint">Carregando itens do ciclo...</p></div>`;
   const comItens = rows.map(r=>({...r, itens:(mapa.get(r.dia)||{}).itens||0, itensTotal:(mapa.get(r.dia)||{}).itensTotal||0}));
-  return chart.call(null, 'itens', 'itensTotal', irFmtInt, 'Itens Divergentes', 66, null, comItens);
+  return chart.call(null, 'itens', 'itensTotal', irFmtInt, 'Itens Divergentes', 66, null, comItens).replace('<div class="panel">', '<div class="panel" id="dxItensDiv">');
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];
