@@ -1030,7 +1030,7 @@ function renderFoco(id){
 }
 function vaiPara(tab){
   if(!TABS[tab]) return;
-  if(tab==='importacao' && leitura()) tab='painel';
+  if(tab==='movs' || (tab==='importacao' && leitura())) tab='painel'; // aba Movimentações escondida por enquanto
   S.tab=tab; S.anima=true; fechaPainel();
   try { history.replaceState(null,'','#'+tab); } catch(e){}
   $('sidebar').classList.remove('mobile-open');
