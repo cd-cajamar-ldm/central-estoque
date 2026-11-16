@@ -5,7 +5,7 @@
  *
  * Bases (exportadas do Bseller e importadas aqui no navegador, guardadas no IndexedDB):
  *   QRY0100 (RG - Produtividade) → 1 linha = 1 RG. Acumula: cada importação soma os novos.
- *   QRY0390 (Estoque por Local)  → foto do saldo; substitui a anterior. Só REV e AVA.
+ *   QRY0390 (Estoque por Local)  → foto do saldo; substitui a anterior. Só as classes de reversa (CLASSES_REVERSA).
  *   ZBIQ0051 (Item x Múltiplo)   → liga item pai a componentes (para o indicador de múltiplos).
  * Cruzando RG x estoque por item + local sai a cobertura.
  *
@@ -14,7 +14,9 @@
 (function(){
 'use strict';
 
-var CLASSES_REVERSA = ['REV','AVA'];
+/* Classes de local que contam como reversa (classificação feita pelo administrador em 16/11/2026: REV, AVA e ATI).
+   Neutras (DENT, PALET, CARGA, DSAI, UMA) e de estoque ficam de fora. Mudou a lista? Importe a QRY0390 de novo. */
+var CLASSES_REVERSA = ['REV','AVA','ATI'];
 var FAIXAS = [[0,30,'até 30 d','#1F8A52'],[31,90,'31–90 d','#E0A100'],[91,180,'91–180 d','#FE5000'],[181,365,'181–365 d','#C83812'],[366,1e9,'+ de 1 ano','#7A1E0A']];
 var CORES_CLASSIF = ['#FE5000','#001A72','#1F8A52','#E0A100','#7D93E8','#8E99A8'];
 var PAGINA = 200;
