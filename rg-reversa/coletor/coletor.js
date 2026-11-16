@@ -7,7 +7,8 @@
 'use strict';
 
 var PEND_KEY = 'rg-reversa-pend';
-var S = { user:'', teclado:false, col:null, avisoLista:'' };
+var HIST_KEY = 'rg-reversa-coletor-hist', HIST_MAX_LOTES = 60, HIST_MAX_RGS = 5000;
+var S = { user:'', teclado:false, col:null, avisoLista:'', tela:'coletor', histAberto:'' };
 
 function $(id){ return document.getElementById(id); }
 function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -40,7 +41,33 @@ function nomeBox(raw){
 function campo(id, ph, c, onde, desligado){
   return '<input class="cl-in'+(c.erro&&c.foco===onde?' err':'')+'" id="'+id+'" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="'+ph+'"'+(S.teclado?'':' inputmode="none"')+(desligado?' disabled':'')+'>';
 }
+/* ---------- histórico de transferências (guardado no aparelho) ---------- */
+function guardaHist(rel){
+  var l=lsGet(HIST_KEY);
+  l.unshift({ lote:rel.lote, ts:Date.now(), data:rel.data, hora:rel.hora, origem:rel.origem, destino:rel.destino, rgs:rel.rgs.map(function(r){ return r.rg; }) });
+  var tot=0, out=[];
+  l.forEach(function(x){ if(out.length<HIST_MAX_LOTES && (tot+x.rgs.length<=HIST_MAX_RGS || !out.length)){ out.push(x); tot+=x.rgs.length; } });
+  lsSet(HIST_KEY,out);
+}
+function textoLote(x){
+  return RG.textoPutty(RG.linhasBlocos([{ origem:x.origem, destino:x.destino, rgs:x.rgs.map(function(r){ return {rg:r}; }) }]));
+}
+function viewHist(){
+  var lista=lsGet(HIST_KEY), pend=pendentes(), tot=lista.reduce(function(s,x){ return s+x.rgs.length; },0), h='';
+  h+='<div class="cl-box cl-hbox"><div class="cl-rel-h"><b>Histórico de transferências</b><span class="cl-rel-n">'+int(lista.length)+' lote'+(lista.length===1?'':'s')+' · '+int(tot)+' RGs</span></div>'+
+    '<div class="cl-btns"><button class="cl-pri" data-act="h-copy-all"'+(lista.length?'':' disabled')+'>📋 Copiar tudo</button><button class="cl-sec" data-act="h-voltar">← Voltar</button></div></div>';
+  if(!lista.length) h+='<div class="cl-vazio">Nenhuma transferência registrada neste aparelho ainda.</div>';
+  lista.forEach(function(x){
+    var aberto=S.histAberto===x.lote, naoEnv=pend.some(function(p){ return p.lote===x.lote; });
+    h+='<div class="cl-box cl-hitem"><div class="cl-hit-top"><b>'+esc(x.hora)+'</b><span>'+esc(x.data)+'</span>'+(naoEnv?'<em class="cl-hit-pend">não enviado</em>':'')+'<span class="cl-rel-n">'+x.rgs.length+' RG'+(x.rgs.length===1?'':'s')+'</span></div>'+
+      '<div class="cl-rel-rota"><b>'+esc(RG.localNorm(x.origem))+'</b><span>→</span><b>'+esc(RG.localNorm(x.destino))+'</b></div>'+
+      '<div class="cl-btns"><button class="cl-sec" data-act="h-ver" data-l="'+esc(x.lote)+'">'+(aberto?'Ocultar RGs':'Ver RGs')+'</button><button class="cl-pri" data-act="h-copy" data-l="'+esc(x.lote)+'">📋 Copiar</button></div>'+
+      (aberto?'<div class="cl-tabw"><table class="cl-tab"><thead><tr><th>#</th><th>RG</th></tr></thead><tbody>'+x.rgs.map(function(r,i){ return '<tr><td>'+(i+1)+'</td><td class="rg">'+esc(r)+'</td></tr>'; }).join('')+'</tbody></table></div>':'')+'</div>';
+  });
+  return h;
+}
 function view(){
+  if(S.tela==='hist') return viewHist();
   var c=S.col, pend=pendentes(), h='';
   if(pend.length) h+='<div class="cl-pend"><span>⚠ <b>'+int(pend.reduce(function(s,p){ return s+p.rows.length; },0))+'</b> bipagens aguardando envio.</span><button data-act="sync">Enviar</button></div>';
   /* Relatório da movimentação que acabou de ser finalizada: copiar → movimentar no WMS → Finalizar movimentação. */
@@ -51,7 +78,6 @@ function view(){
       '<div class="cl-rel-rota"><b>'+esc(RG.localNorm(rel.origem))+'</b><span>→</span><b>'+esc(RG.localNorm(rel.destino))+'</b></div>'+
       (rel.salvo?'':'<div class="cl-msg bad" style="margin-bottom:8px">Sem conexão: o histórico será enviado depois.</div>')+
       '<button class="cl-pri cl-copiar'+(rel.usado?' feito':'')+'" data-act="rel-copy">'+(rel.usado?'✔ Copiado — copiar de novo':'📋 Copiar relatório')+'</button>'+
-      '<div class="cl-rel-dica">Copia só os códigos da transferência (origem · RG · destino), uma linha por RG. Cole no PuTTY, faça a movimentação e toque em Finalizar.</div>'+
       '<div class="cl-tabw"><table class="cl-tab"><thead><tr><th>Local de origem</th><th>RG</th><th>Local de destino</th></tr></thead><tbody>'+
       rel.rgs.map(function(r){ return '<tr><td>'+esc(RG.localNorm(rel.origem))+'</td><td class="rg">'+esc(r.rg)+'</td><td>'+esc(RG.localNorm(rel.destino))+'</td></tr>'; }).join('')+'</tbody></table></div>'+
       '<button class="cl-lnk" data-act="rel-xlsx">⬇ Baixar Excel (opcional)</button></div>'+
@@ -64,9 +90,9 @@ function view(){
     else h+=campo('clOrigem','bipe o local de origem',c,'origem');
     h+='</div>';
     /* 2 · RGs */
-    h+='<div class="cl-box'+(c.origem?(c.rgs.length?' ok':' on'):' off')+'"><label for="clRg"><span class="cl-n">2</span>RGs</label>'+campo('clRg','bipe o RG',c,'rg',!c.origem)+
+    h+='<div class="cl-box'+(c.origem?(c.rgs.length?' ok':' on'):' off')+'"><label for="clRg"><span class="cl-n">2</span>RGs<span class="cl-qtd">Qtd <b>'+c.rgs.length+'</b></span></label>'+campo('clRg','bipe o RG',c,'rg',!c.origem)+
       '<div class="cl-list" id="clList">'+(c.rgs.length?c.rgs.map(function(r,i){ return '<div class="cl-li"><span>'+(i+1)+'</span><b>'+esc(r.rg)+'</b><button data-act="del" data-i="'+i+'" aria-label="Remover">✕</button></div>'; }).join(''):'<div class="cl-vazio">Os RGs bipados aparecem aqui, um por linha.</div>')+'</div>'+
-      '<div class="cl-qtd">Quantidade bipada: <b>'+c.rgs.length+'</b></div></div>';
+      '</div>';
     /* 3 · destino */
     h+='<div class="cl-box'+(c.destino?' ok':(c.rgs.length?' on':' off'))+'"><label for="clDestino"><span class="cl-n">3</span>Local de destino</label>';
     if(c.destino) h+='<div class="cl-lock"><b>'+esc(RG.localNorm(c.destino))+'</b><button data-act="trocar-d" aria-label="Trocar destino">✎</button></div>'+nomeBox(c.destino);
@@ -100,7 +126,8 @@ function commit(campoNome, el){
     if(RG.localCodigo(v)===RG.localCodigo(c.origem)){ el.value=''; return erro('O destino é igual à origem.','destino'); }
     c.destino=v; c.foco='final'; bip(true); return render();
   }
-  var rg=String(v).trim();
+  var rg=String(v).replace(/[^0-9A-Za-z]/g,'');   /* o leitor às vezes manda um "+" ou outro símbolo na frente */
+  if(!rg){ el.value=''; return; }
   if(c.rgs.some(function(r){ return r.rg===rg; })){ el.value=''; return erro('RG '+rg+' já foi bipado neste palete.','rg'); }
   c.rgs.push({rg:rg}); c.foco='rg'; bip(true); render();
 }
@@ -126,6 +153,7 @@ function finaliza(){
   var rows=c.rgs.map(function(r){ return { lote:lote, criado_em:quando, operador:S.user, local_origem:c.origem, rg:r.rg, local_destino:c.destino }; });
   var resumo=c.rgs.length+' RGs · '+RG.localNorm(c.origem)+' → '+RG.localNorm(c.destino), hora=d2(new Date().getHours())+':'+d2(new Date().getMinutes());
   var ultimo='', hist=c.hist, rel={ lote:lote, hora:hora, origem:c.origem, destino:c.destino, rgs:c.rgs.slice(), salvo:false, data:new Date().toLocaleDateString('pt-BR') };
+  guardaHist(rel);
   enviaLote(rows).then(function(){ hist.unshift(hora+' · '+resumo); rel.salvo=true; toast('Movimentação salva: '+resumo); }).catch(function(){
     var p=pendentes(); p.push({lote:lote, rows:rows}); lsSet(PEND_KEY,p);
     hist.unshift(hora+' · '+resumo+' (pendente)'); toast('Sem conexão — guardei no aparelho e envio depois.', true);
@@ -145,7 +173,7 @@ function xlsx(){
 function copia(){
   var r=S.col.rel; if(!r) return;
   var linhas=RG.linhasBlocos([blocoRel(r)]);
-  RG.copia(linhas.join('\n')).then(function(){ r.usado=true; toast(int(linhas.length)+' linhas copiadas — cole no PuTTY.'); marca(r); render(); });
+  RG.copia(RG.textoPutty(linhas)).then(function(){ r.usado=true; toast(int(linhas.length)+' linhas copiadas — cole no PuTTY.'); marca(r); render(); });
 }
 /* Exportou o relatório: marca o lote como exportado (se já chegou ao banco). */
 function marca(r){
@@ -174,6 +202,16 @@ document.addEventListener('click', function(ev){
   if(a==='final') return finaliza();
   if(a==='sync') return sync();
   if(a==='rel-xlsx') return xlsx();
+  if(a==='h-voltar'){ S.tela='coletor'; $('clHist').classList.remove('on'); return render(); }
+  if(a==='h-ver'){ S.histAberto = S.histAberto===el.dataset.l ? '' : el.dataset.l; return render(); }
+  if(a==='h-copy'){
+    var x=lsGet(HIST_KEY).filter(function(y){ return y.lote===el.dataset.l; })[0]; if(!x) return;
+    return RG.copia(textoLote(x)).then(function(){ toast(x.rgs.length+' linhas copiadas.'); });
+  }
+  if(a==='h-copy-all'){
+    var todos=lsGet(HIST_KEY); if(!todos.length) return;
+    return RG.copia(todos.map(textoLote).join('')).then(function(){ toast(todos.reduce(function(s,y){ return s+y.rgs.length; },0)+' linhas copiadas.'); });
+  }
   if(a==='rel-copy') return copia();
   if(a==='fim-mov'){
     if(c.rel && !c.rel.usado && !confirm('Você ainda não copiou o relatório. Finalizar mesmo assim?')) return;
@@ -195,6 +233,7 @@ document.addEventListener('keydown', function(ev){
 });
 $('clTeclado').addEventListener('click', function(){ S.teclado=!S.teclado; this.classList.toggle('on',S.teclado); render(); });
 $('clSync').addEventListener('click', function(){ carregaLista(true); });
+$('clHist').addEventListener('click', function(){ S.tela = S.tela==='hist' ? 'coletor' : 'hist'; this.classList.toggle('on', S.tela==='hist'); render(); var sc=document.querySelector('.cl-scroll'); if(sc) sc.scrollTop=0; });
 /* o leitor às vezes tira o foco ao tocar na tela: um toque fora dos campos devolve o foco ao campo da vez */
 document.addEventListener('click', function(ev){ if(!ev.target.closest('button,input,a')) foco(); });
 

@@ -105,6 +105,15 @@ function rgAcessoEmPortugues(msg){
          Não bloqueia o app por causa disso — se falhar, só não conta. */
       rgSupa.rpc('ldm_registrar_acesso', { p_app_key: RG_APP_KEY }).then(function(){}, function(){});
       window.rgIniciar();
+      /* Nível de acesso: 'visualizar' = consulta + coletor, sem importar nem apagar dados (o banco também recusa).
+         Se a consulta falhar ou demorar, segue como editor — quem decide de verdade é o banco. */
+      rgSupa.rpc('ldm_nivel_acesso', { p_app_key: RG_APP_KEY }).then(function(r){
+        if(r && r.data === 'visualizar'){
+          window.LDM_SOMENTE_LEITURA = true;
+          document.documentElement.classList.add('somente-leitura');
+          if(window.rgAplicaNivel) window.rgAplicaNivel();
+        }
+      }, function(){});
   }
 
   async function rgVerificarAcesso(){
