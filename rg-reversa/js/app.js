@@ -979,7 +979,7 @@ function mvXlsx(){
 function mvCopy(){
   var lista=movsFiltradas(); if(!lista.length) return;
   var l=RG.linhasBlocos(blocosMovs(lista));
-  RG.copia(l.join('\n')).then(function(){ toast(int(l.length)+' linhas (RGs) copiadas — cole no PuTTY.'); marcaExportado(lista); });
+  RG.copia(RG.textoPutty(l)).then(function(){ toast(int(l.length)+' linhas (RGs) copiadas — cole no PuTTY.'); marcaExportado(lista); });
 }
 function copiaFallback(txt){ var t=document.createElement('textarea'); t.value=txt; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch(e){} t.remove(); }
 
