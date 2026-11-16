@@ -254,7 +254,9 @@ async function irInit(){
   irUpdateThemeLabel();
   irApplyZoom(parseInt(localStorage.getItem('ir-zoom'), 10) || 100);
 
+  irMostrarFotoDash();
   await irPreCarregar();
+  irMarca('dados locais lidos');
   irMostrarVersao();
   /* Link direto para uma aba específica (ex.: usado pela TV LDM): #setores
      abre direto em Setores, sem passar pelo Dashboard. */
@@ -264,6 +266,7 @@ async function irInit(){
     if(irH && IR_TAB_LABELS[irH]) irHashTab = irH;
   } catch(e){}
   irSwitchTab(irHashTab);
+  irMarca('tela desenhada');
 
   // Daqui pra baixo nada segura a tela.
   if(IR.net410AnoSel){
@@ -314,6 +317,7 @@ async function irLoadCicloData(cicloId, opts){
     IR.divergencias = divergencias; IR.locais = locais; IR.contagens = contagens;
     IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
     IR._cicloPesadoId = cicloId;
+    irMarca('ciclo completo carregado');
     return true;
   });
   if(opts && opts.rapido){
@@ -620,7 +624,39 @@ function irRenderView(){
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
   irFitKpiNumbers();
   irFluidAjustar();
+  if(IR.currentTab==='dashboard') irGuardarFotoDash();
 }
+/* "Foto" do Dashboard: a última tela desenhada fica guardada no aparelho e
+   aparece na hora na próxima abertura (logo depois da permissão), enquanto os
+   dados são lidos; em seguida a tela de verdade é desenhada por cima. Só o
+   Dashboard, e só se for do mesmo ciclo e da mesma versão do app. */
+const IR_FOTO_KEY = 'ir-foto-dash';
+let _irFotoT = null;
+function irGuardarFotoDash(){
+  clearTimeout(_irFotoT);
+  _irFotoT = setTimeout(()=>{
+    try{
+      const root = document.getElementById('viewRoot');
+      if(!root || IR.currentTab!=='dashboard' || !IR.cicloAtivo) return;
+      const html = root.innerHTML;
+      if(html.length > 1500000) return; // grande demais para guardar
+      localStorage.setItem(IR_FOTO_KEY, JSON.stringify({v:IR_APP_VERSION, c:IR.cicloAtivo.id, h:html}));
+    }catch(e){}
+  }, 1500);
+}
+function irMostrarFotoDash(){
+  try{
+    let alvo = 'dashboard';
+    try{ const h = decodeURIComponent(location.hash.slice(1)); if(h) alvo = h; }catch(e){}
+    if(alvo!=='dashboard') return;
+    const f = JSON.parse(localStorage.getItem(IR_FOTO_KEY)||'null');
+    if(!f || f.v!==IR_APP_VERSION || !f.h) return;
+    const root = document.getElementById('viewRoot');
+    if(root && /Carregando/.test(root.textContent||'')){ root.innerHTML = f.h; irMarca('foto da última tela'); }
+  }catch(e){}
+}
+/* Marcas de tempo para o modo de medição (?tempos=1). */
+function irMarca(nome){ try{ performance.mark('ldm:'+nome); }catch(e){} }
 /* Encolhe o numero de cada tile de KPI ate ele caber na largura real disponivel.
    O grid dos blocos e auto-fit, entao a largura da tile muda de forma pouco previsivel
    conforme a tela (medido: 76px a 1500px, 86px a 1280px, 111px a 1920px) — chutar o
@@ -1113,7 +1149,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v279';
+const IR_APP_VERSION = 'v280';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
