@@ -35,7 +35,14 @@ async function rgDicaDeEmail(email){
     const { data, error } = await rgSupa.rpc('ldm_situacao_email', { p_email: email });
     if(error || !data) return null;
     if(data === 'sem_conta') return 'Este e-mail já foi liberado pelo administrador, mas ainda não tem senha criada. Clique em "Primeiro acesso" e crie sua senha.';
-    if(data === 'nao_cadastrado') return 'Este e-mail ainda não foi liberado. Peça pro administrador cadastrar em Configurações, no painel da Central.';
+    if(data === 'nao_cadastrado'){
+      /* Mostra exatamente o que foi procurado: quase sempre é letra trocada (ex.: "macanico" em vez de "mecanico"). */
+      const DOMINIO = '@lojadomecanico.com.br';
+      const certo = email.slice(-DOMINIO.length) === DOMINIO;
+      return 'O e-mail "' + email + '" não está na lista de liberados. ' +
+        (certo ? 'Confira se não há letra trocada ou faltando. ' : 'O e-mail da empresa termina em ' + DOMINIO + ' — confira o que foi digitado. ') +
+        'Se estiver certo, peça pro administrador cadastrar em Configurações, no painel da Central.';
+    }
     if(data === 'tem_conta') return 'Este e-mail já tem senha, e ela não confere. Se usa outro app da Central (Inventário, Tarefas...), é a mesma senha. Se esqueceu, clique em "Esqueci a senha".';
     return null;
   } catch(e){ return null; }

@@ -1930,6 +1930,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         if(a === 'mostrar'){ var i = document.getElementById('senhaNova'); var oculto = i.type === 'password'; i.type = oculto ? 'text' : 'password'; b.textContent = oculto ? 'Ocultar' : 'Mostrar'; return; }
         if(a === 'gerar'){ var campo = document.getElementById('senhaNova'); campo.value = senhaGerar(); campo.type = 'text'; document.querySelector('[data-s="mostrar"]').textContent = 'Ocultar'; return; }
         if(a === 'copiar'){ var cod = document.getElementById('senhaCod').textContent; (navigator.clipboard ? navigator.clipboard.writeText(cod) : Promise.reject()).then(function(){ b.textContent = '✔ Copiada'; }, function(){ var r = document.createRange(); r.selectNodeContents(document.getElementById('senhaCod')); var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent = 'Selecionada: copie com Ctrl+C'; }); return; }
+        if(a === 'copiar-tudo'){ var cod2 = document.getElementById('senhaCod').textContent; var txt = 'E-mail: ' + senhaPessoa.email + '\nSenha: ' + cod2; (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function(){ b.textContent = '✔ Copiado'; }, function(){ b.textContent = 'Não consegui copiar'; }); return; }
         if(a === 'salvar') return senhaSalvar();
       });
       senhaFundo.addEventListener('keydown', function(ev){
@@ -1972,8 +1973,8 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       document.getElementById('senhaCorpo').innerHTML =
           '<p class="senha-ok">✔ Senha definida. Passe para <b>' + esc(pessoa.nome) + '</b> o e-mail e a senha abaixo. Ela já pode entrar nos apps que você liberou.</p>'
         + '<code class="senha-cod" id="senhaCod">' + esc(senha) + '</code>'
-        + '<p class="senha-aviso">Esta senha só aparece agora e não fica guardada em lugar nenhum. Se perder, é só definir outra.</p>'
-        + '<div class="senha-acoes"><button type="button" data-s="copiar">Copiar senha</button><button type="button" class="pri" data-s="fechar">Fechar</button></div>';
+        + '<p class="senha-aviso">O e-mail dela é <b>' + esc(pessoa.email) + '</b> — confira se ela digita igual. Esta senha só aparece agora e não fica guardada em lugar nenhum; se perder, é só definir outra.</p>'
+        + '<div class="senha-acoes"><button type="button" data-s="copiar">Copiar senha</button><button type="button" data-s="copiar-tudo">Copiar e-mail e senha</button><button type="button" class="pri" data-s="fechar">Fechar</button></div>';
       accessCarregarTudo();
     } catch(f){
       erro.textContent = senhaEmPortugues(f && f.message); erro.hidden = false;
