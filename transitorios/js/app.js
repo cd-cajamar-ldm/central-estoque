@@ -799,7 +799,7 @@ function irTransPainelSetor(g, logs, estatico){
         ganhoSetor>0 ? irFmtPct(g.valor?ganhoSetor/g.valor:0)+' do saldo · ganho no NET do ano' : irTransDiagDuplicidade(),
         ganhoSetor>0 ? 'trans-kpi-dup' : '')}
     </div>
-    ${irTransGraficos(totCol, totValFaixa)}
+    ${estatico ? '' : irTransGraficos(totCol, totValFaixa)}
     <div class="table-wrap"><table class="trans-table">
       <thead>
         <tr><th rowspan="2" class="tt-local">Local transitório</th><th rowspan="2" class="tt-desc">Descrição</th>
