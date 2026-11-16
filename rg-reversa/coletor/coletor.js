@@ -38,7 +38,7 @@ function novo(ultimo, hist, rel){ return { origem:'', rgs:[], destino:'', msg:''
 function nomeBox(raw){
   var cod=RG.localNorm(raw), x=RG.nomeLocal(raw);
   if(x && x.d) return '<div class="cl-nome"><b>'+esc(x.d)+'</b><small>'+esc(x.c)+'</small></div>';
-  return '<div class="cl-nome sem"><b>'+(RG.locais.mapa.size?'Local não encontrado na lista':'Lista de locais ainda não carregada')+'</b><small>código '+esc(cod)+'</small></div>';
+  return '<div class="cl-nome sem"><b>'+(RG.locais.mapa.size?'Local não encontrado na lista':'Lista de locais ainda não carregada')+'</b><small>código '+esc(cod)+(RG.locais.mapa.size?' · não está na última QRY0390 importada':'')+'</small></div>';
 }
 function campo(id, ph, c, onde, desligado){
   return '<input class="cl-in'+(c.erro&&c.foco===onde?' err':'')+'" id="'+id+'" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="'+ph+'"'+(S.teclado?'':' inputmode="none"')+(desligado?' disabled':'')+'>';
@@ -88,7 +88,7 @@ function view(){
     var pode=c.origem && c.rgs.length && c.destino && !c.salvando;
     /* 1 · origem */
     h+='<div class="cl-box'+(c.origem?' ok':' on')+'"><label for="clOrigem"><span class="cl-n">1</span>Local de origem</label>';
-    if(c.origem) h+='<div class="cl-lock"><b>'+esc(RG.localNorm(c.origem))+'</b><button data-act="trocar-o" aria-label="Trocar origem">✎</button></div>'+nomeBox(c.origem);
+    if(c.origem) h+='<div class="cl-lock"><b>'+esc(RG.localNorm(c.origem))+'</b><button data-act="trocar-o" aria-label="Trocar origem">✎</button></div>'+'<div data-nome="origem">'+nomeBox(c.origem)+'</div>';
     else h+=campo('clOrigem','bipe o local de origem',c,'origem');
     h+='</div>';
     /* 2 · RGs */
@@ -97,7 +97,7 @@ function view(){
       '</div>';
     /* 3 · destino */
     h+='<div class="cl-box'+(c.destino?' ok':(c.rgs.length?' on':' off'))+'"><label for="clDestino"><span class="cl-n">3</span>Local de destino</label>';
-    if(c.destino) h+='<div class="cl-lock"><b>'+esc(RG.localNorm(c.destino))+'</b><button data-act="trocar-d" aria-label="Trocar destino">✎</button></div>'+nomeBox(c.destino);
+    if(c.destino) h+='<div class="cl-lock"><b>'+esc(RG.localNorm(c.destino))+'</b><button data-act="trocar-d" aria-label="Trocar destino">✎</button></div>'+'<div data-nome="destino">'+nomeBox(c.destino)+'</div>';
     else h+=campo('clDestino','bipe o local de destino',c,'destino',!c.rgs.length);
     h+='</div>';
     if(c.msg) h+='<div class="cl-msg'+(c.erro?' bad':'')+'">'+esc(c.msg)+'</div>';
@@ -117,16 +117,26 @@ function foco(){
   var c=S.col, id = c.foco==='final' ? 'clFinal' : c.foco==='destino' ? 'clDestino' : c.foco==='rg' ? 'clRg' : 'clOrigem';
   var el=$(id); if(el && !el.disabled) el.focus();
 }
+/* Local que o aparelho não conhece: pergunta só por ele ao servidor e troca a caixa do nome sem redesenhar a tela
+   (redesenhar apagaria o que a pessoa estiver bipando). */
+function procuraNome(onde){
+  var c=S.col, raw=c && c[onde];
+  if(!raw || RG.nomeLocal(raw) || !window.rgSupa) return;
+  RG.buscaLocal(window.rgSupa, raw).then(function(x){
+    var el=document.querySelector('[data-nome="'+onde+'"]');
+    if(x && el && S.col && S.col[onde]===raw) el.innerHTML=nomeBox(raw);
+  });
+}
 function erro(msg, onde){ var c=S.col; c.erro=true; c.msg=msg; c.foco=onde; bip(false); render(); }
 
 /* ---------- bipagem ---------- */
 function commit(campoNome, el){
   var c=S.col, v=el.value.trim(); if(!v) return;
   c.erro=false; c.msg='';
-  if(campoNome==='origem'){ c.origem=v; c.rel=null; c.foco='rg'; bip(true); return render(); }
+  if(campoNome==='origem'){ c.origem=v; c.rel=null; c.foco='rg'; bip(true); render(); return procuraNome('origem'); }
   if(campoNome==='destino'){
     if(RG.localCodigo(v)===RG.localCodigo(c.origem)){ el.value=''; return erro('O destino é igual à origem.','destino'); }
-    c.destino=v; c.foco='final'; bip(true); return render();
+    c.destino=v; c.foco='final'; bip(true); render(); return procuraNome('destino');
   }
   var rg=String(v).replace(/[^0-9A-Za-z]/g,'');   /* o leitor às vezes manda um "+" ou outro símbolo na frente */
   if(!rg){ el.value=''; return; }
@@ -135,7 +145,7 @@ function commit(campoNome, el){
   if(/^\d{5,12}$/.test(rg)){
     if(!c.rgs.length){ el.value=''; return erro('Bipe pelo menos um RG antes do local de destino.','rg'); }
     if(RG.localCodigo(rg)===RG.localCodigo(c.origem)){ el.value=''; return erro('O destino é igual à origem.','rg'); }
-    c.destino=v; c.foco='final'; bip(true); return render();
+    c.destino=v; c.foco='final'; bip(true); render(); return procuraNome('destino');
   }
   if(c.rgs.some(function(r){ return r.rg===rg; })){ el.value=''; return erro('RG '+rg+' já foi bipado neste palete.','rg'); }
   c.rgs.push({rg:rg}); c.foco='rg'; bip(true); render();
