@@ -37,6 +37,21 @@ async function mdDicaDeEmail(email){
   } catch(e){ return null; }
 }
 
+/* Evita a tela travar pra sempre: às vezes o navegador fica esperando outra
+   aba de um app da Oficina LDM (mesmo projeto Supabase, mesma sessão)
+   liberar o login. Depois desse tempo, desiste e explica em vez de travar
+   sem nenhuma mensagem. */
+function comLimite(promessa, segundos){
+  return Promise.race([
+    promessa,
+    new Promise(function(_, rejeitar){
+      setTimeout(function(){
+        rejeitar(new Error('Demorou demais pra responder. Feche as outras abas de apps da Oficina LDM e tente de novo.'));
+      }, segundos * 1000);
+    })
+  ]);
+}
+
 (function(){
   const telaAcesso = document.getElementById('telaAcesso');
   const telaLogin = document.getElementById('acessoLogin');
@@ -86,15 +101,15 @@ async function mdDicaDeEmail(email){
     const senha = senhaEl.value;
     try {
       if(modo === 'entrar'){
-        const { error } = await mdSupa.auth.signInWithPassword({ email: email, password: senha });
+        const { error } = await comLimite(mdSupa.auth.signInWithPassword({ email: email, password: senha }), 12);
         if(error) throw error;
       } else if(modo === 'criar'){
-        const { error } = await mdSupa.auth.signUp({ email: email, password: senha });
+        const { error } = await comLimite(mdSupa.auth.signUp({ email: email, password: senha }), 12);
         if(error) throw error;
         recadoEl.textContent = 'Acesso criado. Se o e-mail já estiver liberado pro administrador, você já entra; senão, peça pra ele te cadastrar em Configurações.';
         recadoEl.hidden = false;
       } else {
-        const { error } = await mdSupa.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+        const { error } = await comLimite(mdSupa.auth.resetPasswordForEmail(email, { redirectTo: window.location.href }), 12);
         if(error) throw error;
         recadoEl.textContent = 'Se este e-mail tiver acesso, o link de troca de senha chega em instantes.';
         recadoEl.hidden = false;

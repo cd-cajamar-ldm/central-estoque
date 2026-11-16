@@ -1783,6 +1783,21 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     return msg || 'Não consegui completar a operação.';
   }
 
+  /* Evita a tela travar pra sempre: às vezes o navegador fica esperando outra
+     aba de um app da Oficina LDM (mesmo projeto Supabase, mesma sessão)
+     liberar o login. Depois desse tempo, desiste e explica em vez de travar
+     sem nenhuma mensagem. */
+  function comLimite(promessa, segundos){
+    return Promise.race([
+      promessa,
+      new Promise(function(_, rejeitar){
+        setTimeout(function(){
+          rejeitar(new Error('Demorou demais pra responder. Feche as outras abas de apps da Oficina LDM e tente de novo.'));
+        }, segundos * 1000);
+      })
+    ]);
+  }
+
   var accessLoginBox = document.getElementById('accessLogin');
   var accessDeniedBox = document.getElementById('accessDenied');
   var accessAdminBox = document.getElementById('accessAdmin');
@@ -1958,7 +1973,14 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   async function accessVerificarSessao(){
     if(!sbAcessos) return;
     accessMsg(null);
-    var { data: { session } } = await sbAcessos.auth.getSession();
+    var session;
+    try {
+      session = (await comLimite(sbAcessos.auth.getSession(), 8)).data.session;
+    } catch(falha){
+      document.getElementById('accessDeniedTexto').textContent = accessEmPortugues(falha && falha.message);
+      accessMostrar('negado');
+      return;
+    }
     if(!session){ accessMostrar('login'); return; }
     var { data: pessoa, error } = await sbAcessos.schema('acessos').from('pessoas')
       .select('papel,ativo').eq('user_id', session.user.id).maybeSingle();
@@ -1985,11 +2007,20 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     accessLoginForm.addEventListener('submit', async function(e){
       e.preventDefault();
       accessLoginMsg.hidden = true;
+      var botao = accessLoginForm.querySelector('button[type="submit"]');
       var email = accessLimpaEmail(document.getElementById('accessLoginEmail').value);
       var senha = document.getElementById('accessLoginSenha').value;
-      var { error } = await sbAcessos.auth.signInWithPassword({ email: email, password: senha });
-      if(error){ accessLoginMsg.textContent = accessEmPortugues(error.message); accessLoginMsg.hidden = false; return; }
-      accessVerificarSessao();
+      if(botao) botao.disabled = true;
+      try {
+        var { error } = await comLimite(sbAcessos.auth.signInWithPassword({ email: email, password: senha }), 12);
+        if(error){ accessLoginMsg.textContent = accessEmPortugues(error.message); accessLoginMsg.hidden = false; return; }
+        accessVerificarSessao();
+      } catch(falha){
+        accessLoginMsg.textContent = accessEmPortugues(falha && falha.message);
+        accessLoginMsg.hidden = false;
+      } finally {
+        if(botao) botao.disabled = false;
+      }
     });
   }
   ['accessLogoutBtn', 'accessLogoutBtnNegado'].forEach(function(id){
