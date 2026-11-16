@@ -235,6 +235,9 @@ async function irCarregarEssencial(){
     IR.net410Anos = net410Anos;
     if(IR.net410Anos.length) IR.net410AnoSel = IR.net410Anos[0];
     if(pCiclo) await pCiclo;
+    // Comparativo dos ciclos (acurácia mensal/anual e Ciclos do ano) já na 1ª tela:
+    // antes ele chegava depois e o Dashboard inteiro era desenhado de novo.
+    if(IR.ciclos.length) await irCarregarComparativoCiclos(true);
   }catch(e){
     // Guarda o erro: sem isso, uma falha ao ABRIR o banco (dados intactos, só
     // inacessíveis) aparecia na tela como "nenhum ciclo importado ainda" — que
@@ -251,7 +254,9 @@ async function irInit(){
   irUpdateThemeLabel();
   irApplyZoom(parseInt(localStorage.getItem('ir-zoom'), 10) || 100);
 
+  irMostrarFotoDash();
   await irPreCarregar();
+  irMarca('dados locais lidos');
   irMostrarVersao();
   /* Link direto para uma aba específica (ex.: usado pela TV LDM): #setores
      abre direto em Setores, sem passar pelo Dashboard. */
@@ -261,6 +266,7 @@ async function irInit(){
     if(irH && IR_TAB_LABELS[irH]) irHashTab = irH;
   } catch(e){}
   irSwitchTab(irHashTab);
+  irMarca('tela desenhada');
 
   // Daqui pra baixo nada segura a tela.
   if(IR.net410AnoSel){
@@ -311,12 +317,26 @@ async function irLoadCicloData(cicloId, opts){
     IR.divergencias = divergencias; IR.locais = locais; IR.contagens = contagens;
     IR.itemDivSaldo = irCalcItemSaldo(IR.divergencias);
     IR._cicloPesadoId = cicloId;
+    irMarca('ciclo completo carregado');
     return true;
   });
   if(opts && opts.rapido){
     IR.divergencias = []; IR.locais = []; IR.contagens = [];
     IR.itemDivSaldo = irCalcItemSaldo([]);
-    pesado.then(ok=>{ if(ok && !['importacao','configuracoes','exportar'].includes(IR.currentTab)) irRenderView(); })
+    pesado.then(ok=>{
+      if(!ok || ['importacao','configuracoes','exportar'].includes(IR.currentTab)) return;
+      /* No Dashboard só dois quadros dependem do pesado: troca só eles, em vez de
+         redesenhar a tela inteira de novo (era a maior trava depois de abrir). */
+      if(IR.currentTab==='dashboard' && document.getElementById('dxItensDiv') && document.getElementById('dxAssert')){
+        const rows = ((IR.indicadores||{}).divergentesPorDia||[]).slice(-7);
+        const tmp = document.createElement('div');
+        tmp.innerHTML = irRenderDivergentesPorDiaPanel(IR.indicadores);
+        const novoItens = tmp.querySelector('#dxItensDiv');
+        if(novoItens) document.getElementById('dxItensDiv').replaceWith(novoItens);
+        document.getElementById('dxAssert').outerHTML = irRenderAssertividadePanel();
+        irFluidAgendar();
+      } else irRenderView();
+    })
       .catch(e=>console.error('Falha ao carregar o ciclo', e));
   } else {
     await pesado;
@@ -327,7 +347,7 @@ async function irLoadCicloData(cicloId, opts){
 // Carrega os indicadores de TODOS os ciclos já processados (ordenados por ano+número)
 // pro gráfico "Comparativo de Acurácias entre Ciclos" do Dashboard — cada ciclo já é
 // isolado por cicloId no IndexedDB, então não há mistura entre eles aqui.
-async function irCarregarComparativoCiclos(){
+async function irCarregarComparativoCiclos(semRender){
   const ciclosOrdenados = IR.ciclos.slice().sort((a,b)=>{
     const anoA = irCicloAno(a)||0, anoB = irCicloAno(b)||0;
     return anoA!==anoB ? anoA-anoB : a.numero-b.numero;
@@ -344,7 +364,7 @@ async function irCarregarComparativoCiclos(){
     ({ciclo:c, ind: await irGetIndicadores(c.id)})
   ));
   IR.comparativoCiclos = resultados.map((r, i)=> r.status==='fulfilled' ? r.value : {ciclo:ciclosOrdenados[i], ind:null});
-  irRenderView();
+  if(!semRender) irRenderView();
 }
 const IR_MOBILE_QUERY = '(max-width:640px)'; // precisa bater com o breakpoint do CSS (theme.css)
 // No mobile o menu é um overlay (aberto/fechado); no desktop é o modo compacto de 56px.
@@ -550,16 +570,22 @@ async function irFiltrarCiclo(cicloId){
 IR._fluid = {};
 function irFluid(key, build, altura){
   IR._fluid[key] = build;
-  return `<div class="ir-fluid" data-k="${key}" style="min-height:${altura}px">${build(760)}</div>`;
+  // Desenha uma vez só, já na largura real (irFluidAjustar logo após a tela montar).
+  return `<div class="ir-fluid" data-k="${key}" style="min-height:${altura}px"></div>`;
 }
 function irFluidAjustar(){
+  // Lê todas as larguras primeiro e só depois escreve: intercalar leitura e escrita
+  // obrigava o navegador a recalcular o layout da página a cada gráfico.
+  const alvos = [];
   document.querySelectorAll('#viewRoot .ir-fluid').forEach(el=>{
     const b = IR._fluid[el.dataset.k];
     const w = Math.floor(el.clientWidth);
-    if(!b || w<160 || String(w)===el.dataset.w) return;
-    el.dataset.w = w;
-    el.innerHTML = b(w);
+    if(!b) return;
+    if(w<160){ if(!el.dataset.w) alvos.push([el, b, 760]); return; } // escondido: desenha num tamanho padrão
+    if(String(w)===el.dataset.w) return;
+    alvos.push([el, b, w]);
   });
+  for(const [el, b, w] of alvos){ el.dataset.w = w; el.innerHTML = b(w); }
 }
 let _irFluidT = null;
 function irFluidAgendar(){ clearTimeout(_irFluidT); _irFluidT = setTimeout(irFluidAjustar, 60); }
@@ -598,7 +624,39 @@ function irRenderView(){
   if(IR.currentTab==='dashboard') irScrollVBarsToEnd();
   irFitKpiNumbers();
   irFluidAjustar();
+  if(IR.currentTab==='dashboard') irGuardarFotoDash();
 }
+/* "Foto" do Dashboard: a última tela desenhada fica guardada no aparelho e
+   aparece na hora na próxima abertura (logo depois da permissão), enquanto os
+   dados são lidos; em seguida a tela de verdade é desenhada por cima. Só o
+   Dashboard, e só se for do mesmo ciclo e da mesma versão do app. */
+const IR_FOTO_KEY = 'ir-foto-dash';
+let _irFotoT = null;
+function irGuardarFotoDash(){
+  clearTimeout(_irFotoT);
+  _irFotoT = setTimeout(()=>{
+    try{
+      const root = document.getElementById('viewRoot');
+      if(!root || IR.currentTab!=='dashboard' || !IR.cicloAtivo) return;
+      const html = root.innerHTML;
+      if(html.length > 1500000) return; // grande demais para guardar
+      localStorage.setItem(IR_FOTO_KEY, JSON.stringify({v:IR_APP_VERSION, c:IR.cicloAtivo.id, h:html}));
+    }catch(e){}
+  }, 1500);
+}
+function irMostrarFotoDash(){
+  try{
+    let alvo = 'dashboard';
+    try{ const h = decodeURIComponent(location.hash.slice(1)); if(h) alvo = h; }catch(e){}
+    if(alvo!=='dashboard') return;
+    const f = JSON.parse(localStorage.getItem(IR_FOTO_KEY)||'null');
+    if(!f || f.v!==IR_APP_VERSION || !f.h) return;
+    const root = document.getElementById('viewRoot');
+    if(root && /Carregando/.test(root.textContent||'')){ root.innerHTML = f.h; irMarca('foto da última tela'); }
+  }catch(e){}
+}
+/* Marcas de tempo para o modo de medição (?tempos=1). */
+function irMarca(nome){ try{ performance.mark('ldm:'+nome); }catch(e){} }
 /* Encolhe o numero de cada tile de KPI ate ele caber na largura real disponivel.
    O grid dos blocos e auto-fit, entao a largura da tile muda de forma pouco previsivel
    conforme a tela (medido: 76px a 1500px, 86px a 1280px, 111px a 1920px) — chutar o
@@ -1091,7 +1149,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v277';
+const IR_APP_VERSION = 'v280';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1321,8 +1379,8 @@ function irRenderAssertividadePanel(){
   const a = irAssertividade();
   const head = `<div class="dx-panel-h"><h3>Assertividade das contagens</h3>
     <div class="cmp-legend"><span><span class="cmp-dot" style="background:var(--success);"></span>acertou</span><span><span class="cmp-dot" style="background:var(--danger);"></span>errou</span><span><span class="dx-meta-leg"></span>meta 97%</span></div></div>`;
-  if(!a) return `<div class="panel">${head}<p class="field-hint">Carregando as contagens do ciclo...</p></div>`;
-  if(!a.julgadas) return `<div class="panel">${head}<p class="field-hint">Ainda não há contagens físicas confirmadas neste ciclo.</p></div>`;
+  if(!a) return `<div class="panel" id="dxAssert">${head}<p class="field-hint">Carregando as contagens do ciclo...</p></div>`;
+  if(!a.julgadas) return `<div class="panel" id="dxAssert">${head}<p class="field-hint">Ainda não há contagens físicas confirmadas neste ciclo.</p></div>`;
   const meta = IR_META_ACURACIA;
   const ranking = a.lista.filter(p=>p.contagens>=IR_ASSERT_MIN).sort((x,y)=> y.pct-x.pct || y.contagens-x.contagens);
   const poucas = a.lista.length - ranking.length;
@@ -1335,7 +1393,7 @@ function irRenderAssertividadePanel(){
       <span class="as-pct ${p.pct>=meta?'good':'bad'}">${irFmtPct(p.pct)}</span>
     </div>`;
   const melhor = ranking[0];
-  return `<div class="panel as-panel">
+  return `<div class="panel as-panel" id="dxAssert">
     ${head}
     <div class="as-topo">
       <div class="as-kpi"><span>Assertividade geral</span><b class="${a.pct>=meta?'good':'bad'}">${irFmtPct(a.pct)}</b><small>${irFmtInt(a.acertos)} de ${irFmtInt(a.julgadas)} contagens certas</small></div>
@@ -2558,9 +2616,9 @@ function irItensPorDiaMapa(){
 }
 function irRenderItensDivPorDia(rows, chart){
   const mapa = irItensPorDiaMapa();
-  if(!mapa) return `<div class="panel"><h3>Itens Divergentes</h3><p class="field-hint">Carregando itens do ciclo...</p></div>`;
+  if(!mapa) return `<div class="panel" id="dxItensDiv"><h3>Itens Divergentes</h3><p class="field-hint">Carregando itens do ciclo...</p></div>`;
   const comItens = rows.map(r=>({...r, itens:(mapa.get(r.dia)||{}).itens||0, itensTotal:(mapa.get(r.dia)||{}).itensTotal||0}));
-  return chart.call(null, 'itens', 'itensTotal', irFmtInt, 'Itens Divergentes', 66, null, comItens);
+  return chart.call(null, 'itens', 'itensTotal', irFmtInt, 'Itens Divergentes', 66, null, comItens).replace('<div class="panel">', '<div class="panel" id="dxItensDiv">');
 }
 function irShowDiaTooltip(ev, dia){
   const rows = (IR._porDiaRua||{})[dia]||[];

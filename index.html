@@ -270,6 +270,28 @@
   .access-app-chip-icon{width:20px;height:20px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
   .access-app-chip-icon svg{width:11px;height:11px;}
   .access-empty{color:var(--ink-soft);font-size:12.5px;font-style:italic;}
+  .access-btn-senha{display:inline-flex;align-items:center;gap:7px;margin:14px 0 0;background:var(--chip-bg);border:1px solid var(--line);border-radius:10px;padding:7px 13px;font:600 12px 'Inter',sans-serif;color:var(--ink);cursor:pointer;}
+  .access-btn-senha:hover{border-color:var(--orange);color:var(--orange);}
+  .senha-fundo{position:fixed;inset:0;z-index:300;background:rgba(8,12,30,.55);display:flex;align-items:center;justify-content:center;padding:16px;}
+  .senha-fundo[hidden]{display:none;}
+  .senha-caixa{width:100%;max-width:430px;background:var(--bg0);color:var(--ink);border:1px solid var(--line);border-radius:18px;padding:22px 22px 18px;box-shadow:0 30px 60px -20px rgba(0,0,0,.55);}
+  .senha-caixa h3{margin:0 0 4px;font-family:'Poppins',sans-serif;font-size:18px;font-weight:800;}
+  .senha-quem{margin:0 0 14px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;}
+  .senha-quem b{color:var(--ink);}
+  .senha-rot{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:6px;}
+  .senha-linha{display:flex;gap:8px;}
+  .senha-linha input{flex:1;min-width:0;font:600 15px 'SFMono-Regular',Consolas,monospace;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+  .senha-linha input:focus{outline:none;border-color:var(--orange);}
+  .senha-caixa button{font:700 12.5px 'Inter',sans-serif;border-radius:10px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:var(--chip-bg);color:var(--ink);}
+  .senha-caixa button:hover{border-color:var(--orange);}
+  .senha-caixa button.pri{background:var(--orange);border-color:var(--orange);color:#fff;}
+  .senha-caixa button:disabled{opacity:.6;cursor:default;}
+  .senha-erro{margin:10px 0 0;padding:9px 12px;border-radius:10px;background:rgba(200,56,18,.12);color:#C83812;font-size:12.5px;line-height:1.45;}
+  .senha-acoes{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+  .senha-ok{margin:0 0 12px;font-size:13px;line-height:1.55;}
+  .senha-ok b{color:var(--ink);}
+  .senha-cod{display:block;width:100%;text-align:center;font:800 20px 'SFMono-Regular',Consolas,monospace;letter-spacing:.06em;padding:14px;border-radius:12px;background:var(--surface);border:1px dashed var(--orange);color:var(--ink);user-select:all;}
+  .senha-aviso{margin:10px 0 0;font-size:11.5px;color:var(--ink-soft);line-height:1.5;}
 
   /* CONFIGURAÇÕES — painel lateral: resumo, apps mais usados, atividade recente */
   .access-atividade{display:flex;flex-direction:column;gap:16px;position:sticky;top:24px;}
@@ -1750,6 +1772,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     ? window.supabase.createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: true, autoRefreshToken: true } })
     : null;
 
+  /* E-mail sem espaço e sem caractere invisível (vem junto ao copiar do Outlook/Teams e faz o e-mail "não bater"). */
+  function accessLimpaEmail(s){ return String(s || '').replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g, '').toLowerCase(); }
+
   function accessEmPortugues(msg){
     var m = String(msg || '').toLowerCase();
     if(m.indexOf('invalid login credentials') !== -1) return 'E-mail ou senha incorretos.';
@@ -1913,6 +1938,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         +   '<div class="access-person-body"' + (aberto ? '' : ' hidden') + '>'
         +     '<label class="access-toggle"><input type="checkbox" class="access-cb-ativo" ' + (p.ativo ? 'checked' : '') + '> Ativo</label>'
         +     '<label class="access-toggle"><input type="checkbox" class="access-cb-admin" ' + (p.papel === 'admin' ? 'checked' : '') + '> Administrador</label>'
+        +     '<div><button type="button" class="access-btn-senha" title="Definir a senha de acesso desta pessoa">🔑 Definir senha</button></div>'
         +     '<div class="access-apps-grid">' + apps.map(function(a){
                 var marcado = !!marcados[a.key];
                 var freq = marcado && accessLogCache[p.id] ? accessLogCache[p.id][a.key] : null;
@@ -1959,7 +1985,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     accessLoginForm.addEventListener('submit', async function(e){
       e.preventDefault();
       accessLoginMsg.hidden = true;
-      var email = document.getElementById('accessLoginEmail').value.trim().toLowerCase();
+      var email = accessLimpaEmail(document.getElementById('accessLoginEmail').value);
       var senha = document.getElementById('accessLoginSenha').value;
       var { error } = await sbAcessos.auth.signInWithPassword({ email: email, password: senha });
       if(error){ accessLoginMsg.textContent = accessEmPortugues(error.message); accessLoginMsg.hidden = false; return; }
@@ -1984,7 +2010,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       var nomeEl = document.getElementById('accessNovoNome');
       var emailEl = document.getElementById('accessNovoEmail');
       var nome = nomeEl.value.trim().toUpperCase();
-      var email = emailEl.value.trim().toLowerCase();
+      var email = accessLimpaEmail(emailEl.value);
       if(!nome || !email){ accessMsg('Preencha nome e e-mail.'); return; }
       var { error } = await sbAcessos.schema('acessos').from('pessoas').insert({ nome: nome, email: email });
       if(error){ accessMsg(accessEmPortugues(error.message)); return; }
@@ -1995,6 +2021,88 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     });
   }
 
+  /* Administrador define a senha de outra pessoa: quando ela esqueceu, nunca criou ou a conta é antiga.
+     A senha vai para o banco já como hash (função ldm_admin_definir_senha, migração 013); aqui ela só existe na tela. */
+  var senhaFundo = null, senhaPessoa = null;
+  function senhaGerar(){
+    var al = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', b = new Uint32Array(10), s = '';
+    crypto.getRandomValues(b);
+    for(var i = 0; i < b.length; i++) s += al.charAt(b[i] % al.length);
+    return s;
+  }
+  function senhaEmPortugues(msg){
+    var m = String(msg || '');
+    if(/ldm_admin_definir_senha|schema cache|does not exist|could not find the function/i.test(m)) return 'Falta rodar a migração 013_admin_definir_senha.sql no SQL Editor do Supabase.';
+    return accessEmPortugues(m);
+  }
+  function senhaFechar(){
+    if(!senhaFundo) return;
+    senhaFundo.hidden = true; senhaFundo.innerHTML = ''; senhaPessoa = null;   /* a senha não fica na tela */
+  }
+  function senhaAbrir(pessoa){
+    if(!senhaFundo){
+      senhaFundo = document.createElement('div'); senhaFundo.className = 'senha-fundo'; senhaFundo.hidden = true;
+      document.body.appendChild(senhaFundo);
+      senhaFundo.addEventListener('click', function(ev){
+        if(ev.target === senhaFundo) return senhaFechar();
+        var b = ev.target.closest('[data-s]'); if(!b) return;
+        var a = b.dataset.s;
+        if(a === 'cancelar' || a === 'fechar') return senhaFechar();
+        if(a === 'mostrar'){ var i = document.getElementById('senhaNova'); var oculto = i.type === 'password'; i.type = oculto ? 'text' : 'password'; b.textContent = oculto ? 'Ocultar' : 'Mostrar'; return; }
+        if(a === 'gerar'){ var campo = document.getElementById('senhaNova'); campo.value = senhaGerar(); campo.type = 'text'; document.querySelector('[data-s="mostrar"]').textContent = 'Ocultar'; return; }
+        if(a === 'copiar'){ var cod = document.getElementById('senhaCod').textContent; (navigator.clipboard ? navigator.clipboard.writeText(cod) : Promise.reject()).then(function(){ b.textContent = '✔ Copiada'; }, function(){ var r = document.createRange(); r.selectNodeContents(document.getElementById('senhaCod')); var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent = 'Selecionada: copie com Ctrl+C'; }); return; }
+        if(a === 'copiar-tudo'){ var cod2 = document.getElementById('senhaCod').textContent; var txt = 'E-mail: ' + senhaPessoa.email + '\nSenha: ' + cod2; (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function(){ b.textContent = '✔ Copiado'; }, function(){ b.textContent = 'Não consegui copiar'; }); return; }
+        if(a === 'salvar') return senhaSalvar();
+      });
+      senhaFundo.addEventListener('keydown', function(ev){
+        if(ev.key === 'Escape') return senhaFechar();
+        if(ev.key === 'Enter' && ev.target.id === 'senhaNova'){ ev.preventDefault(); senhaSalvar(); }
+      });
+    }
+    senhaPessoa = pessoa;
+    senhaFundo.innerHTML = '<div class="senha-caixa" role="dialog" aria-modal="true">'
+      + '<h3>Definir senha</h3>'
+      + '<p class="senha-quem"><b>' + esc(pessoa.nome) + '</b><br>' + esc(pessoa.email) + '</p>'
+      + '<div id="senhaCorpo">'
+      +   '<label class="senha-rot" for="senhaNova">Nova senha (mínimo 6 caracteres)</label>'
+      +   '<div class="senha-linha"><input type="password" id="senhaNova" autocomplete="new-password" spellcheck="false"><button type="button" data-s="mostrar">Mostrar</button><button type="button" data-s="gerar">Gerar</button></div>'
+      +   '<p class="senha-erro" id="senhaErro" hidden></p>'
+      +   '<div class="senha-acoes"><button type="button" data-s="cancelar">Cancelar</button><button type="button" class="pri" id="senhaSalvarBtn" data-s="salvar">Salvar senha</button></div>'
+      + '</div></div>';
+    senhaFundo.hidden = false;
+    document.getElementById('senhaNova').focus();
+  }
+  async function senhaSalvar(){
+    var pessoa = senhaPessoa, campo = document.getElementById('senhaNova'), erro = document.getElementById('senhaErro'), btn = document.getElementById('senhaSalvarBtn');
+    if(!pessoa || !campo) return;
+    var senha = campo.value;
+    erro.hidden = true;
+    if(senha.length < 6){ erro.textContent = 'A senha precisa de pelo menos 6 caracteres.'; erro.hidden = false; return; }
+    btn.disabled = true; btn.textContent = 'Salvando…';
+    try {
+      var r = await sbAcessos.rpc('ldm_admin_definir_senha', { p_email: pessoa.email, p_senha: senha });
+      if(!r.error && r.data === 'sem_conta'){
+        /* Ainda não existe conta: cria pelo cadastro normal, num cliente à parte (não troca o login do administrador),
+           e chama a função de novo para confirmar o e-mail e ligar a conta à pessoa. */
+        var avulso = window.supabase.createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+        var cad = await avulso.auth.signUp({ email: pessoa.email, password: senha });
+        if(cad.error && String(cad.error.message).toLowerCase().indexOf('already') === -1) throw cad.error;
+        r = await sbAcessos.rpc('ldm_admin_definir_senha', { p_email: pessoa.email, p_senha: senha });
+      }
+      if(r.error) throw r.error;
+      if(r.data !== 'ok') throw new Error('Não consegui criar a conta desta pessoa. Tente de novo.');
+      document.getElementById('senhaCorpo').innerHTML =
+          '<p class="senha-ok">✔ Senha definida. Passe para <b>' + esc(pessoa.nome) + '</b> o e-mail e a senha abaixo. Ela já pode entrar nos apps que você liberou.</p>'
+        + '<code class="senha-cod" id="senhaCod">' + esc(senha) + '</code>'
+        + '<p class="senha-aviso">O e-mail dela é <b>' + esc(pessoa.email) + '</b> — confira se ela digita igual. Esta senha só aparece agora e não fica guardada em lugar nenhum; se perder, é só definir outra.</p>'
+        + '<div class="senha-acoes"><button type="button" data-s="copiar">Copiar senha</button><button type="button" data-s="copiar-tudo">Copiar e-mail e senha</button><button type="button" class="pri" data-s="fechar">Fechar</button></div>';
+      accessCarregarTudo();
+    } catch(f){
+      erro.textContent = senhaEmPortugues(f && f.message); erro.hidden = false;
+      btn.disabled = false; btn.textContent = 'Salvar senha';
+    }
+  }
+
   if(accessPeopleEl){
     accessPeopleEl.addEventListener('click', async function(e){
       var head = e.target.closest('.access-person-head');
@@ -2002,6 +2110,13 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         var id = head.closest('.access-person-admin').dataset.id;
         accessAbertas[id] = !accessAbertas[id];
         accessRenderPessoas();
+        return;
+      }
+      var btnSenha = e.target.closest('.access-btn-senha');
+      if(btnSenha){
+        var idSenha = btnSenha.closest('.access-person-admin').dataset.id;
+        var quem = accessPessoasCache.filter(function(x){ return String(x.id) === idSenha; })[0];
+        if(quem) senhaAbrir(quem);
         return;
       }
     });
