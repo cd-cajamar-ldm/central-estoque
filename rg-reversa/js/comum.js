@@ -210,6 +210,10 @@ RG.linhasBlocos = function(blocos){
   return out;
 };
 
+/* Texto para colar no PuTTY. O Enter final é o que confirma a ÚLTIMA linha: sem ele a última
+   transferência fica parada no campo Destino esperando alguém apertar Enter. */
+RG.textoPutty = function(linhas){ return linhas.length ? linhas.join('\n') + '\n' : ''; };
+
 /* ---------- Excel no visual do app ---------- */
 var AZUL = '001A72', LARANJA = 'FE5000', CINZA = 'F4F5F7', LINHA = 'D5D8E0', TEXTO = '1D1F2A';
 function borda(){ var t = { style: 'thin', color: { rgb: LINHA } }; return { top: t, bottom: t, left: t, right: t }; }
