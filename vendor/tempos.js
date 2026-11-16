@@ -20,9 +20,11 @@
       'tela de acesso liberada: ' + s(T.gate),
       'texto "Carregando" sumiu: ' + s(T.carregando),
       'processador travado (soma): ' + s(T.longas) + ' · maior trava: ' + s(T.maiorLonga),
-      'agora: ' + s(performance.now()),
+      'agora (desde que a página abriu): ' + s(performance.now()),
       '— mais lentos —'
     ];
+    var marcas = performance.getEntriesByType('mark').filter(function(m){ return m.name.indexOf('ldm:') === 0; });
+    if(marcas.length){ linhas.push('— etapas do app —'); marcas.forEach(function(m){ linhas.push(s(m.startTime) + '  ' + m.name.slice(4)); }); linhas.push('— mais lentos —'); }
     res.forEach(function(r){ linhas.push(s(r.duration) + '  ' + curto(r.name)); });
     return linhas.join('\n');
   }
