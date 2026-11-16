@@ -235,6 +235,9 @@ async function irCarregarEssencial(){
     IR.net410Anos = net410Anos;
     if(IR.net410Anos.length) IR.net410AnoSel = IR.net410Anos[0];
     if(pCiclo) await pCiclo;
+    // Comparativo dos ciclos (acurácia mensal/anual e Ciclos do ano) já na 1ª tela:
+    // antes ele chegava depois e o Dashboard inteiro era desenhado de novo.
+    if(IR.ciclos.length) await irCarregarComparativoCiclos(true);
   }catch(e){
     // Guarda o erro: sem isso, uma falha ao ABRIR o banco (dados intactos, só
     // inacessíveis) aparecia na tela como "nenhum ciclo importado ainda" — que
@@ -340,7 +343,7 @@ async function irLoadCicloData(cicloId, opts){
 // Carrega os indicadores de TODOS os ciclos já processados (ordenados por ano+número)
 // pro gráfico "Comparativo de Acurácias entre Ciclos" do Dashboard — cada ciclo já é
 // isolado por cicloId no IndexedDB, então não há mistura entre eles aqui.
-async function irCarregarComparativoCiclos(){
+async function irCarregarComparativoCiclos(semRender){
   const ciclosOrdenados = IR.ciclos.slice().sort((a,b)=>{
     const anoA = irCicloAno(a)||0, anoB = irCicloAno(b)||0;
     return anoA!==anoB ? anoA-anoB : a.numero-b.numero;
@@ -357,7 +360,7 @@ async function irCarregarComparativoCiclos(){
     ({ciclo:c, ind: await irGetIndicadores(c.id)})
   ));
   IR.comparativoCiclos = resultados.map((r, i)=> r.status==='fulfilled' ? r.value : {ciclo:ciclosOrdenados[i], ind:null});
-  irRenderView();
+  if(!semRender) irRenderView();
 }
 const IR_MOBILE_QUERY = '(max-width:640px)'; // precisa bater com o breakpoint do CSS (theme.css)
 // No mobile o menu é um overlay (aberto/fechado); no desktop é o modo compacto de 56px.
@@ -563,16 +566,22 @@ async function irFiltrarCiclo(cicloId){
 IR._fluid = {};
 function irFluid(key, build, altura){
   IR._fluid[key] = build;
-  return `<div class="ir-fluid" data-k="${key}" style="min-height:${altura}px">${build(760)}</div>`;
+  // Desenha uma vez só, já na largura real (irFluidAjustar logo após a tela montar).
+  return `<div class="ir-fluid" data-k="${key}" style="min-height:${altura}px"></div>`;
 }
 function irFluidAjustar(){
+  // Lê todas as larguras primeiro e só depois escreve: intercalar leitura e escrita
+  // obrigava o navegador a recalcular o layout da página a cada gráfico.
+  const alvos = [];
   document.querySelectorAll('#viewRoot .ir-fluid').forEach(el=>{
     const b = IR._fluid[el.dataset.k];
     const w = Math.floor(el.clientWidth);
-    if(!b || w<160 || String(w)===el.dataset.w) return;
-    el.dataset.w = w;
-    el.innerHTML = b(w);
+    if(!b) return;
+    if(w<160){ if(!el.dataset.w) alvos.push([el, b, 760]); return; } // escondido: desenha num tamanho padrão
+    if(String(w)===el.dataset.w) return;
+    alvos.push([el, b, w]);
   });
+  for(const [el, b, w] of alvos){ el.dataset.w = w; el.innerHTML = b(w); }
 }
 let _irFluidT = null;
 function irFluidAgendar(){ clearTimeout(_irFluidT); _irFluidT = setTimeout(irFluidAjustar, 60); }
@@ -1104,7 +1113,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v278';
+const IR_APP_VERSION = 'v279';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
