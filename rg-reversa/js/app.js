@@ -671,12 +671,10 @@ function anima(){
 
 function vPainel(){
   var D=S.D, T=D.tot, L=D.loc, tem=!!S.est;
-  var classes=tem ? Object.keys(S.est.classes).sort() : [];
-  var chips = classes.length>1 ? '<div class="rgx-filtro">'+[''].concat(classes).map(function(c){ return '<button type="button" class="'+(S.classe===c?'on':'')+'" data-act="classe" data-c="'+esc(c)+'">'+(c?esc(S.est.classes[c]||c):'Toda a reversa')+'</button>'; }).join('')+'</div>' : '';
   var hero='<div class="rv-hero rgx-hero"><div class="rv-hero-in">'+
     '<div class="rv-marca"><img src="brand/Logo_LDM_icon.png" alt=""><div><b>Oficina LDM</b><span>RG Reversa · CD Cajamar</span></div></div>'+
     '<div class="rv-hero-row"><div><h2>Implantação de RG</h2><span class="rgx-sub">Logística Reversa'+(tem?' · base de '+dataBR(S.est.em):'')+'</span></div>'+
-    '<div class="rgx-hero-dir">'+chips+'<div class="rv-hero-btns"><a class="rv-btn pri" href="coletor/">📲 Abrir coletor</a><button class="rv-btn sec" data-act="tab" data-tab="importacao">⬆ Importar</button></div></div></div></div></div>';
+    '</div></div></div>';
   if(!tem && !S.rgs.length && S.nuvem.estado==='sync'){
     return hero+'<div class="rv-body"><div class="panel rgx-vazio"><div class="rgx-vazio-ic">⏳</div><h3>Carregando a última importação…</h3></div></div>';
   }
