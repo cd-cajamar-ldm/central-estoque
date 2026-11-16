@@ -236,7 +236,9 @@
   .access-login-input{flex:1;min-width:160px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:9px 12px;}
   .access-login-msg{margin:12px 0 0;font-size:12.5px;color:#C83812;}
 
-  .access-admin{position:relative;z-index:2;margin-top:20px;max-width:760px;}
+  .access-admin{position:relative;z-index:2;margin-top:20px;max-width:1180px;display:grid;grid-template-columns:minmax(0,760px) minmax(260px,340px);gap:24px;align-items:start;}
+  .access-admin[hidden]{display:none;}
+  .access-admin-main{min-width:0;}
   .access-admin-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
   .access-busca{flex:1;min-width:200px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:9px 16px;}
   .access-filtro-semapp{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
@@ -291,6 +293,36 @@
   .senha-ok b{color:var(--ink);}
   .senha-cod{display:block;width:100%;text-align:center;font:800 20px 'SFMono-Regular',Consolas,monospace;letter-spacing:.06em;padding:14px;border-radius:12px;background:var(--surface);border:1px dashed var(--orange);color:var(--ink);user-select:all;}
   .senha-aviso{margin:10px 0 0;font-size:11.5px;color:var(--ink-soft);line-height:1.5;}
+
+  /* CONFIGURAÇÕES — painel lateral: resumo, apps mais usados, atividade recente */
+  .access-atividade{display:flex;flex-direction:column;gap:16px;position:sticky;top:24px;}
+  .access-atividade-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;}
+  .access-atividade-card h3{margin:0 0 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);}
+  .access-resumo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .access-resumo-tile{background:var(--chip-bg);border-radius:12px;padding:10px 12px;}
+  .access-resumo-num{display:block;font-family:'Poppins',sans-serif;font-size:19px;font-weight:700;color:var(--ink);line-height:1.2;}
+  .access-resumo-label{display:block;font-size:10.5px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
+  .access-ranking{display:flex;flex-direction:column;gap:10px;}
+  .access-ranking-row{display:flex;align-items:center;gap:9px;}
+  .access-ranking-icon{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-ranking-icon svg{width:12px;height:12px;}
+  .access-ranking-info{min-width:0;flex:1;}
+  .access-ranking-nome{display:block;font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .access-ranking-bar-wrap{background:var(--chip-bg);border-radius:999px;height:5px;margin-top:4px;overflow:hidden;}
+  .access-ranking-bar{height:100%;border-radius:999px;background:var(--accent);}
+  .access-ranking-num{font-size:11px;font-weight:700;color:var(--ink-soft);flex-shrink:0;white-space:nowrap;}
+  .access-feed{display:flex;flex-direction:column;gap:12px;}
+  .access-feed-row{display:flex;align-items:flex-start;gap:9px;}
+  .access-feed-icon{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;margin-top:1px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-feed-icon svg{width:12px;height:12px;}
+  .access-feed-texto{font-size:12px;color:var(--ink);line-height:1.4;}
+  .access-feed-texto b{font-weight:700;}
+  .access-feed-quando{display:block;font-size:10.5px;color:var(--ink-soft);margin-top:1px;}
+
+  @media(max-width:1020px){
+    .access-admin{grid-template-columns:1fr;}
+    .access-atividade{position:static;}
+  }
 
   /* MODAL DE EDIÇÃO */
   .modal-overlay{position:fixed;inset:0;background:rgba(8,10,24,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
@@ -566,20 +598,37 @@
       </div>
 
       <div class="access-admin" id="accessAdmin" hidden>
-        <div class="access-admin-head">
-          <input type="text" id="accessBusca" class="access-busca" placeholder="Buscar por nome ou e-mail...">
-          <label class="access-filtro-semapp"><input type="checkbox" id="accessFiltroSemApp"> Só sem nenhum app liberado</label>
-          <button type="button" class="btn-secondary" id="accessLogoutBtn">Sair</button>
+        <div class="access-admin-main">
+          <div class="access-admin-head">
+            <input type="text" id="accessBusca" class="access-busca" placeholder="Buscar por nome ou e-mail...">
+            <label class="access-filtro-semapp"><input type="checkbox" id="accessFiltroSemApp"> Só sem nenhum app liberado</label>
+            <button type="button" class="btn-secondary" id="accessLogoutBtn">Sair</button>
+          </div>
+          <button type="button" class="btn-primary access-nova-pessoa-btn" id="accessNovaPessoaBtn">+ Nova pessoa</button>
+          <div class="access-nova-pessoa" id="accessNovaPessoaForm" hidden>
+            <input type="text" id="accessNovoNome" class="access-login-input" placeholder="Nome completo">
+            <input type="email" id="accessNovoEmail" class="access-login-input" placeholder="E-mail corporativo">
+            <button type="button" class="btn-primary" id="accessNovaPessoaSalvar">Cadastrar</button>
+            <button type="button" class="btn-secondary" id="accessNovaPessoaCancelar">Cancelar</button>
+          </div>
+          <p class="access-admin-msg" id="accessAdminMsg" hidden></p>
+          <div class="access-people-admin" id="accessPeopleAdmin"></div>
         </div>
-        <button type="button" class="btn-primary access-nova-pessoa-btn" id="accessNovaPessoaBtn">+ Nova pessoa</button>
-        <div class="access-nova-pessoa" id="accessNovaPessoaForm" hidden>
-          <input type="text" id="accessNovoNome" class="access-login-input" placeholder="Nome completo">
-          <input type="email" id="accessNovoEmail" class="access-login-input" placeholder="E-mail corporativo">
-          <button type="button" class="btn-primary" id="accessNovaPessoaSalvar">Cadastrar</button>
-          <button type="button" class="btn-secondary" id="accessNovaPessoaCancelar">Cancelar</button>
-        </div>
-        <p class="access-admin-msg" id="accessAdminMsg" hidden></p>
-        <div class="access-people-admin" id="accessPeopleAdmin"></div>
+
+        <aside class="access-atividade">
+          <div class="access-atividade-card">
+            <h3>Resumo</h3>
+            <div class="access-resumo-grid" id="accessResumoGrid"></div>
+          </div>
+          <div class="access-atividade-card">
+            <h3>Apps mais usados</h3>
+            <div class="access-ranking" id="accessRankingApps"></div>
+          </div>
+          <div class="access-atividade-card">
+            <h3>Atividade recente</h3>
+            <div class="access-feed" id="accessFeedRecente"></div>
+          </div>
+        </aside>
       </div>
     </section>
   </main>
@@ -1735,6 +1784,21 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     return msg || 'Não consegui completar a operação.';
   }
 
+  /* Evita a tela travar pra sempre: às vezes o navegador fica esperando outra
+     aba de um app da Oficina LDM (mesmo projeto Supabase, mesma sessão)
+     liberar o login. Depois desse tempo, desiste e explica em vez de travar
+     sem nenhuma mensagem. */
+  function comLimite(promessa, segundos){
+    return Promise.race([
+      promessa,
+      new Promise(function(_, rejeitar){
+        setTimeout(function(){
+          rejeitar(new Error('Demorou demais pra responder. Feche as outras abas de apps da Oficina LDM e tente de novo.'));
+        }, segundos * 1000);
+      })
+    ]);
+  }
+
   var accessLoginBox = document.getElementById('accessLogin');
   var accessDeniedBox = document.getElementById('accessDenied');
   var accessAdminBox = document.getElementById('accessAdmin');
@@ -1750,7 +1814,11 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var accessPessoasCache = [];
   var accessPermissoesCache = {};
   var accessLogCache = {};
+  var accessLogRaw = [];
   var accessAbertas = {};
+  var accessResumoEl = document.getElementById('accessResumoGrid');
+  var accessRankingEl = document.getElementById('accessRankingApps');
+  var accessFeedEl = document.getElementById('accessFeedRecente');
 
   function accessMostrar(estado){
     accessLoginBox.hidden = estado !== 'login';
@@ -1765,11 +1833,20 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   }
 
   async function accessCarregarTudo(){
-    var [{ data: pessoas, error: errP }, { data: permissoes, error: errPerm }, { data: log, error: errLog }] = await Promise.all([
-      sbAcessos.schema('acessos').from('pessoas').select('*').order('nome'),
-      sbAcessos.schema('acessos').from('permissoes').select('*'),
-      sbAcessos.schema('acessos').from('log').select('pessoa_id,app_key,acessado_em')
-    ]);
+    var pessoas, errP, permissoes, errPerm, log, errLog;
+    try {
+      var resultados = await comLimite(Promise.all([
+        sbAcessos.schema('acessos').from('pessoas').select('*').order('nome'),
+        sbAcessos.schema('acessos').from('permissoes').select('*'),
+        sbAcessos.schema('acessos').from('log').select('pessoa_id,app_key,acessado_em')
+      ]), 12);
+      pessoas = resultados[0].data; errP = resultados[0].error;
+      permissoes = resultados[1].data; errPerm = resultados[1].error;
+      log = resultados[2].data; errLog = resultados[2].error;
+    } catch(falha){
+      accessMsg(accessEmPortugues(falha && falha.message));
+      return;
+    }
     if(errP || errPerm){ accessMsg(accessEmPortugues((errP || errPerm).message)); return; }
     accessPessoasCache = pessoas || [];
     accessPermissoesCache = {};
@@ -1781,8 +1858,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
        A tabela de log é nova — se ainda não existir (migração não rodada),
        só não mostra frequência, sem travar o resto do painel. */
     accessLogCache = {};
+    accessLogRaw = errLog ? [] : (log || []);
     if(!errLog){
-      (log || []).forEach(function(l){
+      accessLogRaw.forEach(function(l){
         if(!accessLogCache[l.pessoa_id]) accessLogCache[l.pessoa_id] = {};
         var atual = accessLogCache[l.pessoa_id][l.app_key];
         if(!atual) atual = accessLogCache[l.pessoa_id][l.app_key] = { total: 0, ultimo: null };
@@ -1791,6 +1869,80 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       });
     }
     accessRenderPessoas();
+    accessRenderAtividade();
+  }
+
+  /* Painel lateral: resumo, ranking de apps mais usados e atividade
+     recente -- tudo calculado em cima do que accessCarregarTudo já buscou,
+     sem nenhuma consulta extra ao banco. */
+  function accessRenderAtividade(){
+    if(!accessResumoEl) return;
+    var apps = getAllApps();
+    var appPorChave = {};
+    apps.forEach(function(a){ appPorChave[a.key] = a; });
+    var pessoaPorId = {};
+    accessPessoasCache.forEach(function(p){ pessoaPorId[p.id] = p; });
+
+    var ativas = accessPessoasCache.filter(function(p){ return p.ativo; });
+    var semApp = ativas.filter(function(p){
+      var marcados = accessPermissoesCache[p.id] || {};
+      return Object.keys(marcados).length === 0;
+    });
+    var totalAcessos = accessLogRaw.length;
+
+    accessResumoEl.innerHTML = [
+      { num: ativas.length, label: 'Pessoas ativas' },
+      { num: semApp.length, label: 'Sem nenhum app' },
+      { num: apps.length, label: 'Apps no catálogo' },
+      { num: totalAcessos, label: 'Acessos registrados' }
+    ].map(function(t){
+      return '<div class="access-resumo-tile"><span class="access-resumo-num">' + t.num + '</span><span class="access-resumo-label">' + t.label + '</span></div>';
+    }).join('');
+
+    /* Ranking: total de acessos por app, maior primeiro. Só entram apps com
+       pelo menos 1 acesso registrado -- sem poluir com todo o catálogo. */
+    var totalPorApp = {};
+    accessLogRaw.forEach(function(l){ totalPorApp[l.app_key] = (totalPorApp[l.app_key] || 0) + 1; });
+    var ranking = Object.keys(totalPorApp)
+      .map(function(key){ return { app: appPorChave[key], total: totalPorApp[key] }; })
+      .filter(function(r){ return r.app; })
+      .sort(function(a, b){ return b.total - a.total; })
+      .slice(0, 8);
+    var maiorTotal = ranking.length ? ranking[0].total : 1;
+    accessRankingEl.innerHTML = ranking.length ? ranking.map(function(r){
+      var pct = Math.max(8, Math.round((r.total / maiorTotal) * 100));
+      return ''
+        + '<div class="access-ranking-row" style="--accent:' + r.app.color + ';">'
+        +   '<span class="access-ranking-icon">' + r.app.icon + '</span>'
+        +   '<span class="access-ranking-info"><span class="access-ranking-nome">' + esc(r.app.name) + '</span><span class="access-ranking-bar-wrap"><span class="access-ranking-bar" style="width:' + pct + '%;"></span></span></span>'
+        +   '<span class="access-ranking-num">' + r.total + '</span>'
+        + '</div>';
+    }).join('') : '<p class="access-empty">Ainda sem acessos registrados.</p>';
+
+    /* Atividade recente: uma linha por pessoa+app (a última vez, com o total
+       de acessos ao lado) -- não cada evento bruto. Quem fica entrando e
+       saindo do mesmo app várias vezes por hora (ex.: coletor recarregando)
+       não devia tomar a lista inteira com a mesma pessoa repetida. */
+    var recentes = Object.keys(accessLogCache).reduce(function(lista, pessoaId){
+      Object.keys(accessLogCache[pessoaId]).forEach(function(appKey){
+        lista.push({ pessoaId: pessoaId, appKey: appKey, freq: accessLogCache[pessoaId][appKey] });
+      });
+      return lista;
+    }, []).sort(function(a, b){
+      return a.freq.ultimo < b.freq.ultimo ? 1 : -1;
+    }).slice(0, 10);
+    accessFeedEl.innerHTML = recentes.length ? recentes.map(function(r){
+      var pessoa = pessoaPorId[r.pessoaId];
+      var app = appPorChave[r.appKey];
+      if(!pessoa || !app) return '';
+      var quando = new Date(r.freq.ultimo).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      var vezes = r.freq.total > 1 ? ' · ' + r.freq.total + ' vezes' : '';
+      return ''
+        + '<div class="access-feed-row" style="--accent:' + app.color + ';">'
+        +   '<span class="access-feed-icon">' + app.icon + '</span>'
+        +   '<span class="access-feed-texto"><b>' + esc(pessoa.nome) + '</b> acessou ' + esc(app.name) + '<span class="access-feed-quando">' + quando + vezes + '</span></span>'
+        + '</div>';
+    }).join('') : '<p class="access-empty">Ainda sem atividade registrada.</p>';
   }
 
   function accessRenderPessoas(){
@@ -1840,11 +1992,26 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   async function accessVerificarSessao(){
     if(!sbAcessos) return;
     accessMsg(null);
-    var { data: { session } } = await sbAcessos.auth.getSession();
+    var session;
+    try {
+      session = (await comLimite(sbAcessos.auth.getSession(), 8)).data.session;
+    } catch(falha){
+      document.getElementById('accessDeniedTexto').textContent = accessEmPortugues(falha && falha.message);
+      accessMostrar('negado');
+      return;
+    }
     if(!session){ accessMostrar('login'); return; }
-    var { data: pessoa, error } = await sbAcessos.schema('acessos').from('pessoas')
-      .select('papel,ativo').eq('user_id', session.user.id).maybeSingle();
+    var pessoa, error;
     var textoEl = document.getElementById('accessDeniedTexto');
+    try {
+      var resultado = await comLimite(sbAcessos.schema('acessos').from('pessoas')
+        .select('papel,ativo').eq('user_id', session.user.id).maybeSingle(), 12);
+      pessoa = resultado.data; error = resultado.error;
+    } catch(falha){
+      textoEl.textContent = accessEmPortugues(falha && falha.message);
+      accessMostrar('negado');
+      return;
+    }
     if(error){
       /* Erro de verdade (ex.: schema "acessos" ainda não liberado em
          Settings → Data API → Exposed schemas) — nunca confundir com
@@ -1867,11 +2034,20 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     accessLoginForm.addEventListener('submit', async function(e){
       e.preventDefault();
       accessLoginMsg.hidden = true;
+      var botao = accessLoginForm.querySelector('button[type="submit"]');
       var email = accessLimpaEmail(document.getElementById('accessLoginEmail').value);
       var senha = document.getElementById('accessLoginSenha').value;
-      var { error } = await sbAcessos.auth.signInWithPassword({ email: email, password: senha });
-      if(error){ accessLoginMsg.textContent = accessEmPortugues(error.message); accessLoginMsg.hidden = false; return; }
-      accessVerificarSessao();
+      if(botao) botao.disabled = true;
+      try {
+        var { error } = await comLimite(sbAcessos.auth.signInWithPassword({ email: email, password: senha }), 12);
+        if(error){ accessLoginMsg.textContent = accessEmPortugues(error.message); accessLoginMsg.hidden = false; return; }
+        accessVerificarSessao();
+      } catch(falha){
+        accessLoginMsg.textContent = accessEmPortugues(falha && falha.message);
+        accessLoginMsg.hidden = false;
+      } finally {
+        if(botao) botao.disabled = false;
+      }
     });
   }
   ['accessLogoutBtn', 'accessLogoutBtnNegado'].forEach(function(id){
@@ -2056,7 +2232,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   }
 
   /* Não chamar o Supabase de dentro do aviso de login (trava a conexão): setTimeout. */
-  if(sbAcessos) sbAcessos.auth.onAuthStateChange(function(){ accessVerificarSessao(); setTimeout(atualizarCadeados, 0); });
+  if(sbAcessos) sbAcessos.auth.onAuthStateChange(function(){ setTimeout(accessVerificarSessao, 0); setTimeout(atualizarCadeados, 0); });
 
   renderCards();
   renderSidebarFavorites();

@@ -629,7 +629,7 @@ function irRenderView(){
 /* "Foto" do Dashboard: a última tela desenhada fica guardada no aparelho e
    aparece na hora na próxima abertura (logo depois da permissão), enquanto os
    dados são lidos; em seguida a tela de verdade é desenhada por cima. Só o
-   Dashboard, e só se for do mesmo ciclo e da mesma versão do app. */
+   Dashboard. */
 const IR_FOTO_KEY = 'ir-foto-dash';
 let _irFotoT = null;
 function irGuardarFotoDash(){
@@ -650,7 +650,7 @@ function irMostrarFotoDash(){
     try{ const h = decodeURIComponent(location.hash.slice(1)); if(h) alvo = h; }catch(e){}
     if(alvo!=='dashboard') return;
     const f = JSON.parse(localStorage.getItem(IR_FOTO_KEY)||'null');
-    if(!f || f.v!==IR_APP_VERSION || !f.h) return;
+    if(!f || !f.h) return; // vale mesmo de versão anterior: é só a imagem até a tela nova chegar
     const root = document.getElementById('viewRoot');
     if(root && /Carregando/.test(root.textContent||'')){ root.innerHTML = f.h; irMarca('foto da última tela'); }
   }catch(e){}
@@ -1149,7 +1149,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v280';
+const IR_APP_VERSION = 'v284';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1320,7 +1320,12 @@ function irRenderDashboard(){
       ${irRenderLogTablePanel(ind)}
       ${irRenderContadosPorDiaPanel(ind)}
       ${irRenderDivergentesPorDiaPanel(ind)}
-      ${irRenderAssertividadePanel()}
+      <section class="dx-secao">
+        <div class="dx-secao-h"><span class="dx-secao-traco"></span><h2>Produtividade</h2></div>
+        <div class="dx-secao-corpo">
+          ${irRenderAssertividadePanel()}
+        </div>
+      </section>
     </div>
   </div>`;
 }
@@ -2401,7 +2406,8 @@ function irRenderPioresRuas(ind){
    fininha e clara. O rótulo da meta fica no topo do painel, longe dos números. */
 function irBuildContadosBarrasSvg(itens, opts){
   opts = opts||{};
-  const W = opts.W || 760, H = 240, pL = 10, pR = 10, pT = 38, pB = 30;
+  const temSem = itens.some(it=>it.sem);
+  const W = opts.W || 760, H = temSem ? 256 : 240, pL = 10, pR = 10, pT = 38, pB = temSem ? 46 : 30;
   const w = (W-pL-pR)/Math.max(1,itens.length);
   const mx = Math.max(1, ...itens.map(i=>Math.max(i.v, i.meta)))*1.08;
   const y = v => pT + (1-v/mx)*(H-pT-pB);
@@ -2417,7 +2423,8 @@ function irBuildContadosBarrasSvg(itens, opts){
     if(!fixa) g += `<line x1="${(pL+i*w+3).toFixed(1)}" x2="${(pL+(i+1)*w-3).toFixed(1)}" y1="${y(it.meta).toFixed(1)}" y2="${y(it.meta).toFixed(1)}" style="stroke:var(--ink-soft)" stroke-width="1" stroke-dasharray="4 4" opacity=".45"/>`;
     g += `<text x="${cx.toFixed(1)}" y="${(y(it.v)-18).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="800" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${irFmtInt(it.v)}</text>
       <text x="${cx.toFixed(1)}" y="${(y(it.v)-5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" style="fill:${ok?'var(--success)':'var(--danger)'};paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;">${Math.round(it.v/it.meta*100)}%</text>
-      <text x="${cx.toFixed(1)}" y="${H-10}" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink-soft)">${irEsc(it.rot)}</text>`;
+      <text x="${cx.toFixed(1)}" y="${H-(it.sem?27:10)}" text-anchor="middle" font-size="11" font-weight="600" style="fill:var(--ink-soft)">${irEsc(it.rot)}</text>${it.sem?`
+      <text x="${cx.toFixed(1)}" y="${H-9}" text-anchor="middle" font-size="11.5" font-weight="700" letter-spacing=".06em" style="fill:${it.fds?'var(--orange)':'var(--dx-local,#001A72)'};font-family:Poppins,Inter,system-ui,sans-serif;text-transform:uppercase">${irEsc(it.sem)}</text>`:''}`;
   });
   return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block">${g}</svg>`;
 }
@@ -2445,8 +2452,10 @@ function irRenderContadosPorDiaPanel(ind){
   IR._porDiaRua = ind.porDiaRua||{};
   const itensDia = rows.map(r=>({
       rot: new Date(r.dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}),
+      sem: ['dom','seg','ter','qua','qui','sex','sáb'][new Date(r.dia+'T00:00:00').getDay()],
+      fds: [0,6].includes(new Date(r.dia+'T00:00:00').getDay()),
       v: r.total, meta: IR_META_DIARIA, tip: `irShowDiaTooltip(event,'${r.dia}')`}));
-  const dia = rows.length ? irFluid('contDia', w=>irBuildContadosBarrasSvg(itensDia, {W:w}), 240)
+  const dia = rows.length ? irFluid('contDia', w=>irBuildContadosBarrasSvg(itensDia, {W:w}), 256)
     : '<p class="field-hint">Nenhuma contagem registrada ainda.</p>';
   const {ano, rows: meses} = irContadosMensalDoAno();
   const itensMes = meses.map(m=>({rot: irMesCurto(m.mes), v: m.total, meta: IR_META_MENSAL}));
@@ -2492,7 +2501,7 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
   // <linearGradient> com o mesmo id em dois deles faz um pisar no do outro.
   const gradId = 'irDivGrad'+Math.random().toString(36).slice(2,9);
   const diaLabel = (dia)=> new Date(dia+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-  const H = 236, padT = 54, padB = 28, padL = 4, padR = 10;
+  const H = opts.semana ? 254 : 236, padT = 54, padB = opts.semana ? 46 : 28, padL = 4, padR = 10;
   const plotH = H - padT - padB;
   let rowsVisiveis = rows, omitidos = 0;
   if(opts.fixedW){
@@ -2544,7 +2553,11 @@ function irBuildDivergentesComboSvg(rows, campoDiv, campoSist, fmt, opts){
     if(div>maxS) svg += corteMark(xD+barW/2);
     svg += `<text x="${xS+barW/2}" y="${base-hS-6}" text-anchor="middle" font-size="${fLbl}" font-weight="700" style="fill:${cores.sist}">${fmt(sist)}</text>`;
     svg += `<text x="${xD+barW/2}" y="${base-hD-6}" text-anchor="middle" font-size="${fLbl}" font-weight="700" style="fill:${cores.div}">${fmt(div)}</text>`;
-    svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="10.5" style="fill:${cores.axis}">${diaLabel(r.dia)}</text>`;
+    svg += `<text x="${cx}" y="${H-(opts.semana?26:8)}" text-anchor="middle" font-size="10.5" style="fill:${cores.axis}">${diaLabel(r.dia)}</text>`;
+    if(opts.semana){
+      const dw = new Date(r.dia+'T00:00:00').getDay();
+      svg += `<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="11.5" font-weight="700" letter-spacing=".06em" style="fill:${dw===0||dw===6?'var(--orange)':'var(--dx-local,#001A72)'};font-family:Poppins,Inter,system-ui,sans-serif;text-transform:uppercase">${['dom','seg','ter','qua','qui','sex','sáb'][dw]}</text>`;
+    }
   });
   // preserveAspectRatio="none": o desenho estica pra preencher a largura do
   // elemento (100%) sem mexer na altura. No Dashboard isso faz o gráfico
@@ -2570,12 +2583,12 @@ function irRenderDivergentesPorDiaPanel(ind){
     const desenha = w => {
       const sl = Math.max(52, (w-14)/rowsG.length);
       const fs = (sl>=96?10:(sl>=80?9.5:9)) - (fontLbl?1:0);
-      return irBuildDivergentesComboSvg(rowsG, campoDiv, campoSist, fmt, {slot:sl, fluidW:w, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fs}).svgHtml;
+      return irBuildDivergentesComboSvg(rowsG, campoDiv, campoSist, fmt, {slot:sl, fluidW:w, meta:META, barFrac:0.4, gapFrac:0.05, fontLbl:fs, semana:true}).svgHtml;
     };
     return `<div class="panel">
       <h3>${titulo}</h3>
       ${legenda}
-      ${irFluid('div_'+campoDiv, desenha, 236)}
+      ${irFluid('div_'+campoDiv, desenha, 254)}
     </div>`;
   };
   // Os três são parecidos: ficam lado a lado, com 7 dias cada e a mesma largura por dia.
