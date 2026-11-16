@@ -23,6 +23,20 @@ function mdAcessoEmPortugues(msg){
   return msg || 'Não consegui completar a operação.';
 }
 
+/* "Invalid login credentials" é a mesma mensagem genérica tanto pra senha
+   errada quanto pra um e-mail que o admin liberou mas que ainda não criou
+   senha (Primeiro acesso) -- aqui a tela pergunta ao banco qual é o caso
+   certo, pra não parecer que o acesso liberado "não funcionou". */
+async function mdDicaDeEmail(email){
+  try {
+    const { data, error } = await mdSupa.rpc('ldm_situacao_email', { p_email: email });
+    if(error || !data) return null;
+    if(data === 'sem_conta') return 'Este e-mail já foi liberado pelo administrador, mas ainda não tem senha criada. Clique em "Primeiro acesso" e crie sua senha.';
+    if(data === 'nao_cadastrado') return 'Este e-mail ainda não foi liberado. Peça pro administrador cadastrar em Configurações, no painel da Central.';
+    return null;
+  } catch(e){ return null; }
+}
+
 (function(){
   const telaAcesso = document.getElementById('telaAcesso');
   const telaLogin = document.getElementById('acessoLogin');
@@ -87,7 +101,12 @@ function mdAcessoEmPortugues(msg){
       }
       await mdVerificarAcesso();
     } catch(falha){
-      erroEl.textContent = mdAcessoEmPortugues(falha && falha.message);
+      var mensagem = mdAcessoEmPortugues(falha && falha.message);
+      if(modo === 'entrar' && String(falha && falha.message || '').toLowerCase().includes('invalid login credentials')){
+        var dica = await mdDicaDeEmail(email);
+        if(dica) mensagem = dica;
+      }
+      erroEl.textContent = mensagem;
       erroEl.hidden = false;
     } finally {
       enviarBtn.disabled = false;
@@ -123,8 +142,18 @@ function mdAcessoEmPortugues(msg){
       /* Registra a visita pra contar na frequência (Configurações do hub).
          Não bloqueia o app por causa disso — se falhar, só não conta. */
       mdSupa.rpc('ldm_registrar_acesso', { p_app_key: MD_APP_KEY }).catch(function(){});
-      irInit();
+      /* acesso.js agora carrega antes do app.js (pra checar o acesso logo,
+         sem esperar as libs pesadas) — então irInit pode ainda não existir
+         no instante em que a permissão é confirmada. */
+      mdChamarInit();
     }
+  }
+
+  function mdChamarInit(){
+    if(typeof irInit === 'function'){ irInit(); return; }
+    window.addEventListener('load', function(){
+      if(typeof irInit === 'function') irInit();
+    });
   }
 
   mdSupa.auth.onAuthStateChange(function(){ mdVerificarAcesso(); });
