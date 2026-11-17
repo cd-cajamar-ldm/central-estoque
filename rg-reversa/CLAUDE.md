@@ -13,3 +13,7 @@
   gravadas), mas não vê a Importação e o banco recusa importar/apagar. É um desvio consciente da regra geral do
   repositório, porque os assistentes usam o coletor. As políticas estão em
   `rg-reversa/supabase/migrations/004_nivel_visualizar.sql` (rodar à mão no SQL Editor do Supabase).
+- **Controle de locais mistos** (aba "Locais mistos"): a tabela `rg_misto` guarda cada período em que um local ficou misto
+  (RG + peça sem RG). Quem *pode editar* alimenta o histórico sozinho a cada importação (QRY0100/QRY0390) ou pelo botão
+  "Atualizar controle". Zonas TRI e PIC ficam de fora (`SEM_MONITOR` em `js/app.js`). Tabela criada à mão com
+  `rg-reversa/supabase/migrations/005_misto_historico.sql`.
