@@ -435,22 +435,3 @@ tr.rgx-click{ cursor:pointer; }
 .rgx-rel{ text-align:center; padding:6px 0 4px; }
 .rgx-rel button{ background:none; border:0; font:500 11.5px inherit; color:var(--ink-soft); opacity:.65; cursor:pointer; padding:6px 10px; border-radius:8px; }
 .rgx-rel button:hover{ opacity:1; color:var(--orange); background:rgba(254,80,0,.07); }
-
-/* tempo em misto (Mapa dos locais) */
-.rgx-tm{ border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin:2px 0 14px; background:var(--chip-bg,transparent); }
-.rgx-tm-h{ display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:baseline; margin-bottom:8px; }
-.rgx-tm-h b{ font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink); }
-.rgx-tm-h span{ font-size:11.5px; color:var(--ink-soft); }
-.rgx-tm-g{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; }
-.rgx-tm-bl{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
-.rgx-tm-b{ position:relative; padding-top:7px; text-align:center; }
-.rgx-tm-b i{ position:absolute; top:0; left:10%; right:10%; height:3px; border-radius:3px; }
-.rgx-tm-b b{ display:block; font-size:20px; color:var(--ink); }
-.rgx-tm-b span{ font-size:10.5px; color:var(--ink-soft); }
-.rgx-tm-top{ display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; align-content:start; }
-.rgx-tm-top em{ font-size:11.5px; color:var(--ink-soft); }
-.rgx-tm-l{ display:flex; justify-content:space-between; gap:6px; background:none; border:0; border-bottom:1px solid var(--line); padding:3px 2px; font:inherit; font-size:11.5px; color:var(--ink); cursor:pointer; text-align:left; }
-.rgx-tm-l span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rgx-tm-l b{ color:#C83812; flex-shrink:0; }
-.rgx-tm-l:hover{ background:rgba(254,80,0,.07); }
-@media (max-width:760px){ .rgx-tm-g{ grid-template-columns:1fr; } }
