@@ -204,7 +204,7 @@ const ALIAS_410 = {
   quantidade: ['Quantidade'], sentido: ['Sentido'], vlMov: ['Vl.Mov.','Vl Mov'],
   idDeposito: ['Id Deposito','Id Depósito'], deposito: ['Nome Deposito','Nome Depósito'], obsWms: ['Observacao WMS','Observação WMS'],
   depto: ['Nome Depto','Nome Departamento','Departamento'],
-  // Lógica (301/302) e Id Depto — só usados pela tabela de detalhe "NET por
+  // Lógica (301/302) e Id Depto — só usados pela tabela de detalhe "Net por
   // Lógica 301/302" (visão linha a linha da própria 410). Opcionais: se a
   // planilha não trouxer essas colunas, a tabela simplesmente fica vazia.
   logica: ['Logica','Lógica'], idDepto: ['Id Depto','Id Departamento'],
@@ -213,7 +213,7 @@ const ALIAS_410 = {
      lançamentos vem com a WMS vazia e o motivo escrito só nesta outra — por exemplo
      "Saida de estoque em atendimento ao chamado #143474 - Estoque desbalanceado", que
      é baixa manual por chamado e não contagem de inventário. Lendo só a WMS, esses
-     caíam no padrão "sem legenda, considera" e entravam no NET sem ninguém perceber. */
+     caíam no padrão "sem legenda, considera" e entravam no Net sem ninguém perceber. */
   observacao: ['Observacao','Observação'],
   // Evidência do lançamento (documento, quem fez, quando) — não entra em nenhum
   // cálculo, só fica junto do item pra provar o movimento quando alguém perguntar
@@ -767,7 +767,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
       || isoDateTime(parseDateVal(getVal(row, r843.dataFimContagem)))
       || isoDateTime(parseDateVal(getVal(row, r843.dataInicioContagem))) || '').slice(0,10);
     if(dRefBruto > dataMaisRecenteNoArquivo) dataMaisRecenteNoArquivo = dRefBruto;
-    // Todo motivo de ajuste entra, menos os que a legenda marca como fora do NET
+    // Todo motivo de ajuste entra, menos os que a legenda marca como fora do Net
     // (baixa de insumo, quebra, EPI, nota fiscal, pallets...). É a MESMA legenda
     // editável em Configurações que classifica a QRY410, então os dois lados do
     // app passam a concordar sobre o que é ajuste de estoque. Antes só "AIR"
@@ -941,7 +941,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // penúltima pra virar "concluída" (senão ficava "em_contagem" pra sempre) — isso
   // criava um problema real: quando uma contagem errada era corrigida por uma
   // recontagem num Id Inventario NOVO (visita separada), essa recontagem raramente
-  // tinha 2 rodadas internas batendo, então ficava excluída da Acurácia/NET pra sempre,
+  // tinha 2 rodadas internas batendo, então ficava excluída da Acurácia/Net pra sempre,
   // e só a rodada errada original (já convergida sozinha) entrava — sobrando um saldo
   // fantasma que já tinha sido corrigido na prática (ex.: +64 sem o -64 que cancelava).
   // Pedido explícito do usuário: "desconsidere locais em aberto, somente se estiver
@@ -1730,12 +1730,12 @@ async function runPipeline410({buf410}){
       porDia:new Map(), porItemDia:new Map(),
       porObs:new Map(), porObsMes:new Map(),
       // Depto (coluna "Nome Depto" da QRY410) — só conta movimento de motivo
-      // considerado pro NET, mesmo critério da quebra por Obs mês a mês.
+      // considerado pro Net, mesmo critério da quebra por Obs mês a mês.
       porDepto:new Map(), porDeptoMes:new Map(),
       porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0, linhasExcluidasLogica:0,
       linhasSentidoInferido:0, valorSentidoInferido:0, exemplosSentidoInferido:[],
       // Linhas cruas da própria 410, só Lógica 301/302 — alimenta a tabela de
-      // detalhe da aba NET (visão linha a linha, não agregada). Os totais de
+      // detalhe da aba Net (visão linha a linha, não agregada). Os totais de
       // Net Ano/Mês de cada linha só ficam prontos depois do laço principal
       // (porItem/porItemMes só fecham quando todas as linhas já passaram),
       // por isso aqui só guarda os dados crus e anota os dois Nets depois.
@@ -1823,7 +1823,7 @@ async function runPipeline410({buf410}){
     const idDeposito = parseInt(parseNumber(getVal(row, r410.idDeposito)), 10);
     if(idDeposito===21){ g.linhasExcluidasDeposito21++; continue; }
 
-    // NET oficial = só Lógica 301 e 302 (regra explícita do usuário — é como a
+    // Net oficial = só Lógica 301 e 302 (regra explícita do usuário — é como a
     // dinâmica da própria 410 fecha). Outras lógicas ficam de fora de tudo,
     // inclusive da quebra por Obs. Arquivo sem a coluna Lógica não tem como
     // filtrar: entra inteiro, como antes, e a tela avisa.
@@ -1834,7 +1834,7 @@ async function runPipeline410({buf410}){
 
     // Sentido sem acento e pelo começo ("Saída", "SAIDA", "S"...). Quando não
     // dá pra reconhecer, vale o sinal do próprio Vl.Mov. (é o que a dinâmica da
-    // 410 soma) — antes o sinal virava 0 e o lançamento sumia do NET sem aviso.
+    // 410 soma) — antes o sinal virava 0 e o lançamento sumia do Net sem aviso.
     const sentido = String(getVal(row, r410.sentido)||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const vlBruto = parseNumber(getVal(row, r410.vlMov));
     const vlAbs = Math.abs(vlBruto);
@@ -1862,8 +1862,8 @@ async function runPipeline410({buf410}){
     if(sinal<0) go.saida += valor;
     else if(sinal>0) go.entrada += valor;
 
-    // Mesma quebra por Obs, mas por mês — alimenta a tabela "NET por Observação" da
-    // aba NET, que precisa respeitar o mês selecionado (a de cima é só do ano inteiro).
+    // Mesma quebra por Obs, mas por mês — alimenta a tabela "Net por Observação" da
+    // aba Net, que precisa respeitar o mês selecionado (a de cima é só do ano inteiro).
     if(!g.porObsMes.has(mes)) g.porObsMes.set(mes, new Map());
     const porObsDoMes = g.porObsMes.get(mes);
     if(!porObsDoMes.has(cls.id)) porObsDoMes.set(cls.id, {id:cls.id, legenda:cls.legenda, considerarNet:cls.considerarNet, saida:0, entrada:0});
@@ -1871,7 +1871,7 @@ async function runPipeline410({buf410}){
     if(sinal<0) goMes.saida += valor;
     else if(sinal>0) goMes.entrada += valor;
 
-    // Linha a linha da 410, só Lógica 301/302 — independe de Considerar NET (é
+    // Linha a linha da 410, só Lógica 301/302 — independe de Considerar Net (é
     // uma visão crua, não um agregado). Os campos Net Ano/Mês ficam de fora
     // aqui e são preenchidos depois, quando porItem/porItemMes já tiverem
     // somado todas as linhas do ano.
@@ -1882,7 +1882,7 @@ async function runPipeline410({buf410}){
         nome: String(getVal(row, r410.nomeItem)||'').trim(),
         idDepto: String(getVal(row, r410.idDepto)||'').trim(),
         depto: String(getVal(row, r410.depto)||'').trim(),
-        // Depósito (id e nome) — o painel NET do app de fechamento mostra o NET por depósito.
+        // Depósito (id e nome) — o painel Net do app de fechamento mostra o Net por depósito.
         idDeposito: isNaN(idDeposito) ? '' : String(idDeposito),
         deposito: String(getVal(row, r410.deposito)||'').trim(),
         dtMov: isoDateTime(dt),
@@ -1896,10 +1896,10 @@ async function runPipeline410({buf410}){
       });
     }
 
-    if(!cls.considerarNet) continue; // resto (mês/dia, item, depto) só conta com motivos válidos pro NET
+    if(!cls.considerarNet) continue; // resto (mês/dia, item, depto) só conta com motivos válidos pro Net
 
     // Quebra por Departamento (ano e mês) — mesma regra da quebra por Obs: só
-    // motivo considerado pro NET entra aqui.
+    // motivo considerado pro Net entra aqui.
     const depto = String(getVal(row, r410.depto)||'').trim() || '(sem depto)';
     if(!g.porDepto.has(depto)) g.porDepto.set(depto, {id:depto, saida:0, entrada:0});
     const gd = g.porDepto.get(depto);
