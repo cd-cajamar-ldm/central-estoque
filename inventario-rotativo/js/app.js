@@ -432,7 +432,7 @@ const IR_TAB_LABELS = {
   dashboard:['Dashboard Inventário','Visão geral do ciclo ativo.'],
   ciclo:['NET','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
   produtividade:['Produtividade','Aba em reconstrução.'],
-  setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
+  setores:['Overview','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
@@ -1815,7 +1815,7 @@ function irRenderPorSetorPanel(ind){
   return `<div class="panel">
     <h3>Resumo por Setor</h3>
     <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por setor.</p>
-    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="tbl-sticky-head">
+    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-dense tbl-sticky-head">
       <thead><tr>
         <th>Setor</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
         <th>Locais Pendentes</th>
@@ -1869,7 +1869,7 @@ function irRenderPorRuaPanel(ind){
       </div>
       ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
-    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="tbl-sticky-head">
+    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-dense tbl-sticky-head">
       <thead><tr>
         <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
         <th>Rua</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
@@ -2667,7 +2667,7 @@ function irRenderRuasMaisDivergentesPanel(ind){
   return `<div class="panel">
     <h3>Ruas mais divergentes</h3>
     <p class="panel-sub">Todas as ruas, ordenadas por peças divergentes absolutas (da maior para a menor).</p>
-    <div class="table-wrap"><table>
+    <div class="table-wrap"><table class="table-dense">
       <thead><tr><th>Rua</th><th>Peças Divergentes</th><th>Locais Divergentes</th><th>Valor Divergente</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td class="mono">${irEsc(r.chave)}</td>
