@@ -738,7 +738,62 @@ function vPainel(){
       '<div class="panel">'+h3('Itens com mais unidades sem RG')+hbars(top,{cor:'linear-gradient(90deg,#FE5000,#FFB347)'})+'</div>'+
       '<div class="panel">'+h3('Estoque por restrição')+hbars(rs)+'</div>'+
     '</div>'+
+    '<div class="rgx-rel"><button type="button" data-act="relatorio" title="Baixa um arquivo HTML com o resumo do dashboard para enviar">⤓ Relatório para a gestão (HTML)</button></div>'+
   '</div>';
+}
+
+/* ---------- Relatório em HTML (arquivo único, pronto para enviar por e-mail) ---------- */
+function relatorioHtml(){
+  var D=S.D, T=D.tot, L=D.loc, ritmo=ritmoAtual(), prev=previsao(ritmo), cob=T.saldo?T.comRg/T.saldo*100:0;
+  var agora=new Date(), base=S.est?dataBR(S.est.em):'—';
+  var kpi=function(rot,val,sub,cor){ return '<div class="k"><span>'+esc(rot)+'</span><b'+(cor?' style="color:'+cor+'"':'')+'>'+val+'</b><i>'+sub+'</i></div>'; };
+  var barra=function(p,cor){ return '<div class="bar"><u style="width:'+Math.max(0,Math.min(100,p)).toFixed(1)+'%;background:'+cor+'"></u></div>'; };
+  var tab=function(cab,linhas){ return '<table><thead><tr>'+cab.map(function(c,i){ return '<th'+(i?' class="n"':'')+'>'+esc(c)+'</th>'; }).join('')+'</tr></thead><tbody>'+linhas.map(function(l){ return '<tr>'+l.map(function(c,i){ return '<td'+(i?' class="n"':'')+'>'+c+'</td>'; }).join('')+'</tr>'; }).join('')+'</tbody></table>'; };
+  var dd=D.dias.slice(-30), max=Math.max.apply(null,dd.map(function(x){ return x[1]; }).concat([1]));
+  var W=720, H=150, bw=W/Math.max(dd.length,1);
+  var svg=dd.length ? '<svg viewBox="0 0 '+W+' '+(H+22)+'" width="100%" role="img" aria-label="RGs gerados por dia">'+dd.map(function(x,i){
+    var h=x[1]/max*H, X=i*bw+bw*.15;
+    return '<rect x="'+X.toFixed(1)+'" y="'+(H-h).toFixed(1)+'" width="'+(bw*.7).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2" fill="#FE5000"/>'+
+      '<text x="'+(X+bw*.35).toFixed(1)+'" y="'+(H+14)+'" font-size="9" text-anchor="middle" fill="#6B7280">'+dataBR(x[0]).slice(0,5)+'</text>'+
+      (dd.length<=16 ? '<text x="'+(X+bw*.35).toFixed(1)+'" y="'+Math.max(10,H-h-4).toFixed(1)+'" font-size="9" text-anchor="middle" fill="#001A72" font-weight="700">'+int(x[1])+'</text>' : '');
+  }).join('')+'</svg>' : '<p class="m">Sem RGs no período.</p>';
+  var totF=D.faixas.reduce(function(a,b){ return a+b; },0)||1;
+  var faixas=tab(['Idade do estoque sem RG','Unidades','%'], FAIXAS.map(function(f,i){ return ['<span class="dot" style="background:'+f[3]+'"></span>'+f[2], int(D.faixas[i]), pct(D.faixas[i],totF)]; }));
+  var ops=tab(['Operador','RGs','Por dia'], D.ops.slice(0,8).map(function(o){ return [esc(operNome(o.oper)), int(o.n), int(o.media)]; }));
+  var top=tab(['Item','Un sem RG'], Array.from(D.itens.values()).sort(function(a,b){ return b.semRg-a.semRg; }).slice(0,8).map(function(it){ return [esc(it.item+' · '+(it.desc||'')), int(it.semRg)]; }));
+  var cls=tab(['Classificação (RGs abertos)','RGs','%'], D.classif.slice(0,6).map(function(c){ return [esc(c.nome), int(c.n), pct(c.n,D.abertos.length)]; }));
+  var css='*{box-sizing:border-box}body{margin:0;background:#F3F4F8;color:#111827;font:14px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif}.w{max-width:860px;margin:0 auto;padding:20px 16px 36px}'+
+    'header{background:#001A72;color:#fff;border-radius:16px;padding:22px 24px;border-bottom:5px solid #FE5000}header small{opacity:.8;letter-spacing:.08em;text-transform:uppercase;font-size:11px}header h1{margin:4px 0 2px;font-size:24px}header p{margin:0;opacity:.85;font-size:13px}'+
+    '.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:14px 0}.k{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,26,114,.08)}.k span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6B7280;font-weight:700}.k b{display:block;font-size:28px;color:#001A72;margin:2px 0}.k i{font-style:normal;font-size:12px;color:#6B7280}'+
+    '.bar{height:8px;background:#E5E7EB;border-radius:99px;overflow:hidden;margin-top:8px}.bar u{display:block;height:100%;border-radius:99px}'+
+    'section{background:#fff;border-radius:14px;padding:16px 18px;margin:12px 0;box-shadow:0 1px 3px rgba(0,26,114,.08)}h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#001A72}'+
+    '.c2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}.c2 section{margin:0}'+
+    'table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6B7280;padding:6px 4px;border-bottom:1px solid #E5E7EB}td{padding:6px 4px;border-bottom:1px solid #F0F1F5}.n{text-align:right;font-variant-numeric:tabular-nums}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}'+
+    '.m{color:#6B7280;font-size:12px}footer{text-align:center;color:#9CA3AF;font-size:11px;margin-top:18px}@media print{body{background:#fff}.w{padding:0}section,.k{box-shadow:none;border:1px solid #E5E7EB;break-inside:avoid}}';
+  return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RG Reversa · Relatório '+dataBR(agora)+'</title><style>'+css+'</style></head><body><div class="w">'+
+    '<header><small>Loja do Mecânico · CD Cajamar</small><h1>RG Reversa · Implantação de RG</h1><p>Base do estoque de '+base+' · relatório gerado em '+dataHoraBR(agora)+'</p></header>'+
+    '<div class="g">'+
+      '<div class="k"><span>Cobertura de RG</span><b>'+pct(T.comRg,T.saldo)+'</b><i>'+int(T.comRg)+' de '+int(T.saldo)+' unidades · meta 100%</i>'+barra(cob,'#FE5000')+'</div>'+
+      kpi('Falta identificar', int(T.semRg), pct(T.semRg,T.saldo)+' do estoque da reversa', T.semRg?'#C83812':'#1F8A52')+
+      kpi('RGs gerados', int(D.rgs.length), int(D.abertos.length)+' abertos · '+int(D.ops.length)+' operadores')+
+      kpi('Conclusão prevista', prev?dataBR(prev.t):'—', prev?prazoTxt(prev.du)+' no ritmo de '+int(ritmo)+'/dia':'sem ritmo calculado')+
+    '</div>'+
+    '<section><h2>Locais da reversa</h2><div class="g" style="margin:0">'+
+      kpi('Locais 100% RG', int(L.rg), pct(L.rg,L.total)+' de '+int(L.total)+' locais','#1F8A52')+
+      kpi('Locais mistos', int(L.misto), int(L.unMisto)+' un sem RG misturadas', L.misto?'#C83812':'#1F8A52')+
+      kpi('Locais sem RG', int(L.sem), pct(L.sem,L.total)+' dos locais')+
+    '</div></section>'+
+    '<section><h2>RGs gerados por dia (últimos 30 dias com geração)</h2>'+svg+'<p class="m">Média recente: '+int(D.ritmo)+' RGs/dia · '+int(D.porPessoa)+' por pessoa/dia</p></section>'+
+    '<div class="c2"><section><h2>Idade do estoque sem RG</h2>'+faixas+'</section><section><h2>Operadores</h2>'+ops+'</section></div>'+
+    '<div class="c2" style="margin-top:12px"><section><h2>Itens com mais unidades sem RG</h2>'+top+'</section><section><h2>Classificação das peças</h2>'+cls+'</section></div>'+
+    '<footer>RG Reversa · Central LDM · gerado automaticamente a partir dos relatórios QRY0100 e QRY0390</footer></div></body></html>';
+}
+function baixaRelatorio(){
+  if(!S.est) return toast('Importe os relatórios antes de gerar o relatório.', true);
+  var blob=new Blob([relatorioHtml()],{type:'text/html;charset=utf-8'}), a=document.createElement('a'), d=new Date();
+  a.href=URL.createObjectURL(blob); a.download='RG_Reversa_Relatorio_'+d.getFullYear()+d2(d.getMonth()+1)+d2(d.getDate())+'.html';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(a.href); },2000);
+  toast('Relatório baixado. É só anexar no e-mail.');
 }
 
 /* ---------- tabelas (Estoque × RG e Consulta) ---------- */
@@ -1084,6 +1139,7 @@ function acao(el, ev){
   if(a==='mais'){ S.lim[el.dataset.tb]=(S.lim[el.dataset.tb]||PAGINA)+PAGINA; return render(); }
   if(a==='ficha') return abreFicha(el.dataset.rg);
   if(a==='fecha-ficha') return fechaFicha();
+  if(a==='relatorio') return baixaRelatorio();
   if(a==='exporta-rgs') return exportaRgs();
   if(a==='exporta-cov') return exporta('RG_Reversa_Estoque_x_RG', CAB_COV, linhasCov(covFiltrada()));
   if(a==='escolher'){ if(leitura()) return toast('Seu acesso não permite importar relatórios.', true); $('fileInput').click(); return; }

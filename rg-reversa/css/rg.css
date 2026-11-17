@@ -430,3 +430,8 @@ tr.rgx-click{ cursor:pointer; }
 .rg-campos div > span{ display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
 .rg-campos b{ font-size:13px; font-weight:600; word-break:break-word; }
 @media(max-width:560px){ .rg-campos{ grid-template-columns:1fr; } .rgx-pn-kp{ grid-template-columns:repeat(2,1fr); } }
+
+/* botão discreto de relatório (fim do painel) */
+.rgx-rel{ text-align:center; padding:6px 0 4px; }
+.rgx-rel button{ background:none; border:0; font:500 11.5px inherit; color:var(--ink-soft); opacity:.65; cursor:pointer; padding:6px 10px; border-radius:8px; }
+.rgx-rel button:hover{ opacity:1; color:var(--orange); background:rgba(254,80,0,.07); }
