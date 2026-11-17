@@ -425,9 +425,14 @@ function irTransFaixa(dia, hoje){
 const IR_TRANS_PRAZO_H = 48;
 function irTransDentroDoPrazo(faixa){ return faixa==='D0' || faixa==='D+1'; }
 // Peças E valor por faixa de idade de um endereço (ou de um grupo de endereços).
+// Sem a QRY0160 importada (irTransTemData()==false) ninguém tem data nenhuma —
+// jogar tudo em D+7 inventava "parado há 7 dias" pro CD inteiro. Nesse caso o
+// saldo sem data vai pra fora das faixas (semDataQtd/semDataValor), e quem
+// chama decide como mostrar "idade desconhecida" sem fingir que é a pior faixa.
 function irTransIdade(locais){
   const hoje = Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00');
-  const r = {}, v = {}; let comData = 0;
+  const temData = irTransTemData();
+  const r = {}, v = {}; let comData = 0, semDataQtd = 0, semDataValor = 0;
   for(const f of IR_TRANS_FAIXAS){ r[f] = 0; v[f] = 0; }
   for(const l of locais){
     const pd = l.porDia, pv = l.porDiaValor || {};
@@ -436,14 +441,16 @@ function irTransIdade(locais){
         const f = irTransFaixa(dia, hoje);
         r[f] += pd[dia]; v[f] += (pv[dia]||0); comData += pd[dia];
       }
-    }else{
+    }else if(temData){
       // Endereço que a QRY0160 nunca viu (só está na 390) não tem data nenhuma —
       // mesmo critério do dia vazio: cai no D+7, não some da conta.
       const f = 'D+'+IR_TRANS_FAIXA_MAX;
       r[f] += l.qtd||0; v[f] += l.valor||0;
+    }else{
+      semDataQtd += l.qtd||0; semDataValor += l.valor||0;
     }
   }
-  return {faixas:r, valores:v, comData};
+  return {faixas:r, valores:v, comData, semDataQtd, semDataValor};
 }
 /* Barrinhas de valor acumulado por idade, acima de cada tabela. A pergunta é
    "quanto dinheiro está represado em cada faixa" — e a resposta em barra se lê
@@ -840,6 +847,7 @@ function irTransPainelSetor(g, logs){
    campo editável, sem a coluna de duplicidade (é diagnóstico de tela, não de
    relatório). Setor por setor, mais denso, cabe mais gente por rolada. */
 function irTransPainelSetorReport(g){
+  const temData = irTransTemData();
   const porPrefixo = new Map();
   for(const l of g.locais){
     const chave = irTransChave(l);
@@ -863,6 +871,9 @@ function irTransPainelSetorReport(g){
   const nivel = foraPct>=50 ? 'alto' : (foraPct>=25 ? 'medio' : 'baixo');
   const corSetor = IR_TRANS_SETOR_COR[g.setor] || '#001A72';
   const kpi = (rot, val) => `<div><span class="rp-setor-kpi-lbl">${irEsc(rot)}</span><strong>${val}</strong></div>`;
+  // Sem a QRY0160 não tem idade de ninguém — a coluna "Fora do prazo" vira "—"
+  // em vez de inventar um número, e a grade de D0-D7 dá lugar a uma tabela
+  // simples (sem fingir saber a idade do saldo).
   return `<div class="rp-setor" style="--setor-cor:${corSetor}">
     <div class="rp-setor-head">
       <div class="rp-setor-tit"><span class="rp-setor-bar" style="background:${corSetor}"></span>
@@ -871,26 +882,37 @@ function irTransPainelSetorReport(g){
         ${kpi('Parado', irFmtMoney(g.valor))}
         ${kpi('Peças', irFmtInt(g.qtd))}
         ${kpi('Endereços', irFmtInt(g.locais.length))}
-        <div><span class="rp-setor-kpi-lbl">Fora do prazo</span><span class="rp-chip rp-chip-${nivel}">${foraPct}%</span></div>
+        ${temData
+          ? `<div><span class="rp-setor-kpi-lbl">Fora do prazo</span><span class="rp-chip rp-chip-${nivel}">${foraPct}%</span></div>`
+          : `<div><span class="rp-setor-kpi-lbl">Fora do prazo</span><strong>—</strong></div>`}
       </div>
     </div>
     <div class="table-wrap"><table class="rp-setor-table">
       <thead>
-        <tr><th rowspan="2">Local</th><th rowspan="2">Descrição</th>
+        ${temData ? `<tr><th rowspan="2">Local</th><th rowspan="2">Descrição</th>
             <th colspan="${cols.length}">Peças paradas há — prazo de ${IR_TRANS_PRAZO_H}h</th>
             <th rowspan="2" class="num">Valor</th></tr>
-        <tr>${cols.map(l=>`<th class="num ${irTransDentroDoPrazo(l)?'ok':'atraso'}">${irEsc(l)}</th>`).join('')}</tr>
+        <tr>${cols.map(l=>`<th class="num ${irTransDentroDoPrazo(l)?'ok':'atraso'}">${irEsc(l)}</th>`).join('')}</tr>`
+          : `<tr><th>Local</th><th>Descrição</th><th class="num">Peças</th><th class="num">Valor</th></tr>`}
       </thead>
-      <tbody>${linhas.map(p=>`<tr>
+      <tbody>${linhas.map(p=>temData ? `<tr>
         <td class="cod">${irEsc(p.x1||'(vazio)')}</td>
         <td class="desc">${irEsc(irTransNome(p.x1))}</td>
         ${cols.map(l=>`<td class="num ${p.cel[l]?(irTransDentroDoPrazo(l)?'ok':'atraso'):''}">${p.cel[l]?irFmtInt(p.cel[l]):'0'}</td>`).join('')}
         <td class="num valor">${irFmtMoney(p.valor)}</td>
+      </tr>` : `<tr>
+        <td class="cod">${irEsc(p.x1||'(vazio)')}</td>
+        <td class="desc">${irEsc(irTransNome(p.x1))}</td>
+        <td class="num">${irFmtInt(p.qtd)}</td>
+        <td class="num valor">${irFmtMoney(p.valor)}</td>
       </tr>`).join('')}</tbody>
       <tfoot><tr>
-        <td colspan="2">Total ${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</td>
+        ${temData ? `<td colspan="2">Total ${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</td>
         ${cols.map(l=>`<td class="num">${totCol[l]?irFmtInt(totCol[l]):'0'}</td>`).join('')}
-        <td class="num valor">${irFmtMoney(g.valor)}</td>
+        <td class="num valor">${irFmtMoney(g.valor)}</td>`
+          : `<td>Total ${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</td><td></td>
+        <td class="num">${irFmtInt(g.qtd)}</td>
+        <td class="num valor">${irFmtMoney(g.valor)}</td>`}
       </tr></tfoot>
     </table></div>
   </div>`;
@@ -994,11 +1016,12 @@ function irRenderTransEmailForm(){
     <div class="form-actions"><button class="btn btn-secondary" onclick="irTransToggleDestinatarios()">Fechar</button></div>
   </div>`;
 }
-/* Pior idade (em dias) dentro de um grupo de endereços — mesmo critério do
-   D+7 do gráfico: sem porDia nenhum (a 160 nunca viu) é o pior caso, não "sem
-   informação". Usada só pro ranking de ofensores, não entra no cálculo normal. */
+/* Pior idade (em dias) dentro de um grupo de endereços. Sem a QRY0160 (nenhum
+   endereço tem porDia) não tem idade nenhuma pra ranquear — devolve null, e
+   quem chama tira esse local do ranking de ofensores em vez de fingir 7d+. */
 function irTransIdadeMaxDias(locais){
   const hoje = Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00');
+  if(!irTransTemData()) return null;
   let max = null;
   for(const l of locais){
     const pd = l.porDia;
@@ -1028,8 +1051,9 @@ function irTransOfensores(setores, topN){
       todos.push({chave:p.chave, setor:g.setor, valor:p.valor, idade: irTransIdadeMaxDias(p.locais)});
     }
   }
-  todos.sort((a,b)=> (b.idade??0)-(a.idade??0) || b.valor-a.valor);
-  return todos.slice(0, topN);
+  const comIdade = todos.filter(t=>t.idade!=null);
+  comIdade.sort((a,b)=> b.idade-a.idade || b.valor-a.valor);
+  return comIdade.slice(0, topN);
 }
 function irTransRenderOfensores(ofensores){
   if(!ofensores.length) return '';
@@ -1072,7 +1096,7 @@ function irTransBoletimHtml(classe){
       </div>
     </div>
     <div class="rp-body">
-      ${irTransRenderOfensores(ofensores)}
+      ${classe==='rp-tela' ? '' : irTransRenderOfensores(ofensores)}
       ${/* Só os setores da legenda (TSF, C.E, INB, OUT, TRP, REV). O endereço sem
             classe não entra: "sem classe" aqui é o CD inteiro — picking, pulmão,
             armazenagem normal —, dezenas de milhares de endereços que não são
