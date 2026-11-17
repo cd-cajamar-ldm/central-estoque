@@ -997,9 +997,16 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
    o app, pra ler tranquilo em qualquer tamanho de tela. Cores fixas (não usam
    variáveis de tema claro/escuro) porque vira uma imagem estática. ---------- */
 #irPrintArea{ display:none; }
-.rp-page{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; color:#1D1F2A; background:#E7EAF1; padding:0 0 28px; max-width:920px; }
+/* color-scheme:light avoida o Chromium forçar um escurecimento automático de texto
+   dentro desse bloco quando a página tá no tema escuro — aqui a paleta já é fixa
+   e clara de propósito (mesma do boletim por e-mail), não precisa de ajuda. */
+.rp-page{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; color:#1D1F2A; background:#E7EAF1; padding:0 0 28px; max-width:920px; color-scheme:light; }
 
-.rp-hero{ background:#001A72; color:#fff; padding:34px 40px 26px; position:relative; }
+.rp-hero{
+  color:#fff; padding:34px 40px 26px; position:relative;
+  background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.86) 55%, rgba(0,18,82,.5) 100%), url(../brand/menu-corredor.jpg);
+  background-size:cover; background-position:center 42%;
+}
 .rp-hero::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:4px; background:linear-gradient(90deg,#FA4616,#FF7A4D,#FA4616); }
 .rp-hero-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
 /* Arquivo branco de verdade em vez de filter: o html2canvas, que gera a imagem
@@ -1010,8 +1017,23 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-hero-badge{ display:inline-block; color:#FF7A4D; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-bottom:12px; }
 .rp-hero h1{ font-size:24px; font-weight:700; letter-spacing:-.01em; line-height:1.2; }
 .rp-hero p{ font-size:12.5px; color:#AEBBD6; margin-top:5px; }
-.rp-hero-meta{ display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
-.rp-hero-meta span{ font-size:10.5px; color:#D7DEEC; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.1); padding:5px 10px; border-radius:6px; }
+.rp-hero-kpis{ display:flex; flex-wrap:wrap; gap:30px; margin-top:20px; }
+.rp-hero-kpis div{ display:flex; flex-direction:column; gap:3px; }
+.rp-hero-kpi-lbl{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#C9D0F2; }
+.rp-hero-kpis strong{ font-family:'Poppins',sans-serif; font-size:25px; font-weight:700; }
+
+/* Os endereços mais velhos do CD inteiro, cruzando setor — vem antes de
+   qualquer tabela, pra não precisar abrir uma por uma pra achar quem puxa
+   risco de virar perda. */
+.rp-ofensores{ margin-bottom:28px; }
+.rp-ofensores h3{ font-size:13px; font-weight:800; color:#1D1F2A; margin-bottom:10px; }
+.rp-ofensores-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.rp-ofensor-card{ background:#fff; border:1px solid #F0DDC9; background-color:#FFF8F0; border-radius:10px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; }
+.rp-ofensor-top{ display:flex; justify-content:space-between; align-items:center; }
+.rp-ofensor-cod{ font-weight:800; font-size:13px; color:#1D1F2A; }
+.rp-ofensor-dias{ background:#C83812; color:#fff; font-size:10px; font-weight:800; padding:2px 8px; border-radius:100px; }
+.rp-ofensor-setor{ font-size:11px; color:#6B7280; }
+.rp-ofensor-valor{ font-family:'Poppins',sans-serif; font-size:16px; font-weight:700; color:#1D1F2A; }
 
 .rp-body{ padding:28px 40px 4px; }
 
@@ -1071,6 +1093,49 @@ input, select, textarea{ width:100%; border:1px solid var(--line); border-radius
 .rp-table-dense th:first-child, .rp-table-dense td:first-child{ text-align:left; }
 .rp-cols2{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
 .rp-footer{ margin-top:28px; padding:14px 16px 0; border-top:1px solid #E4E7EE; font-size:9.5px; color:#9AA1B4; text-align:center; }
+
+/* Bloco por setor do boletim — formato próprio do relatório, não o .panel/
+   .trans-table da tela: sem gráfico, sem edição, sem coluna de duplicidade,
+   direto do KPI pra tabela. */
+/* --setor-cor vem inline por bloco (IR_TRANS_SETOR_COR): cada setor carrega sua
+   própria identidade pro cabeçalho da tabela, em vez do mesmo azul repetido seis
+   vezes — é o que tirava a cara de "ERP antigo" do relatório. */
+.rp-setor{ background:#fff; border-radius:16px; padding:20px 22px; margin-bottom:22px;
+  box-shadow:0 14px 32px -16px rgba(0,26,114,.22); border:1px solid #EEF0F4; }
+.rp-setor-head{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:16px; }
+.rp-setor-tit{ display:flex; align-items:center; gap:10px; }
+.rp-setor-bar{ width:10px; height:26px; border-radius:4px; display:inline-block; }
+.rp-setor-tit h2{ font-family:'Poppins',sans-serif; font-size:17px; font-weight:700; color:#1D1F2A; }
+.rp-setor-kpis{ display:flex; gap:22px; flex-wrap:wrap; align-items:center; }
+.rp-setor-kpis div{ text-align:right; }
+.rp-setor-kpi-lbl{ display:block; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6B7280; }
+.rp-setor-kpis strong{ font-family:'Poppins',sans-serif; font-size:17px; font-weight:700; color:#1D1F2A; }
+/* Chip de risco: antes era só um número colorido perdido no canto — em pílula
+   com fundo tingido, o olho acha o setor crítico sem precisar ler o texto. */
+.rp-chip{ display:inline-block; font-family:'Poppins',sans-serif; font-size:13.5px; font-weight:700;
+  padding:3px 11px; border-radius:20px; }
+.rp-chip-baixo{ background:#E4F3EA; color:#1F8A52; }
+.rp-chip-medio{ background:#FFE9DD; color:#C25A1E; }
+.rp-chip-alto{ background:#FBE1DC; color:#C83812; }
+/* .table-wrap usa var(--surface), que no tema escuro fica escuro — mas aqui a
+   paleta é sempre clara (igual ao boletim), então força branco por baixo da
+   grade, senão as linhas sem fundo próprio mostravam o escuro por trás. */
+.rp-setor .table-wrap{ background:#fff; border-color:#EEF0F4; }
+table.rp-setor-table{ width:100%; border-collapse:collapse; font-size:11.5px; }
+table.rp-setor-table thead tr:first-child th{ background:var(--setor-cor,#001A72); color:#fff; text-align:left; padding:7px 10px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+table.rp-setor-table thead tr:first-child th.num{ text-align:right; }
+table.rp-setor-table thead tr:last-child th{ text-align:center; padding:5px 6px; font-size:9.5px; font-weight:700; color:#fff; }
+table.rp-setor-table th.ok{ background:#1F8A52; }
+table.rp-setor-table th.atraso{ background:#FE5000; }
+table.rp-setor-table td{ padding:7px 10px; border-bottom:1px solid #EEF0F4; }
+table.rp-setor-table tbody tr:nth-child(even){ background:#FAFBFC; }
+table.rp-setor-table td.cod{ font-weight:800; white-space:nowrap; }
+table.rp-setor-table td.desc{ color:#6B7280; white-space:nowrap; }
+table.rp-setor-table td.num{ text-align:center; font-variant-numeric:tabular-nums; }
+table.rp-setor-table td.num.atraso{ color:#C83812; font-weight:800; }
+table.rp-setor-table td.valor{ text-align:right; font-weight:700; white-space:nowrap; }
+table.rp-setor-table tfoot td{ padding:8px 10px; font-weight:800; background:#F4F5F7; font-variant-numeric:tabular-nums; }
+table.rp-setor-table tfoot td.valor{ text-align:right; }
 
 /* ============================================================
    Tema "Projetos" — só na aba de Divergências.
@@ -1546,4 +1611,77 @@ table.bt-table tbody td.bt-vazio{ position:static; }
 table.bt-table tfoot td{
   position:sticky; bottom:0; z-index:2; background:var(--surface); border-top:2px solid var(--line);
   border-bottom:none; font-size:12.5px;
+}
+
+/* Layout do boletim aplicado na tela do app: mesma folha, mas adaptável à janela. */
+.rp-page.rp-tela{ max-width:none; width:100%; margin-bottom:18px; border-radius:12px; overflow:hidden; }
+.rp-tela .rp-hero{ padding:24px 28px 20px; }
+.rp-tela .rp-body{ padding:22px 28px 4px; }
+.rp-tela .table-wrap{ overflow-x:auto; }
+@media (max-width:900px){
+  .rp-tela .rp-ofensores-grid{ grid-template-columns:repeat(2,1fr); }
+  .rp-tela .rp-hero, .rp-tela .rp-body{ padding-left:16px; padding-right:16px; }
+  .rp-tela .rp-hero-kpis{ gap:18px; }
+}
+
+/* ---------- PAINEL DE INDICADORES ----------
+   Mesmo vocabulário visual do dashboard do Inventário Rotativo (classes dx-*),
+   portado aqui pra tela nova ficar com a cara do resto da casa. */
+.dx-hero{
+  margin:-20px -24px 0; padding:20px 24px 90px; color:#fff;
+  background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.82) 50%, rgba(0,18,82,.35) 100%), url(../brand/menu-corredor.jpg);
+  background-size:cover; background-position:center 60%;
+}
+.dx-hero-in{ display:flex; flex-direction:column; gap:26px; }
+.dx-marca{ display:flex; align-items:center; gap:12px; }
+.dx-marca-txt{ display:flex; flex-direction:column; }
+.dx-marca-txt b{ font-family:'Poppins',sans-serif; font-size:15px; font-weight:700; }
+.dx-marca-txt span{ font-size:12px; color:#C9D0F2; }
+.dx-hero-row{ display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-end; gap:16px; }
+.dx-hero-tit{ display:flex; flex-direction:column; gap:8px; }
+.dx-hero-tit h2{ margin:0; font-family:'Poppins',sans-serif; font-size:30px; font-weight:700; color:#fff; }
+.dx-tag{ font-size:14px; color:#DCE1F7; }
+.dx-body{ margin:-64px 0 0; position:relative; display:flex; flex-direction:column; gap:16px; }
+.dx-body .panel{ margin-bottom:0; border-radius:14px; }
+.dx-cards{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
+.dx-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+  display:flex; flex-direction:column; gap:8px; box-shadow:0 16px 34px -18px rgba(0,26,114,.35); }
+.dx-card-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.dx-card-rot{ font-size:13px; font-weight:700; color:var(--ink-soft); }
+.dx-card-val{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.dx-num{ font-family:'Poppins',sans-serif; font-size:30px; font-weight:700; line-height:1; color:var(--ink); font-variant-numeric:tabular-nums; }
+.dx-num.bad{ color:var(--danger); }
+.dx-card-hint{ font-size:12px; color:var(--ink-soft); }
+.dx-faixa{ background:var(--surface2); border:1px solid var(--line); border-radius:14px; padding:6px 4px;
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
+.dx-tile{ padding:12px 16px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:3px; min-width:0; }
+.dx-tile:last-child{ border-right:0; }
+.dx-tile-rot{ font-size:12px; color:var(--ink-soft); }
+.dx-tile-val{ font-size:21px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.dx-tile-val.bad{ color:var(--danger); }
+.dx-tile-hint{ font-size:11px; color:var(--ink-soft); }
+/* Ranking de setores ofensores: uma barra por setor, maior valor fora do prazo primeiro. */
+.dx-rank-row{ display:grid; grid-template-columns:4px 150px 1fr 42px 120px; align-items:center; gap:12px; padding:8px 4px; }
+.dx-rank-row + .dx-rank-row{ border-top:1px solid var(--line); }
+.dx-rank-bar{ width:4px; height:22px; border-radius:3px; }
+.dx-rank-nome{ font-size:13px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dx-rank-track{ height:8px; background:var(--surface2); border-radius:999px; overflow:hidden; }
+.dx-rank-track i{ display:block; height:100%; border-radius:999px; }
+.dx-rank-pct{ font-size:12.5px; font-weight:800; color:var(--ink-soft); text-align:right; font-variant-numeric:tabular-nums; }
+.dx-rank-valor{ font-size:13px; font-weight:700; color:var(--ink); text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+@media(max-width:700px){
+  .dx-rank-row{ grid-template-columns:4px 1fr 60px; grid-template-areas:"bar nome pct" "bar track valor"; row-gap:4px; }
+  .dx-rank-bar{ grid-area:bar; } .dx-rank-nome{ grid-area:nome; } .dx-rank-pct{ grid-area:pct; }
+  .dx-rank-track{ grid-area:track; } .dx-rank-valor{ grid-area:valor; text-align:left; }
+}
+/* Linha de evolução — só o essencial: grade de base, pontos com tooltip nativo
+   (title do SVG) e rótulo de data a cada N pontos. */
+.dx-ln{ display:block; height:auto; }
+.dx-ln-grid{ stroke:var(--line); stroke-width:1; }
+.dx-ln-ax{ font-size:12px; fill:var(--ink-soft); }
+.dx-ln-pt{ stroke:var(--surface); stroke-width:2; cursor:pointer; }
+.dx-ln-pt:hover{ r:7; }
+@media(max-width:640px){
+  .dx-hero{ margin:-14px -14px 0; padding:16px 16px 84px; }
+  .dx-hero-tit h2{ font-size:24px; }
 }
