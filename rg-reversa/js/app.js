@@ -21,7 +21,7 @@ var FAIXAS = [[0,30,'até 30 d','#1F8A52'],[31,90,'31–90 d','#E0A100'],[91,180
 var CORES_CLASSIF = ['#FE5000','#001A72','#1F8A52','#E0A100','#7D93E8','#8E99A8'];
 var PAGINA = 200;
 var LOG_KEY = 'rg-reversa-log', PEND_KEY = 'rg-reversa-pend';
-/* Locais fora do monitoramento de tempo em misto (zonas TRI e PIC). */
+/* Controle de mistos: zonas TRI e PIC ficam fora. */
 var SEM_MONITOR = /^(TRI|PIC)/i;
 var MISTO_FX = [[0,7,'até 7 d','#1F8A52'],[8,30,'8–30 d','#E0A100'],[31,90,'31–90 d','#FE5000'],[91,1e9,'+ de 90 d','#C83812']];
 var RESTR = {WN:'Vendável',WA:'Reversa',WQ:'Quebra',RT:'Conferência',WE:'Amostra',LT:'Litígio',WV:'Validade',WL:'Não localizado',WI:'Insumos',WT:'Análise',WR:'Reparo',AT:'Múlt. reversa',SS:'Marca própria',DT:'Triagem',WD:'Obsoleto',WS:'Leilão',AI:'Múlt. incompleto'};
@@ -30,6 +30,7 @@ var TABS = {
   painel:['Dashboard','Implantação de RG na logística reversa — meta: 100% do estoque com RG.'],
   estoque:['Estoque × RG','Saldo da reversa por item e local.'],
   rgs:['Consulta de RGs','Cada RG é uma peça.'],
+  mistos:['Locais mistos','Quanto tempo cada local está com RG e peça sem RG juntos.'],
   movs:['Movimentações','Relatório do coletor para baixar em Excel ou colar no PuTTY.'],
   importacao:['Importação','Relatórios do Bseller que alimentam o dashboard.']
 };
@@ -37,9 +38,10 @@ var TABS = {
 var S = {
   rgs:[], est:null, mult:null, hist:[], tab:'painel', D:null, ocupado:'', user:'', stamps:{}, nuvem:{ estado:'', msg:'' },
   movs:null, movsBusy:false, movsErro:'',
+  mistos:null, mistosBusy:false, mistosErro:'', mistosMsg:'', fMisQ:'', fMisFx:-1, fMisZona:'',
   fm:{ de:'', ate:'', st:'pend', q:'' }, lim:{}, sort:{},
   col:null,
-  classe:'', ritmo:null, anima:true, q:'', fClassif:'', fOper:'', mapaModo:'sit', mapaFx:-1, cobModo:'sem', cobQ:'', cobLocal:'', cobFaixa:''
+  classe:'', ritmo:null, anima:true, q:'', fClassif:'', fOper:'', cobModo:'sem', cobQ:'', cobLocal:'', cobFaixa:''
 };
 
 /* ---------- utilidades ---------- */
@@ -295,6 +297,10 @@ function importar(files){
       return seq.then(function(){ msgs.push('dados guardados no servidor'); return dbSet('stamps',S.stamps).catch(function(){}); })
         .catch(function(e){ erros.push('Não consegui guardar os dados no servidor: '+msgNuvem(e)); });
     }).then(function(){
+      if(!(mudados.has('rgs')||mudados.has('est')) || leitura()) return;
+      return registraMistos().then(function(r){ if(r) msgs.push('controle de mistos ('+int(r.novos)+' novos · '+int(r.resolvidos)+' resolvidos)'); })
+        .catch(function(e){ erros.push(semTabelaMis(e) ? 'Controle de mistos: falta rodar a migração 005 no Supabase.' : 'Controle de mistos: '+msgNuvem(e)); });
+    }).then(function(){
       S.ocupado=''; render();
       if(erros.length) toast(erros.join(' '), true);
       else if(msgs.length) toast('Importado: '+msgs.join(' · ')+'.');
@@ -361,22 +367,15 @@ function deriva(){
     if(l.st==='misto') D.loc.unMisto+=l.semRg;
     l.fora=SEM_MONITOR.test(String(l.localDesc||l.local||'').trim());
   });
-  /* Tempo em misto (estimado): o local virou misto quando passaram a conviver RG e peça sem RG,
-     ou seja, no mais recente dos dois começos — idade da peça sem RG mais antiga × idade do RG mais antigo. */
+  /* Início estimado de cada local misto: o local passou a ser misto quando RG e peça sem RG passaram a conviver,
+     isto é, no mais recente dos dois começos (idade da peça sem RG mais antiga × idade do RG mais antigo). */
   var rgAntigo=new Map(); D.abertos.forEach(function(r){ if(r.dt && (!rgAntigo.has(r.local) || r.dt<rgAntigo.get(r.local))) rgAntigo.set(r.local,r.dt); });
   var semAntigo=new Map(); D.cov.forEach(function(c){ if(c.semRg>0 && c.dias!=null && c.dias>(semAntigo.has(c.local)?semAntigo.get(c.local):-1)) semAntigo.set(c.local,c.dias); });
-  D.misto={ lista:[], faixas:MISTO_FX.map(function(){ return 0; }), semData:0, fora:0, media:0 };
   D.locais.forEach(function(l){
     if(l.st!=='misto') return;
-    if(l.fora){ D.misto.fora++; return; }
     var a=semAntigo.has(l.local)?semAntigo.get(l.local):null, b=rgAntigo.has(l.local)?dias(rgAntigo.get(l.local)):null;
-    l.diasMisto = a!=null && b!=null ? Math.min(a,b) : (a!=null?a:b);
-    if(l.diasMisto==null){ D.misto.semData++; return; }
-    for(var i=0;i<MISTO_FX.length;i++) if(l.diasMisto>=MISTO_FX[i][0] && l.diasMisto<=MISTO_FX[i][1]){ D.misto.faixas[i]++; break; }
-    D.misto.lista.push(l);
+    l.estDias = a!=null && b!=null ? Math.min(a,b) : (a!=null?a:b);
   });
-  D.misto.lista.sort(function(a,b){ return b.diasMisto-a.diasMisto; });
-  D.misto.media=D.misto.lista.length ? D.misto.lista.reduce(function(t,l){ return t+l.diasMisto; },0)/D.misto.lista.length : 0;
   /* Ritmo: RGs por dia, usando os dias com geração (últimos 14 dias corridos até o dado mais novo). */
   var porDia=new Map(); D.rgs.forEach(function(r){ if(r.dt) porDia.set(r.dt,(porDia.get(r.dt)||0)+1); });
   D.porDia=porDia;
@@ -630,16 +629,6 @@ function regua(){
   return h+'</div>';
 }
 
-function tempoMisto(){
-  var M=S.D.misto; if(!M || !S.D.loc.misto) return '';
-  var tot=M.lista.length;
-  var blocos=MISTO_FX.map(function(f,i){ return '<button type="button" class="rgx-tm-b'+(S.mapaFx===i?' on':'')+'" data-act="mapa-fx" data-i="'+i+'"'+tip(f[2],int(M.faixas[i])+' locais mistos','Clique para ver no mapa')+'><i style="background:'+f[3]+'"></i><b>'+int(M.faixas[i])+'</b><span>'+f[2]+'</span></button>'; }).join('');
-  var top=M.lista.slice(0,6).map(function(l){
-    return '<button type="button" class="rgx-tm-l" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.semRg)+' un sem RG · '+int(l.rgs)+' RGs')+'><span>'+esc(l.localDesc||l.local)+'</span><b>'+int(l.diasMisto)+' d</b></button>';
-  }).join('');
-  return '<div class="rgx-tm"><div class="rgx-tm-h"><b>Tempo em misto</b><span>média '+int(M.media)+' dias · '+int(tot)+' locais'+(M.fora?' · '+int(M.fora)+' em TRI/PIC fora':'')+'</span></div>'+
-    '<div class="rgx-tm-g"><div class="rgx-tm-bl">'+blocos+'</div><div class="rgx-tm-top">'+(top||'<em>sem datas para calcular</em>')+'</div></div></div>';
-}
 function mapaLocais(){
   var D=S.D, zonas=new Map(), porPrefixo=new Map();
   D.locais.forEach(function(l){ porPrefixo.set(l.zona,(porPrefixo.get(l.zona)||0)+1); });
@@ -651,23 +640,12 @@ function mapaLocais(){
   D.locais.forEach(function(l){ var z=zonas.get(l.zonaMapa); if(!z){ z={nome:l.zonaMapa, l:[], saldo:0}; zonas.set(l.zonaMapa,z); } z.l.push(l); z.saldo+=l.saldo; });
   var arr=Array.from(zonas.values()).sort(function(a,b){ return b.saldo-a.saldo; });
   var maxS=Math.max.apply(null,D.locais.map(function(l){ return l.saldo; }))||1;
-  var tempo=S.mapaModo==='tempo';
-  var fxDe=function(l){ if(l.st!=='misto' || l.fora || l.diasMisto==null) return -1; for(var i=0;i<MISTO_FX.length;i++) if(l.diasMisto>=MISTO_FX[i][0] && l.diasMisto<=MISTO_FX[i][1]) return i; return -1; };
-  if(tempo){
-    arr.forEach(function(z){ z.nm=0; z.max=-1; z.l.forEach(function(l){ var f=fxDe(l); if(f>=0 && (S.mapaFx<0 || S.mapaFx===f)){ z.nm++; if(l.diasMisto>z.max) z.max=l.diasMisto; } }); });
-    arr=arr.filter(function(z){ return z.nm>0; }).sort(function(a,b){ return b.max-a.max; });
-    if(!arr.length) return '<div class="rgx-ok">Nenhum local misto nesta faixa</div>';
-  }
-  return '<div class="rgx-mapa'+(tempo?' tempo':'')+'">'+arr.map(function(z){
-    if(tempo) return '<div class="rgx-zona"><div class="rgx-zona-h"><b>'+esc(z.nome)+'</b><span>'+int(z.nm)+' mistos · maior '+int(z.max)+' d</span></div><div class="rgx-cels">'+z.l.map(function(l){
-      var f=fxDe(l), on=f>=0 && (S.mapaFx<0 || S.mapaFx===f);
-      return '<button type="button" class="rgx-cel '+(on?'':'apag')+'"'+(on?' style="background:'+MISTO_FX[f][3]+'"':'')+' data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,on?'Misto há '+int(l.diasMisto)+' dias':(l.st==='misto'?(l.fora?'Misto · TRI/PIC fora do monitoramento':'Misto'):l.st==='rg'?'100% RG':'Sem RG'),int(l.semRg)+' un sem RG · '+int(l.rgs)+' RGs')+'></button>';
-    }).join('')+'</div></div>';
+  return '<div class="rgx-mapa">'+arr.map(function(z){
     z.l.sort(function(a,b){ return String(a.localDesc).localeCompare(String(b.localDesc),'pt-BR',{numeric:true}); });
     return '<div class="rgx-zona"><div class="rgx-zona-h"><b>'+esc(z.nome)+'</b><span>'+int(z.l.length)+' locais · '+int(z.saldo)+' un</span></div><div class="rgx-cels">'+z.l.map(function(l){
       /* intensidade = quanto saldo o local guarda (escala de raiz para não sumir os pequenos) */
       var op=(0.5+0.5*Math.pow(l.saldo/maxS,0.3)).toFixed(2);
-      return '<button type="button" class="rgx-cel '+l.st+'" style="opacity:'+op+'" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.saldo)+' un · '+int(l.rgs)+' RGs',l.st==='rg'?'100% RG':l.st==='misto'?'Misto · '+pct(l.comRg,l.saldo)+' com RG'+(l.diasMisto!=null?' · misto há '+int(l.diasMisto)+' d':''):'Sem RG')+'></button>';
+      return '<button type="button" class="rgx-cel '+l.st+'" style="opacity:'+op+'" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.saldo)+' un · '+int(l.rgs)+' RGs',l.st==='rg'?'100% RG':l.st==='misto'?'Misto · '+pct(l.comRg,l.saldo)+' com RG':'Sem RG')+'></button>';
     }).join('')+'</div></div>';
   }).join('')+'</div>';
 }
@@ -769,7 +747,7 @@ function vPainel(){
       '<div class="panel">'+h3('Onde falta RG','<div class="cmp-legend"><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto</span></div>')+blocoTreemap()+'</div>'+
       '<div class="panel">'+h3('Classificação das peças')+rosca()+'</div>'+
     '</div>'+
-    '<div class="panel">'+h3('Mapa dos locais','<div class="rgx-mm"><button type="button" class="'+(S.mapaModo==='sit'?'on':'')+'" data-act="mapa-modo" data-m="sit">Situação</button><button type="button" class="'+(S.mapaModo==='tempo'?'on':'')+'" data-act="mapa-modo" data-m="tempo">Tempo em misto</button></div>'+(S.mapaModo==='tempo' ? '<div class="cmp-legend">'+MISTO_FX.map(function(f){ return '<span><span class="cmp-dot" style="background:'+f[3]+'"></span>'+f[2]+'</span>'; }).join('')+'</div>' : '<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>'))+tempoMisto()+mapaLocais()+'</div>'+
+    '<div class="panel">'+h3('Mapa dos locais','<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>')+mapaLocais()+'</div>'+
     '<div class="rgx-g rgx-g-c">'+
       '<div class="panel">'+h3('Idade do estoque sem RG')+regua()+'</div>'+
       '<div class="panel">'+h3('Ritmo diário')+ritmoDiario()+'</div>'+
@@ -802,7 +780,6 @@ function relatorioHtml(){
   var faixas=tab(['Idade do estoque sem RG','Unidades','%'], FAIXAS.map(function(f,i){ return ['<span class="dot" style="background:'+f[3]+'"></span>'+f[2], int(D.faixas[i]), pct(D.faixas[i],totF)]; }));
   var ops=tab(['Operador','RGs','Por dia'], D.ops.slice(0,8).map(function(o){ return [esc(operNome(o.oper)), int(o.n), int(o.media)]; }));
   var top=tab(['Item','Un sem RG'], Array.from(D.itens.values()).sort(function(a,b){ return b.semRg-a.semRg; }).slice(0,8).map(function(it){ return [esc(it.item+' · '+(it.desc||'')), int(it.semRg)]; }));
-  var tm=D.misto, mistoTab=tm && tm.lista.length ? tab(['Local misto há mais tempo','Dias','Un sem RG'], tm.lista.slice(0,8).map(function(l){ return [esc(l.localDesc||l.local), int(l.diasMisto), int(l.semRg)]; })) : '<p class="m">Nenhum local misto com data para calcular.</p>';
   var cls=tab(['Classificação (RGs abertos)','RGs','%'], D.classif.slice(0,6).map(function(c){ return [esc(c.nome), int(c.n), pct(c.n,D.abertos.length)]; }));
   var css='*{box-sizing:border-box}body{margin:0;background:#F3F4F8;color:#111827;font:14px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif}.w{max-width:860px;margin:0 auto;padding:20px 16px 36px}'+
     'header{background:#001A72;color:#fff;border-radius:16px;padding:22px 24px;border-bottom:5px solid #FE5000}header small{opacity:.8;letter-spacing:.08em;text-transform:uppercase;font-size:11px}header h1{margin:4px 0 2px;font-size:24px}header p{margin:0;opacity:.85;font-size:13px}'+
@@ -825,7 +802,6 @@ function relatorioHtml(){
       kpi('Locais mistos', int(L.misto), int(L.unMisto)+' un sem RG misturadas', L.misto?'#C83812':'#1F8A52')+
       kpi('Locais sem RG', int(L.sem), pct(L.sem,L.total)+' dos locais')+
     '</div></section>'+
-    '<section><h2>Locais mistos há mais tempo'+(tm&&tm.lista.length?' · média de '+int(tm.media)+' dias':'')+'</h2>'+mistoTab+'<p class="m">Estimativa pela idade da peça sem RG e do RG mais antigos do local. Zonas TRI e PIC ficam de fora.</p></section>'+
     '<section><h2>RGs gerados por dia (últimos 30 dias com geração)</h2>'+svg+'<p class="m">Média recente: '+int(D.ritmo)+' RGs/dia · '+int(D.porPessoa)+' por pessoa/dia</p></section>'+
     '<div class="c2"><section><h2>Idade do estoque sem RG</h2>'+faixas+'</section><section><h2>Operadores</h2>'+ops+'</section></div>'+
     '<div class="c2" style="margin-top:12px"><section><h2>Itens com mais unidades sem RG</h2>'+top+'</section><section><h2>Classificação das peças</h2>'+cls+'</section></div>'+
@@ -870,7 +846,7 @@ function tabela(id, cols, linhas, cfg){
   }).join('')+'</tr></thead><tbody>';
   if(!parte.length) h+='<tr><td colspan="'+cols.length+'" class="rgx-nada">Nada encontrado</td></tr>';
   parte.forEach(function(r){
-    h+='<tr'+(cfg.rg?' class="rgx-click" data-act="ficha" data-rg="'+esc(r.rg)+'"':'')+'>'+cols.map(function(c){ return '<td'+(c.num?' class="rgx-num"':'')+'>'+(c.fmt?c.fmt(r):esc(r[c.k]))+'</td>'; }).join('')+'</tr>';
+    h+='<tr'+(cfg.rg?' class="rgx-click" data-act="ficha" data-rg="'+esc(r.rg)+'"':cfg.local?' class="rgx-click" data-act="local" data-l="'+esc(r.local)+'"':'')+'>'+cols.map(function(c){ return '<td'+(c.num?' class="rgx-num"':'')+'>'+(c.fmt?c.fmt(r):esc(r[c.k]))+'</td>'; }).join('')+'</tr>';
   });
   h+='</tbody></table></div>';
   if(linhas.length>lim) h+='<div class="rgx-mais"><button class="btn btn-secondary" data-act="mais" data-tb="'+id+'">Mostrar mais · '+int(linhas.length-lim)+'</button></div>';
@@ -953,6 +929,125 @@ function vRgs(){
     tabela('rgs',COLS_RG,lista,{rg:1})+'</div>';
 }
 
+
+/* ---------- Controle de locais mistos (histórico no Supabase: tabela rg_misto) ---------- */
+function zonaDe(desc){ var p=String(desc||'').trim().split(/\s+/); return p[0] && p[0].length<=1 && p[1] ? p[0]+' '+p[1] : (p[0]||'—'); }
+function fxMis(d){ for(var i=0;i<MISTO_FX.length;i++) if(d>=MISTO_FX[i][0] && d<=MISTO_FX[i][1]) return i; return MISTO_FX.length-1; }
+function lotes(a,n){ var o=[]; for(var i=0;i<a.length;i+=n) o.push(a.slice(i,i+n)); return o; }
+function semTabelaMis(e){ return /rg_misto|does not exist|schema cache|relation/i.test((e&&e.message)||String(e||'')); }
+function carregaMistos(){
+  if(S.mistosBusy) return;
+  var sb=window.rgSupa; if(!sb){ S.mistos=[]; return; }
+  S.mistosBusy=true; S.mistosErro='';
+  sb.from('rg_misto').select('*').order('desde',{ascending:true}).limit(20000).then(function(r){
+    if(r.error) throw r.error;
+    S.mistos=r.data||[];
+  }).catch(function(e){ S.mistos=[]; S.mistosErro=semTabelaMis(e) ? 'tabela' : ((e&&e.message)||'Não consegui carregar o controle.'); })
+    .then(function(){ S.mistosBusy=false; if(S.tab==='mistos') render(); });
+}
+/* Compara os locais mistos de agora com os períodos já registrados: abre o que virou misto, fecha o que deixou de ser. */
+function registraMistos(){
+  var sb=window.rgSupa; if(!sb || leitura() || !S.D || !S.est) return Promise.resolve(null);
+  var iso=function(t){ return new Date(t).toISOString(); }, agora=Date.now();
+  var atuais=S.D.locais.filter(function(l){ return l.st==='misto' && !l.fora; });
+  var chk=function(r){ if(r.error) throw r.error; return r; };
+  return sb.from('rg_misto').select('id,local,visto_em,resolvido_em').order('id',{ascending:true}).limit(20000).then(function(r){
+    chk(r);
+    var todos=r.data||[], abertos=new Map(), ultimo=0;
+    todos.forEach(function(x){ var v=Date.parse(x.visto_em)||0; if(v>ultimo) ultimo=v; if(!x.resolvido_em) abertos.set(x.local,x); });
+    var primeira=!todos.length, cur=new Set(), novos=[], mantem=[], fecha=[];
+    atuais.forEach(function(l){
+      cur.add(l.local);
+      var a=abertos.get(l.local);
+      if(a){ mantem.push(a.id); return; }
+      var est=l.estDias!=null ? hoje0()-l.estDias*864e5 : agora;
+      var desde=primeira ? est : Math.min(agora, Math.max(est, ultimo||est));
+      novos.push({ local:l.local, local_desc:l.localDesc||l.local, desde:iso(desde), origem:primeira?'estimado':'medido', visto_em:iso(agora) });
+    });
+    abertos.forEach(function(a,loc){ if(!cur.has(loc)) fecha.push(a.id); });
+    var seq=Promise.resolve();
+    lotes(novos,300).forEach(function(c){ seq=seq.then(function(){ return sb.from('rg_misto').insert(c).then(chk); }); });
+    lotes(mantem,150).forEach(function(c){ seq=seq.then(function(){ return sb.from('rg_misto').update({visto_em:iso(agora)}).in('id',c).then(chk); }); });
+    lotes(fecha,150).forEach(function(c){ seq=seq.then(function(){ return sb.from('rg_misto').update({visto_em:iso(agora), resolvido_em:iso(agora)}).in('id',c).then(chk); }); });
+    return seq.then(function(){ S.mistos=null; return { novos:novos.length, mantidos:mantem.length, resolvidos:fecha.length, primeira:primeira }; });
+  });
+}
+function misLinhas(){
+  var agora=Date.now(), mapa=new Map(); S.D.locais.forEach(function(l){ mapa.set(l.local,l); });
+  return (S.mistos||[]).filter(function(x){ return !x.resolvido_em; }).map(function(x){
+    var l=mapa.get(x.local)||{}, ds=Date.parse(x.desde), d=Math.max(0,Math.floor((agora-ds)/864e5)), desc=x.local_desc||x.local;
+    return { local:x.local, desc:desc, zona:zonaDe(desc), desde:ds, dias:d, fx:fxMis(d), origem:x.origem, un:l.semRg||0, rgs:l.rgs||0 };
+  });
+}
+function misFiltradas(todas){
+  var q=norm(S.fMisQ);
+  return todas.filter(function(r){
+    if(S.fMisFx>=0 && r.fx!==S.fMisFx) return false;
+    if(S.fMisZona && r.zona!==S.fMisZona) return false;
+    if(q && norm(r.desc+' '+r.local+' '+r.zona).indexOf(q)<0) return false;
+    return true;
+  });
+}
+var CAB_MIS=['Local','Código','Zona','Misto desde','Dias em misto','Un sem RG','RGs','Início'];
+function linhasMis(l){ return l.map(function(r){ return [r.desc, r.local, r.zona, dataBR(r.desde), r.dias, r.un, r.rgs, r.origem==='estimado'?'estimado':'medido']; }); }
+function vMistos(){
+  if(!S.est) return semDados('a QRY0100 e a QRY0390');
+  if(S.mistos==null && !S.mistosBusy) setTimeout(carregaMistos,0);
+  var aviso='';
+  if(S.mistosErro==='tabela') return '<div class="panel rgx-vazio"><div class="rgx-vazio-ic">⚙</div><h3>Falta criar a tabela do controle no Supabase</h3><p class="rgx-vazio-p">Rode o arquivo <code>rg-reversa/supabase/migrations/005_misto_historico.sql</code> no SQL Editor do Supabase (uma vez) e volte aqui.</p></div>';
+  if(S.mistosErro) aviso='<div class="rv-aviso" style="margin-bottom:12px"><strong>Erro:</strong> '+esc(S.mistosErro)+'</div>';
+  if(S.mistosMsg) aviso+='<div class="rv-aviso ok" style="margin-bottom:12px">'+esc(S.mistosMsg)+'</div>';
+  var tot=(S.mistos||[]).length;
+  if(S.mistos!=null && !tot){
+    return aviso+'<div class="panel rgx-vazio"><div class="rgx-vazio-ic">⏱</div><h3>O controle ainda não começou</h3>'+
+      '<p class="rgx-vazio-p">Ele guarda, a cada importação, quais locais estão mistos e desde quando. '+int(S.D.loc.misto)+' locais estão mistos agora.</p>'+
+      '<button class="btn btn-orange so-editor" data-act="mis-atualiza">Começar o controle agora</button></div>';
+  }
+  var todas=misLinhas(), lista=misFiltradas(todas), agora=Date.now();
+  var res=(S.mistos||[]).filter(function(x){ return x.resolvido_em; }).map(function(x){ var a=Date.parse(x.desde), b=Date.parse(x.resolvido_em); return { desc:x.local_desc||x.local, desde:a, ate:b, dias:Math.max(0,Math.round((b-a)/864e5)) }; }).sort(function(a,b){ return b.ate-a.ate; });
+  var r30=res.filter(function(r){ return agora-r.ate<=30*864e5; });
+  var media=todas.length ? todas.reduce(function(s,r){ return s+r.dias; },0)/todas.length : 0;
+  var maisAntigo=todas.slice().sort(function(a,b){ return b.dias-a.dias; })[0];
+  var ult=(S.mistos||[]).reduce(function(m,x){ var v=Date.parse(x.visto_em)||0; return v>m?v:m; },0);
+  var zonas=Array.from(new Set(todas.map(function(r){ return r.zona; }))).sort(function(a,b){ return a.localeCompare(b,'pt-BR',{numeric:true}); });
+  var chip=function(i,rot,nn){ return '<button type="button" class="chip'+(S.fMisFx===i?' active':'')+'" data-act="mis-fx" data-i="'+i+'">'+esc(rot)+' · '+int(nn)+'</button>'; };
+  var tiles='<div class="rv-faixa">'+
+    tile('Mistos agora', int(todas.length), int(S.D.loc.misto-todas.length)>0 ? int(S.D.loc.misto-todas.length)+' em TRI/PIC fora' : 'de '+int(S.D.loc.total)+' locais', todas.length?'bad':'good')+
+    tile('Tempo médio', int(media)+' d', 'dos locais mistos', '')+
+    tile('Mais antigo', maisAntigo?int(maisAntigo.dias)+' d':'—', maisAntigo?esc(maisAntigo.desc):'', maisAntigo&&maisAntigo.dias>90?'bad':'')+
+    tile('Resolvidos em 30 dias', int(r30.length), r30.length?'média de '+int(r30.reduce(function(s,r){ return s+r.dias; },0)/r30.length)+' d para resolver':'ainda sem resolvidos', r30.length?'good':'')+
+    '</div>';
+  var cols=[
+    {k:'desc',rot:'Local',fmt:function(r){ return '<b>'+esc(r.desc)+'</b>'; }},
+    {k:'zona',rot:'Zona',fmt:function(r){ return esc(r.zona); }},
+    {k:'desde',rot:'Misto desde',num:true,fmt:function(r){ return dataBR(r.desde)+(r.origem==='estimado'?' <span class="rgx-est" title="Primeiro registro do controle: início estimado pela idade do RG e da peça sem RG">est.</span>':''); }},
+    {k:'dias',rot:'Dias em misto',num:true,fmt:function(r){ return '<span class="rgx-mpill" style="background:'+MISTO_FX[r.fx][3]+'">'+int(r.dias)+' d</span>'; }},
+    {k:'un',rot:'Un sem RG',num:true,fmt:function(r){ return int(r.un); }},
+    {k:'rgs',rot:'RGs',num:true,fmt:function(r){ return int(r.rgs); }}
+  ];
+  if(!S.sort.mis) S.sort.mis={k:'dias',dir:-1};
+  var recentes='';
+  if(res.length){
+    recentes='<div class="panel" style="margin-top:14px"><div class="dx-panel-h"><h3>Resolvidos recentemente</h3></div>'+
+      tabela('misRes',[{k:'desc',rot:'Local',fmt:function(r){ return esc(r.desc); }},{k:'desde',rot:'Ficou misto em',num:true,fmt:function(r){ return dataBR(r.desde); }},{k:'ate',rot:'Resolvido em',num:true,fmt:function(r){ return dataBR(r.ate); }},{k:'dias',rot:'Levou',num:true,fmt:function(r){ return int(r.dias)+' d'; }}],res.slice(0,30))+'</div>';
+  }
+  return aviso+tiles+
+    '<div class="panel"><div class="rgx-chips">'+chip(-1,'Todos',todas.length)+MISTO_FX.map(function(f,i){ return chip(i,f[2],todas.filter(function(r){ return r.fx===i; }).length); }).join('')+'</div>'+
+    '<div class="filter-bar"><input type="text" id="misQ" placeholder="Local ou zona" value="'+esc(S.fMisQ)+'">'+
+      '<select data-f="fMisZona">'+opt('','Todas as zonas',S.fMisZona)+zonas.map(function(z){ return opt(z,z,S.fMisZona); }).join('')+'</select>'+
+      '<button class="btn btn-primary" data-act="mis-xlsx">Exportar Excel</button>'+
+      '<button class="btn btn-secondary so-editor" data-act="mis-atualiza" title="Compara os mistos de agora com o histórico">Atualizar controle</button></div>'+
+    '<div class="rgx-resumo"><span><b>'+int(lista.length)+'</b> locais mistos</span>'+(ult?'<span>controle atualizado em <b>'+dataHoraBR(ult)+'</b></span>':'')+'<span>TRI e PIC ficam de fora</span></div>'+
+    tabela('mis',cols,lista,{local:1})+'</div>'+recentes;
+}
+function misAtualiza(){
+  if(leitura()) return toast('Seu acesso não permite atualizar o controle.', true);
+  S.mistosMsg=''; toast('Atualizando o controle…');
+  registraMistos().then(function(r){
+    if(r) S.mistosMsg=(r.primeira?'Controle iniciado: ':'Controle atualizado: ')+int(r.novos)+' novos mistos · '+int(r.resolvidos)+' resolvidos · '+int(r.mantidos)+' continuam.';
+    render();
+  }).catch(function(e){ if(semTabelaMis(e)){ S.mistosErro='tabela'; render(); } else toast('Não consegui atualizar o controle: '+msgNuvem(e), true); });
+}
 
 /* ---------- painel lateral do local ---------- */
 function abrePainel(local){
@@ -1110,7 +1205,7 @@ function vImportacao(){
 }
 
 /* ---------- navegação ---------- */
-var VIEWS={ painel:vPainel, estoque:vEstoque, rgs:vRgs, movs:vMovs, importacao:vImportacao };
+var VIEWS={ painel:vPainel, estoque:vEstoque, rgs:vRgs, mistos:vMistos, movs:vMovs, importacao:vImportacao };
 function render(){
   var t=TABS[S.tab]; $('tabTitle').textContent=t[0]; $('tabSubtitle').textContent=t[1];
   Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-tab]'),function(b){ b.classList.toggle('active', b.dataset.tab===S.tab); });
@@ -1133,6 +1228,7 @@ function vaiPara(tab){
   try { history.replaceState(null,'','#'+tab); } catch(e){}
   $('sidebar').classList.remove('mobile-open');
   if(tab==='movs') S.movs=null;
+  if(tab==='mistos'){ S.mistos=null; S.mistosMsg=''; }
   render();
   var sc=document.querySelector('.page-scroll'); if(sc) sc.scrollTop=0;
 }
@@ -1166,8 +1262,6 @@ function acao(el, ev){
   if(a==='zoom-mais') return aplicaZoom(zoomAtual()+10);
   if(a==='zoom-menos') return aplicaZoom(zoomAtual()-10);
   if(a==='classe'){ S.classe=el.dataset.c; S.ritmo=null; S.anima=true; S.cobLocal=''; deriva(); return render(); }
-  if(a==='mapa-modo'){ S.mapaModo=el.dataset.m; S.mapaFx=-1; S.anima=false; return render(); }
-  if(a==='mapa-fx'){ var fi=+el.dataset.i; S.mapaFx=S.mapaFx===fi?-1:fi; S.mapaModo='tempo'; S.anima=false; return render(); }
   if(a==='ritmo-real'){ S.ritmo=null; var r=ritmoAtual(), s=$('simRitmo'); if(s) s.value=Math.max(50,Math.round(r/50)*50); return atualizaSim(r); }
   if(a==='local') return abrePainel(el.dataset.l);
   if(a==='fecha-painel') return fechaPainel();
@@ -1185,6 +1279,9 @@ function acao(el, ev){
   if(a==='ficha') return abreFicha(el.dataset.rg);
   if(a==='fecha-ficha') return fechaFicha();
   if(a==='relatorio') return baixaRelatorio();
+  if(a==='mis-atualiza') return misAtualiza();
+  if(a==='mis-fx'){ var mi=+el.dataset.i; S.fMisFx=S.fMisFx===mi?-1:mi; S.lim.mis=0; return render(); }
+  if(a==='mis-xlsx'){ var ml=misFiltradas(misLinhas()).sort(function(x,y){ return y.dias-x.dias; }); if(!ml.length) return toast('Nada para exportar.', true); return exporta('RG_Reversa_Locais_Mistos', CAB_MIS, linhasMis(ml)); }
   if(a==='exporta-rgs') return exportaRgs();
   if(a==='exporta-cov') return exporta('RG_Reversa_Estoque_x_RG', CAB_COV, linhasCov(covFiltrada()));
   if(a==='escolher'){ if(leitura()) return toast('Seu acesso não permite importar relatórios.', true); $('fileInput').click(); return; }
@@ -1220,6 +1317,7 @@ function inicia(){
     if(t.id==='colRg'){ clearTimeout(colTimer); colTimer=setTimeout(function(){ if(t.value.trim().length>=3 && document.activeElement===t) colCommit('rg', t); }, 280); return; }
     if(t.id==='simRitmo'){ S.ritmo=+t.value; return atualizaSim(S.ritmo); }
     if(t.id==='fQ' || t.id==='fCobQ'){ clearTimeout(espera); espera=setTimeout(function(){ if(t.id==='fQ'){ S.q=t.value; S.lim.rgs=0; } else { S.cobQ=t.value; S.lim.cov=0; } renderFoco(t.id); }, 220); return; }
+    if(t.id==='misQ'){ clearTimeout(espera); espera=setTimeout(function(){ S.fMisQ=t.value; S.lim.mis=0; renderFoco('misQ'); }, 220); return; }
     if(t.id==='mvQ'){ clearTimeout(espera); espera=setTimeout(function(){ S.fm.q=t.value; S.lim.mv=0; render(); var el=$('mvQ'); if(el){ el.focus(); var n=el.value.length; try { el.setSelectionRange(n,n); } catch(e){} } }, 220); }
   });
   document.addEventListener('keydown', function(ev){
