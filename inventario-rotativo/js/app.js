@@ -435,7 +435,7 @@ const IR_TAB_LABELS = {
   dashboard:['Dashboard Inventário','Visão geral do ciclo ativo.'],
   ciclo:['NET','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
   produtividade:['Produtividade','Aba em reconstrução.'],
-  setores:['Setores','Resumo por setor (rua) e ruas mais divergentes.'],
+  setores:['Overview','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
@@ -1801,60 +1801,15 @@ function irHeatStyle(val, meta){
   return `background:rgba(${r},${g},${b},.14); color:rgb(${r},${g},${b});`;
 }
 /* ============================================================
-   SETORES (Resumo por Setor + Resumo por Rua + Ruas mais divergentes)
+   SETORES (Resumo por Rua + Ruas mais divergentes)
    ============================================================ */
 function irRenderSetores(){
   const ind = IR.indicadores;
   if(!ind) return irEmptyState('Sem indicadores', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   return `
-    ${irRenderPorSetorPanel(ind)}
     ${irRenderPorRuaPanel(ind)}
     ${irRenderRuasMaisDivergentesPanel(ind)}
   `;
-}
-/* Setor é só o X1 (sem o X2) — visão mais grossa que a de Rua logo abaixo, pra
-   achar rápido qual setor está pior antes de abrir a tabela por rua e achar a
-   rua específica dentro dele. Mesmas colunas da tabela por Rua, sem a coluna
-   de seleção/exportação de pendentes (essa é só por Rua, ver irRenderPorRuaPanel). */
-function irRenderPorSetorPanel(ind){
-  const rows = (ind.porSetor||[]).filter(r=>r.chave!=='(sem setor)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
-  if(!rows.length) return '';
-  const meta = ind.meta;
-  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
-  return `<div class="panel">
-    <h3>Resumo por Setor</h3>
-    <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por setor.</p>
-    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="tbl-sticky-head">
-      <thead><tr>
-        <th>Setor</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
-        <th>Locais Pendentes</th>
-        <th>Peças Contadas</th><th>Peças Divergentes</th>
-        <th>Acurácia Peças</th><th>Posições</th><th>Valores</th>
-      </tr></thead>
-      <tbody>${rowsComPendentes.map(r=>`<tr>
-        <td class="mono">${irEsc(r.chave)}</td>
-        <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
-        <td class="mono">${irFmtInt(r.locaisContados)}</td>
-        <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
-        <td class="mono">${irFmtInt(r.locaisPendentes)}</td>
-        <td class="mono">${irFmtInt(r.pecasContadas)}</td>
-        <td class="mono">${irFmtInt(r.pecasDivergentes)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaPecas, meta)}">${irFmtPct(r.acuraciaPecas)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaPosicoes, meta)}">${irFmtPct(r.acuraciaPosicoes)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaValor, meta)}">${irFmtPct(r.acuraciaValor)}</td>
-      </tr>`).join('')}</tbody>
-      <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
-        <td class="mono">TOTAL</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisDivergentes,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisPendentes,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.pecasContadas,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.pecasDivergentes,0))}</td>
-        <td colspan="3"></td>
-      </tr></tfoot>
-    </table></div></div>
-  </div>`;
 }
 function irRenderPorRuaPanel(ind){
   const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
@@ -1878,14 +1833,16 @@ function irRenderPorRuaPanel(ind){
       </div>
       ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
-    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="tbl-sticky-head">
-      <thead><tr>
-        <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
-        <th>Rua</th><th>Locais Orçados</th><th>Locais Contados</th><th>Locais Divergentes</th>
-        <th>Locais Pendentes</th>
-        <th>Peças Contadas</th><th>Peças Divergentes</th>
-        <th>Acurácia Peças</th><th>Posições</th><th>Valores</th>
-      </tr></thead>
+    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-grouped tbl-sticky-head">
+      <thead>
+        <tr class="grupo"><th colspan="2"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
+        <tr class="cols">
+          <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
+          <th>Rua</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
+          <th>Contadas</th><th>Divergentes</th>
+          <th>Peças</th><th>Posições</th><th>Valor</th>
+        </tr>
+      </thead>
       <tbody>${rowsComPendentes.map(r=>`<tr>
         ${/* Toda linha tem a caixa, inclusive a que não tem pendente — só que
              desabilitada. Antes a linha sem pendente vinha sem caixa nenhuma, e a
@@ -2681,17 +2638,42 @@ function irHideDiaTooltip(){
 function irRenderRuasMaisDivergentesPanel(ind){
   const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>b.pecasDivergentes-a.pecasDivergentes);
   if(!rows.length) return `<div class="panel"><h3>Ruas mais divergentes</h3><p class="field-hint">Nenhuma divergência registrada ainda.</p></div>`;
+  const meta = ind.meta;
+  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
   return `<div class="panel">
     <h3>Ruas mais divergentes</h3>
-    <p class="panel-sub">Todas as ruas, ordenadas por peças divergentes absolutas (da maior para a menor).</p>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Rua</th><th>Peças Divergentes</th><th>Locais Divergentes</th><th>Valor Divergente</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr>
+    <p class="panel-sub">Todas as ruas, ordenadas por peças divergentes (da maior para a menor).</p>
+    <div class="table-wrap"><table class="table-grouped">
+      <thead>
+        <tr class="grupo"><th></th><th colspan="5">Locais</th><th colspan="2">Peças</th><th colspan="3">Valor</th><th colspan="3">Acurácias</th></tr>
+        <tr class="cols">
+          <th>Rua</th>
+          <th>Orçados</th><th>Contados</th><th>% Contado</th><th>Divergentes</th><th>Pendentes</th>
+          <th>Contadas</th><th>Divergentes</th>
+          <th>Físico</th><th>Líquido</th><th>Absoluto</th>
+          <th>Peças</th><th>Posições</th><th>Valor</th>
+        </tr>
+      </thead>
+      <tbody>${rowsComPendentes.map(r=>{
+        const pct = r.locaisOrcados>0 ? r.locaisContados/r.locaisOrcados : 0;
+        const liquido = r.valorDivergenteLiquido||0;
+        const corLiquido = liquido<0 ? 'color:var(--danger);' : liquido>0 ? 'color:var(--success);' : '';
+        return `<tr${r.pecasDivergentes===0?' style="color:var(--ink-soft);"':''}>
         <td class="mono">${irEsc(r.chave)}</td>
-        <td class="mono">${irFmtInt(r.pecasDivergentes)}</td>
+        <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
+        <td class="mono">${irFmtInt(r.locaisContados)}</td>
+        <td class="mono">${irFmtPct(pct)}</td>
         <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
+        <td class="mono">${irFmtInt(r.locaisPendentes)}</td>
+        <td class="mono">${irFmtInt(r.pecasContadas)}</td>
+        <td class="mono" style="font-weight:700;">${irFmtInt(r.pecasDivergentes)}</td>
+        <td class="mono">${irFmtMoney(r.vlFisicoTotal)}</td>
+        <td class="mono" style="${corLiquido}">${irFmtMoney(liquido)}</td>
         <td class="mono">${irFmtMoney(r.valorDivergenteAbsoluto)}</td>
-      </tr>`).join('')}</tbody>
+        <td class="mono" style="${irHeatStyle(r.acuraciaPecas, meta)}">${irFmtPct(r.acuraciaPecas)}</td>
+        <td class="mono" style="${irHeatStyle(r.acuraciaPosicoes, meta)}">${irFmtPct(r.acuraciaPosicoes)}</td>
+        <td class="mono" style="${irHeatStyle(r.acuraciaValor, meta)}">${irFmtPct(r.acuraciaValor)}</td>
+      </tr>`;}).join('')}</tbody>
     </table></div>
   </div>`;
 }
