@@ -21,6 +21,9 @@ var FAIXAS = [[0,30,'até 30 d','#1F8A52'],[31,90,'31–90 d','#E0A100'],[91,180
 var CORES_CLASSIF = ['#FE5000','#001A72','#1F8A52','#E0A100','#7D93E8','#8E99A8'];
 var PAGINA = 200;
 var LOG_KEY = 'rg-reversa-log', PEND_KEY = 'rg-reversa-pend';
+/* Locais fora do monitoramento de tempo em misto (zonas TRI e PIC). */
+var SEM_MONITOR = /^(TRI|PIC)/i;
+var MISTO_FX = [[0,7,'até 7 d','#1F8A52'],[8,30,'8–30 d','#E0A100'],[31,90,'31–90 d','#FE5000'],[91,1e9,'+ de 90 d','#C83812']];
 var RESTR = {WN:'Vendável',WA:'Reversa',WQ:'Quebra',RT:'Conferência',WE:'Amostra',LT:'Litígio',WV:'Validade',WL:'Não localizado',WI:'Insumos',WT:'Análise',WR:'Reparo',AT:'Múlt. reversa',SS:'Marca própria',DT:'Triagem',WD:'Obsoleto',WS:'Leilão',AI:'Múlt. incompleto'};
 
 var TABS = {
@@ -36,7 +39,7 @@ var S = {
   movs:null, movsBusy:false, movsErro:'',
   fm:{ de:'', ate:'', st:'pend', q:'' }, lim:{}, sort:{},
   col:null,
-  classe:'', ritmo:null, anima:true, q:'', fClassif:'', fOper:'', cobModo:'sem', cobQ:'', cobLocal:'', cobFaixa:''
+  classe:'', ritmo:null, anima:true, q:'', fClassif:'', fOper:'', mapaModo:'sit', mapaFx:-1, cobModo:'sem', cobQ:'', cobLocal:'', cobFaixa:''
 };
 
 /* ---------- utilidades ---------- */
@@ -356,7 +359,24 @@ function deriva(){
     l.zona = String(l.localDesc||'').split(' ')[0]||'—';
     D.loc[l.st]++;
     if(l.st==='misto') D.loc.unMisto+=l.semRg;
+    l.fora=SEM_MONITOR.test(String(l.localDesc||l.local||'').trim());
   });
+  /* Tempo em misto (estimado): o local virou misto quando passaram a conviver RG e peça sem RG,
+     ou seja, no mais recente dos dois começos — idade da peça sem RG mais antiga × idade do RG mais antigo. */
+  var rgAntigo=new Map(); D.abertos.forEach(function(r){ if(r.dt && (!rgAntigo.has(r.local) || r.dt<rgAntigo.get(r.local))) rgAntigo.set(r.local,r.dt); });
+  var semAntigo=new Map(); D.cov.forEach(function(c){ if(c.semRg>0 && c.dias!=null && c.dias>(semAntigo.has(c.local)?semAntigo.get(c.local):-1)) semAntigo.set(c.local,c.dias); });
+  D.misto={ lista:[], faixas:MISTO_FX.map(function(){ return 0; }), semData:0, fora:0, media:0 };
+  D.locais.forEach(function(l){
+    if(l.st!=='misto') return;
+    if(l.fora){ D.misto.fora++; return; }
+    var a=semAntigo.has(l.local)?semAntigo.get(l.local):null, b=rgAntigo.has(l.local)?dias(rgAntigo.get(l.local)):null;
+    l.diasMisto = a!=null && b!=null ? Math.min(a,b) : (a!=null?a:b);
+    if(l.diasMisto==null){ D.misto.semData++; return; }
+    for(var i=0;i<MISTO_FX.length;i++) if(l.diasMisto>=MISTO_FX[i][0] && l.diasMisto<=MISTO_FX[i][1]){ D.misto.faixas[i]++; break; }
+    D.misto.lista.push(l);
+  });
+  D.misto.lista.sort(function(a,b){ return b.diasMisto-a.diasMisto; });
+  D.misto.media=D.misto.lista.length ? D.misto.lista.reduce(function(t,l){ return t+l.diasMisto; },0)/D.misto.lista.length : 0;
   /* Ritmo: RGs por dia, usando os dias com geração (últimos 14 dias corridos até o dado mais novo). */
   var porDia=new Map(); D.rgs.forEach(function(r){ if(r.dt) porDia.set(r.dt,(porDia.get(r.dt)||0)+1); });
   D.porDia=porDia;
@@ -610,6 +630,16 @@ function regua(){
   return h+'</div>';
 }
 
+function tempoMisto(){
+  var M=S.D.misto; if(!M || !S.D.loc.misto) return '';
+  var tot=M.lista.length;
+  var blocos=MISTO_FX.map(function(f,i){ return '<button type="button" class="rgx-tm-b'+(S.mapaFx===i?' on':'')+'" data-act="mapa-fx" data-i="'+i+'"'+tip(f[2],int(M.faixas[i])+' locais mistos','Clique para ver no mapa')+'><i style="background:'+f[3]+'"></i><b>'+int(M.faixas[i])+'</b><span>'+f[2]+'</span></button>'; }).join('');
+  var top=M.lista.slice(0,6).map(function(l){
+    return '<button type="button" class="rgx-tm-l" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.semRg)+' un sem RG · '+int(l.rgs)+' RGs')+'><span>'+esc(l.localDesc||l.local)+'</span><b>'+int(l.diasMisto)+' d</b></button>';
+  }).join('');
+  return '<div class="rgx-tm"><div class="rgx-tm-h"><b>Tempo em misto</b><span>média '+int(M.media)+' dias · '+int(tot)+' locais'+(M.fora?' · '+int(M.fora)+' em TRI/PIC fora':'')+'</span></div>'+
+    '<div class="rgx-tm-g"><div class="rgx-tm-bl">'+blocos+'</div><div class="rgx-tm-top">'+(top||'<em>sem datas para calcular</em>')+'</div></div></div>';
+}
 function mapaLocais(){
   var D=S.D, zonas=new Map(), porPrefixo=new Map();
   D.locais.forEach(function(l){ porPrefixo.set(l.zona,(porPrefixo.get(l.zona)||0)+1); });
@@ -621,12 +651,23 @@ function mapaLocais(){
   D.locais.forEach(function(l){ var z=zonas.get(l.zonaMapa); if(!z){ z={nome:l.zonaMapa, l:[], saldo:0}; zonas.set(l.zonaMapa,z); } z.l.push(l); z.saldo+=l.saldo; });
   var arr=Array.from(zonas.values()).sort(function(a,b){ return b.saldo-a.saldo; });
   var maxS=Math.max.apply(null,D.locais.map(function(l){ return l.saldo; }))||1;
-  return '<div class="rgx-mapa">'+arr.map(function(z){
+  var tempo=S.mapaModo==='tempo';
+  var fxDe=function(l){ if(l.st!=='misto' || l.fora || l.diasMisto==null) return -1; for(var i=0;i<MISTO_FX.length;i++) if(l.diasMisto>=MISTO_FX[i][0] && l.diasMisto<=MISTO_FX[i][1]) return i; return -1; };
+  if(tempo){
+    arr.forEach(function(z){ z.nm=0; z.max=-1; z.l.forEach(function(l){ var f=fxDe(l); if(f>=0 && (S.mapaFx<0 || S.mapaFx===f)){ z.nm++; if(l.diasMisto>z.max) z.max=l.diasMisto; } }); });
+    arr=arr.filter(function(z){ return z.nm>0; }).sort(function(a,b){ return b.max-a.max; });
+    if(!arr.length) return '<div class="rgx-ok">Nenhum local misto nesta faixa</div>';
+  }
+  return '<div class="rgx-mapa'+(tempo?' tempo':'')+'">'+arr.map(function(z){
+    if(tempo) return '<div class="rgx-zona"><div class="rgx-zona-h"><b>'+esc(z.nome)+'</b><span>'+int(z.nm)+' mistos · maior '+int(z.max)+' d</span></div><div class="rgx-cels">'+z.l.map(function(l){
+      var f=fxDe(l), on=f>=0 && (S.mapaFx<0 || S.mapaFx===f);
+      return '<button type="button" class="rgx-cel '+(on?'':'apag')+'"'+(on?' style="background:'+MISTO_FX[f][3]+'"':'')+' data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,on?'Misto há '+int(l.diasMisto)+' dias':(l.st==='misto'?(l.fora?'Misto · TRI/PIC fora do monitoramento':'Misto'):l.st==='rg'?'100% RG':'Sem RG'),int(l.semRg)+' un sem RG · '+int(l.rgs)+' RGs')+'></button>';
+    }).join('')+'</div></div>';
     z.l.sort(function(a,b){ return String(a.localDesc).localeCompare(String(b.localDesc),'pt-BR',{numeric:true}); });
     return '<div class="rgx-zona"><div class="rgx-zona-h"><b>'+esc(z.nome)+'</b><span>'+int(z.l.length)+' locais · '+int(z.saldo)+' un</span></div><div class="rgx-cels">'+z.l.map(function(l){
       /* intensidade = quanto saldo o local guarda (escala de raiz para não sumir os pequenos) */
       var op=(0.5+0.5*Math.pow(l.saldo/maxS,0.3)).toFixed(2);
-      return '<button type="button" class="rgx-cel '+l.st+'" style="opacity:'+op+'" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.saldo)+' un · '+int(l.rgs)+' RGs',l.st==='rg'?'100% RG':l.st==='misto'?'Misto · '+pct(l.comRg,l.saldo)+' com RG':'Sem RG')+'></button>';
+      return '<button type="button" class="rgx-cel '+l.st+'" style="opacity:'+op+'" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.saldo)+' un · '+int(l.rgs)+' RGs',l.st==='rg'?'100% RG':l.st==='misto'?'Misto · '+pct(l.comRg,l.saldo)+' com RG'+(l.diasMisto!=null?' · misto há '+int(l.diasMisto)+' d':''):'Sem RG')+'></button>';
     }).join('')+'</div></div>';
   }).join('')+'</div>';
 }
@@ -728,7 +769,7 @@ function vPainel(){
       '<div class="panel">'+h3('Onde falta RG','<div class="cmp-legend"><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto</span></div>')+blocoTreemap()+'</div>'+
       '<div class="panel">'+h3('Classificação das peças')+rosca()+'</div>'+
     '</div>'+
-    '<div class="panel">'+h3('Mapa dos locais','<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>')+mapaLocais()+'</div>'+
+    '<div class="panel">'+h3('Mapa dos locais','<div class="rgx-mm"><button type="button" class="'+(S.mapaModo==='sit'?'on':'')+'" data-act="mapa-modo" data-m="sit">Situação</button><button type="button" class="'+(S.mapaModo==='tempo'?'on':'')+'" data-act="mapa-modo" data-m="tempo">Tempo em misto</button></div>'+(S.mapaModo==='tempo' ? '<div class="cmp-legend">'+MISTO_FX.map(function(f){ return '<span><span class="cmp-dot" style="background:'+f[3]+'"></span>'+f[2]+'</span>'; }).join('')+'</div>' : '<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>'))+tempoMisto()+mapaLocais()+'</div>'+
     '<div class="rgx-g rgx-g-c">'+
       '<div class="panel">'+h3('Idade do estoque sem RG')+regua()+'</div>'+
       '<div class="panel">'+h3('Ritmo diário')+ritmoDiario()+'</div>'+
@@ -738,7 +779,64 @@ function vPainel(){
       '<div class="panel">'+h3('Itens com mais unidades sem RG')+hbars(top,{cor:'linear-gradient(90deg,#FE5000,#FFB347)'})+'</div>'+
       '<div class="panel">'+h3('Estoque por restrição')+hbars(rs)+'</div>'+
     '</div>'+
+    '<div class="rgx-rel"><button type="button" data-act="relatorio" title="Baixa um arquivo HTML com o resumo do dashboard para enviar">⤓ Relatório para a gestão (HTML)</button></div>'+
   '</div>';
+}
+
+/* ---------- Relatório em HTML (arquivo único, pronto para enviar por e-mail) ---------- */
+function relatorioHtml(){
+  var D=S.D, T=D.tot, L=D.loc, ritmo=ritmoAtual(), prev=previsao(ritmo), cob=T.saldo?T.comRg/T.saldo*100:0;
+  var agora=new Date(), base=S.est?dataBR(S.est.em):'—';
+  var kpi=function(rot,val,sub,cor){ return '<div class="k"><span>'+esc(rot)+'</span><b'+(cor?' style="color:'+cor+'"':'')+'>'+val+'</b><i>'+sub+'</i></div>'; };
+  var barra=function(p,cor){ return '<div class="bar"><u style="width:'+Math.max(0,Math.min(100,p)).toFixed(1)+'%;background:'+cor+'"></u></div>'; };
+  var tab=function(cab,linhas){ return '<table><thead><tr>'+cab.map(function(c,i){ return '<th'+(i?' class="n"':'')+'>'+esc(c)+'</th>'; }).join('')+'</tr></thead><tbody>'+linhas.map(function(l){ return '<tr>'+l.map(function(c,i){ return '<td'+(i?' class="n"':'')+'>'+c+'</td>'; }).join('')+'</tr>'; }).join('')+'</tbody></table>'; };
+  var dd=D.dias.slice(-30), max=Math.max.apply(null,dd.map(function(x){ return x[1]; }).concat([1]));
+  var W=720, H=150, bw=W/Math.max(dd.length,1);
+  var svg=dd.length ? '<svg viewBox="0 0 '+W+' '+(H+22)+'" width="100%" role="img" aria-label="RGs gerados por dia">'+dd.map(function(x,i){
+    var h=x[1]/max*H, X=i*bw+bw*.15;
+    return '<rect x="'+X.toFixed(1)+'" y="'+(H-h).toFixed(1)+'" width="'+(bw*.7).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2" fill="#FE5000"/>'+
+      '<text x="'+(X+bw*.35).toFixed(1)+'" y="'+(H+14)+'" font-size="9" text-anchor="middle" fill="#6B7280">'+dataBR(x[0]).slice(0,5)+'</text>'+
+      (dd.length<=16 ? '<text x="'+(X+bw*.35).toFixed(1)+'" y="'+Math.max(10,H-h-4).toFixed(1)+'" font-size="9" text-anchor="middle" fill="#001A72" font-weight="700">'+int(x[1])+'</text>' : '');
+  }).join('')+'</svg>' : '<p class="m">Sem RGs no período.</p>';
+  var totF=D.faixas.reduce(function(a,b){ return a+b; },0)||1;
+  var faixas=tab(['Idade do estoque sem RG','Unidades','%'], FAIXAS.map(function(f,i){ return ['<span class="dot" style="background:'+f[3]+'"></span>'+f[2], int(D.faixas[i]), pct(D.faixas[i],totF)]; }));
+  var ops=tab(['Operador','RGs','Por dia'], D.ops.slice(0,8).map(function(o){ return [esc(operNome(o.oper)), int(o.n), int(o.media)]; }));
+  var top=tab(['Item','Un sem RG'], Array.from(D.itens.values()).sort(function(a,b){ return b.semRg-a.semRg; }).slice(0,8).map(function(it){ return [esc(it.item+' · '+(it.desc||'')), int(it.semRg)]; }));
+  var tm=D.misto, mistoTab=tm && tm.lista.length ? tab(['Local misto há mais tempo','Dias','Un sem RG'], tm.lista.slice(0,8).map(function(l){ return [esc(l.localDesc||l.local), int(l.diasMisto), int(l.semRg)]; })) : '<p class="m">Nenhum local misto com data para calcular.</p>';
+  var cls=tab(['Classificação (RGs abertos)','RGs','%'], D.classif.slice(0,6).map(function(c){ return [esc(c.nome), int(c.n), pct(c.n,D.abertos.length)]; }));
+  var css='*{box-sizing:border-box}body{margin:0;background:#F3F4F8;color:#111827;font:14px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif}.w{max-width:860px;margin:0 auto;padding:20px 16px 36px}'+
+    'header{background:#001A72;color:#fff;border-radius:16px;padding:22px 24px;border-bottom:5px solid #FE5000}header small{opacity:.8;letter-spacing:.08em;text-transform:uppercase;font-size:11px}header h1{margin:4px 0 2px;font-size:24px}header p{margin:0;opacity:.85;font-size:13px}'+
+    '.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:14px 0}.k{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,26,114,.08)}.k span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6B7280;font-weight:700}.k b{display:block;font-size:28px;color:#001A72;margin:2px 0}.k i{font-style:normal;font-size:12px;color:#6B7280}'+
+    '.bar{height:8px;background:#E5E7EB;border-radius:99px;overflow:hidden;margin-top:8px}.bar u{display:block;height:100%;border-radius:99px}'+
+    'section{background:#fff;border-radius:14px;padding:16px 18px;margin:12px 0;box-shadow:0 1px 3px rgba(0,26,114,.08)}h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#001A72}'+
+    '.c2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}.c2 section{margin:0}'+
+    'table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6B7280;padding:6px 4px;border-bottom:1px solid #E5E7EB}td{padding:6px 4px;border-bottom:1px solid #F0F1F5}.n{text-align:right;font-variant-numeric:tabular-nums}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}'+
+    '.m{color:#6B7280;font-size:12px}footer{text-align:center;color:#9CA3AF;font-size:11px;margin-top:18px}@media print{body{background:#fff}.w{padding:0}section,.k{box-shadow:none;border:1px solid #E5E7EB;break-inside:avoid}}';
+  return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RG Reversa · Relatório '+dataBR(agora)+'</title><style>'+css+'</style></head><body><div class="w">'+
+    '<header><small>Loja do Mecânico · CD Cajamar</small><h1>RG Reversa · Implantação de RG</h1><p>Base do estoque de '+base+' · relatório gerado em '+dataHoraBR(agora)+'</p></header>'+
+    '<div class="g">'+
+      '<div class="k"><span>Cobertura de RG</span><b>'+pct(T.comRg,T.saldo)+'</b><i>'+int(T.comRg)+' de '+int(T.saldo)+' unidades · meta 100%</i>'+barra(cob,'#FE5000')+'</div>'+
+      kpi('Falta identificar', int(T.semRg), pct(T.semRg,T.saldo)+' do estoque da reversa', T.semRg?'#C83812':'#1F8A52')+
+      kpi('RGs gerados', int(D.rgs.length), int(D.abertos.length)+' abertos · '+int(D.ops.length)+' operadores')+
+      kpi('Conclusão prevista', prev?dataBR(prev.t):'—', prev?prazoTxt(prev.du)+' no ritmo de '+int(ritmo)+'/dia':'sem ritmo calculado')+
+    '</div>'+
+    '<section><h2>Locais da reversa</h2><div class="g" style="margin:0">'+
+      kpi('Locais 100% RG', int(L.rg), pct(L.rg,L.total)+' de '+int(L.total)+' locais','#1F8A52')+
+      kpi('Locais mistos', int(L.misto), int(L.unMisto)+' un sem RG misturadas', L.misto?'#C83812':'#1F8A52')+
+      kpi('Locais sem RG', int(L.sem), pct(L.sem,L.total)+' dos locais')+
+    '</div></section>'+
+    '<section><h2>Locais mistos há mais tempo'+(tm&&tm.lista.length?' · média de '+int(tm.media)+' dias':'')+'</h2>'+mistoTab+'<p class="m">Estimativa pela idade da peça sem RG e do RG mais antigos do local. Zonas TRI e PIC ficam de fora.</p></section>'+
+    '<section><h2>RGs gerados por dia (últimos 30 dias com geração)</h2>'+svg+'<p class="m">Média recente: '+int(D.ritmo)+' RGs/dia · '+int(D.porPessoa)+' por pessoa/dia</p></section>'+
+    '<div class="c2"><section><h2>Idade do estoque sem RG</h2>'+faixas+'</section><section><h2>Operadores</h2>'+ops+'</section></div>'+
+    '<div class="c2" style="margin-top:12px"><section><h2>Itens com mais unidades sem RG</h2>'+top+'</section><section><h2>Classificação das peças</h2>'+cls+'</section></div>'+
+    '<footer>RG Reversa · Central LDM · gerado automaticamente a partir dos relatórios QRY0100 e QRY0390</footer></div></body></html>';
+}
+function baixaRelatorio(){
+  if(!S.est) return toast('Importe os relatórios antes de gerar o relatório.', true);
+  var blob=new Blob([relatorioHtml()],{type:'text/html;charset=utf-8'}), a=document.createElement('a'), d=new Date();
+  a.href=URL.createObjectURL(blob); a.download='RG_Reversa_Relatorio_'+d.getFullYear()+d2(d.getMonth()+1)+d2(d.getDate())+'.html';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(a.href); },2000);
+  toast('Relatório baixado. É só anexar no e-mail.');
 }
 
 /* ---------- tabelas (Estoque × RG e Consulta) ---------- */
@@ -1068,6 +1166,8 @@ function acao(el, ev){
   if(a==='zoom-mais') return aplicaZoom(zoomAtual()+10);
   if(a==='zoom-menos') return aplicaZoom(zoomAtual()-10);
   if(a==='classe'){ S.classe=el.dataset.c; S.ritmo=null; S.anima=true; S.cobLocal=''; deriva(); return render(); }
+  if(a==='mapa-modo'){ S.mapaModo=el.dataset.m; S.mapaFx=-1; S.anima=false; return render(); }
+  if(a==='mapa-fx'){ var fi=+el.dataset.i; S.mapaFx=S.mapaFx===fi?-1:fi; S.mapaModo='tempo'; S.anima=false; return render(); }
   if(a==='ritmo-real'){ S.ritmo=null; var r=ritmoAtual(), s=$('simRitmo'); if(s) s.value=Math.max(50,Math.round(r/50)*50); return atualizaSim(r); }
   if(a==='local') return abrePainel(el.dataset.l);
   if(a==='fecha-painel') return fechaPainel();
@@ -1084,6 +1184,7 @@ function acao(el, ev){
   if(a==='mais'){ S.lim[el.dataset.tb]=(S.lim[el.dataset.tb]||PAGINA)+PAGINA; return render(); }
   if(a==='ficha') return abreFicha(el.dataset.rg);
   if(a==='fecha-ficha') return fechaFicha();
+  if(a==='relatorio') return baixaRelatorio();
   if(a==='exporta-rgs') return exportaRgs();
   if(a==='exporta-cov') return exporta('RG_Reversa_Estoque_x_RG', CAB_COV, linhasCov(covFiltrada()));
   if(a==='escolher'){ if(leitura()) return toast('Seu acesso não permite importar relatórios.', true); $('fileInput').click(); return; }
