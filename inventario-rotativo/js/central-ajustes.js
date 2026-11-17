@@ -41,7 +41,7 @@ function irCaLinhasAno(d){
     const dt = String(l.dtMov||'');
     linhas.push({
       item:l.item, nome:l.nome, depto:l.depto||'(sem depto)', forn:l.fornecedor||'', dep:l.deposito||'(sem depósito)',
-      local:l.localDesc||'', obs:cls.id, mes:l.mes || dt.slice(0,7), dia:dt.slice(0,10), valor:l.valor||0
+      local:l.localDesc||'', obs:cls.id, mot:(cls.legenda || irLegenda410(cls.id, leg) || cls.id), mes:l.mes || dt.slice(0,7), dia:dt.slice(0,10), valor:l.valor||0
     });
   }
   IR._caCache = {k:chave, linhas};
@@ -52,6 +52,7 @@ function irCaPassaFiltro(l){
   return (!f.depto || l.depto===f.depto) && (!f.forn || l.forn===f.forn) && (!f.obs || l.obs===f.obs) && (!f.dep || l.dep===f.dep);
 }
 function irCaSetFiltro(campo, v){ IR.caFiltro[campo] = v; irRenderView(); }
+function irCaSetTopMin(v){ IR.caTopMin = v; irRenderView(); }
 function irCaOrdenar(col){
   const o = IR.caOrdem || {col:'mes', dir:1};
   IR.caOrdem = o.col===col ? {col, dir:-o.dir} : {col, dir:(col==='mes'?1:(col==='ano'?1:1))};
@@ -71,10 +72,10 @@ function irCaDados(d, mesSel){
   const doMes = linhas.filter(l=>l.mes===mesSel);
   let ent = 0, sai = 0;
   const soma = (mapa, k, v)=> mapa.set(k, (mapa.get(k)||0) + v);
-  const porObsSai = new Map(), porDepto = new Map(), porForn = new Map(), porDep = new Map(), porObs = new Map(), porDia = new Map();
+  const porObsSai = new Map(), porMotSai = new Map(), porDepto = new Map(), porForn = new Map(), porDep = new Map(), porObs = new Map(), porDia = new Map();
   const itens = new Map();
   for(const l of doMes){
-    if(l.valor>0) ent += l.valor; else { sai += l.valor; soma(porObsSai, l.obs, l.valor); }
+    if(l.valor>0) ent += l.valor; else { sai += l.valor; soma(porObsSai, l.obs, l.valor); soma(porMotSai, l.mot, l.valor); }
     soma(porDepto, l.depto, l.valor); soma(porDep, l.dep, l.valor); soma(porObs, l.obs, l.valor);
     if(l.forn) soma(porForn, l.forn, l.valor);
     soma(porDia, l.dia, l.valor);
@@ -95,12 +96,12 @@ function irCaDados(d, mesSel){
     return {...it, ano, classe, dep: dep?dep[0]:'', obs: obs?obs[0]:'', local: loc?loc[0]:''};
   });
   const ofensores = lista.filter(i=>i.mes<0).sort((a,b)=>a.mes-b.mes);
-  return {porMes, ent, sai, net:ent+sai, porObsSai, porDepto, porForn, porDep, porObs, porDia, ofensores, todas};
+  return {porMes, ent, sai, net:ent+sai, porObsSai, porMotSai, porDepto, porForn, porDep, porObs, porDia, ofensores, todas};
 }
 
 /* ---------- gráficos (desenhados na largura real via irFluid) ---------- */
 function irCaColunasSvg(rows, W, dest){
-  const H = 270, pl = 58, pr = 14, pt = 22, pb = 28;
+  const H = 340, pl = 58, pr = 14, pt = 22, pb = 28;
   const ac = []; let t = 0; rows.forEach(r=>{ t += r.v; ac.push(t); });
   const hi = Math.max(0, ...rows.map(r=>r.v))*1.25 + Math.max(1, ...rows.map(r=>Math.abs(r.v)))*0.08;
   const lo = Math.min(0, ...rows.map(r=>r.v), ...ac)*1.08;
@@ -123,8 +124,8 @@ function irCaColunasSvg(rows, W, dest){
   return s + '</svg>';
 }
 function irCaPonteSvg(ent, saidas, net, W){
-  const H = 270, pl = 54, pr = 10, pt = 22, pb = 34;
-  const passos = [{rot:'Entr.', v:ent, tp:'tot'}, ...saidas.map(([o,v])=>({rot:o, v, tp:'neg'})), {rot:'Net', v:net, tp:'fim'}];
+  const H = 290, pl = 54, pr = 10, pt = 22, pb = 46;
+  const passos = [{rot:'Entradas', v:ent, tp:'tot'}, ...saidas.map(([o,v])=>({rot:o, v, tp:'neg'})), {rot:'Net', v:net, tp:'fim'}];
   let t = 0; const seg = passos.map(p=>{
     if(p.tp==='tot'){ t = p.v; return [0, p.v]; }
     if(p.tp==='neg'){ const r = [t+p.v, t]; t += p.v; return r; }
@@ -141,7 +142,10 @@ function irCaPonteSvg(ent, saidas, net, W){
     const cor = p.tp==='tot' ? 'var(--ca-ganho)' : (p.tp==='fim' ? irCaCor(p.v) : 'var(--ca-perda)');
     s += `<g><title>${irEsc(p.rot)}: ${irCaR(p.v)}</title><rect x="${x}" y="${y(b)}" width="${bw}" height="${Math.max(2, y(a)-y(b))}" rx="3" style="fill:${cor}" fill-opacity="${p.tp==='neg' && i>1 ? .75 : 1}"/></g>`;
     s += `<text x="${x+bw/2}" y="${p.tp==='fim' ? y(a)+13 : y(b)-5}" font-size="10" font-weight="800" text-anchor="middle" style="fill:${cor}">${irCaK(p.v, p.tp==='tot')}</text>`;
-    s += `<text x="${x+bw/2}" y="${H-12}" font-size="11" font-weight="800" text-anchor="middle" style="fill:var(--ink)">${irEsc(String(p.rot).slice(0,6))}</text>`;
+    // Nome do motivo em até 2 linhas, cortado pela largura de cada barra (nome inteiro no balão).
+    const maxC = Math.max(5, Math.floor(sl/6.3)), pal = String(p.rot).split(/\s+/), lin = [''];
+    pal.forEach(w=>{ const at = lin[lin.length-1]; if((at+' '+w).trim().length<=maxC) lin[lin.length-1] = (at+' '+w).trim(); else if(lin.length<2) lin.push(w.slice(0,maxC)); else if(!lin[1].endsWith('…')) lin[1] = (lin[1].slice(0,maxC-1))+'…'; });
+    s += `<text x="${x+bw/2}" y="${H-20}" font-size="10.5" font-weight="800" text-anchor="middle" style="fill:var(--ink)"><title>${irEsc(p.rot)}</title>${lin.map((t,j)=>`<tspan x="${x+bw/2}" dy="${j?12:0}">${irEsc(t)}</tspan>`).join('')}</text>`;
   });
   return s + '</svg>';
 }
@@ -260,15 +264,15 @@ function irRenderCentralAjustes(){
     ${kc('Maior ofensor', maior?irEsc(maior.item):'—', maior?irCaR(maior.mes)+' · '+(IR_CA_CLASSE[maior.classe]||{}).rot:'', 'var(--ca-perda)')}
   </div>`;
 
-  const gMes = irCaPainel('Net mês a mês · '+d.ano, irFluid('caMes', w=>irCaColunasSvg(mesesRows, w, iSel), 270),
+  const gMes = irCaPainel('Net mês a mês · '+d.ano, irFluid('caMes', w=>irCaColunasSvg(mesesRows, w, iSel), 340),
     irCaLeg('var(--ca-ganho)','ganho')+irCaLeg('var(--ca-perda)','perda')+irCaLeg('var(--ca-linha)','acumulado',true));
   const demais = c.net - vReal - vComp;
   const partes = [['Perda real', vReal, '#FE5000'], ['Compensado', vComp, '#001A72'], ['Demais', demais, '#9AA6C8']];
   const totAbs = partes.reduce((s,p)=>s+Math.abs(p[1]),0) || 1;
   const coresRosca = [['#FE5000','#FF8A3D'], ['#001A72','#3A5BD9'], ['#9AA6C8','#C9D1EC']];
-  const R = 92, ESP = 30, CX = 120, circ = 2*Math.PI*R, gapPx = partes.filter(p=>Math.abs(p[1])>0).length>1 ? 6 : 0;
+  const R = 88, ESP = 46, CX = 120, circ = 2*Math.PI*R, gapPx = partes.filter(p=>Math.abs(p[1])>0).length>1 ? 6 : 0;
   let off = 0;
-  const donut = `<svg width="220" height="220" viewBox="0 0 240 240" class="ca-rosca">
+  const donut = `<svg width="260" height="260" viewBox="0 0 240 240" class="ca-rosca">
     <defs>${coresRosca.map((c2,i)=>`<linearGradient id="caRg${i}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c2[0]}"/><stop offset="1" stop-color="${c2[1]}"/></linearGradient>`).join('')}
       <filter id="caSh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0F1530" flood-opacity=".18"/></filter></defs>
     <circle cx="${CX}" cy="${CX}" r="${R}" fill="none" style="stroke:var(--surface2)" stroke-width="${ESP}"/>
@@ -277,20 +281,22 @@ function irRenderCentralAjustes(){
       off += f*circ; return r; }).join('')}</g>
     <text x="${CX}" y="${CX+4}" text-anchor="middle" font-size="30" font-weight="800" style="fill:${irCaCor(c.net)};font-family:Poppins,Inter,sans-serif">${irCaK(c.net)}</text>
     <text x="${CX}" y="${CX+26}" text-anchor="middle" font-size="12" style="fill:var(--ink-soft)">Net do mês</text></svg>`;
-  const gComp = irCaPainel('O que é o Net de '+nomeMes.toLowerCase(), `<div class="ca-donut">${donut}<div class="ca-donut-l">${partes.map((p,i)=>`<div class="ca-dl" style="--c1:${coresRosca[i][0]};--c2:${coresRosca[i][1]}">
+  const gComp = irCaPainel('Net', `<div class="ca-donut">${donut}<div class="ca-donut-l">${partes.map((p,i)=>`<div class="ca-dl" style="--c1:${coresRosca[i][0]};--c2:${coresRosca[i][1]}">
       <span class="ca-dl-n"><i></i>${p[0]}</span><b style="color:${irCaCor(p[1])}">${irCaK(p[1])}</b><small>${Math.round(Math.abs(p[1])/totAbs*100)}%</small></div>`).join('')}</div></div>`);
 
-  const saidas = Array.from(c.porObsSai.entries()).sort((a,b)=>a[1]-b[1]);
-  const gPonte = irCaPainel('Entradas − saídas por Obs = Net', irFluid('caPonte', w=>irCaPonteSvg(c.ent, saidas, c.net, w), 270));
+  const saidas = Array.from(c.porMotSai.entries()).sort((a,b)=>a[1]-b[1]);
+  const gPonte = irCaPainel('Entradas − saídas por motivo = Net', irFluid('caPonte', w=>irCaPonteSvg(c.ent, saidas, c.net, w), 290));
   const gDep = irCaPainel('Net por departamento', irCaHbar(irCaTop(c.porDepto, 10), true));
 
-  const top = c.ofensores.slice(0, 10);
+  const minTop = Math.abs(parseFloat(IR.caTopMin)||0);
+  const top = minTop ? c.ofensores.filter(i=>Math.abs(i.mes)>=minTop).slice(0, 50) : c.ofensores.slice(0, 10);
   const mxTop = Math.max(1, ...top.map(i=>Math.abs(i.mes)));
   const gTop = irCaPainel('Top ofensores · mês × ano', `<div class="ca-top ca-top-h"><span>Item</span><span></span><span>Mês</span><span>Ano</span></div>
     ${top.map(i=>{ const k = IR_CA_CLASSE[i.classe]; return `<div class="ca-top" title="${irEsc(i.item)} — ${irEsc(i.nome)} · ${k.rot}">
       <span class="ca-top-n"><b class="mono">${irEsc(i.item)}</b> ${irEsc(i.nome)}</span>
       <div class="ca-hb-t ca-top-t"><i style="width:${(Math.abs(i.mes)/mxTop*100).toFixed(1)}%;background:${k.cor}"></i>${i.ano<0?`<em style="left:${(Math.min(Math.abs(i.ano),mxTop)/mxTop*100).toFixed(1)}%"></em>`:''}</div>
       <b style="color:var(--ca-perda)">${irCaK(i.mes)}</b><b style="color:${irCaCor(i.ano)}">${i.ano?irCaK(i.ano):'0'}</b></div>`; }).join('')}`,
+    `<label class="ca-min">Perda a partir de R$ <input type="number" min="0" step="100" value="${minTop||''}" placeholder="0" onchange="irCaSetTopMin(this.value)"></label>`+
     irCaLeg(IR_CA_CLASSE.real.cor,'perda real')+irCaLeg(IR_CA_CLASSE.parcial.cor,'parcial')+irCaLeg(IR_CA_CLASSE.comp.cor,'compensado')+'<span><span class="ca-leg-tick"></span>Net do ano</span>');
 
   // Concentração (% das perdas por item, acumulado)
