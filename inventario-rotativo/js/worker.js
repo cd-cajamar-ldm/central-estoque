@@ -218,7 +218,10 @@ const ALIAS_410 = {
   // Evidência do lançamento (documento, quem fez, quando) — não entra em nenhum
   // cálculo, só fica junto do item pra provar o movimento quando alguém perguntar
   // "por que esse item mudou" (ex.: "item X, doc 460816, fulano, 13/08 17:38").
-  numDoc: ['Num Doc','Num.Doc','Numero Doc'], usuario: ['Usuário','Usuario'], dataHora: ['Data/Hora','Data Hora']
+  numDoc: ['Num Doc','Num.Doc','Numero Doc'], usuario: ['Usuário','Usuario'], dataHora: ['Data/Hora','Data Hora'],
+  // Central de Ajustes: fornecedor e descrição do local, quando a planilha trouxer (opcionais).
+  fornecedor: ['Fornecedor','Nome Fornecedor','Razao Social Fornecedor','Razão Social Fornecedor'],
+  localDesc: ['Descricao Local','Descrição Local','Desc Local','Endereco','Endereço','Local']
 };
 // Classificação de motivos (extrai o código do início de "Observacao WMS" e casa com
 // a legenda) mora em rules.js (irClassificarMotivo410) — compartilhada com a UI, e
@@ -1885,6 +1888,8 @@ async function runPipeline410({buf410}){
         // Depósito (id e nome) — o painel Net do app de fechamento mostra o Net por depósito.
         idDeposito: isNaN(idDeposito) ? '' : String(idDeposito),
         deposito: String(getVal(row, r410.deposito)||'').trim(),
+        fornecedor: String(getVal(row, r410.fornecedor)||'').trim(),
+        localDesc: String(getVal(row, r410.localDesc)||'').trim(),
         dtMov: isoDateTime(dt),
         mes, logica: logicaVal,
         qtd, valor,
