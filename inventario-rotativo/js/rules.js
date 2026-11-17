@@ -15,7 +15,7 @@ const IR_STATUS_LOCAL = {
 };
 
 // Legenda de motivos da QRY410 (Perdas e Ganhos no CD) — define quem entra no cálculo
-// de NET. Códigos que não aparecerem aqui contam como SIM por padrão (regra do usuário:
+// de Net. Códigos que não aparecerem aqui contam como SIM por padrão (regra do usuário:
 // "o que não tiver na legenda, pode considerar"). Ordenados do mais específico (2
 // palavras) pro mais genérico, pra "ARI LOT" não ser confundido com "ARI". Isso aqui é
 // só a SEMENTE/padrão de fábrica — a lista de verdade fica no IndexedDB
@@ -84,7 +84,7 @@ function irClassificarMotivo410(obsWmsRaw, legendaList){
   }
   /* Segunda passada, por texto contido. Nem toda observação começa com código:
      "SALDO INCLUIDO INDEVIDAMENTE VIA NF" é escrita por extenso, não casava com
-     nada e caía no padrão "considera no NET" — sozinha ela deslocou o NET de
+     nada e caía no padrão "considera no Net" — sozinha ela deslocou o Net de
      março em R$ 279.734,88.
 
      Só vale pra entrada com 6 caracteres ou mais, que é o tamanho de uma frase.
@@ -185,7 +185,7 @@ const IR_REGRAS_CATALOGO = [
   {categoria:'Bases de entrada', regra:'SIGEQ278 — Preço', detalhe:'Preço de custo/compra por item. Usada pra valorar a divergência (Acurácia Valor) e dar nome a item sem saldo.', fonte:'SIGEQ278'},
   {categoria:'Bases de entrada', regra:'ZBIQ0051 — Kits/Múltiplos', detalhe:'Item pai × componente, com S/N de quem carrega o valor (in_interface). Evita contar o valor do kit em mais de um componente.', fonte:'ZBIQ0051'},
   {categoria:'Bases de entrada', regra:'QRY0390 — Estoque atual (opcional)', detalhe:'Saldo atual por item/local. Opcional: o estoque é rotativo e não entra em nenhum indicador de acurácia; alimenta EAN/descrição e a foto de estoque.', fonte:'QRY0390'},
-  {categoria:'Bases de entrada', regra:'QRY410 — Perdas e Ganhos (NET)', detalhe:'Movimentos de ajuste do CD, por ano. Independente do ciclo rotativo — processada por ano extraído de Dt.Mov.', fonte:'QRY410'},
+  {categoria:'Bases de entrada', regra:'QRY410 — Perdas e Ganhos (Net)', detalhe:'Movimentos de ajuste do CD, por ano. Independente do ciclo rotativo — processada por ano extraído de Dt.Mov.', fonte:'QRY410'},
 
   // ---- Rodadas de contagem ----
   {categoria:'Rodadas de contagem', regra:'Rodada 1 = sistêmico', detalhe:'A primeira rodada (Id Conferência 1) é o congelamento automático do sistema na abertura do inventário — é o saldo SISTÊMICO de referência, não uma contagem física.', fonte:'QRY0843 · Id Conferência'},
@@ -214,15 +214,15 @@ const IR_REGRAS_CATALOGO = [
   {categoria:'Setor / Rua', regra:'Setor = X1', detalhe:'O SETOR é só o X1 (sem o X2) — agrupa várias ruas, pra comparar rápido qual setor está pior antes de abrir a rua específica.', fonte:'Base Congelada · X1'},
   {categoria:'Setor / Rua', regra:'Local pendente', detalhe:'Local da base congelada sem nenhuma rodada física (Id Conferência ≥ 2) — foi aberto/liquidado sem ninguém contar. Local só com rodada 1 continua pendente.', fonte:'QRY0843 + Base Congelada'},
 
-  // ---- NET (QRY410) ----
-  {categoria:'NET (QRY410)', regra:'Só Lógica 301 e 302', detalhe:'O NET soma só as linhas de Lógica 301 e 302 — demais lógicas ficam de fora de tudo (gráficos, quebras por Obs/Depto, itens). Arquivo sem a coluna Lógica entra inteiro.', fonte:'QRY410 · Lógica'},
-  {categoria:'NET (QRY410)', regra:'Id Depósito 21 excluído', detalhe:'Toda linha com Id Depósito = 21 fica de fora de tudo no NET (regra explícita do usuário).', fonte:'QRY410 · Id Depósito'},
-  {categoria:'NET (QRY410)', regra:'Sinal do movimento', detalhe:'Saída = valor negativo, Entrada = valor positivo. NET = Entradas + Saídas.', fonte:'QRY410 · Sentido, Vl.Mov.'},
-  {categoria:'NET (QRY410)', regra:'Ano do movimento em UTC', detalhe:'O ano/mês vem dos componentes UTC da célula de data (convenção do leitor de planilha), não da hora local — senão lançamentos do dia 1º caíam no mês anterior em fuso negativo (Brasil, UTC−3).', fonte:'QRY410 · Dt.Mov.'},
-  {categoria:'NET (QRY410)', regra:'Classificação por Observação', detalhe:'O motivo vem da "Observação WMS"; se vazia, cai na coluna "Observacao". O código casa quando é a observação inteira ou vem seguido de um caractere não-alfanumérico (pra "AIR." e "AIR/2" contarem como AIR, mas "AIRTON" não).', fonte:'QRY410 · Observação WMS / Observacao'},
-  {categoria:'NET (QRY410)', regra:'Observação por extenso (≥6 letras)', detalhe:'Observação escrita por extenso (ex.: "SALDO INCLUIDO INDEVIDAMENTE VIA NF") é procurada em qualquer posição do texto, mas só pra chaves de 6+ caracteres — código de 3 letras buscado em qualquer posição classificaria errado.', fonte:'QRY410'},
-  {categoria:'NET (QRY410)', regra:'Sem legenda = considera', detalhe:'Motivo que não está na legenda conta como "considerar NET = SIM" por padrão. A legenda é editável em Configurações (não precisa mexer em código a cada motivo novo).', fonte:'Legenda editável'},
-  {categoria:'NET (QRY410)', regra:'Detalhe por Lógica 301/302', detalhe:'A tabela de detalhe linha a linha da NET lista só as Lógicas 301 e 302 (visão crua, não agregada). Net Ano/Mês de cada linha é o saldo do item no período somando todos os motivos considerados pro NET, não só aquela linha.', fonte:'QRY410 · Logica'},
+  // ---- Net (QRY410) ----
+  {categoria:'Net (QRY410)', regra:'Só Lógica 301 e 302', detalhe:'O Net soma só as linhas de Lógica 301 e 302 — demais lógicas ficam de fora de tudo (gráficos, quebras por Obs/Depto, itens). Arquivo sem a coluna Lógica entra inteiro.', fonte:'QRY410 · Lógica'},
+  {categoria:'Net (QRY410)', regra:'Id Depósito 21 excluído', detalhe:'Toda linha com Id Depósito = 21 fica de fora de tudo no Net (regra explícita do usuário).', fonte:'QRY410 · Id Depósito'},
+  {categoria:'Net (QRY410)', regra:'Sinal do movimento', detalhe:'Saída = valor negativo, Entrada = valor positivo. Net = Entradas + Saídas.', fonte:'QRY410 · Sentido, Vl.Mov.'},
+  {categoria:'Net (QRY410)', regra:'Ano do movimento em UTC', detalhe:'O ano/mês vem dos componentes UTC da célula de data (convenção do leitor de planilha), não da hora local — senão lançamentos do dia 1º caíam no mês anterior em fuso negativo (Brasil, UTC−3).', fonte:'QRY410 · Dt.Mov.'},
+  {categoria:'Net (QRY410)', regra:'Classificação por Observação', detalhe:'O motivo vem da "Observação WMS"; se vazia, cai na coluna "Observacao". O código casa quando é a observação inteira ou vem seguido de um caractere não-alfanumérico (pra "AIR." e "AIR/2" contarem como AIR, mas "AIRTON" não).', fonte:'QRY410 · Observação WMS / Observacao'},
+  {categoria:'Net (QRY410)', regra:'Observação por extenso (≥6 letras)', detalhe:'Observação escrita por extenso (ex.: "SALDO INCLUIDO INDEVIDAMENTE VIA NF") é procurada em qualquer posição do texto, mas só pra chaves de 6+ caracteres — código de 3 letras buscado em qualquer posição classificaria errado.', fonte:'QRY410'},
+  {categoria:'Net (QRY410)', regra:'Sem legenda = considera', detalhe:'Motivo que não está na legenda conta como "considerar Net = SIM" por padrão. A legenda é editável em Configurações (não precisa mexer em código a cada motivo novo).', fonte:'Legenda editável'},
+  {categoria:'Net (QRY410)', regra:'Detalhe por Lógica 301/302', detalhe:'A tabela de detalhe linha a linha da Net lista só as Lógicas 301 e 302 (visão crua, não agregada). Net Ano/Mês de cada linha é o saldo do item no período somando todos os motivos considerados pro Net, não só aquela linha.', fonte:'QRY410 · Logica'},
 
   // ---- Datas / dias úteis ----
   {categoria:'Datas', regra:'Dias úteis (Cajamar-SP)', detalhe:'"Dias Restantes" conta dias úteis entre hoje e a data prevista de término, excluindo sábados, domingos e feriados nacionais, estaduais de SP e municipais de Cajamar (São Sebastião 20/01, emancipação 18/02).', fonte:'Calendário'},
