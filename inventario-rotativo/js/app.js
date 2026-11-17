@@ -496,6 +496,8 @@ function irSwitchTab(tab){
   if(filtroCiclo) filtroCiclo.hidden = netTab;
   const filtroMesGeral = document.getElementById('tbFilterMesGeral');
   if(filtroMesGeral) filtroMesGeral.hidden = netTab;
+  const filtroProdData = document.getElementById('tbFilterProdData');
+  if(filtroProdData) filtroProdData.hidden = netTab;
   const filtroNetAno = document.getElementById('tbFilterNetAno');
   if(filtroNetAno) filtroNetAno.hidden = !netTab;
   const filtroNetMes = document.getElementById('tbFilterNetMes');
@@ -1157,7 +1159,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v287';
+const IR_APP_VERSION = 'v288';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2633,7 +2635,7 @@ function irMoveDiaTooltip(ev){
 }
 function irHideDiaTooltip(){
   const tt = document.getElementById('irChartTooltip');
-  if(tt){ tt.classList.add('hidden'); tt.classList.remove('lt-wrap','lt-wrap-big'); }
+  if(tt){ tt.classList.add('hidden'); tt.classList.remove('lt-wrap','lt-wrap-big','ca-tip'); }
 }
 function irRenderRuasMaisDivergentesPanel(ind){
   const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>b.pecasDivergentes-a.pecasDivergentes);
@@ -4386,6 +4388,8 @@ function irRenderNet410ItensMesSection(d){
    Ano/Mês). irRenderNetDistorcaoPanel (auditoria "por que o Net está
    distorcido") continua definida mais abaixo, só não é mais chamada daqui. */
 function irRenderGestaoCiclo(){
+  // Central de Ajustes (modelo CD1) — js/central-ajustes.js. O layout antigo segue abaixo, sem uso.
+  if(typeof irRenderCentralAjustes==='function') return irRenderCentralAjustes();
   const anos = IR.net410Anos||[];
   if(!anos.length){
     return `<div class="panel">
