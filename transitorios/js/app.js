@@ -860,17 +860,18 @@ function irTransPainelSetorReport(g){
   let foraValor = 0;
   for(const f of cols) if(!irTransDentroDoPrazo(f)) foraValor += totValFaixa[f]||0;
   const foraPct = g.valor ? Math.round(foraValor/g.valor*100) : 0;
-  const corSeveridade = foraPct>=50 ? '#C83812' : (foraPct>=25 ? '#FE5000' : '#1F8A52');
-  const kpi = (rot, val, cor) => `<div><span class="rp-setor-kpi-lbl">${irEsc(rot)}</span><strong${cor?` style="color:${cor}"`:''}>${val}</strong></div>`;
-  return `<div class="rp-setor">
+  const nivel = foraPct>=50 ? 'alto' : (foraPct>=25 ? 'medio' : 'baixo');
+  const corSetor = IR_TRANS_SETOR_COR[g.setor] || '#001A72';
+  const kpi = (rot, val) => `<div><span class="rp-setor-kpi-lbl">${irEsc(rot)}</span><strong>${val}</strong></div>`;
+  return `<div class="rp-setor" style="--setor-cor:${corSetor}">
     <div class="rp-setor-head">
-      <div class="rp-setor-tit"><span class="rp-setor-bar" style="background:${IR_TRANS_SETOR_COR[g.setor]||'#001A72'}"></span>
+      <div class="rp-setor-tit"><span class="rp-setor-bar" style="background:${corSetor}"></span>
         <h2>${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</h2></div>
       <div class="rp-setor-kpis">
         ${kpi('Parado', irFmtMoney(g.valor))}
         ${kpi('Peças', irFmtInt(g.qtd))}
         ${kpi('Endereços', irFmtInt(g.locais.length))}
-        ${kpi('Fora do prazo', foraPct+'%', corSeveridade)}
+        <div><span class="rp-setor-kpi-lbl">Fora do prazo</span><span class="rp-chip rp-chip-${nivel}">${foraPct}%</span></div>
       </div>
     </div>
     <div class="table-wrap"><table class="rp-setor-table">
