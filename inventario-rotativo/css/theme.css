@@ -2146,3 +2146,8 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .ca-g-c .ca-panel:first-child{ max-height:560px; overflow-y:auto; }
 .ca-donut-l{ flex:1 1 260px; min-width:240px; }
 .ca-dl-n{ overflow:visible; }
+.ca-top-ctl{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.ca-seg{ display:inline-flex; background:var(--surface2); border-radius:9px; padding:3px; gap:2px; }
+.ca-seg button{ border:none; background:transparent; color:var(--ink-soft); font-family:inherit; font-size:12px; font-weight:800; padding:5px 12px; border-radius:7px; cursor:pointer; }
+.ca-seg button.on{ background:#001A72; color:#fff; }
+.ca-seg button:not(.on):hover{ color:var(--ink); }

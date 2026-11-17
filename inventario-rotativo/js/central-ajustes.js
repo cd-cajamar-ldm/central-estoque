@@ -16,6 +16,7 @@ function irCaK(v, sinal){
   const s = v < 0 ? '−' : ((sinal===false || !v) ? '' : '+');
   const a = Math.abs(v||0);
   if(a >= 1e6) return s + (a/1e6).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}) + 'mi';
+  if(a < 1000) return Math.round(a) ? s + Math.round(a).toLocaleString('pt-BR') : '0';
   return s + (a/1e3).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1}) + 'k';
 }
 function irCaR(v, sinal){
@@ -53,6 +54,7 @@ function irCaPassaFiltro(l){
 }
 function irCaSetFiltro(campo, v){ IR.caFiltro[campo] = v; irRenderView(); }
 function irCaSetTopMin(v){ IR.caTopMin = v; irRenderView(); }
+function irCaSetTop(campo, v){ if(campo==='tipo') IR.caTopTipo = v; else IR.caTopPer = v; irRenderView(); }
 function irCaOrdenar(col){
   const o = IR.caOrdem || {col:'mes', dir:1};
   IR.caOrdem = o.col===col ? {col, dir:-o.dir} : {col, dir:(col==='mes'?1:(col==='ano'?1:1))};
@@ -96,7 +98,12 @@ function irCaDados(d, mesSel){
     return {...it, ano, classe, dep: dep?dep[0]:'', obs: obs?obs[0]:'', local: loc?loc[0]:''};
   });
   const ofensores = lista.filter(i=>i.mes<0).sort((a,b)=>a.mes-b.mes);
-  return {porMes, ent, sai, net:ent+sai, porObsSai, porMotSai, porDepto, porForn, porDep, porObs, porDia, ofensores, todas};
+  const anoRecorte = new Map();
+  for(const l of linhas){
+    let a = anoRecorte.get(l.item); if(!a){ a = {item:l.item, nome:l.nome, v:0}; anoRecorte.set(l.item, a); }
+    a.v += l.valor;
+  }
+  return {porMes, ent, sai, net:ent+sai, porObsSai, porMotSai, porDepto, porForn, porDep, porObs, porDia, ofensores, todas, lista, anoRecorte, anoItem};
 }
 
 /* ---------- gráficos (desenhados na largura real via irFluid) ---------- */
@@ -288,16 +295,29 @@ function irRenderCentralAjustes(){
   const gPonte = irCaPainel('Entradas − saídas por motivo = Net', irFluid('caPonte', w=>irCaPonteSvg(c.ent, saidas, c.net, w), 290));
   const gDep = irCaPainel('Net por departamento', irCaHbar(irCaTop(c.porDepto, 10), true));
 
+  // Top: perdas ou ganhos, no mês ou no ano (ano = recorte dos filtros).
+  const tipo = IR.caTopTipo || 'perda', per = IR.caTopPer || 'mes';
   const minTop = Math.abs(parseFloat(IR.caTopMin)||0);
-  const top = minTop ? c.ofensores.filter(i=>Math.abs(i.mes)>=minTop).slice(0, 50) : c.ofensores.slice(0, 10);
-  const mxTop = Math.max(1, ...top.map(i=>Math.abs(i.mes)));
-  const gTop = irCaPainel('Top ofensores · mês × ano', `<div class="ca-top ca-top-h"><span>Item</span><span></span><span>Mês</span><span>Ano</span></div>
-    ${top.map(i=>{ const k = IR_CA_CLASSE[i.classe]; return `<div class="ca-top" title="${irEsc(i.item)} — ${irEsc(i.nome)} · ${k.rot}">
+  const mesPorItem = new Map(c.lista.map(i=>[i.item, i]));
+  let base;
+  if(per==='mes') base = c.lista.map(i=>({item:i.item, nome:i.nome, v:i.mes, outro:i.ano, classe:i.classe}));
+  else base = Array.from(c.anoRecorte.values()).map(a=>{ const m = mesPorItem.get(a.item); return {item:a.item, nome:a.nome, v:a.v, outro:m?m.mes:0, classe:null}; });
+  base = base.filter(i=> tipo==='perda' ? i.v<0 : i.v>0).sort((a,b)=> tipo==='perda' ? a.v-b.v : b.v-a.v);
+  const top = minTop ? base.filter(i=>Math.abs(i.v)>=minTop).slice(0, 50) : base.slice(0, 10);
+  const mxTop = Math.max(1, ...top.map(i=>Math.abs(i.v)));
+  const corBarra = i=> tipo==='ganho' ? 'var(--ca-ganho)' : (per==='mes' && i.classe ? IR_CA_CLASSE[i.classe].cor : 'var(--ca-perda)');
+  const rotOutro = per==='mes' ? 'Ano' : 'Mês';
+  const seg = (campo, val, rot)=>`<button type="button" class="${(campo==='tipo'?tipo:per)===val?'on':''}" onclick="irCaSetTop('${campo}','${val}')">${rot}</button>`;
+  const gTop = irCaPainel('Top '+(tipo==='perda'?'perdas':'ganhos')+' · '+(per==='mes'?'mês':'ano'), `
+    <div class="ca-top-ctl"><div class="ca-seg">${seg('tipo','perda','Perdas')}${seg('tipo','ganho','Ganhos')}</div><div class="ca-seg">${seg('per','mes','Mês')}${seg('per','ano','Ano')}</div>
+      <label class="ca-min">${tipo==='perda'?'Perda':'Ganho'} a partir de R$ <input type="number" min="0" step="100" value="${minTop||''}" placeholder="0" onchange="irCaSetTopMin(this.value)"></label></div>
+    <div class="ca-top ca-top-h"><span>Item</span><span></span><span>${per==='mes'?'Mês':'Ano'}</span><span>${rotOutro}</span></div>
+    ${top.length ? top.map(i=>{ const k = i.classe ? IR_CA_CLASSE[i.classe] : null; return `<div class="ca-top" title="${irEsc(i.item)} — ${irEsc(i.nome)}${k?' · '+k.rot:''}">
       <span class="ca-top-n"><b class="mono">${irEsc(i.item)}</b> ${irEsc(i.nome)}</span>
-      <div class="ca-hb-t ca-top-t"><i style="width:${(Math.abs(i.mes)/mxTop*100).toFixed(1)}%;background:${k.cor}"></i>${i.ano<0?`<em style="left:${(Math.min(Math.abs(i.ano),mxTop)/mxTop*100).toFixed(1)}%"></em>`:''}</div>
-      <b style="color:var(--ca-perda)">${irCaK(i.mes)}</b><b style="color:${irCaCor(i.ano)}">${i.ano?irCaK(i.ano):'0'}</b></div>`; }).join('')}`,
-    `<label class="ca-min">Perda a partir de R$ <input type="number" min="0" step="100" value="${minTop||''}" placeholder="0" onchange="irCaSetTopMin(this.value)"></label>`+
-    irCaLeg(IR_CA_CLASSE.real.cor,'perda real')+irCaLeg(IR_CA_CLASSE.parcial.cor,'parcial')+irCaLeg(IR_CA_CLASSE.comp.cor,'compensado')+'<span><span class="ca-leg-tick"></span>Net do ano</span>');
+      <div class="ca-hb-t ca-top-t"><i style="width:${(Math.abs(i.v)/mxTop*100).toFixed(1)}%;background:${corBarra(i)}"></i>${(i.outro && Math.sign(i.outro)===Math.sign(i.v))?`<em style="left:${(Math.min(Math.abs(i.outro),mxTop)/mxTop*100).toFixed(1)}%"></em>`:''}</div>
+      <b style="color:${irCaCor(i.v)}">${irCaK(i.v)}</b><b style="color:${irCaCor(i.outro)}">${i.outro?irCaK(i.outro):'0'}</b></div>`; }).join('') : '<p class="field-hint">Nenhum item.</p>'}`,
+    (tipo==='perda' && per==='mes' ? irCaLeg(IR_CA_CLASSE.real.cor,'perda real')+irCaLeg(IR_CA_CLASSE.parcial.cor,'parcial')+irCaLeg(IR_CA_CLASSE.comp.cor,'compensado') : '')+
+    `<span><span class="ca-leg-tick"></span>Net ${per==='mes'?'do ano':'do mês'}</span>`);
 
   // Concentração (% das perdas por item, acumulado)
   const negs = c.ofensores.map(i=>i.mes);
