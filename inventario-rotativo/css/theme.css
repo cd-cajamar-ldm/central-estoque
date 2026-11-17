@@ -2132,3 +2132,11 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .ca-vbar i{ display:block; height:100%; border-radius:4px; background:linear-gradient(90deg, #FFB08A, #FE5000); }
 .ca-vbar b{ color:var(--ca-perda); font-variant-numeric:tabular-nums; min-width:92px; text-align:right; }
 .ca-tab tbody td.num b{ font-variant-numeric:tabular-nums; }
+/* Linhas compactas na tabela de ofensores */
+.ca-tab table{ font-size:12px; }
+.ca-tab thead th{ padding:8px 10px; }
+.ca-tab tbody td{ padding:4px 10px; line-height:1.25; }
+.ca-cod{ padding:1px 6px; font-size:11.5px; }
+.ca-obs{ padding:1px 6px; font-size:11px; }
+.ca-tab .ca-badge{ padding:1px 8px; font-size:11px; }
+.ca-vbar span{ height:6px; }
