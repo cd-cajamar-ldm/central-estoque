@@ -1623,3 +1623,65 @@ table.bt-table tfoot td{
   .rp-tela .rp-hero, .rp-tela .rp-body{ padding-left:16px; padding-right:16px; }
   .rp-tela .rp-hero-kpis{ gap:18px; }
 }
+
+/* ---------- PAINEL DE INDICADORES ----------
+   Mesmo vocabulário visual do dashboard do Inventário Rotativo (classes dx-*),
+   portado aqui pra tela nova ficar com a cara do resto da casa. */
+.dx-hero{
+  margin:-20px -24px 0; padding:20px 24px 90px; color:#fff;
+  background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.82) 50%, rgba(0,18,82,.35) 100%), url(../brand/menu-corredor.jpg);
+  background-size:cover; background-position:center 60%;
+}
+.dx-hero-in{ display:flex; flex-direction:column; gap:26px; }
+.dx-marca{ display:flex; align-items:center; gap:12px; }
+.dx-marca-txt{ display:flex; flex-direction:column; }
+.dx-marca-txt b{ font-family:'Poppins',sans-serif; font-size:15px; font-weight:700; }
+.dx-marca-txt span{ font-size:12px; color:#C9D0F2; }
+.dx-hero-row{ display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-end; gap:16px; }
+.dx-hero-tit{ display:flex; flex-direction:column; gap:8px; }
+.dx-hero-tit h2{ margin:0; font-family:'Poppins',sans-serif; font-size:30px; font-weight:700; color:#fff; }
+.dx-tag{ font-size:14px; color:#DCE1F7; }
+.dx-body{ margin:-64px 0 0; position:relative; display:flex; flex-direction:column; gap:16px; }
+.dx-body .panel{ margin-bottom:0; border-radius:14px; }
+.dx-cards{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
+.dx-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+  display:flex; flex-direction:column; gap:8px; box-shadow:0 16px 34px -18px rgba(0,26,114,.35); }
+.dx-card-top{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.dx-card-rot{ font-size:13px; font-weight:700; color:var(--ink-soft); }
+.dx-card-val{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.dx-num{ font-family:'Poppins',sans-serif; font-size:30px; font-weight:700; line-height:1; color:var(--ink); font-variant-numeric:tabular-nums; }
+.dx-num.bad{ color:var(--danger); }
+.dx-card-hint{ font-size:12px; color:var(--ink-soft); }
+.dx-faixa{ background:var(--surface2); border:1px solid var(--line); border-radius:14px; padding:6px 4px;
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
+.dx-tile{ padding:12px 16px; border-right:1px solid var(--line); display:flex; flex-direction:column; gap:3px; min-width:0; }
+.dx-tile:last-child{ border-right:0; }
+.dx-tile-rot{ font-size:12px; color:var(--ink-soft); }
+.dx-tile-val{ font-size:21px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.dx-tile-val.bad{ color:var(--danger); }
+.dx-tile-hint{ font-size:11px; color:var(--ink-soft); }
+/* Ranking de setores ofensores: uma barra por setor, maior valor fora do prazo primeiro. */
+.dx-rank-row{ display:grid; grid-template-columns:4px 150px 1fr 42px 120px; align-items:center; gap:12px; padding:8px 4px; }
+.dx-rank-row + .dx-rank-row{ border-top:1px solid var(--line); }
+.dx-rank-bar{ width:4px; height:22px; border-radius:3px; }
+.dx-rank-nome{ font-size:13px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dx-rank-track{ height:8px; background:var(--surface2); border-radius:999px; overflow:hidden; }
+.dx-rank-track i{ display:block; height:100%; border-radius:999px; }
+.dx-rank-pct{ font-size:12.5px; font-weight:800; color:var(--ink-soft); text-align:right; font-variant-numeric:tabular-nums; }
+.dx-rank-valor{ font-size:13px; font-weight:700; color:var(--ink); text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+@media(max-width:700px){
+  .dx-rank-row{ grid-template-columns:4px 1fr 60px; grid-template-areas:"bar nome pct" "bar track valor"; row-gap:4px; }
+  .dx-rank-bar{ grid-area:bar; } .dx-rank-nome{ grid-area:nome; } .dx-rank-pct{ grid-area:pct; }
+  .dx-rank-track{ grid-area:track; } .dx-rank-valor{ grid-area:valor; text-align:left; }
+}
+/* Linha de evolução — só o essencial: grade de base, pontos com tooltip nativo
+   (title do SVG) e rótulo de data a cada N pontos. */
+.dx-ln{ display:block; height:auto; }
+.dx-ln-grid{ stroke:var(--line); stroke-width:1; }
+.dx-ln-ax{ font-size:12px; fill:var(--ink-soft); }
+.dx-ln-pt{ stroke:var(--surface); stroke-width:2; cursor:pointer; }
+.dx-ln-pt:hover{ r:7; }
+@media(max-width:640px){
+  .dx-hero{ margin:-14px -14px 0; padding:16px 16px 84px; }
+  .dx-hero-tit h2{ font-size:24px; }
+}
