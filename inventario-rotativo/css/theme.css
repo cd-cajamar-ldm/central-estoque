@@ -2151,3 +2151,16 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .ca-seg button{ border:none; background:transparent; color:var(--ink-soft); font-family:inherit; font-size:12px; font-weight:800; padding:5px 12px; border-radius:7px; cursor:pointer; }
 .ca-seg button.on{ background:#001A72; color:#fff; }
 .ca-seg button:not(.on):hover{ color:var(--ink); }
+.ca-eq-k{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+.ca-eq-k div{ background:var(--surface2); border-radius:10px; padding:9px 12px; display:flex; flex-direction:column; gap:2px; min-width:0; }
+.ca-eq-k span{ font-size:11.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ca-eq-k b{ font-family:Poppins,Inter,system-ui,sans-serif; font-size:19px; font-weight:800; color:var(--ca-ganho); white-space:nowrap; }
+.ca-eq-k b.o{ color:#FE5000; }
+.ca-eq-l{ margin-bottom:10px; }
+.ca-eq-t{ display:flex; align-items:baseline; gap:8px; font-size:12.5px; margin-bottom:5px; }
+.ca-eq-t span{ flex:1; min-width:0; color:var(--ink); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ca-eq-t b{ white-space:nowrap; font-variant-numeric:tabular-nums; }
+.ca-eq-t b small{ font-weight:600; color:var(--ink-soft); }
+.ca-eq-t em{ font-style:normal; font-weight:800; color:#FE5000; min-width:38px; text-align:right; }
+.ca-eq-b{ height:12px; background:var(--surface2); border-radius:6px; overflow:hidden; }
+.ca-eq-b i{ display:block; height:100%; border-radius:6px; }
