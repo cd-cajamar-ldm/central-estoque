@@ -39,7 +39,7 @@ var S = {
   movs:null, movsBusy:false, movsErro:'',
   fm:{ de:'', ate:'', st:'pend', q:'' }, lim:{}, sort:{},
   col:null,
-  classe:'', ritmo:null, anima:true, q:'', fClassif:'', fOper:'', mapaModo:'sit', mapaFx:-1, cobModo:'sem', cobQ:'', cobLocal:'', cobFaixa:''
+  classe:'', ritmo:null, anima:true, q:'', fClassif:'', fOper:'', cobModo:'sem', cobQ:'', cobLocal:'', cobFaixa:''
 };
 
 /* ---------- utilidades ---------- */
@@ -633,7 +633,7 @@ function regua(){
 function tempoMisto(){
   var M=S.D.misto; if(!M || !S.D.loc.misto) return '';
   var tot=M.lista.length;
-  var blocos=MISTO_FX.map(function(f,i){ return '<button type="button" class="rgx-tm-b'+(S.mapaFx===i?' on':'')+'" data-act="mapa-fx" data-i="'+i+'"'+tip(f[2],int(M.faixas[i])+' locais mistos','Clique para ver no mapa')+'><i style="background:'+f[3]+'"></i><b>'+int(M.faixas[i])+'</b><span>'+f[2]+'</span></button>'; }).join('');
+  var blocos=MISTO_FX.map(function(f,i){ return '<div class="rgx-tm-b"'+tip(f[2],int(M.faixas[i])+' locais mistos')+'><i style="background:'+f[3]+'"></i><b>'+int(M.faixas[i])+'</b><span>'+f[2]+'</span></div>'; }).join('');
   var top=M.lista.slice(0,6).map(function(l){
     return '<button type="button" class="rgx-tm-l" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.semRg)+' un sem RG · '+int(l.rgs)+' RGs')+'><span>'+esc(l.localDesc||l.local)+'</span><b>'+int(l.diasMisto)+' d</b></button>';
   }).join('');
@@ -651,18 +651,7 @@ function mapaLocais(){
   D.locais.forEach(function(l){ var z=zonas.get(l.zonaMapa); if(!z){ z={nome:l.zonaMapa, l:[], saldo:0}; zonas.set(l.zonaMapa,z); } z.l.push(l); z.saldo+=l.saldo; });
   var arr=Array.from(zonas.values()).sort(function(a,b){ return b.saldo-a.saldo; });
   var maxS=Math.max.apply(null,D.locais.map(function(l){ return l.saldo; }))||1;
-  var tempo=S.mapaModo==='tempo';
-  var fxDe=function(l){ if(l.st!=='misto' || l.fora || l.diasMisto==null) return -1; for(var i=0;i<MISTO_FX.length;i++) if(l.diasMisto>=MISTO_FX[i][0] && l.diasMisto<=MISTO_FX[i][1]) return i; return -1; };
-  if(tempo){
-    arr.forEach(function(z){ z.nm=0; z.max=-1; z.l.forEach(function(l){ var f=fxDe(l); if(f>=0 && (S.mapaFx<0 || S.mapaFx===f)){ z.nm++; if(l.diasMisto>z.max) z.max=l.diasMisto; } }); });
-    arr=arr.filter(function(z){ return z.nm>0; }).sort(function(a,b){ return b.max-a.max; });
-    if(!arr.length) return '<div class="rgx-ok">Nenhum local misto nesta faixa</div>';
-  }
-  return '<div class="rgx-mapa'+(tempo?' tempo':'')+'">'+arr.map(function(z){
-    if(tempo) return '<div class="rgx-zona"><div class="rgx-zona-h"><b>'+esc(z.nome)+'</b><span>'+int(z.nm)+' mistos · maior '+int(z.max)+' d</span></div><div class="rgx-cels">'+z.l.map(function(l){
-      var f=fxDe(l), on=f>=0 && (S.mapaFx<0 || S.mapaFx===f);
-      return '<button type="button" class="rgx-cel '+(on?'':'apag')+'"'+(on?' style="background:'+MISTO_FX[f][3]+'"':'')+' data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,on?'Misto há '+int(l.diasMisto)+' dias':(l.st==='misto'?(l.fora?'Misto · TRI/PIC fora do monitoramento':'Misto'):l.st==='rg'?'100% RG':'Sem RG'),int(l.semRg)+' un sem RG · '+int(l.rgs)+' RGs')+'></button>';
-    }).join('')+'</div></div>';
+  return '<div class="rgx-mapa">'+arr.map(function(z){
     z.l.sort(function(a,b){ return String(a.localDesc).localeCompare(String(b.localDesc),'pt-BR',{numeric:true}); });
     return '<div class="rgx-zona"><div class="rgx-zona-h"><b>'+esc(z.nome)+'</b><span>'+int(z.l.length)+' locais · '+int(z.saldo)+' un</span></div><div class="rgx-cels">'+z.l.map(function(l){
       /* intensidade = quanto saldo o local guarda (escala de raiz para não sumir os pequenos) */
@@ -769,7 +758,7 @@ function vPainel(){
       '<div class="panel">'+h3('Onde falta RG','<div class="cmp-legend"><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto</span></div>')+blocoTreemap()+'</div>'+
       '<div class="panel">'+h3('Classificação das peças')+rosca()+'</div>'+
     '</div>'+
-    '<div class="panel">'+h3('Mapa dos locais','<div class="rgx-mm"><button type="button" class="'+(S.mapaModo==='sit'?'on':'')+'" data-act="mapa-modo" data-m="sit">Situação</button><button type="button" class="'+(S.mapaModo==='tempo'?'on':'')+'" data-act="mapa-modo" data-m="tempo">Tempo em misto</button></div>'+(S.mapaModo==='tempo' ? '<div class="cmp-legend">'+MISTO_FX.map(function(f){ return '<span><span class="cmp-dot" style="background:'+f[3]+'"></span>'+f[2]+'</span>'; }).join('')+'</div>' : '<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>'))+tempoMisto()+mapaLocais()+'</div>'+
+    '<div class="panel">'+h3('Mapa dos locais','<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>')+tempoMisto()+mapaLocais()+'</div>'+
     '<div class="rgx-g rgx-g-c">'+
       '<div class="panel">'+h3('Idade do estoque sem RG')+regua()+'</div>'+
       '<div class="panel">'+h3('Ritmo diário')+ritmoDiario()+'</div>'+
@@ -1166,8 +1155,6 @@ function acao(el, ev){
   if(a==='zoom-mais') return aplicaZoom(zoomAtual()+10);
   if(a==='zoom-menos') return aplicaZoom(zoomAtual()-10);
   if(a==='classe'){ S.classe=el.dataset.c; S.ritmo=null; S.anima=true; S.cobLocal=''; deriva(); return render(); }
-  if(a==='mapa-modo'){ S.mapaModo=el.dataset.m; S.mapaFx=-1; S.anima=false; return render(); }
-  if(a==='mapa-fx'){ var fi=+el.dataset.i; S.mapaFx=S.mapaFx===fi?-1:fi; S.mapaModo='tempo'; S.anima=false; return render(); }
   if(a==='ritmo-real'){ S.ritmo=null; var r=ritmoAtual(), s=$('simRitmo'); if(s) s.value=Math.max(50,Math.round(r/50)*50); return atualizaSim(r); }
   if(a==='local') return abrePainel(el.dataset.l);
   if(a==='fecha-painel') return fechaPainel();
