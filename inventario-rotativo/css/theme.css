@@ -2164,3 +2164,8 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .ca-eq-t em{ font-style:normal; font-weight:800; color:#FE5000; min-width:38px; text-align:right; }
 .ca-eq-b{ height:12px; background:var(--surface2); border-radius:6px; overflow:hidden; }
 .ca-eq-b i{ display:block; height:100%; border-radius:6px; }
+/* Capa da Central de Ajustes (mesmo formato do Dashboard, imagem de finanças) */
+.dx-hero.ca-hero{ background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.78) 45%, rgba(0,18,82,.2) 100%), url(../brand/net-hero.jpg); background-position:center 40%; }
+.ca-hero .dx-hero-row{ align-items:flex-end; }
+.dx-body.ca-wrap{ margin-top:-70px; }
+.ca-kpi{ box-shadow:0 16px 34px -18px rgba(0,26,114,.35); }

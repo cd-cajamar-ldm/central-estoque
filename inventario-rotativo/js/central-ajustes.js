@@ -282,24 +282,24 @@ function irRenderCentralAjustes(){
   // Filtros (valores do ano)
   const valoresDe = k=> Array.from(new Set(c.todas.map(l=>l[k]).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b)));
   const temForn = c.todas.some(l=>l.forn);
-  const capa = (()=>{ // gráfico de velas + linha + moedas, em branco translúcido
-    let v = '', x = 0, y0 = 70; const alt = [12,-8,16,6,-14,10,-6,18,-10,8,14,-12,6,16,-8,12];
-    alt.forEach((d,i)=>{ x = 520 + i*34; const y1 = y0 - d; const top = Math.min(y0,y1)-6, h = Math.abs(d)+4;
-      v += `<line x1="${x+7}" x2="${x+7}" y1="${top-8}" y2="${top+h+8}" stroke="#fff" stroke-opacity=".35"/><rect x="${x}" y="${top}" width="14" height="${h}" rx="2" fill="${d>=0?'#FE5000':'#fff'}" fill-opacity="${d>=0?.55:.3}"/>`; y0 = y1; });
-    let pts = ''; let yy = 95; for(let i=0;i<=22;i++){ yy += [-9,6,-12,4,-7,10,-5,-11,8,-6,5][i%11]; pts += `${380+i*26},${Math.max(20,Math.min(115,yy))} `; }
-    const moeda = (cx,cy,r)=>`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="2"/><text x="${cx}" y="${cy+r*0.35}" text-anchor="middle" font-size="${r}" font-weight="800" fill="#fff" fill-opacity=".3">R$</text>`;
-    return `<svg class="ca-cab-bg" viewBox="0 0 1100 130" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
-      ${[30,60,90,120].map(g=>`<line x1="300" x2="1100" y1="${g}" y2="${g}" stroke="#fff" stroke-opacity=".07"/>`).join('')}
-      <polyline points="${pts}" fill="none" stroke="#FE5000" stroke-opacity=".75" stroke-width="3" stroke-linejoin="round"/>${v}
-      ${moeda(1040,34,22)}${moeda(1000,96,16)}${moeda(470,30,13)}</svg>`; })();
-  const cab = `<div class="ca-cab">${capa}
-    <div class="ca-cab-t"><b>Central de Ajustes</b><span>${irEsc(nomeMes)} · ${d.ano}</span></div>
-    <div class="ca-fils">
-      ${irCaSelect('depto','Departamento', valoresDe('depto'))}
-      ${temForn ? irCaSelect('forn','Fornecedor', valoresDe('forn')) : ''}
-      ${irCaSelect('obs','Obs', valoresDe('obs'))}
-      ${irCaSelect('dep','Depósito', valoresDe('dep'))}
-    </div></div>`;
+  // Capa no mesmo formato do Dashboard Inventário (foto + logo + título), com imagem de finanças.
+  const cab = `<section class="dx-hero ca-hero">
+    <div class="dx-hero-in">
+      <div class="dx-marca">
+        <span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span>
+        <div class="dx-marca-txt"><b>Oficina LDM</b><span>Inventário · CD Cajamar</span></div>
+      </div>
+      <div class="dx-hero-row">
+        <div class="dx-hero-tit"><h2>Central de Ajustes</h2><span class="dx-tag">Net · ${irEsc(nomeMes)} ${d.ano}</span></div>
+        <div class="ca-fils">
+          ${irCaSelect('depto','Departamento', valoresDe('depto'))}
+          ${temForn ? irCaSelect('forn','Fornecedor', valoresDe('forn')) : ''}
+          ${irCaSelect('obs','Obs', valoresDe('obs'))}
+          ${irCaSelect('dep','Depósito', valoresDe('dep'))}
+        </div>
+      </div>
+    </div>
+  </section>`;
   const kc = (rot, val, sub, cor, cls)=>`<div class="ca-kpi ${cls||''}"><span>${rot}</span><b style="color:${cor}">${val}</b><small>${sub||''}</small></div>`;
   const kpis = `<div class="ca-kpis">
     ${kc('Net do mês', irCaR(c.net), anterior==null?'':`${c.net<anterior?'▼':'▲'} ${(Math.abs(anterior)>=1000 && Math.abs(varPct)<10) ? Math.abs(Math.round(varPct*100))+'%' : irCaR(Math.abs(c.net-anterior))} vs ${IR_MES_NOMES_ABREV[mesIdx-1]||''}`, irCaCor(c.net), 'destaque')}
@@ -401,8 +401,8 @@ function irRenderCentralAjustes(){
       <td><span class="ca-badge" style="--c:${k.cor}">${k.rot}</span></td></tr>`; }).join('')}</tbody></table></div>`,
     Object.values(IR_CA_CLASSE).map(k=>`<span class="ca-badge" style="--c:${k.cor}">${k.rot}</span>`).join(''));
 
-  return `<div class="ca-wrap">
-    ${cab}${kpis}
+  return `${cab}<div class="dx-body ca-wrap">
+    ${kpis}
     <div class="ca-g ca-g-a">${gMes}${gComp}</div>
     <div class="ca-g ca-g-b">${gPonte}${gDep}</div>
     <div class="ca-g ca-g-c">${gTop}${gEq}</div>

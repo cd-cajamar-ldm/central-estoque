@@ -4,7 +4,7 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'inventario-rotativo-v316';
+const CACHE_VERSION = 'inventario-rotativo-v317';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -27,6 +27,7 @@ const PRECACHE_URLS = [
   './brand/Logo_LDM_icon.png',
   './brand/dash-hero.jpg',
   './brand/menu-corredor.jpg',
+  './brand/net-hero.jpg',
   './brand/secao-produtividade.jpg'
 ];
 
