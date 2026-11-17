@@ -45,13 +45,22 @@ const IR_STORES = {
    continuam lá; só a abertura falha. Aqui, nesse caso, reabrimos o banco na
    versão que ele já tem (sem informar versão): o esquema só cresce, então um
    banco mais novo tem todos os stores que este código conhece. */
+function irDbComFechoAutomatico(db){
+  // Sem isto, um upgrade de versão nesta aba trava pra sempre a abertura de
+  // QUALQUER outra aba/janela deste sistema (Inventário ou Transitórios) que já
+  // esteja com o banco aberto numa versão antiga — o IndexedDB não fecha
+  // conexão de outra aba sozinho, e o open() dela fica preso em "blocked" sem
+  // nunca resolver nem rejeitar. Fechando aqui, a aba antiga libera a nova.
+  db.onversionchange = ()=>db.close();
+  return db;
+}
 function irOpenDB(){
   return irOpenDBNaVersao(IR_DB_VERSION).catch(err=>{
     if(!err || err.name !== 'VersionError') throw err;
     console.warn('Banco mais novo que o código — abrindo na versão existente.', err);
     return new Promise((resolve, reject)=>{
       const req = indexedDB.open(IR_DB_NAME);
-      req.onsuccess = ()=>resolve(req.result);
+      req.onsuccess = ()=>resolve(irDbComFechoAutomatico(req.result));
       req.onerror = ()=>reject(req.error);
     });
   });
@@ -130,8 +139,18 @@ function irOpenDBNaVersao(versao){
         for(const idx of indicesMortos[nome]) if(st.indexNames.contains(idx)) st.deleteIndex(idx);
       }
     };
-    req.onsuccess = ()=>resolve(req.result);
+    req.onsuccess = ()=>resolve(irDbComFechoAutomatico(req.result));
     req.onerror = ()=>reject(req.error);
+    // Essa aba travou aguardando outra aba (com o banco aberto numa versão
+    // antiga) fechar a conexão dela. Enquanto essa outra aba não tiver o
+    // onversionchange acima (ou seja, enquanto não recarregar com este
+    // código), a tela some em "Carregando..." sem erro nenhum — daí o aviso.
+    req.onblocked = ()=>{
+      console.warn('IndexedDB bloqueado por outra aba/janela aberta deste sistema.');
+      if(typeof irShowToast==='function'){
+        irShowToast('Outra aba do Inventário/Transitórios está aberta e trava o carregamento — feche as outras abas e atualize esta página.', true);
+      }
+    };
   });
 }
 

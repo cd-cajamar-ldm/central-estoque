@@ -1544,6 +1544,17 @@ function irSwitchTab(tela){
   irCloseSidebarMobile();
   irRenderView();
 }
+/* Se outra aba/janela deste sistema estiver com o banco aberto numa versão
+   antiga, abrir aqui pode ficar preso pra sempre (o IndexedDB não cancela
+   conexão alheia sozinho) — sem isto a tela ficava girando em "Carregando..."
+   sem erro nenhum e sem explicação. Com o prazo estourado, troca pra uma
+   mensagem com o que fazer. */
+function irComPrazo(promessa, ms, msg){
+  return Promise.race([
+    promessa,
+    new Promise((_, rej)=>setTimeout(()=>rej(new Error(msg)), ms))
+  ]);
+}
 async function irInit(){
   const temaSalvo = localStorage.getItem('ir-theme');
   if(temaSalvo) document.documentElement.setAttribute('data-theme', temaSalvo);
@@ -1554,7 +1565,8 @@ async function irInit(){
   const versao = document.getElementById('sidebarVersao');
   if(versao) versao.textContent = IR_APP_VERSION;
   try{
-    IR.est390Meta = await irGetEstoqueMeta();
+    IR.est390Meta = await irComPrazo(irGetEstoqueMeta(), 8000,
+      'O banco do navegador não respondeu. Feche as outras abas ou janelas do Inventário/Transitórios abertas e atualize esta página.');
     IR.transSetores = await irSeedTransSetoresIfEmpty();
     IR.transNomes = await irGetConfig('transitorio-nomes') || {};
     IR.transEmail = await irGetConfig('transitorio-email');
@@ -1567,7 +1579,7 @@ async function irInit(){
     }
   }catch(e){
     console.error('Falha ao iniciar', e);
-    IR.initErro = (e && (e.name ? e.name+': '+e.message : e.message)) || String(e);
+    IR.initErro = (e && (e.name && e.name!=='Error' ? e.name+': '+e.message : e.message)) || String(e);
   }
   /* Link direto para uma tela específica (ex.: usado pela TV LDM). */
   var irHashTela = null;
