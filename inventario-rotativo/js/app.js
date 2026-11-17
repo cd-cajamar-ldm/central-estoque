@@ -1801,62 +1801,15 @@ function irHeatStyle(val, meta){
   return `background:rgba(${r},${g},${b},.14); color:rgb(${r},${g},${b});`;
 }
 /* ============================================================
-   SETORES (Resumo por Setor + Resumo por Rua + Ruas mais divergentes)
+   SETORES (Resumo por Rua + Ruas mais divergentes)
    ============================================================ */
 function irRenderSetores(){
   const ind = IR.indicadores;
   if(!ind) return irEmptyState('Sem indicadores', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   return `
-    ${irRenderPorSetorPanel(ind)}
     ${irRenderPorRuaPanel(ind)}
     ${irRenderRuasMaisDivergentesPanel(ind)}
   `;
-}
-/* Setor é só o X1 (sem o X2) — visão mais grossa que a de Rua logo abaixo, pra
-   achar rápido qual setor está pior antes de abrir a tabela por rua e achar a
-   rua específica dentro dele. Mesmas colunas da tabela por Rua, sem a coluna
-   de seleção/exportação de pendentes (essa é só por Rua, ver irRenderPorRuaPanel). */
-function irRenderPorSetorPanel(ind){
-  const rows = (ind.porSetor||[]).filter(r=>r.chave!=='(sem setor)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
-  if(!rows.length) return '';
-  const meta = ind.meta;
-  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
-  return `<div class="panel">
-    <h3>Resumo por Setor</h3>
-    <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por setor.</p>
-    <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-grouped tbl-sticky-head">
-      <thead>
-        <tr class="grupo"><th></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
-        <tr class="cols">
-          <th>Setor</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
-          <th>Contadas</th><th>Divergentes</th>
-          <th>Peças</th><th>Posições</th><th>Valor</th>
-        </tr>
-      </thead>
-      <tbody>${rowsComPendentes.map(r=>`<tr>
-        <td class="mono">${irEsc(r.chave)}</td>
-        <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
-        <td class="mono">${irFmtInt(r.locaisContados)}</td>
-        <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
-        <td class="mono">${irFmtInt(r.locaisPendentes)}</td>
-        <td class="mono">${irFmtInt(r.pecasContadas)}</td>
-        <td class="mono">${irFmtInt(r.pecasDivergentes)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaPecas, meta)}">${irFmtPct(r.acuraciaPecas)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaPosicoes, meta)}">${irFmtPct(r.acuraciaPosicoes)}</td>
-        <td class="mono" style="${irHeatStyle(r.acuraciaValor, meta)}">${irFmtPct(r.acuraciaValor)}</td>
-      </tr>`).join('')}</tbody>
-      <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
-        <td class="mono">TOTAL</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisDivergentes,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisPendentes,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.pecasContadas,0))}</td>
-        <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.pecasDivergentes,0))}</td>
-        <td colspan="3"></td>
-      </tr></tfoot>
-    </table></div></div>
-  </div>`;
 }
 function irRenderPorRuaPanel(ind){
   const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
