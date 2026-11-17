@@ -21,6 +21,9 @@ var FAIXAS = [[0,30,'até 30 d','#1F8A52'],[31,90,'31–90 d','#E0A100'],[91,180
 var CORES_CLASSIF = ['#FE5000','#001A72','#1F8A52','#E0A100','#7D93E8','#8E99A8'];
 var PAGINA = 200;
 var LOG_KEY = 'rg-reversa-log', PEND_KEY = 'rg-reversa-pend';
+/* Locais fora do monitoramento de tempo em misto (zonas TRI e PIC). */
+var SEM_MONITOR = /^(TRI|PIC)/i;
+var MISTO_FX = [[0,7,'até 7 d','#1F8A52'],[8,30,'8–30 d','#E0A100'],[31,90,'31–90 d','#FE5000'],[91,1e9,'+ de 90 d','#C83812']];
 var RESTR = {WN:'Vendável',WA:'Reversa',WQ:'Quebra',RT:'Conferência',WE:'Amostra',LT:'Litígio',WV:'Validade',WL:'Não localizado',WI:'Insumos',WT:'Análise',WR:'Reparo',AT:'Múlt. reversa',SS:'Marca própria',DT:'Triagem',WD:'Obsoleto',WS:'Leilão',AI:'Múlt. incompleto'};
 
 var TABS = {
@@ -356,7 +359,24 @@ function deriva(){
     l.zona = String(l.localDesc||'').split(' ')[0]||'—';
     D.loc[l.st]++;
     if(l.st==='misto') D.loc.unMisto+=l.semRg;
+    l.fora=SEM_MONITOR.test(String(l.localDesc||l.local||'').trim());
   });
+  /* Tempo em misto (estimado): o local virou misto quando passaram a conviver RG e peça sem RG,
+     ou seja, no mais recente dos dois começos — idade da peça sem RG mais antiga × idade do RG mais antigo. */
+  var rgAntigo=new Map(); D.abertos.forEach(function(r){ if(r.dt && (!rgAntigo.has(r.local) || r.dt<rgAntigo.get(r.local))) rgAntigo.set(r.local,r.dt); });
+  var semAntigo=new Map(); D.cov.forEach(function(c){ if(c.semRg>0 && c.dias!=null && c.dias>(semAntigo.has(c.local)?semAntigo.get(c.local):-1)) semAntigo.set(c.local,c.dias); });
+  D.misto={ lista:[], faixas:MISTO_FX.map(function(){ return 0; }), semData:0, fora:0, media:0 };
+  D.locais.forEach(function(l){
+    if(l.st!=='misto') return;
+    if(l.fora){ D.misto.fora++; return; }
+    var a=semAntigo.has(l.local)?semAntigo.get(l.local):null, b=rgAntigo.has(l.local)?dias(rgAntigo.get(l.local)):null;
+    l.diasMisto = a!=null && b!=null ? Math.min(a,b) : (a!=null?a:b);
+    if(l.diasMisto==null){ D.misto.semData++; return; }
+    for(var i=0;i<MISTO_FX.length;i++) if(l.diasMisto>=MISTO_FX[i][0] && l.diasMisto<=MISTO_FX[i][1]){ D.misto.faixas[i]++; break; }
+    D.misto.lista.push(l);
+  });
+  D.misto.lista.sort(function(a,b){ return b.diasMisto-a.diasMisto; });
+  D.misto.media=D.misto.lista.length ? D.misto.lista.reduce(function(t,l){ return t+l.diasMisto; },0)/D.misto.lista.length : 0;
   /* Ritmo: RGs por dia, usando os dias com geração (últimos 14 dias corridos até o dado mais novo). */
   var porDia=new Map(); D.rgs.forEach(function(r){ if(r.dt) porDia.set(r.dt,(porDia.get(r.dt)||0)+1); });
   D.porDia=porDia;
@@ -610,6 +630,16 @@ function regua(){
   return h+'</div>';
 }
 
+function tempoMisto(){
+  var M=S.D.misto; if(!M || !S.D.loc.misto) return '';
+  var tot=M.lista.length;
+  var blocos=MISTO_FX.map(function(f,i){ return '<div class="rgx-tm-b"'+tip(f[2],int(M.faixas[i])+' locais mistos')+'><i style="background:'+f[3]+'"></i><b>'+int(M.faixas[i])+'</b><span>'+f[2]+'</span></div>'; }).join('');
+  var top=M.lista.slice(0,6).map(function(l){
+    return '<button type="button" class="rgx-tm-l" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.semRg)+' un sem RG · '+int(l.rgs)+' RGs')+'><span>'+esc(l.localDesc||l.local)+'</span><b>'+int(l.diasMisto)+' d</b></button>';
+  }).join('');
+  return '<div class="rgx-tm"><div class="rgx-tm-h"><b>Tempo em misto</b><span>média '+int(M.media)+' dias · '+int(tot)+' locais'+(M.fora?' · '+int(M.fora)+' em TRI/PIC fora':'')+'</span></div>'+
+    '<div class="rgx-tm-g"><div class="rgx-tm-bl">'+blocos+'</div><div class="rgx-tm-top">'+(top||'<em>sem datas para calcular</em>')+'</div></div></div>';
+}
 function mapaLocais(){
   var D=S.D, zonas=new Map(), porPrefixo=new Map();
   D.locais.forEach(function(l){ porPrefixo.set(l.zona,(porPrefixo.get(l.zona)||0)+1); });
@@ -626,7 +656,7 @@ function mapaLocais(){
     return '<div class="rgx-zona"><div class="rgx-zona-h"><b>'+esc(z.nome)+'</b><span>'+int(z.l.length)+' locais · '+int(z.saldo)+' un</span></div><div class="rgx-cels">'+z.l.map(function(l){
       /* intensidade = quanto saldo o local guarda (escala de raiz para não sumir os pequenos) */
       var op=(0.5+0.5*Math.pow(l.saldo/maxS,0.3)).toFixed(2);
-      return '<button type="button" class="rgx-cel '+l.st+'" style="opacity:'+op+'" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.saldo)+' un · '+int(l.rgs)+' RGs',l.st==='rg'?'100% RG':l.st==='misto'?'Misto · '+pct(l.comRg,l.saldo)+' com RG':'Sem RG')+'></button>';
+      return '<button type="button" class="rgx-cel '+l.st+'" style="opacity:'+op+'" data-act="local" data-l="'+esc(l.local)+'"'+tip(l.localDesc,int(l.saldo)+' un · '+int(l.rgs)+' RGs',l.st==='rg'?'100% RG':l.st==='misto'?'Misto · '+pct(l.comRg,l.saldo)+' com RG'+(l.diasMisto!=null?' · misto há '+int(l.diasMisto)+' d':''):'Sem RG')+'></button>';
     }).join('')+'</div></div>';
   }).join('')+'</div>';
 }
@@ -728,7 +758,7 @@ function vPainel(){
       '<div class="panel">'+h3('Onde falta RG','<div class="cmp-legend"><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto</span></div>')+blocoTreemap()+'</div>'+
       '<div class="panel">'+h3('Classificação das peças')+rosca()+'</div>'+
     '</div>'+
-    '<div class="panel">'+h3('Mapa dos locais','<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>')+mapaLocais()+'</div>'+
+    '<div class="panel">'+h3('Mapa dos locais','<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>')+tempoMisto()+mapaLocais()+'</div>'+
     '<div class="rgx-g rgx-g-c">'+
       '<div class="panel">'+h3('Idade do estoque sem RG')+regua()+'</div>'+
       '<div class="panel">'+h3('Ritmo diário')+ritmoDiario()+'</div>'+
@@ -761,6 +791,7 @@ function relatorioHtml(){
   var faixas=tab(['Idade do estoque sem RG','Unidades','%'], FAIXAS.map(function(f,i){ return ['<span class="dot" style="background:'+f[3]+'"></span>'+f[2], int(D.faixas[i]), pct(D.faixas[i],totF)]; }));
   var ops=tab(['Operador','RGs','Por dia'], D.ops.slice(0,8).map(function(o){ return [esc(operNome(o.oper)), int(o.n), int(o.media)]; }));
   var top=tab(['Item','Un sem RG'], Array.from(D.itens.values()).sort(function(a,b){ return b.semRg-a.semRg; }).slice(0,8).map(function(it){ return [esc(it.item+' · '+(it.desc||'')), int(it.semRg)]; }));
+  var tm=D.misto, mistoTab=tm && tm.lista.length ? tab(['Local misto há mais tempo','Dias','Un sem RG'], tm.lista.slice(0,8).map(function(l){ return [esc(l.localDesc||l.local), int(l.diasMisto), int(l.semRg)]; })) : '<p class="m">Nenhum local misto com data para calcular.</p>';
   var cls=tab(['Classificação (RGs abertos)','RGs','%'], D.classif.slice(0,6).map(function(c){ return [esc(c.nome), int(c.n), pct(c.n,D.abertos.length)]; }));
   var css='*{box-sizing:border-box}body{margin:0;background:#F3F4F8;color:#111827;font:14px/1.45 -apple-system,Segoe UI,Roboto,Arial,sans-serif}.w{max-width:860px;margin:0 auto;padding:20px 16px 36px}'+
     'header{background:#001A72;color:#fff;border-radius:16px;padding:22px 24px;border-bottom:5px solid #FE5000}header small{opacity:.8;letter-spacing:.08em;text-transform:uppercase;font-size:11px}header h1{margin:4px 0 2px;font-size:24px}header p{margin:0;opacity:.85;font-size:13px}'+
@@ -783,6 +814,7 @@ function relatorioHtml(){
       kpi('Locais mistos', int(L.misto), int(L.unMisto)+' un sem RG misturadas', L.misto?'#C83812':'#1F8A52')+
       kpi('Locais sem RG', int(L.sem), pct(L.sem,L.total)+' dos locais')+
     '</div></section>'+
+    '<section><h2>Locais mistos há mais tempo'+(tm&&tm.lista.length?' · média de '+int(tm.media)+' dias':'')+'</h2>'+mistoTab+'<p class="m">Estimativa pela idade da peça sem RG e do RG mais antigos do local. Zonas TRI e PIC ficam de fora.</p></section>'+
     '<section><h2>RGs gerados por dia (últimos 30 dias com geração)</h2>'+svg+'<p class="m">Média recente: '+int(D.ritmo)+' RGs/dia · '+int(D.porPessoa)+' por pessoa/dia</p></section>'+
     '<div class="c2"><section><h2>Idade do estoque sem RG</h2>'+faixas+'</section><section><h2>Operadores</h2>'+ops+'</section></div>'+
     '<div class="c2" style="margin-top:12px"><section><h2>Itens com mais unidades sem RG</h2>'+top+'</section><section><h2>Classificação das peças</h2>'+cls+'</section></div>'+
