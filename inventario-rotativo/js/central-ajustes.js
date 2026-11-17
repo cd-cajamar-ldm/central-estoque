@@ -16,6 +16,7 @@ function irCaK(v, sinal){
   const s = v < 0 ? '−' : ((sinal===false || !v) ? '' : '+');
   const a = Math.abs(v||0);
   if(a >= 1e6) return s + (a/1e6).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2}) + 'mi';
+  if(a < 1000) return Math.round(a) ? s + Math.round(a).toLocaleString('pt-BR') : '0';
   return s + (a/1e3).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1}) + 'k';
 }
 function irCaR(v, sinal){
@@ -53,6 +54,7 @@ function irCaPassaFiltro(l){
 }
 function irCaSetFiltro(campo, v){ IR.caFiltro[campo] = v; irRenderView(); }
 function irCaSetTopMin(v){ IR.caTopMin = v; irRenderView(); }
+function irCaSetTop(campo, v){ if(campo==='tipo') IR.caTopTipo = v; else IR.caTopPer = v; irRenderView(); }
 function irCaOrdenar(col){
   const o = IR.caOrdem || {col:'mes', dir:1};
   IR.caOrdem = o.col===col ? {col, dir:-o.dir} : {col, dir:(col==='mes'?1:(col==='ano'?1:1))};
@@ -96,7 +98,12 @@ function irCaDados(d, mesSel){
     return {...it, ano, classe, dep: dep?dep[0]:'', obs: obs?obs[0]:'', local: loc?loc[0]:''};
   });
   const ofensores = lista.filter(i=>i.mes<0).sort((a,b)=>a.mes-b.mes);
-  return {porMes, ent, sai, net:ent+sai, porObsSai, porMotSai, porDepto, porForn, porDep, porObs, porDia, ofensores, todas};
+  const anoRecorte = new Map();
+  for(const l of linhas){
+    let a = anoRecorte.get(l.item); if(!a){ a = {item:l.item, nome:l.nome, v:0}; anoRecorte.set(l.item, a); }
+    a.v += l.valor;
+  }
+  return {porMes, ent, sai, net:ent+sai, porObsSai, porMotSai, porDepto, porForn, porDep, porObs, porDia, ofensores, todas, lista, anoRecorte, anoItem};
 }
 
 /* ---------- gráficos (desenhados na largura real via irFluid) ---------- */
@@ -185,6 +192,47 @@ function irCaDiaTip(ev, dia){
     : `<div class="field-hint">Sem perda real neste dia.</div>`}`;
   tt.classList.remove('hidden', 'lt-wrap', 'lt-wrap-big'); tt.classList.add('ca-tip');
   irMoveDiaTooltip(ev);
+}
+/* Equalização mês a mês, por ITEM: para cada item, o Net do mês anterior (p) e o do
+   mês (c). Se tiverem sinais opostos, a parte que se anulou é min(|p|,|c|). */
+function irCaEqualizacao(c, meses){
+  const porMesItem = new Map();
+  for(const l of c.todas){
+    if(!irCaPassaFiltro(l)) continue;
+    let m = porMesItem.get(l.mes); if(!m){ m = new Map(); porMesItem.set(l.mes, m); }
+    m.set(l.item, (m.get(l.item)||0) + l.valor);
+  }
+  const out = [];
+  for(let k=1;k<meses.length;k++){
+    const ant = porMesItem.get(meses[k-1]) || new Map(), at = porMesItem.get(meses[k]) || new Map();
+    let base = 0, eqv = 0, basePerdas = 0, baseGanhos = 0, eqPerdas = 0, eqGanhos = 0, n = 0;
+    for(const [item, p] of ant){
+      if(!p) continue;
+      base += Math.abs(p);
+      if(p<0) basePerdas += -p; else baseGanhos += p;
+      const cur = at.get(item)||0;
+      if(cur && Math.sign(cur)!==Math.sign(p)){
+        const e = Math.min(Math.abs(p), Math.abs(cur)); eqv += e; n++;
+        if(p<0) eqPerdas += e; else eqGanhos += e;
+      }
+    }
+    out.push({mes:meses[k], base, eq:eqv, basePerdas, baseGanhos, eqPerdas, eqGanhos, n});
+  }
+  return out;
+}
+function irCaEqSvg(rows, W, mesSel){
+  const H = 170, pl = 10, pr = 10, pt = 24, pb = 24;
+  const sl = (W-pl-pr)/Math.max(1, rows.length), bw = Math.min(34, sl*0.55);
+  let s = `<svg width="${W}" height="${H}" style="display:block">`;
+  rows.forEach((r,i)=>{
+    const pct = r.base ? r.eq/r.base : 0, x = pl+i*sl+(sl-bw)/2, h = H-pt-pb, sel = r.mes===mesSel;
+    s += `<g><title>${IR_MES_NOMES_ABREV[parseInt(r.mes.slice(5,7),10)-1]}: ${irCaR(r.eq)} de ${irCaR(r.base)} (${Math.round(pct*100)}%)</title>
+      <rect x="${x}" y="${pt}" width="${bw}" height="${h}" rx="5" style="fill:var(--surface2)"/>
+      <rect x="${x}" y="${pt+h*(1-pct)}" width="${bw}" height="${Math.max(2,h*pct)}" rx="5" style="fill:var(--ca-ganho)" fill-opacity="${sel?1:.55}"/></g>
+      <text x="${x+bw/2}" y="${pt-7}" font-size="10.5" font-weight="800" text-anchor="middle" style="fill:${sel?'var(--ca-perda)':'var(--ink-soft)'}">${Math.round(pct*100)}%</text>
+      <text x="${x+bw/2}" y="${H-7}" font-size="10.5" font-weight="${sel?800:600}" text-anchor="middle" style="fill:${sel?'var(--ink)':'var(--ink-soft)'}">${IR_MES_NOMES_ABREV[parseInt(r.mes.slice(5,7),10)-1]}</text>`;
+  });
+  return s+'</svg>';
 }
 function irCaHbar(lista, destacar){
   if(!lista.length) return '<p class="field-hint">—</p>';
@@ -288,33 +336,43 @@ function irRenderCentralAjustes(){
   const gPonte = irCaPainel('Entradas − saídas por motivo = Net', irFluid('caPonte', w=>irCaPonteSvg(c.ent, saidas, c.net, w), 290));
   const gDep = irCaPainel('Net por departamento', irCaHbar(irCaTop(c.porDepto, 10), true));
 
+  // Top: perdas ou ganhos, no mês ou no ano (ano = recorte dos filtros).
+  const tipo = IR.caTopTipo || 'perda', per = IR.caTopPer || 'mes';
   const minTop = Math.abs(parseFloat(IR.caTopMin)||0);
-  const top = minTop ? c.ofensores.filter(i=>Math.abs(i.mes)>=minTop).slice(0, 50) : c.ofensores.slice(0, 10);
-  const mxTop = Math.max(1, ...top.map(i=>Math.abs(i.mes)));
-  const gTop = irCaPainel('Top ofensores · mês × ano', `<div class="ca-top ca-top-h"><span>Item</span><span></span><span>Mês</span><span>Ano</span></div>
-    ${top.map(i=>{ const k = IR_CA_CLASSE[i.classe]; return `<div class="ca-top" title="${irEsc(i.item)} — ${irEsc(i.nome)} · ${k.rot}">
+  const mesPorItem = new Map(c.lista.map(i=>[i.item, i]));
+  let base;
+  if(per==='mes') base = c.lista.map(i=>({item:i.item, nome:i.nome, v:i.mes, outro:i.ano, classe:i.classe}));
+  else base = Array.from(c.anoRecorte.values()).map(a=>{ const m = mesPorItem.get(a.item); return {item:a.item, nome:a.nome, v:a.v, outro:m?m.mes:0, classe:null}; });
+  base = base.filter(i=> tipo==='perda' ? i.v<0 : i.v>0).sort((a,b)=> tipo==='perda' ? a.v-b.v : b.v-a.v);
+  const top = minTop ? base.filter(i=>Math.abs(i.v)>=minTop).slice(0, 50) : base.slice(0, 10);
+  const mxTop = Math.max(1, ...top.map(i=>Math.abs(i.v)));
+  const corBarra = i=> tipo==='ganho' ? 'var(--ca-ganho)' : (per==='mes' && i.classe ? IR_CA_CLASSE[i.classe].cor : 'var(--ca-perda)');
+  const rotOutro = per==='mes' ? 'Ano' : 'Mês';
+  const seg = (campo, val, rot)=>`<button type="button" class="${(campo==='tipo'?tipo:per)===val?'on':''}" onclick="irCaSetTop('${campo}','${val}')">${rot}</button>`;
+  const gTop = irCaPainel('Top '+(tipo==='perda'?'perdas':'ganhos')+' · '+(per==='mes'?'mês':'ano'), `
+    <div class="ca-top-ctl"><div class="ca-seg">${seg('tipo','perda','Perdas')}${seg('tipo','ganho','Ganhos')}</div><div class="ca-seg">${seg('per','mes','Mês')}${seg('per','ano','Ano')}</div>
+      <label class="ca-min">${tipo==='perda'?'Perda':'Ganho'} a partir de R$ <input type="number" min="0" step="100" value="${minTop||''}" placeholder="0" onchange="irCaSetTopMin(this.value)"></label></div>
+    <div class="ca-top ca-top-h"><span>Item</span><span></span><span>${per==='mes'?'Mês':'Ano'}</span><span>${rotOutro}</span></div>
+    ${top.length ? top.map(i=>{ const k = i.classe ? IR_CA_CLASSE[i.classe] : null; return `<div class="ca-top" title="${irEsc(i.item)} — ${irEsc(i.nome)}${k?' · '+k.rot:''}">
       <span class="ca-top-n"><b class="mono">${irEsc(i.item)}</b> ${irEsc(i.nome)}</span>
-      <div class="ca-hb-t ca-top-t"><i style="width:${(Math.abs(i.mes)/mxTop*100).toFixed(1)}%;background:${k.cor}"></i>${i.ano<0?`<em style="left:${(Math.min(Math.abs(i.ano),mxTop)/mxTop*100).toFixed(1)}%"></em>`:''}</div>
-      <b style="color:var(--ca-perda)">${irCaK(i.mes)}</b><b style="color:${irCaCor(i.ano)}">${i.ano?irCaK(i.ano):'0'}</b></div>`; }).join('')}`,
-    `<label class="ca-min">Perda a partir de R$ <input type="number" min="0" step="100" value="${minTop||''}" placeholder="0" onchange="irCaSetTopMin(this.value)"></label>`+
-    irCaLeg(IR_CA_CLASSE.real.cor,'perda real')+irCaLeg(IR_CA_CLASSE.parcial.cor,'parcial')+irCaLeg(IR_CA_CLASSE.comp.cor,'compensado')+'<span><span class="ca-leg-tick"></span>Net do ano</span>');
+      <div class="ca-hb-t ca-top-t"><i style="width:${(Math.abs(i.v)/mxTop*100).toFixed(1)}%;background:${corBarra(i)}"></i>${(i.outro && Math.sign(i.outro)===Math.sign(i.v))?`<em style="left:${(Math.min(Math.abs(i.outro),mxTop)/mxTop*100).toFixed(1)}%"></em>`:''}</div>
+      <b style="color:${irCaCor(i.v)}">${irCaK(i.v)}</b><b style="color:${irCaCor(i.outro)}">${i.outro?irCaK(i.outro):'0'}</b></div>`; }).join('') : '<p class="field-hint">Nenhum item.</p>'}`,
+    (tipo==='perda' && per==='mes' ? irCaLeg(IR_CA_CLASSE.real.cor,'perda real')+irCaLeg(IR_CA_CLASSE.parcial.cor,'parcial')+irCaLeg(IR_CA_CLASSE.comp.cor,'compensado') : '')+
+    `<span><span class="ca-leg-tick"></span>Net ${per==='mes'?'do ano':'do mês'}</span>`);
 
-  // Concentração (% das perdas por item, acumulado)
-  const negs = c.ofensores.map(i=>i.mes);
-  const totNeg = negs.reduce((s,v)=>s+v,0) || -1;
-  const gPar = irCaPainel('Concentração das perdas', irFluid('caPar', W=>{
-    const H = 240, pl = 40, n = Math.min(12, negs.length);
-    const sl = (W-pl-10)/Math.max(1,n); let acc = 0;
-    let s = `<svg width="${W}" height="${H}" style="display:block">`;
-    for(let k=0;k<5;k++){ const yy = 20 + k*45; s += `<line x1="${pl}" x2="${W-10}" y1="${yy}" y2="${yy}" style="stroke:var(--line)" stroke-opacity=".6"/><text x="${pl-6}" y="${yy+4}" font-size="10.5" text-anchor="end" style="fill:var(--ink-soft)">${100-k*25}%</text>`; }
-    const pts = [];
-    for(let i=0;i<n;i++){ const v = negs[i]; acc += v; const h = v/totNeg*180;
-      s += `<rect x="${pl+i*sl+3}" y="${200-h}" width="${Math.max(2,sl-6)}" height="${h}" rx="3" style="fill:${i===0?'var(--ca-perda)':'var(--ca-perda-2)'}"/>`;
-      pts.push([pl+i*sl+sl/2, 20+(1-acc/totNeg)*180]); }
-    s += `<polyline points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}" fill="none" style="stroke:var(--orange)" stroke-width="2.4"/>`;
-    pts.slice(0,3).forEach((p,i)=>{ s += `<text x="${p[0]+(i===0?12:0)}" y="${p[1]-8}" font-size="11" font-weight="800" text-anchor="${i===0?'start':'middle'}" style="fill:var(--orange)">${Math.round(negs.slice(0,i+1).reduce((a,b)=>a+b,0)/totNeg*100)}%</text>`; });
-    s += `<text x="${pl}" y="${H-8}" font-size="10.5" style="fill:var(--ink-soft)">1 item = ${negs.length?Math.round(negs[0]/totNeg*100):0}% das perdas</text>`;
-    return s+'</svg>'; }, 240));
+  // Equalização MoM: do ajuste de cada item no mês anterior, quanto voltou (sinal oposto) no mês seguinte.
+  const eq = irCaEqualizacao(c, meses);
+  const eqSel = eq.find(e=>e.mes===mesSel);
+  const mesAntRot = iSel>0 ? IR_MES_NOMES_ABREV[parseInt(meses[iSel-1].slice(5,7),10)-1] : '';
+  const mesRot = IR_MES_NOMES_ABREV[mesIdx];
+  const barraEq = (rot, eqv, base, cor)=>`<div class="ca-eq-l"><div class="ca-eq-t"><span>${rot}</span><b>${irCaK(eqv,false)} <small>de ${irCaK(base,false)}</small></b><em>${base?Math.round(eqv/base*100):0}%</em></div>
+    <div class="ca-eq-b"><i style="width:${base?Math.min(100,eqv/base*100).toFixed(1):0}%;background:${cor}"></i></div></div>`;
+  const gEq = irCaPainel('Equalização MoM', eqSel && eqSel.base ? `
+    <div class="ca-eq-k"><div><span>Equalizado em ${mesRot}</span><b>${irCaR(eqSel.eq)}</b></div><div><span>do ajuste de ${mesAntRot}</span><b class="o">${Math.round(eqSel.eq/eqSel.base*100)}%</b></div><div><span>Itens</span><b>${irFmtInt(eqSel.n)}</b></div></div>
+    ${barraEq('Perdas de '+mesAntRot+' que voltaram em '+mesRot, eqSel.eqPerdas, eqSel.basePerdas, 'var(--ca-ganho)')}
+    ${barraEq('Ganhos de '+mesAntRot+' que saíram em '+mesRot, eqSel.eqGanhos, eqSel.baseGanhos, 'var(--ca-perda)')}
+    ${irFluid('caEq', W=>irCaEqSvg(eq.filter(e=>e.base), W, mesSel), 170)}` : '<p class="field-hint">Sem mês anterior para comparar.</p>',
+    irCaLeg('var(--ca-ganho)','equalizado')+irCaLeg('var(--surface2)','não equalizado'));
 
   const gForn = temForn ? irCaPainel('Fornecedor', irCaHbar(irCaTop(c.porForn), true)) : '';
   const gDep2 = irCaPainel('Depósito', irCaHbar(irCaTop(c.porDep), true));
@@ -347,7 +405,7 @@ function irRenderCentralAjustes(){
     ${cab}${kpis}
     <div class="ca-g ca-g-a">${gMes}${gComp}</div>
     <div class="ca-g ca-g-b">${gPonte}${gDep}</div>
-    <div class="ca-g ca-g-c">${gTop}${gPar}</div>
+    <div class="ca-g ca-g-c">${gTop}${gEq}</div>
     <div class="ca-g ca-g-3">${gForn}${gDep2}${gObs}</div>
     ${gDia}
     ${gTab}
