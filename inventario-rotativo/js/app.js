@@ -13,7 +13,7 @@ const IR = {
   prioridadeConfig:null,
   boletimEmail:{}, // {para, cc} — destinatários salvos do boletim por e-mail (Configurações)
   net410Legenda:[], // legenda de motivos da 410 (editável em Configurações)
-  net410Ignorados:[], // itens ocultos da análise de distorção do NET (motivo já conhecido)
+  net410Ignorados:[], // itens ocultos da análise de distorção do Net (motivo já conhecido)
   net410Padroes:[], // trechos da Observação WMS que escondem qualquer item que os carregue (ex.: "SALDO")
   netAuditoriaN:10, // quantos itens entram na "Gerar Auditoria" (top N por |saldo| do período atual)
   netAuditoriaGerada:null, // {geradoEm, mesLabel, linhas:[...]} — resultado da última geração
@@ -21,7 +21,7 @@ const IR = {
   processing:false, progress:{stage:'', pct:0},
   divergencias:[], locais:[], contagens:[],
   // 'inventario' = só motivo AIR (o ciclo rotativo propriamente dito); 'geral' = os
-  // demais motivos que já contam pro NET hoje (ADE, AIC...). Pedido do usuário pra
+  // demais motivos que já contam pro Net hoje (ADE, AIC...). Pedido do usuário pra
   // não misturar as duas coisas numa tabela só, já que elas respondem perguntas
   // diferentes (como o rotativo está indo vs. o que mais está pesando no CD).
   divTipo:'inventario',
@@ -75,7 +75,7 @@ const IR = {
   // inteiro de uma vez (muita linha deixa a rolagem pesada).
   net410DetFiltro:{mes:null, trimestre:'todos', logica:'todas', obsPrefixo:'todos', depto:'todos'},
   net410DetSort:{col:'dtMov', dir:'desc'},
-  divNetMesSel:null, // mês selecionado no painel "Por que o NET está distorcido?" (aba Divergências)
+  divNetMesSel:null, // mês selecionado no painel "Por que o Net está distorcido?" (aba Divergências)
   divNetDiaSel:null, // dia selecionado (opcional) no mesmo painel — "" ou null = mês inteiro
   comparativoCiclos:null, // [{ciclo, ind}] de todos os ciclos já processados, pro gráfico do Dashboard
 };
@@ -92,7 +92,7 @@ function irFmtMoneyCompact(n){
   n = n||0;
   const abs = Math.abs(n);
   // Sinal antes do "R$" (-R$39,8K), não depois (R$-39,8K) — só aparece de verdade
-  // no gráfico NET Mensal (único lugar que passa valor negativo por aqui hoje; os
+  // no gráfico Net Mensal (único lugar que passa valor negativo por aqui hoje; os
   // outros usos são sempre total/absoluto), mas o -R$ é o padrão certo do "R$" negativo.
   const sinal = n<0 ? '-' : '';
   if(abs>=1000000) return sinal+'R$'+(abs/1000000).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'M';
@@ -207,7 +207,7 @@ function irEmptyState(title, desc, onclickFn, btnLabel){
       juntas em vez de uma depois da outra. Nada aparece antes da permissão: a
       tela de acesso continua por cima.
    2) A tela abre com isso. O que é pesado (contagens, divergências e locais do
-      ciclo — dezenas de milhares de linhas —, NET e a checagem do banco) carrega
+      ciclo — dezenas de milhares de linhas —, Net e a checagem do banco) carrega
       depois, em segundo plano, e a tela se refaz quando chega. */
 let _irPreCarga = null;
 function irPreCarregar(){
@@ -275,7 +275,7 @@ async function irInit(){
     irGetNet410(IR.net410AnoSel).then(d=>{
       IR.net410Data = d; irSetNet410MesDefault();
       if(IR.currentTab==='ciclo') irRenderView();
-    }).catch(e=>console.warn('NET não carregou', e));
+    }).catch(e=>console.warn('Net não carregou', e));
   }
   // Sem isso o navegador pode descartar o banco sozinho quando o disco aperta —
   // e o app perde ciclos inteiros sem nenhum aviso. Só pede; se negar, segue.
@@ -433,7 +433,7 @@ function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)|
 
 const IR_TAB_LABELS = {
   dashboard:['Dashboard Inventário','Visão geral do ciclo ativo.'],
-  ciclo:['NET','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
+  ciclo:['Net','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
   produtividade:['Produtividade','Aba em reconstrução.'],
   setores:['Overview','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
@@ -443,7 +443,7 @@ const IR_TAB_LABELS = {
   gestaoInventario:['Gestão de Inventário','Inventário + local com contagem errada, desconsiderados da acurácia com justificativa.'],
   exportar:['Exportar','Exporte toda a base, as regras/lógicas e os indicadores do sistema.'],
 };
-/* Reversa e Insumos repetem as abas do Rotativo (menos NET, que vai para outro
+/* Reversa e Insumos repetem as abas do Rotativo (menos Net, que vai para outro
    app). Por enquanto abrem "em construção" — chave: reversa_<aba>, insumo_<aba>. */
 const IR_AREAS_EXTRA = {reversa:'Reversa', insumo:'Insumos'};
 const IR_ABAS_AREA = ['dashboard','produtividade','setores','divergencias','indicadores'];
@@ -488,8 +488,8 @@ function irSwitchTab(tab){
   // aba não faz.
   const filtros = document.getElementById('topbarFilters');
   if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab) || irTabEhAreaExtra(tab);
-  // NET é independente do ciclo rotativo (QRY410 é por ano, não por ciclo): troca
-  // Ciclo/Mês (que não têm efeito nenhum sobre a NET) pelo Ano/Mês da própria QRY410
+  // Net é independente do ciclo rotativo (QRY410 é por ano, não por ciclo): troca
+  // Ciclo/Mês (que não têm efeito nenhum sobre a Net) pelo Ano/Mês da própria QRY410
   // no topo — mesmo lugar de sempre, só que com o filtro certo pra essa aba.
   const netTab = (tab==='ciclo');
   const filtroCiclo = document.getElementById('tbFilterCiclo');
@@ -705,7 +705,7 @@ function irScrollVBarsToEnd(){
    esquecer de atualizar quando alguém renomeia uma extração.
 
    Os padrões são frouxos de propósito: o nome que sai do Snowflake é editado por
-   quem baixa. "QRY0390" vira "QRY390 - Estoque Atual" e a 410 vira "NET - Livro
+   quem baixa. "QRY0390" vira "QRY390 - Estoque Atual" e a 410 vira "Net - Livro
    Fiscal", sem número nenhum — por isso o apelido entra no padrão junto do
    código. */
 const IR_PAT = {
@@ -892,7 +892,7 @@ function irRenderDestino843(){
   // produtividade individual. Chamá-la de "descartada" aqui seria mentira.
   const desc = [
     ['fora da janela do ciclo', m.linhasForaDaJanela],
-    ['motivo fora do NET', m.linhasForaDoNet],
+    ['motivo fora do Net', m.linhasForaDoNet],
     ['sem data utilizável', m.linhasSemDataDescartadas]
   ].filter(([,n])=>n>0);
   const total = m.totalLinhas843||0;
@@ -1157,7 +1157,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v286';
+const IR_APP_VERSION = 'v287';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -2002,7 +2002,7 @@ function irBuildContadosPorDiaSvg(rows, meta, opts){
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${notaOmitidos}${bars}${labels}${xLabels}${metaLine}</svg>`;
 }
 /* Gráfico de colunas com linha de base no zero — pra série que tem mês positivo E
-   negativo (NET da 410 por mês), diferente do resto dos gráficos de barra do app
+   negativo (Net da 410 por mês), diferente do resto dos gráficos de barra do app
    (que partem sempre de 0 pra cima). Barra positiva sobe da base, negativa desce;
    rótulo fica do lado de fora da barra (acima se positiva, abaixo se negativa). */
 function irBuildColunasComBaseZeroSvg(rows, opts){
@@ -2011,7 +2011,7 @@ function irBuildColunasComBaseZeroSvg(rows, opts){
   const campo = opts.campo||'valor', fmt = opts.fmt||irFmtMoney, xLabel = opts.xLabel||(r=>r.label);
   // W/H por parâmetro (mesma ideia do irBuildAcuraciaCiclosSvg): o boletim usa o
   // padrão 800x260 (largura fixa da página impressa), mas um painel de tela cheia
-  // (aba NET) pode pedir um W maior pra desenhar já perto do tamanho real do
+  // (aba Net) pode pedir um W maior pra desenhar já perto do tamanho real do
   // painel — sem isso o SVG ficava pequeno e centralizado, sobrando vão vazio.
   const W = opts.W||800, H = opts.H||260;
   const padL = 14, padR = 14, padT = 34, padB = 30;
@@ -2443,7 +2443,7 @@ function irRenderContadosPorDiaPanel(ind){
 // Peças/Valor/Locais divergentes por dia — mesmo estilo do gráfico "Contados por
 // Dia" (barras por dia da Data Fim/Situação da rodada final do local), mas sem a
 // linha de meta, já que aqui não existe uma meta diária de divergência. Ajuda a
-// responder "quando o NET desviou" com números concretos, não só o total do mês.
+// responder "quando o Net desviou" com números concretos, não só o total do mês.
 /* Cada dia mostra o par sistêmica (base) × divergente, na MESMA escala — a
    divergência aparece pequena perto da base, de propósito, porque é assim que
    ela é de verdade. A acurácia do dia (1 − divergente ÷ sistêmica) vira um
@@ -2701,7 +2701,7 @@ function irEhCicloLegadoAIR(cicloNumero, dataAbertura){
 function irCalcItemSaldo(divergencias){
   // Este ranking mede o TAMANHO DO ERRO de contagem por item — divergência
   // ABSOLUTA: Σ |físico − sistema|. Sobra num local e falta em outro não se
-  // anulam; as duas foram erro. O saldo líquido (NET) continua calculado e
+  // anulam; as duas foram erro. O saldo líquido (Net) continua calculado e
   // aparece ao lado como leitura complementar, mas não é o que ordena a lista.
   // Só motivo AIR (Inventário Rotativo) — o resto do boletim/dashboard (Acurácia,
   // Peças Divergentes etc.) também é só AIR, então essa lista não pode misturar
@@ -2896,7 +2896,7 @@ function irGerarRelatorioEmail(){
   const pctContagem = ind.locaisCongelados>0 ? ind.locaisConcluidos/ind.locaisCongelados : 0;
   const rpDonutColors = {color:'#FA4616', track:'#EEF0F4', textColor:'#1D1F2A'};
   const rpLogColors = {pecas:'#FA4616', posicoes:'#001A72', valor:'#1D1F2A', grid:'#E4E7EE', axis:'#6B7280'};
-  // NET mensal (QRY410) — a série do ano inteiro, ganho/perda de TODOS os ajustes do
+  // Net mensal (QRY410) — a série do ano inteiro, ganho/perda de TODOS os ajustes do
   // CD (não só o ciclo rotativo). Diferente do "Divergente (líq.)" acima, que é só o
   // líquido do ciclo. Fica de fora se a 410 ainda não foi processada.
   const netMensalRows = (IR.net410Data && IR.net410Data.porMes || []).map(m=>({
@@ -2907,20 +2907,20 @@ function irGerarRelatorioEmail(){
   // mas ela sai da largura fixa do boletim com muitos meses e fica de fora da
   // imagem gerada. No gráfico ela sempre aparece, porque as barras se reajustam.
   const netMensalRowsComTotal = netMensalRows.length ? [...netMensalRows, {mes:'total', net:netMensalTotal, label:'Total'}] : netMensalRows;
-  // Motivos do NET do mês vigente — "vigente" é o mês de hoje se já tiver dado da
+  // Motivos do Net do mês vigente — "vigente" é o mês de hoje se já tiver dado da
   // 410 processado; sem isso (dado ainda não chegou), cai no último mês disponível,
   // que no fim das contas é o mesmo "mês vigente" da operação.
   const mesHoje = new Date().toISOString().slice(0,7);
   const mesVigente = netMensalRows.find(r=>r.mes===mesHoje) || netMensalRows[netMensalRows.length-1];
   const mesVigenteFull = mesVigente ? (IR.net410Data.porMes||[]).find(m=>m.mes===mesVigente.mes) : null;
-  // Só motivo que entra no NET — motivo "Não" (ex.: Baixa Insumo) não compõe o
+  // Só motivo que entra no Net — motivo "Não" (ex.: Baixa Insumo) não compõe o
   // número e só confundia aparecendo do lado do que realmente soma.
   const motivosMesTodos = mesVigenteFull ? (mesVigenteFull.porObs||[]).filter(o=>o.considerarNet).sort((a,b)=>Math.abs(b.totalGeral)-Math.abs(a.totalGeral)) : [];
   const motivosMes = motivosMesTodos.slice(0,12);
   // O Total usa ganhos/perdas/net já calculados pelo worker (mesmo campo que gera a
-  // linha do mês na tabela "NET Mensal" acima) — e não a soma dos motivos exibidos:
-  // porObs lista TODO motivo (inclusive "Não" considera NET, só pra transparência),
-  // e somar tudo bateria errado com o NET de verdade, que é só dos motivos "Sim".
+  // linha do mês na tabela "Net Mensal" acima) — e não a soma dos motivos exibidos:
+  // porObs lista TODO motivo (inclusive "Não" considera Net, só pra transparência),
+  // e somar tudo bateria errado com o Net de verdade, que é só dos motivos "Sim".
   const motivosMesTotal = mesVigenteFull
     ? {entrada: mesVigenteFull.ganhos, saida: mesVigenteFull.perdas, totalGeral: mesVigenteFull.net}
     : {entrada:0, saida:0, totalGeral:0};
@@ -2944,16 +2944,16 @@ function irGerarRelatorioEmail(){
       ${blocoPecas}${blocoLocais}${blocoValor}${blocoCiclo}
     </div>
 
-    ${netMensalRows.length ? `${sectionTitle('📈','NET Mensal em Colunas','QRY410 — mesmo valor da tabela abaixo, um mês por coluna pra facilitar a leitura lado a lado')}
+    ${netMensalRows.length ? `${sectionTitle('📈','Net Mensal em Colunas','QRY410 — mesmo valor da tabela abaixo, um mês por coluna pra facilitar a leitura lado a lado')}
     <div class="rp-panel rp-panel-pad">
       ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B'})}
       <div class="table-wrap" style="margin-top:14px;"><table class="rp-table">
         <thead><tr><th>Indicador</th>${netMensalRows.map(r=>`<th>${irEsc(r.label)}</th>`).join('')}<th>Total ${irEsc(String(IR.net410AnoSel||''))}</th></tr></thead>
-        <tbody><tr><td>NET</td>${netMensalRows.map(r=>`<td style="color:${r.net>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(r.net)}</td>`).join('')}<td style="font-weight:800;">${irFmtMoney(netMensalTotal)}</td></tr></tbody>
+        <tbody><tr><td>Net</td>${netMensalRows.map(r=>`<td style="color:${r.net>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(r.net)}</td>`).join('')}<td style="font-weight:800;">${irFmtMoney(netMensalTotal)}</td></tr></tbody>
       </table></div>
     </div>` : ''}
 
-    ${motivosMes.length ? `${sectionTitle('🔖','Motivos do NET — '+irEsc(mesVigente.label+'/'+mesVigente.mes.slice(0,4)),'quebra do NET do mês vigente por motivo da observação WMS')}
+    ${motivosMes.length ? `${sectionTitle('🔖','Motivos do Net — '+irEsc(mesVigente.label+'/'+mesVigente.mes.slice(0,4)),'quebra do Net do mês vigente por motivo da observação WMS')}
     <div class="rp-panel"><table class="rp-table">
       <thead><tr><th>Motivo</th><th>Entrada</th><th>Saída</th><th>Total</th></tr></thead>
       <tbody>${motivosMes.map(o=>`<tr>
@@ -2963,7 +2963,7 @@ function irGerarRelatorioEmail(){
         <td style="color:${o.totalGeral>=0?'#001A72':'#C0392B'};font-weight:700;">${irFmtMoney(o.totalGeral)}</td>
       </tr>`).join('')}
       <tr>
-        <td style="font-weight:800;">NET do mês</td>
+        <td style="font-weight:800;">Net do mês</td>
         <td style="color:#1F8A52;font-weight:800;">${irFmtMoney(motivosMesTotal.entrada)}</td>
         <td style="color:#C0392B;font-weight:800;">${irFmtMoney(motivosMesTotal.saida)}</td>
         <td style="color:${motivosMesTotal.totalGeral>=0?'#001A72':'#C0392B'};font-weight:800;">${irFmtMoney(motivosMesTotal.totalGeral)}</td>
@@ -3257,7 +3257,7 @@ async function irBaixarBoletimImagem(html, nomeArquivo, email){
    QRY410 — PERDAS E GANHOS NO CD
    Independente do ciclo rotativo (por ano, não por cicloId) — ver worker.js
    runPipeline410() pras regras de negócio (Id Depósito 21 fora, só Lógica 301/302, Saída = negativo,
-   legenda de motivos que entram ou não no NET).
+   legenda de motivos que entram ou não no Net).
    ============================================================ */
 function irOnFile410(file){ if(!file) return; IR.net410File = file; irRenderView(); }
 function irOnDropFile410(e){ e.preventDefault(); const file = e.dataTransfer.files[0]; if(file) irOnFile410(file); }
@@ -3277,8 +3277,8 @@ function irSetNet410MesDefault(){
   IR.net410MesSel = rows.length ? rows[rows.length-1].mes : null;
 }
 function irSetNet410Mes(mes){ IR.net410MesSel = mes; irRenderNetTopFiltro(); irRenderView(); }
-// Filtro de Ano/Mês da aba NET — fica no topo do site (mesmo lugar do Ciclo/Mês das
-// outras abas, só que trocado quando a aba ativa é a NET), não dentro do corpo da
+// Filtro de Ano/Mês da aba Net — fica no topo do site (mesmo lugar do Ciclo/Mês das
+// outras abas, só que trocado quando a aba ativa é a Net), não dentro do corpo da
 // página. Selects vivem no index.html (#netAnoFilterSelect/#netMesFilterSelect);
 // aqui só populam as opções e mantêm o valor selecionado em dia com o estado.
 function irRenderNetTopFiltro(){
@@ -3333,8 +3333,8 @@ function irProcessar410(){
   });
   return _p;
 }
-/* Painel de importação da QRY410 — fica na aba Importação (não na NET) pra não mexer
-   no layout do Dashboard/NET com mais um dropzone. Processamento independente do
+/* Painel de importação da QRY410 — fica na aba Importação (não na Net) pra não mexer
+   no layout do Dashboard/Net com mais um dropzone. Processamento independente do
    'PROCESSAR CICLO' (ver irProcessar410). */
 /* ---------- IMPORTAÇÃO DA QRY0390 (ESTOQUE ATUAL) ---------- */
 function irOnFile390Est(f){ if(!f) return; IR.est390File = f; irRenderView(); }
@@ -4079,7 +4079,7 @@ function irRenderNet410Panel(){
   const anos = IR.net410Anos;
   return `<div class="panel">
     <h3>Perdas e Ganhos no CD (QRY410)</h3>
-    <p class="panel-sub">Independente do ciclo rotativo — organizado por ano. Inventário Rotativo (AIR) é só mais um dos motivos que compõem o NET, junto com auditorias, curvas etc. Importe/atualize a QRY410 na aba Importação.</p>
+    <p class="panel-sub">Independente do ciclo rotativo — organizado por ano. Inventário Rotativo (AIR) é só mais um dos motivos que compõem o Net, junto com auditorias, curvas etc. Importe/atualize a QRY410 na aba Importação.</p>
     ${anos.length ? `<div class="two-col" style="max-width:340px;">
       <div><label>Ano</label><select onchange="irSetNet410Ano(this.value)">
         ${anos.map(a=>`<option value="${a}" ${a===IR.net410AnoSel?'selected':''}>${a}</option>`).join('')}
@@ -4091,7 +4091,7 @@ function irRenderNet410Panel(){
 }
 const IR_MES_NOMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const IR_MES_NOMES_ABREV = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-// Gráfico de colunas do NET mês a mês — barra pra cima (verde) quando positivo, pra
+// Gráfico de colunas do Net mês a mês — barra pra cima (verde) quando positivo, pra
 // baixo (vermelho) quando negativo, em volta de uma linha de base no zero.
 function irBuildNetMensalBarSvg(rows, opts){
   opts = opts||{};
@@ -4107,7 +4107,7 @@ function irBuildNetMensalBarSvg(rows, opts){
   const baseY = padT + plotH/2;
   // Fator 0.86 (em vez de ir até a metade inteira do plotH) garante uma folga fixa
   // entre a ponta da maior barra e o rótulo do mês no eixo X — sem isso, o rótulo de
-  // valor de uma barra grande (ex.: NET de março bem negativo) ficava colado ou
+  // valor de uma barra grande (ex.: Net de março bem negativo) ficava colado ou
   // em cima do nome do mês.
   const barMaxH = (plotH/2)*0.86;
   const barW = Math.min(56, plotW/n*0.6);
@@ -4126,7 +4126,7 @@ function irBuildNetMensalBarSvg(rows, opts){
   const zeroLine = `<line x1="${padL}" y1="${baseY.toFixed(1)}" x2="${W-padR}" y2="${baseY.toFixed(1)}" stroke="${colors.grid}" stroke-width="1.5"/>`;
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">${zeroLine}${bars}${labels}${xLabels}</svg>`;
 }
-// Tabela do NET com um mês por coluna (visão compacta, lado a lado) — usada na aba NET
+// Tabela do Net com um mês por coluna (visão compacta, lado a lado) — usada na aba Net
 // e reaproveitada no boletim, pra bater o ano do ciclo em uma linha só, mês a mês.
 function irBuildNetMensalColunasTable(d, tableCls){
   const rows = d.porMes||[];
@@ -4134,7 +4134,7 @@ function irBuildNetMensalColunasTable(d, tableCls){
   return `<div class="table-wrap"><table class="${tableCls||''}">
     <thead><tr><th>Indicador</th>${rows.map(m=>`<th>${IR_MES_NOMES_ABREV[parseInt(m.mes.slice(5,7),10)-1]}</th>`).join('')}<th>Total ${d.ano}</th></tr></thead>
     <tbody><tr>
-      <td style="font-weight:700;">NET</td>
+      <td style="font-weight:700;">Net</td>
       ${rows.map(m=>`<td class="mono" style="color:${m.net>=0?'var(--blue)':'var(--danger)'};font-weight:700;">${irFmtMoney(m.net)}</td>`).join('')}
       <td class="mono" style="color:${d.totalNet>=0?'var(--blue)':'var(--danger)'};font-weight:700;">${irFmtMoney(d.totalNet)}</td>
     </tr></tbody>
@@ -4144,14 +4144,14 @@ function irRenderNet410Resultado(d){
   const rows = d.porMes||[];
   return `
     <div class="panel">
-      <h3>NET mensal em colunas — ${d.ano}</h3>
-      <p class="panel-sub">Mesmo valor de NET da tabela abaixo, só que com um mês por coluna pra facilitar a leitura lado a lado.</p>
+      <h3>Net mensal em colunas — ${d.ano}</h3>
+      <p class="panel-sub">Mesmo valor de Net da tabela abaixo, só que com um mês por coluna pra facilitar a leitura lado a lado.</p>
       ${irBuildNetMensalBarSvg(rows)}
       ${irBuildNetMensalColunasTable(d, 'table-wide')}
     </div>
     <div class="panel">
       <h3>Net mensal — ${d.ano}</h3>
-      <p class="panel-sub">Só considera motivos válidos pro NET (ver tabela por Obs abaixo). ${irFmtInt(d.linhasExcluidasDeposito21)} linha(s) do Id Depósito 21 ficaram de fora. ${d.temColunaLogica ? 'Só Lógica 301/302: '+irFmtInt(d.linhasExcluidasLogica||0)+' linha(s) de outras lógicas ficaram de fora.' : (d.linhasExcluidasLogica===undefined ? '<strong>Reimporte a QRY410 pra aplicar a regra de só Lógica 301/302.</strong>' : '<strong>Arquivo sem a coluna Lógica — não deu pra filtrar 301/302.</strong>')} Total de linhas do ano: ${irFmtInt(d.totalLinhas)}.</p>
+      <p class="panel-sub">Só considera motivos válidos pro Net (ver tabela por Obs abaixo). ${irFmtInt(d.linhasExcluidasDeposito21)} linha(s) do Id Depósito 21 ficaram de fora. ${d.temColunaLogica ? 'Só Lógica 301/302: '+irFmtInt(d.linhasExcluidasLogica||0)+' linha(s) de outras lógicas ficaram de fora.' : (d.linhasExcluidasLogica===undefined ? '<strong>Reimporte a QRY410 pra aplicar a regra de só Lógica 301/302.</strong>' : '<strong>Arquivo sem a coluna Lógica — não deu pra filtrar 301/302.</strong>')} Total de linhas do ano: ${irFmtInt(d.totalLinhas)}.</p>
       <div class="table-wrap"><table>
         <thead><tr><th>Mês</th><th>Net</th><th>Net Absoluto</th><th>Ganhos</th><th>Perdas</th></tr></thead>
         <tbody>${rows.map(m=>`<tr>
@@ -4172,9 +4172,9 @@ function irRenderNet410Resultado(d){
     </div>
     <div class="panel">
       <h3>Por motivo (Obs) — ${d.ano}</h3>
-      <p class="panel-sub">Todos os motivos que apareceram no ano, considerados ou não pro NET (regra: sem legenda cadastrada conta como considerado).</p>
+      <p class="panel-sub">Todos os motivos que apareceram no ano, considerados ou não pro Net (regra: sem legenda cadastrada conta como considerado).</p>
       <div class="table-wrap"><table class="table-wide">
-        <thead><tr><th>Obs</th><th>Legenda</th><th>Considerar NET?</th><th>Saída</th><th>Entrada</th><th>Total Geral</th></tr></thead>
+        <thead><tr><th>Obs</th><th>Legenda</th><th>Considerar Net?</th><th>Saída</th><th>Entrada</th><th>Total Geral</th></tr></thead>
         <tbody>${(d.porObs||[]).map(o=>`<tr>
           <td class="mono">${irEsc(o.id)}</td>
           <td>${irEsc(o.legenda)||'—'}</td>
@@ -4188,8 +4188,8 @@ function irRenderNet410Resultado(d){
     ${irRenderNet410PorObsMesTable(d)}
     <h3 style="margin:20px 0 -6px;">Itens que mais impactam no ano — ${d.ano}</h3>
     <div class="bi-grid-2">
-      ${irRenderNet410ItensPanel(d.topItensPositivos, false, 'Soma do valor no ano ('+d.ano+'), só motivos considerados pro NET.')}
-      ${irRenderNet410ItensPanel(d.topItensNegativos, true, 'Soma do valor no ano ('+d.ano+'), só motivos considerados pro NET.')}
+      ${irRenderNet410ItensPanel(d.topItensPositivos, false, 'Soma do valor no ano ('+d.ano+'), só motivos considerados pro Net.')}
+      ${irRenderNet410ItensPanel(d.topItensNegativos, true, 'Soma do valor no ano ('+d.ano+'), só motivos considerados pro Net.')}
     </div>
     ${irRenderNet410ItensMesSection(d)}
   `;
@@ -4197,8 +4197,8 @@ function irRenderNet410Resultado(d){
 // Ordem fixa pedida pro operacional pros códigos principais; depois deles
 // entra QUALQUER outro código considerado que tiver movimento no mês (ASR,
 // TID, PAR...). Antes a tabela só mostrava esses 6 e o Total Geral não
-// batia com o gráfico (ex.: ASR somava no NET e não aparecia aqui).
-// "Considerar NET" vem do próprio processamento (o mesmo que o gráfico usou).
+// batia com o gráfico (ex.: ASR somava no Net e não aparecia aqui).
+// "Considerar Net" vem do próprio processamento (o mesmo que o gráfico usou).
 const IR_NET410_ORDEM_OBS = ['AEE','INV','ADE','AIR','LIT','AIN'];
 function irRenderNet410PorObsMesTable(d){
   const mes = IR.net410MesSel;
@@ -4217,7 +4217,7 @@ function irRenderNet410PorObsMesTable(d){
   const ordem = c=>{ const i = IR_NET410_ORDEM_OBS.indexOf(c.id); return i<0 ? IR_NET410_ORDEM_OBS.length : i; };
   const linhas = considerados.map(comNet)
     .sort((x,y)=> ordem(x)-ordem(y) || Math.abs(y.net)-Math.abs(x.net));
-  // Lançamentos do mês que NÃO entram no NET (legenda = não considerar) —
+  // Lançamentos do mês que NÃO entram no Net (legenda = não considerar) —
   // listados à parte pra explicar diferença contra a dinâmica da 410.
   const foraNet = doMes.filter(o=>o.considerarNet===false).map(comNet)
     .filter(o=>o.saida || o.entrada).sort((x,y)=>Math.abs(y.net)-Math.abs(x.net));
@@ -4227,10 +4227,10 @@ function irRenderNet410PorObsMesTable(d){
   const mesLabel = mObj ? (IR_MES_NOMES[parseInt(mes.slice(5,7),10)-1]+'/'+mes.slice(0,4)) : '—';
   return `
     <div class="panel">
-      <h3>NET por Observação (R$) — ${irEsc(mesLabel)}</h3>
-      <p class="panel-sub">Só observações com Considerar NET = SIM. Respeita o mês selecionado acima (não é o total bruto do ano).</p>
+      <h3>Net por Observação (R$) — ${irEsc(mesLabel)}</h3>
+      <p class="panel-sub">Só observações com Considerar Net = SIM. Respeita o mês selecionado acima (não é o total bruto do ano).</p>
       <div class="table-wrap"><table class="table-wide">
-        <thead><tr><th>OBS</th><th>Saída</th><th>Entrada</th><th>NET</th></tr></thead>
+        <thead><tr><th>OBS</th><th>Saída</th><th>Entrada</th><th>Net</th></tr></thead>
         <tbody>${linhas.length ? linhas.map(o=>`<tr>
           <td class="mono">${irEsc(o.id)}</td>
           <td class="mono" style="color:var(--danger);">${o.saida?irFmtMoney(o.saida):'—'}</td>
@@ -4244,11 +4244,11 @@ function irRenderNet410PorObsMesTable(d){
           <td class="mono" style="color:${totalNet>=0?'var(--blue)':'var(--danger)'};">${irFmtMoney(totalNet)}</td>
         </tr></tfoot>
       </table></div>
-      ${foraNet.length ? `<p class="field-hint" style="margin-top:10px;"><strong>Fora do NET neste mês</strong> (Considerar NET = NÃO em Configurações): ${foraNet.map(o=>`${irEsc(o.id)}${o.legenda?' ('+irEsc(o.legenda)+')':''} ${irFmtMoney(o.net)}`).join(' · ')}</p>` : ''}
+      ${foraNet.length ? `<p class="field-hint" style="margin-top:10px;"><strong>Fora do Net neste mês</strong> (Considerar Net = NÃO em Configurações): ${foraNet.map(o=>`${irEsc(o.id)}${o.legenda?' ('+irEsc(o.legenda)+')':''} ${irFmtMoney(o.net)}`).join(' · ')}</p>` : ''}
     </div>`;
 }
 /* ============================================================
-   NET — Detalhe por Lógica (301/302)
+   Net — Detalhe por Lógica (301/302)
    Visão linha a linha da própria QRY410 (não agregada), restrita às Lógicas
    301/302 — pra investigar um lançamento específico sem abrir a planilha.
    Filtros e ordenação são próprios dessa tabela (não mexem no Mês/Ano do
@@ -4323,8 +4323,8 @@ function irRenderNet410DetalheLogicaPanel(d){
   </div>`;
   return `
     <div class="panel">
-      <h3>NET — Detalhe por Lógica (301/302)</h3>
-      <p class="panel-sub">Linha a linha da própria 410 (não agregada), só Lógicas 301 e 302. Net Ano/Mês é o saldo do item no período, somando todos os motivos considerados pro NET — não só esta linha. Clique no título da coluna pra ordenar.</p>
+      <h3>Net — Detalhe por Lógica (301/302)</h3>
+      <p class="panel-sub">Linha a linha da própria 410 (não agregada), só Lógicas 301 e 302. Net Ano/Mês é o saldo do item no período, somando todos os motivos considerados pro Net — não só esta linha. Clique no título da coluna pra ordenar.</p>
       <div class="net-det-filtros" style="margin-bottom:12px;">
         ${selectFiltro('mes', 'Mês', mesesDisp.map(m=>({v:m, lbl:irNet410DetMesLabel(m)})))}
         ${selectFiltro('trimestre', 'Trimestre', [1,2,3,4].map(t=>({v:String(t), lbl:t+'º Trimestre'})))}
@@ -4357,7 +4357,7 @@ function irRenderNet410ItensPanel(items, negativos, subtitulo){
     </div>`).join('')}
   </div>`;
 }
-/* "Por que o NET do mês está tão negativo?" — mesmo ranking de itens, mas só do mês
+/* "Por que o Net do mês está tão negativo?" — mesmo ranking de itens, mas só do mês
    selecionado (padrão: o mês mais recente com movimento nos dados importados). */
 function irRenderNet410ItensMesSection(d){
   const meses = d.porMes||[];
@@ -4373,23 +4373,23 @@ function irRenderNet410ItensMesSection(d){
       <div></div>
     </div>
     <div class="bi-grid-2">
-      ${irRenderNet410ItensPanel(m.topItensPositivos, false, 'Soma do valor em '+mesLabel+', só motivos considerados pro NET.')}
-      ${irRenderNet410ItensPanel(m.topItensNegativos, true, 'Soma do valor em '+mesLabel+', só motivos considerados pro NET.')}
+      ${irRenderNet410ItensPanel(m.topItensPositivos, false, 'Soma do valor em '+mesLabel+', só motivos considerados pro Net.')}
+      ${irRenderNet410ItensPanel(m.topItensNegativos, true, 'Soma do valor em '+mesLabel+', só motivos considerados pro Net.')}
     </div>
   `;
 }
 /* ============================================================
    GESTÃO DO CICLO
    ============================================================ */
-/* Aba "NET" — reconstruída a pedido do usuário. Independente do ciclo rotativo
+/* Aba "Net" — reconstruída a pedido do usuário. Independente do ciclo rotativo
    (QRY410 é ano-a-ano, não por ciclo — por isso não tem filtro de Ciclo, só
-   Ano/Mês). irRenderNetDistorcaoPanel (auditoria "por que o NET está
+   Ano/Mês). irRenderNetDistorcaoPanel (auditoria "por que o Net está
    distorcido") continua definida mais abaixo, só não é mais chamada daqui. */
 function irRenderGestaoCiclo(){
   const anos = IR.net410Anos||[];
   if(!anos.length){
     return `<div class="panel">
-      <h3>NET</h3>
+      <h3>Net</h3>
       <p class="field-hint">Nenhuma QRY410 processada ainda — importe na aba <a href="#" onclick="irSwitchTab('importacao');return false;">Importação</a>.</p>
     </div>`;
   }
@@ -4403,16 +4403,16 @@ function irRenderGestaoCiclo(){
   const netMensalRows = meses.map(m=>({mes:m.mes, net:m.net, label: IR_MES_NOMES_ABREV[parseInt(m.mes.slice(5,7),10)-1]}));
   const netMensalTotal = netMensalRows.reduce((s,r)=>s+r.net,0);
   const netMensalRowsComTotal = netMensalRows.length ? [...netMensalRows, {mes:'total', net:netMensalTotal, label:'Total'}] : netMensalRows;
-  // Top 10 itens que mais impactam o NET no mês selecionado (positivo/negativo).
+  // Top 10 itens que mais impactam o Net no mês selecionado (positivo/negativo).
   const topPos = ((mObj && mObj.topItensPositivos) || []).slice(0, 10);
   const topNeg = ((mObj && mObj.topItensNegativos) || []).slice(0, 10);
   // Base processada antes da regra "só Lógica 301/302" não tem o contador —
-  // o NET dela ainda soma todas as lógicas até a QRY410 ser reimportada.
+  // o Net dela ainda soma todas as lógicas até a QRY410 ser reimportada.
   const avisoLogica = d && d.linhasExcluidasLogica===undefined
-    ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>Reimporte a QRY410</strong> pra aplicar a regra nova: o NET passa a somar só as Lógicas 301 e 302. Os números abaixo ainda são da regra antiga (todas as lógicas).</p></div>`
-    : (d && !d.temColunaLogica ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>A QRY410 importada não tem a coluna Lógica</strong> — não deu pra filtrar só 301/302; o NET abaixo soma todas as lógicas.</p></div>` : '');
+    ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>Reimporte a QRY410</strong> pra aplicar a regra nova: o Net passa a somar só as Lógicas 301 e 302. Os números abaixo ainda são da regra antiga (todas as lógicas).</p></div>`
+    : (d && !d.temColunaLogica ? `<div class="panel" style="border-left:4px solid var(--orange);"><p class="field-hint" style="margin:0;"><strong>A QRY410 importada não tem a coluna Lógica</strong> — não deu pra filtrar só 301/302; o Net abaixo soma todas as lógicas.</p></div>` : '');
   // Lançamentos 301/302 que a leitura não conseguiu encaixar direito — antes
-  // sumiam sem aviso e o NET não batia com a dinâmica da 410.
+  // sumiam sem aviso e o Net não batia com a dinâmica da 410.
   const exemplosDiag = d ? [
     ...(d.exemplosSentidoInferido||[]).map(x=>({...x, motivo:'Sentido não reconhecido — usado o sinal do Vl.Mov.'})),
     ...(d.exemplosSemData||[]).map(x=>({...x, motivo:'Dt.Mov. vazia ou ilegível — fora de todos os meses'}))
@@ -4428,22 +4428,22 @@ function irRenderGestaoCiclo(){
   return `${avisoLogica}${avisoDiag}
     <div class="bi-grid-2">
       ${netMensalRows.length ? `<div class="panel">
-        <h3>NET Mensal em Colunas — ${d.ano}</h3>
+        <h3>Net Mensal em Colunas — ${d.ano}</h3>
         <p class="panel-sub">Ganho/perda líquido dos ajustes do CD (só Lógica 301/302), mês a mês, com o total do ano na última coluna. Independente do ciclo rotativo — filtre Ano/Mês no topo da tela.</p>
         ${irBuildColunasComBaseZeroSvg(netMensalRowsComTotal, {campo:'net', fmt:irFmtMoneyCompact, xLabel:r=>r.label, corPos:'#001A72', corNeg:'#C0392B', W:620, H:260})}
-      </div>` : `<div class="panel"><h3>NET Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
+      </div>` : `<div class="panel"><h3>Net Mensal em Colunas</h3><p class="field-hint">Sem movimentos no ano selecionado.</p></div>`}
       ${irRenderNet410PorObsMesTable(d)}
     </div>
     ${irRenderNet410DetalheLogicaPanel(d)}
-    <h3 style="margin:20px 0 -6px;">Itens que mais impactam o NET — ${irEsc(mesLabel)}</h3>
+    <h3 style="margin:20px 0 -6px;">Itens que mais impactam o Net — ${irEsc(mesLabel)}</h3>
     <div class="bi-grid-2">
-      ${irRenderNet410ItensPanel(topPos, false, 'Os 10 itens que mais aumentaram o NET em '+mesLabel+', só motivos considerados pro NET.')}
-      ${irRenderNet410ItensPanel(topNeg, true, 'Os 10 itens que mais reduziram o NET em '+mesLabel+', só motivos considerados pro NET.')}
+      ${irRenderNet410ItensPanel(topPos, false, 'Os 10 itens que mais aumentaram o Net em '+mesLabel+', só motivos considerados pro Net.')}
+      ${irRenderNet410ItensPanel(topNeg, true, 'Os 10 itens que mais reduziram o Net em '+mesLabel+', só motivos considerados pro Net.')}
     </div>
   `;
 }
-// Tabela NET Entrada/Saída por Departamento (coluna "Nome Depto" da QRY410) — mesmo
-// padrão da tabela por Observação: só motivo considerado pro NET, mês selecionado
+// Tabela Net Entrada/Saída por Departamento (coluna "Nome Depto" da QRY410) — mesmo
+// padrão da tabela por Observação: só motivo considerado pro Net, mês selecionado
 // acima, linhas em ordem alfabética pra ficar estável entre meses.
 function irRenderNet410PorDeptoMesTable(d){
   const mes = IR.net410MesSel;
@@ -4457,10 +4457,10 @@ function irRenderNet410PorDeptoMesTable(d){
   const mesLabel = mObj ? (IR_MES_NOMES[parseInt(mes.slice(5,7),10)-1]+'/'+mes.slice(0,4)) : '—';
   return `
     <div class="panel">
-      <h3>NET por Departamento — ${irEsc(mesLabel)}</h3>
-      <p class="panel-sub">Só observações com Considerar NET = SIM. Respeita o mês selecionado acima.</p>
+      <h3>Net por Departamento — ${irEsc(mesLabel)}</h3>
+      <p class="panel-sub">Só observações com Considerar Net = SIM. Respeita o mês selecionado acima.</p>
       <div class="table-wrap"><table class="table-wide">
-        <thead><tr><th>Depto</th><th>Saída</th><th>Entrada</th><th>NET</th></tr></thead>
+        <thead><tr><th>Depto</th><th>Saída</th><th>Entrada</th><th>Net</th></tr></thead>
         <tbody>${linhas.length ? linhas.map(o=>`<tr>
           <td>${irEsc(o.id)}</td>
           <td class="mono" style="color:var(--danger);">${o.saida?irFmtMoney(o.saida):'—'}</td>
@@ -5857,7 +5857,7 @@ async function irAdicionarNet410Padrao(){
   await irSaveNet410PadraoIgnorado(texto);
   IR.net410Padroes = await irGetNet410PadroesIgnoradosAll();
   if(input) input.value = '';
-  irShowToast(`Itens com "${texto}" na Observação WMS não vão mais aparecer na análise do NET.`);
+  irShowToast(`Itens com "${texto}" na Observação WMS não vão mais aparecer na análise do Net.`);
   irRenderView();
 }
 async function irRemoverNet410PadraoUI(id){
@@ -5913,11 +5913,11 @@ function irRenderNetTopLists(comCobertura){
     ${bloco('Por Quantidade (peças)', 'saldoQtd', irFmtInt)}
   </div>`;
 }
-// "Por que o NET está distorcido?" — a 410 acumula TODOS os ajustes do CD (o
-// Inventário Rotativo/AIR é só um dos motivos), então quando o NET do mês está
+// "Por que o Net está distorcido?" — a 410 acumula TODOS os ajustes do CD (o
+// Inventário Rotativo/AIR é só um dos motivos), então quando o Net do mês está
 // estranhamente alto ou baixo, o auditor precisa saber rápido quais itens específicos
 // explicam a maior parte do número — não só uma lista de "top itens" arbitrária, mas
-// itens suficientes pra cobrir a maior parte do NET, com local e quantidade pra ir
+// itens suficientes pra cobrir a maior parte do Net, com local e quantidade pra ir
 // direto validar fisicamente.
 function irRenderNetDistorcaoPanel(){
   if(!IR.net410Anos.length){
@@ -5946,13 +5946,13 @@ function irRenderNetDistorcaoPanel(){
   const padroes = IR.net410Padroes||[];
 
   // Junta os itens positivos e negativos do mês, ordena por |saldo| — são os que
-  // mais pesam na distorção do NET, seja puxando pra cima ou pra baixo.
+  // mais pesam na distorção do Net, seja puxando pra cima ou pra baixo.
   const todosOrdenados = [...(m.topItensPositivos||[]), ...(m.topItensNegativos||[])]
     .filter(i=>!ignoradosSet.has(i.item) && !irItemTemPadraoIgnorado(i, padroes))
     .sort((a,b)=>Math.abs(b.saldoValor)-Math.abs(a.saldoValor));
   // Cobertura acumulada usa a MOVIMENTAÇÃO BRUTA (soma de |saldo| de todos os itens),
-  // não o NET do mês — quando dois itens grandes se cancelam (ex.: +19.452 de um lado,
-  // -19.452 do outro, sobrando quase nada de NET), usar o NET pequeno como base faria
+  // não o Net do mês — quando dois itens grandes se cancelam (ex.: +19.452 de um lado,
+  // -19.452 do outro, sobrando quase nada de Net), usar o Net pequeno como base faria
   // a % de cada item explodir pra bem além de 100%, o que não significa nada. A soma
   // bruta sempre vai de 0% a 100% de forma sensata.
   const totalMovimentoBruto = todosOrdenados.reduce((s,i)=>s+Math.abs(i.saldoValor), 0);
@@ -5967,7 +5967,7 @@ function irRenderNetDistorcaoPanel(){
   // os top N itens do período que já está na tela.
   IR._netComCoberturaAtual = comCobertura;
   IR._netMesLabelAtual = mesLabel;
-  // Cancelamento forte = a movimentação bruta é bem maior que o NET final, ou seja,
+  // Cancelamento forte = a movimentação bruta é bem maior que o Net final, ou seja,
   // ganhos e perdas grandes quase se anulam — vale alertar, porque é o padrão clássico
   // de item com contagem trocada (ex.: duas variantes de cor do mesmo modelo).
   const cancelamentoForte = m.netAbs>0 && totalMovimentoBruto >= m.netAbs*3;
@@ -6005,9 +6005,9 @@ function irRenderNetDistorcaoPanel(){
     const ehAIR = motivoTop && motivoTop.id==='AIR';
     const local = localMaisDivergente(i.item);
     const outrosLocais = local ? (IR.divergencias||[]).filter(d=>d.item===i.item && d.diferenca!==0).length - 1 : 0;
-    // Compensado no ano = o mês pesa no NET mas ao longo do ano esse item se anula
+    // Compensado no ano = o mês pesa no Net mas ao longo do ano esse item se anula
     // (ou quase) — ganho de um mês/ciclo cobrindo perda de outro. É essa comparação
-    // que permite justificar um NET mensal alto sem estar "sujo".
+    // que permite justificar um Net mensal alto sem estar "sujo".
     const compensado = i.saldoAno!==undefined && Math.abs(i.saldoValor)>0 && Math.abs(i.saldoAno) < Math.abs(i.saldoValor)*0.3;
     const uid = 'ir-mov-'+irEsc(i.item)+'-'+Math.random().toString(36).slice(2,7);
     const movs = i.movimentos||[];
@@ -6030,10 +6030,10 @@ function irRenderNetDistorcaoPanel(){
   };
 
   const periodoCurto = IR.divNetDiaSel ? 'dia' : 'mês';
-  const thead = `<thead><tr><th>Item</th><th>Descrição</th><th>Ganhos no ${periodoCurto}</th><th>Saldo no ${periodoCurto}</th><th>Saldo no ano</th><th>% do NET</th><th>% Acum. movimentação</th><th>Motivo principal</th><th>Local mais divergente (ciclo atual)</th><th>Ação sugerida</th><th>Evidência</th><th></th></tr></thead>`;
+  const thead = `<thead><tr><th>Item</th><th>Descrição</th><th>Ganhos no ${periodoCurto}</th><th>Saldo no ${periodoCurto}</th><th>Saldo no ano</th><th>% do Net</th><th>% Acum. movimentação</th><th>Motivo principal</th><th>Local mais divergente (ciclo atual)</th><th>Ação sugerida</th><th>Evidência</th><th></th></tr></thead>`;
   let tabela;
   if(!comCobertura.length){
-    tabela = `<p class="field-hint">Nenhum item com saldo válido pro NET nesse ${periodoCurto==='dia'?'dia':'mês'}.</p>`;
+    tabela = `<p class="field-hint">Nenhum item com saldo válido pro Net nesse ${periodoCurto==='dia'?'dia':'mês'}.</p>`;
   } else {
     const uid = 'ir-net-resto-'+Math.random().toString(36).slice(2,9);
     const coberturaVisivel = visiveis.length ? irFmtPct(visiveis[visiveis.length-1].pctAcumulado) : '0%';
@@ -6056,7 +6056,7 @@ function irRenderNetDistorcaoPanel(){
     </div>
     ${IR.netAuditoriaGerada ? irRenderAuditoriaNetGerada() : ''}
     ${dadosDesatualizados ? `<p class="field-hint" style="color:var(--danger);margin-bottom:12px;">⚠️ Alguns dados desse ano foram processados antes de Ganhos, Saldo no Ano e Quantidade existirem nessa análise — aparecem como "—" abaixo. Reimporte a QRY410 na aba <a href="#" onclick="irSwitchTab('importacao');return false;">Importação</a> pra atualizar.</p>` : ''}
-    ${cancelamentoForte ? `<p class="field-hint" style="color:var(--orange);margin-bottom:12px;">⚠️ A movimentação bruta de ${irEsc(mesLabel)} (${irFmtMoney(totalMovimentoBruto)}) é bem maior que o NET final (${irFmtMoney(m.netAbs)}) — sinal de que ganhos e perdas grandes estão se cancelando. Vale checar se não é troca de contagem entre itens parecidos (ex.: mesma peça em cores/variações diferentes).</p>` : ''}
+    ${cancelamentoForte ? `<p class="field-hint" style="color:var(--orange);margin-bottom:12px;">⚠️ A movimentação bruta de ${irEsc(mesLabel)} (${irFmtMoney(totalMovimentoBruto)}) é bem maior que o Net final (${irFmtMoney(m.netAbs)}) — sinal de que ganhos e perdas grandes estão se cancelando. Vale checar se não é troca de contagem entre itens parecidos (ex.: mesma peça em cores/variações diferentes).</p>` : ''}
     ${ignoradosSet.size ? `<p class="field-hint" style="margin-bottom:12px;">${ignoradosSet.size} ${ignoradosSet.size===1?'item ignorado não aparece':'itens ignorados não aparecem'} nessa análise (motivo já conhecido) — <a href="#" onclick="irSwitchTab('configuracoes');return false;">gerenciar em Configurações</a>.</p>` : ''}
     ${padroes.length ? `<p class="field-hint" style="margin-bottom:12px;">Itens com "${padroes.map(p=>irEsc(p.padrao)).join('", "')}" na Observação WMS não aparecem nessa análise — <a href="#" onclick="irSwitchTab('configuracoes');return false;">gerenciar em Configurações</a>.</p>` : ''}
     <div class="two-col" style="max-width:620px;margin-bottom:14px;grid-template-columns:1fr 1fr 1fr;">
@@ -6072,19 +6072,19 @@ function irRenderNetDistorcaoPanel(){
       </select></div>
     </div>
     <div class="kpi-grid">
-      <div class="kpi-card ${m.net>=0?'good':'bad'}"><div class="num mono">${irFmtMoney(m.net)}</div><div class="label">NET de ${irEsc(mesLabel)}</div></div>
+      <div class="kpi-card ${m.net>=0?'good':'bad'}"><div class="num mono">${irFmtMoney(m.net)}</div><div class="label">Net de ${irEsc(mesLabel)}</div></div>
       <div class="kpi-card orange"><div class="num mono">${irFmtMoney(m.netAIR)}</div><div class="label">Vindo do Inventário (AIR)</div></div>
       <div class="kpi-card"><div class="num mono">${irFmtMoney(m.netOutros)}</div><div class="label">Vindo de outros motivos</div></div>
-      <div class="kpi-card"><div class="num mono">${irFmtPct(pctAIR)}</div><div class="label">% do NET vindo do inventário</div></div>
+      <div class="kpi-card"><div class="num mono">${irFmtPct(pctAIR)}</div><div class="label">% do Net vindo do inventário</div></div>
     </div>
     ${irRenderNetTopLists(comCobertura)}
     ${tabela}
   </div>`;
 }
 /* ============================================================
-   DIVERGÊNCIAS — ofensores do NET
+   DIVERGÊNCIAS — ofensores do Net
 
-   A tela responde uma coisa só: o NET do período está em X; quais itens
+   A tela responde uma coisa só: o Net do período está em X; quais itens
    causaram isso. Uma linha por ITEM.
 
    Um item só é OFENSOR quando a perda (ou a sobra) sobrevive ao ano. Perder
@@ -6096,8 +6096,8 @@ function irRenderNetDistorcaoPanel(){
    gera a auditoria e imprime. A auditoria lista os locais onde o item TEM
    SALDO hoje (QRY0390) — é onde ele vai conferir.
    ============================================================ */
-const IR_DIV_CORTE_PADRAO = 1000;   // |NET R$| mínimo para o item ser ofensor
-const IR_DIV_CORTE_QTD_PADRAO = 10; // |NET peças| mínimo quando o corte é por quantidade
+const IR_DIV_CORTE_PADRAO = 1000;   // |Net R$| mínimo para o item ser ofensor
+const IR_DIV_CORTE_QTD_PADRAO = 10; // |Net peças| mínimo quando o corte é por quantidade
 // Corte vigente e o campo do item ao qual ele se aplica. Trocar a base troca as
 // duas coisas de uma vez: o que é ofensor e o que a tabela ordena por padrão.
 function irDivBase(){
@@ -6422,8 +6422,8 @@ function irDivAgruparPorItem(divs){
   }
   return map;
 }
-/* Núcleo: NET do escopo + NET do ano, e a classificação em ofensor/compensado. */
-/* Motivo que não conta pro NET (ANF de nota fiscal, BAI de insumo, QBR de quebra,
+/* Núcleo: Net do escopo + Net do ano, e a classificação em ofensor/compensado. */
+/* Motivo que não conta pro Net (ANF de nota fiscal, BAI de insumo, QBR de quebra,
    EPI, INP de pallets) não é divergência de estoque e não pode aparecer na aba. O
    worker já barra na importação, mas a checagem também roda aqui: ciclo processado
    antes dessa regra continua no banco com essas linhas, e reprocessar é decisão do
@@ -6433,7 +6433,7 @@ function irDivMotivoConta(d){
   const m = (IR.net410Legenda||[]).find(x=>x.id===d.motivo);
   return !m || m.considerarNet !== false;
 }
-// AIR é o ajuste do próprio ciclo rotativo; qualquer outro motivo que conte pro NET
+// AIR é o ajuste do próprio ciclo rotativo; qualquer outro motivo que conte pro Net
 // (ADE, AIC...) é inventário de outro programa, não deste ciclo — por isso as duas
 // coisas não podem ficar misturadas na mesma tabela/cartão/auditoria.
 function irDivEhAIR(d){
@@ -6482,7 +6482,7 @@ function irDivCalcItens(){
     // Relevância é pelo ABSOLUTO, não pelo saldo líquido: um item que perde 2.688
     // num local e "acha" 2.688 em outro, no MESMO dia, fecha líquido zero e some da
     // tela inteira — mas os dois erros de contagem são reais e precisam aparecer.
-    // Pedido explícito do usuário: "se o NET do item zera, ele deve constar, mas
+    // Pedido explícito do usuário: "se o Net do item zera, ele deve constar, mas
     // posso retirar quando não quiser ver" — por isso continua visível (como
     // compensado), nunca mais invisível.
     const relevante = noPeriodoAbs >= corte;
@@ -6548,11 +6548,11 @@ function irDivCalcItens(){
     corte
   };
 }
-/* NET do mês corrente, sempre — independe do período escolhido no filtro. É o
+/* Net do mês corrente, sempre — independe do período escolhido no filtro. É o
    número que o auditor precisa ver ao abrir a tela, mesmo olhando outro recorte. */
 function irDivNetMesVigente(){
   const mes = new Date().toISOString().slice(0,7);
-  // O NET do mês é o do livro fiscal — mesmo número do gráfico NET Mensal. Sai da
+  // O Net do mês é o do livro fiscal — mesmo número do gráfico Net Mensal. Sai da
   // QRY410 direto, não da contagem: são bases diferentes e não fecham entre si.
   const dados = (IR.div410Cache||{})[mes.slice(0,4)];
   const linha = ((dados||{}).porMes || []).find(m=>m.mes===mes);
@@ -7003,8 +7003,8 @@ async function irDivExportarHojeEEnviar(){
 }
 
 /* ---------- RENDER ---------- */
-// Alterna a tela inteira (cartões NET, tabela, similares, auditoria) entre só o
-// ajuste do ciclo rotativo (AIR) e os demais motivos que contam pro NET. É a
+// Alterna a tela inteira (cartões Net, tabela, similares, auditoria) entre só o
+// ajuste do ciclo rotativo (AIR) e os demais motivos que contam pro Net. É a
 // primeira decisão da tela porque muda o que TODO o resto mostra.
 function irRenderDivTipoToggle(){
   const t = IR.divTipo||'inventario';
@@ -7078,7 +7078,7 @@ function irRenderDivResumo(c){
   const mv = irDivNetMesVigente();
   const ind = irDivIndevido(c);
   return `<div class="panel ofe-resumo">
-    ${cell('NET de '+irMesLabel(mv.mes), (mv.valor>0?'+':'')+irFmtMoney(mv.valor), mv.valor<0?'neg':'pos', irFmtInt(mv.qtd)+' peças · '+(mv.fonte==='410'?'QRY410':'contagem'))}
+    ${cell('Net de '+irMesLabel(mv.mes), (mv.valor>0?'+':'')+irFmtMoney(mv.valor), mv.valor<0?'neg':'pos', irFmtInt(mv.qtd)+' peças · '+(mv.fonte==='410'?'QRY410':'contagem'))}
     ${cell('Ganho indevido', '+'+irFmtMoney(ind.ganho), 'pos', irFmtInt(ind.nGanho)+(ind.nGanho===1?' item':' itens')+' · +'+irFmtInt(ind.ganhoQtd)+' peças')}
     ${cell('Perda indevida', irFmtMoney(ind.perda), 'neg', irFmtInt(ind.nPerda)+(ind.nPerda===1?' item':' itens')+' · '+irFmtInt(ind.perdaQtd)+' peças')}
     ${cell('Divergências no período', irFmtInt(c.totalLinhas), '', irFmtInt(c.totalItens)+' itens · '+irFmtInt(c.totalLocais)+' locais')}
@@ -7115,8 +7115,8 @@ const IR_OFE_COLS = [
   {key:'descricao',   lbl:'Descrição'},
   {key:'absValor',    lbl:'Valor R$ ÷ net',   num:true},
   {key:'absQtd',      lbl:'Peças ÷ net',      num:true},
-  {key:'netValorAno', lbl:'NET R$ (ano)',     num:true, ano:true},
-  {key:'netQtdAno',   lbl:'NET peças (ano)',  num:true, ano:true},
+  {key:'netValorAno', lbl:'Net R$ (ano)',     num:true, ano:true},
+  {key:'netQtdAno',   lbl:'Net peças (ano)',  num:true, ano:true},
   {key:'nLocais',     lbl:'Locais',           num:true},
   {key:'situacao',    lbl:'Situação'}
 ];
@@ -7132,10 +7132,10 @@ function irRenderDivTabela(c){
   });
   const o = IR.divOrdem || {col:'absValor', dir:'desc'};
   const seta = k => o.col===k ? (o.dir==='desc'?' ▾':' ▴') : '';
-  // Absoluto é o número grande (é ele que diz o tamanho do erro); o NET do ANO
+  // Absoluto é o número grande (é ele que diz o tamanho do erro); o Net do ANO
   // some pequeno do lado só pra comparar — quando os dois batem, o item é um
-  // ofensor normal; quando o NET do ano é bem menor que o absoluto, foi aquele
-  // NET que escondia o problema até agora (é o caso "compensado"). Sempre o do
+  // ofensor normal; quando o Net do ano é bem menor que o absoluto, foi aquele
+  // Net que escondia o problema até agora (é o caso "compensado"). Sempre o do
   // ano, nunca o do período filtrado: filtrar por mês não pode fazer um item
   // compensado no ano parecer um ofensor novo só porque um mês sozinho pesou.
   const numAbs = (abs, net, fmt) => `<td class="mono">${fmt(abs)}<span class="ofe-net-sub ${net<0?'neg':(net>0?'pos':'')}">net ${net>0?'+':''}${fmt(net)}</span></td>`;
@@ -7972,7 +7972,7 @@ function irRenderExportar(){
   return `
     <div class="panel">
       <h3>Exportar base completa</h3>
-      <p class="panel-sub">Gera arquivos Excel (.xlsx) com TUDO que está salvo no navegador, uma aba por tabela, separados pra não estourar a memória: 1) documentação + indicadores, 2) um por ciclo, 3) um por ano da NET, 4) bases. Conteúdo: regras e lógicas, catálogo de indicadores, todo ciclo gravado (base congelada, contagens, divergências), os indicadores por ciclo (resumo, por rua, por setor, por log), a NET (QRY410) e as bases independentes de ciclo (estoque atual, EAN, info de local).</p>
+      <p class="panel-sub">Gera arquivos Excel (.xlsx) com TUDO que está salvo no navegador, uma aba por tabela, separados pra não estourar a memória: 1) documentação + indicadores, 2) um por ciclo, 3) um por ano da Net, 4) bases. Conteúdo: regras e lógicas, catálogo de indicadores, todo ciclo gravado (base congelada, contagens, divergências), os indicadores por ciclo (resumo, por rua, por setor, por log), a Net (QRY410) e as bases independentes de ciclo (estoque atual, EAN, info de local).</p>
       <p class="field-hint" style="margin-bottom:12px;">Em base grande pode demorar um pouco — não feche a aba enquanto gera. Se o navegador perguntar, permita o download de vários arquivos.</p>
       <div class="form-actions">
         <button class="btn btn-primary" ${IR._exportandoTudo?'disabled':''} onclick="irExportarTudoXlsx()">${IR._exportandoTudo?'Gerando...':'📥 Exportar tudo (.xlsx)'}</button>
@@ -8307,7 +8307,7 @@ function irRenderConfiguracoes(){
   ${irRenderNet410PadroesConfig()}`;
 }
 /* Ciclos gravados na base, com exclusão. Serve pra tirar um ciclo importado por
-   engano — enquanto ele existe, entra nas visões por ano e distorce o NET. */
+   engano — enquanto ele existe, entra nas visões por ano e distorce o Net. */
 function irRenderCiclosConfig(){
   const ciclos = (IR.ciclos||[]).slice().sort((a,b)=>String(b.dataAbertura||'').localeCompare(String(a.dataAbertura||'')));
   if(!ciclos.length) return '';
@@ -8389,7 +8389,7 @@ async function irSalvarProdMetaConfig(){
   irRenderView();
 }
 // Padrões de Observação WMS (ex.: "SALDO") que escondem qualquer item que os carregue
-// da análise "Por que o NET está distorcido" — diferente do ignorado item por item,
+// da análise "Por que o Net está distorcido" — diferente do ignorado item por item,
 // vale pra qualquer item futuro que carregue esse mesmo tipo de ajuste.
 function irRenderNet410PadroesConfig(){
   const lista = (IR.net410Padroes||[]).slice().sort((a,b)=>(a.criadoEm||'').localeCompare(b.criadoEm||''));
@@ -8399,8 +8399,8 @@ function irRenderNet410PadroesConfig(){
     <td><button class="btn-link" onclick="irRemoverNet410PadraoUI('${irEsc(p.id)}')">Remover</button></td>
   </tr>`;
   return `<div class="panel">
-    <h3>Padrões de Observação ignorados na análise do NET</h3>
-    <p class="field-hint" style="margin-bottom:12px;">Qualquer item com esse trecho na Observação WMS de algum movimento fica fora da análise "Por que o NET está distorcido", em qualquer mês — útil pra tipos de ajuste recorrentes (ex.: "SALDO INCLUIDO INDEVIDAMENTE...") que aparecem em itens diferentes com o tempo.</p>
+    <h3>Padrões de Observação ignorados na análise do Net</h3>
+    <p class="field-hint" style="margin-bottom:12px;">Qualquer item com esse trecho na Observação WMS de algum movimento fica fora da análise "Por que o Net está distorcido", em qualquer mês — útil pra tipos de ajuste recorrentes (ex.: "SALDO INCLUIDO INDEVIDAMENTE...") que aparecem em itens diferentes com o tempo.</p>
     <div class="form-actions" style="margin-bottom:12px;">
       <input type="text" id="ir-net410-padrao-novo" placeholder="Ex.: SALDO" style="max-width:280px;">
       <button class="btn btn-secondary" onclick="irAdicionarNet410Padrao()">Adicionar padrão</button>
@@ -8411,7 +8411,7 @@ function irRenderNet410PadroesConfig(){
     </table></div>` : `<p class="field-hint">Nenhum padrão cadastrado.</p>`}
   </div>`;
 }
-// Itens ignorados na análise "Por que o NET está distorcido" — marcados manualmente
+// Itens ignorados na análise "Por que o Net está distorcido" — marcados manualmente
 // no painel de Divergências quando o motivo já é conhecido. Aqui dá pra ver a lista
 // completa e trazer o item de volta pra análise a qualquer momento.
 function irRenderNet410IgnoradosConfig(){
@@ -8423,8 +8423,8 @@ function irRenderNet410IgnoradosConfig(){
     <td><button class="btn-link" onclick="irRestaurarNet410Item('${irEsc(i.item)}')">Restaurar</button></td>
   </tr>`;
   return `<div class="panel">
-    <h3>Itens ignorados na análise do NET</h3>
-    <p class="field-hint" style="margin-bottom:12px;">Itens marcados como "já sei o motivo" no painel "Por que o NET está distorcido" — ficam fora dos rankings e da cobertura até você restaurar aqui.</p>
+    <h3>Itens ignorados na análise do Net</h3>
+    <p class="field-hint" style="margin-bottom:12px;">Itens marcados como "já sei o motivo" no painel "Por que o Net está distorcido" — ficam fora dos rankings e da cobertura até você restaurar aqui.</p>
     ${lista.length ? `<div class="table-wrap"><table>
       <thead><tr><th>Item</th><th>Descrição</th><th>Ignorado em</th><th></th></tr></thead>
       <tbody>${lista.map(row).join('')}</tbody>
@@ -8438,7 +8438,7 @@ async function irRestaurarNet410Item(item){
 }
 // Legenda de motivos da 410 (AIR/ADE/LOJA/...) — editável aqui em vez de fixa no
 // código, pra dar conta de motivo novo ou mudança de classificação sem precisar
-// mexer em código. "Considera no NET" só vale a partir do próximo processamento da
+// mexer em código. "Considera no Net" só vale a partir do próximo processamento da
 // QRY410 (é usado durante a importação); o nome/legenda já atualiza na hora nos
 // painéis que buscam ao vivo (ex.: "Motivo principal" em Divergências).
 function irRenderNet410LegendaConfig(){
@@ -8451,9 +8451,9 @@ function irRenderNet410LegendaConfig(){
   </tr>`;
   return `<div class="panel">
     <h3>Legenda de motivos da QRY410</h3>
-    <p class="field-hint" style="margin-bottom:12px;">Mapeia o código no início da "Observação WMS" (ex.: AIR, ADE, LOJA) pro nome exibido nos painéis de NET, e se esse motivo entra no cálculo do NET. Código não listado aqui conta como "considera no NET" por padrão. "Considera no NET" só vale a partir da próxima vez que reimportar a QRY410.</p>
+    <p class="field-hint" style="margin-bottom:12px;">Mapeia o código no início da "Observação WMS" (ex.: AIR, ADE, LOJA) pro nome exibido nos painéis de Net, e se esse motivo entra no cálculo do Net. Código não listado aqui conta como "considera no Net" por padrão. "Considera no Net" só vale a partir da próxima vez que reimportar a QRY410.</p>
     <div class="table-wrap"><table>
-      <thead><tr><th>Código</th><th>Legenda</th><th style="text-align:center;">Considera no NET</th><th></th></tr></thead>
+      <thead><tr><th>Código</th><th>Legenda</th><th style="text-align:center;">Considera no Net</th><th></th></tr></thead>
       <tbody>${lista.map(row).join('')}</tbody>
     </table></div>
     <div class="two-col" style="margin-top:14px;">

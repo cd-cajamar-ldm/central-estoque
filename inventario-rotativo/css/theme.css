@@ -1825,7 +1825,7 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .sidebar .sb-foto .brand-sub{ color:#DCE1F7; }
 .sidebar.collapsed .sb-foto{ height:auto; }
 .sidebar.collapsed .sb-foto-tit{ display:none; }
-.sb-foto + .brand-back{ margin-top:8px; }
+.sidebar-nav + .brand-back{ margin:6px 14px 6px; }
 /* Carrinho da logo maior dentro do selo laranja. */
 .brand-logo img{ width:86%; height:86%; }
 
