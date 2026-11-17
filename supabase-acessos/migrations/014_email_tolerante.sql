@@ -23,7 +23,7 @@ language sql
 immutable
 set search_path = pg_catalog
 as $$
-  select lower(regexp_replace(coalesce(p, ''), '[\s ​-‏‪-‮⁠-⁤﻿]', '', 'g'));
+  select lower(regexp_replace(coalesce(p, ''), '[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]', '', 'g'));
 $$;
 
 -- 2a. e-mails guardados, já limpos (sem tocar numa linha se a versão limpa já existir em outra pessoa)

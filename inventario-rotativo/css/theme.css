@@ -187,7 +187,9 @@ button{ font-family:inherit; cursor:pointer; }
 }
 .sidebar-toggle{ background:none; border:none; color:#fff; opacity:.7; padding:4px; margin-left:auto; }
 .sidebar-toggle:hover{ opacity:1; }
-.sidebar-nav{ flex:1; overflow-y:auto; padding:4px 14px 20px; }
+.sidebar-nav{ flex:1; overflow-y:auto; padding:4px 14px 20px; scrollbar-width:none; -ms-overflow-style:none; }
+.sidebar-nav::-webkit-scrollbar, .sidebar::-webkit-scrollbar{ display:none; width:0; height:0; }
+.sidebar{ scrollbar-width:none; -ms-overflow-style:none; }
 /* Pílula com fundo ao ativar, igual ao .sb-nav-item da Oficina LDM — antes era
    uma barra lateral colorida. */
 .nav-item{
@@ -244,7 +246,7 @@ button{ font-family:inherit; cursor:pointer; }
 /* Barra de filtros no estilo "slicer" de BI: cada filtro é uma caixinha com o
    rótulo em cima e o valor/seletor embaixo, agrupadas do lado direito do topbar —
    junta Ciclo (já existia como pill solto) e Mês (novo) no mesmo visual. */
-.topbar-filters{ display:flex; align-items:stretch; gap:10px; flex-shrink:0; align-self:center; }
+.topbar-filters{ display:flex; align-items:stretch; gap:10px; flex-shrink:0; align-self:center; margin-left:auto; }
 /* O display:flex acima ganha do [hidden] do navegador, que é regra de elemento —
    sem isto o hidden do JS não escondia nada. */
 .topbar-filters[hidden]{ display:none; }
@@ -1940,3 +1942,72 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .dx-secao-corpo>.panel{margin:0}
 [data-theme="dark"] .dx-secao{background:rgba(255,255,255,.03)}
 @media (max-width:700px){.dx-secao-h{height:96px;padding:0 18px}.dx-secao-h h2{font-size:28px}.dx-secao-corpo{padding:12px}}
+
+/* ===== Seção Produtividade — indicadores PX1–PX8 ===== */
+.dp-wrap{ display:flex; flex-direction:column; gap:18px; }
+.dp-wrap .panel{ margin:0; }
+.dp-panel .as-topo{ grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); }
+.dp-panel .as-kpi b{ font-size:20px; }
+.dp-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:18px; }
+.dp-rk{ display:grid; grid-template-columns:26px minmax(100px,160px) minmax(0,1fr) 96px 52px; gap:10px; align-items:center; font-size:13px; }
+.dp-rt-lin{ grid-template-columns:minmax(100px,160px) minmax(0,1fr) 120px 56px; }
+.dp-rk-bar{ position:relative; height:12px; background:var(--surface2); border-radius:999px; }
+.dp-rk-bar i{ position:absolute; left:0; top:0; bottom:0; border-radius:999px; background:#9AA3BF; }
+.dp-rk-bar i.ok{ background:var(--dx-local,#001A72); }
+.dp-rk-bar i.good{ background:var(--success); } .dp-rk-bar i.warn{ background:#E8A33D; } .dp-rk-bar i.bad{ background:var(--danger); }
+.dp-rk-bar em{ position:absolute; top:-4px; bottom:-4px; border-left:2px dashed var(--orange); }
+.as-pct.warn{ color:#C98A1E; }
+.dp-hm{ display:grid; gap:4px; overflow-x:auto; }
+.dp-hm-h{ font-size:11px; color:var(--ink-soft); text-align:center; }
+.dp-hm-d{ font-family:Poppins,Inter,system-ui,sans-serif; font-size:12px; font-weight:700; color:var(--dx-local,#001A72); display:flex; align-items:center; }
+.dp-hm-d.fds, .dp-eq-sem.fds{ color:var(--orange); }
+.dp-hm-c{ height:32px; border-radius:6px; background:var(--surface2); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; min-width:0; }
+.dp-tl{ display:grid; grid-template-columns:minmax(100px,170px) minmax(0,1fr) 60px 60px; gap:10px; align-items:center; font-size:13px; }
+.dp-tl-eixo{ margin-bottom:4px; }
+.dp-tl-horas{ position:relative; height:14px; }
+.dp-tl-horas span{ position:absolute; transform:translateX(-50%); font-size:10.5px; color:var(--ink-soft); }
+.dp-tl-trilho{ position:relative; height:24px; background:var(--surface2); border-radius:6px; overflow:hidden; }
+.dp-tl-trilho i{ position:absolute; top:4px; bottom:4px; background:var(--dx-local,#001A72); border-radius:3px; }
+.dp-rt-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:12px; }
+.dp-rt{ background:var(--surface2); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:4px; }
+.dp-rt-h{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12.5px; }
+.dp-rt-h b{ font-size:12px; } .dp-rt-h b.good{ color:var(--success); } .dp-rt-h b.bad{ color:var(--danger); }
+.dp-rt-v{ font-family:Poppins,Inter,system-ui,sans-serif; font-size:22px; font-weight:800; color:var(--ink); }
+.dp-rt-v small{ font-family:Inter,system-ui,sans-serif; font-size:11.5px; font-weight:600; color:var(--ink-soft); }
+.dp-sp{ width:100%; height:64px; display:block; }
+.dp-eq-wrap{ display:flex; gap:8px; }
+.dp-eq{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.dp-eq-pp{ font-size:11.5px; font-weight:700; white-space:nowrap; } .dp-eq-pp.good{ color:var(--success); } .dp-eq-pp.bad{ color:var(--danger); }
+.dp-eq-area{ height:170px; width:100%; display:flex; align-items:flex-end; justify-content:center; }
+.dp-eq-bar{ position:relative; width:58%; min-height:2px; background:linear-gradient(var(--dx-local,#001A72), color-mix(in srgb, var(--dx-local,#001A72) 18%, white)); border-radius:5px 5px 0 0; }
+.dp-eq-bar span{ position:absolute; top:-18px; left:50%; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--ink); white-space:nowrap; }
+.dp-eq-pes{ display:flex; flex-wrap:wrap; gap:3px; justify-content:center; max-width:70px; min-height:20px; }
+.dp-eq-pes i{ width:8px; height:8px; border-radius:50%; background:var(--dx-local,#001A72); }
+.dp-eq-pes small{ font-size:10px; color:var(--ink-soft); }
+.dp-eq-dia{ font-size:11px; color:var(--ink-soft); }
+.dp-eq-sem{ font-family:Poppins,Inter,system-ui,sans-serif; font-size:11.5px; font-weight:700; letter-spacing:.06em; color:var(--dx-local,#001A72); }
+.dp-pd-wrap{ display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:18px; align-items:end; }
+.dp-pd-pod{ display:flex; gap:12px; align-items:flex-end; }
+.dp-pd{ flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
+.dp-pd small{ font-size:11.5px; color:var(--ink-soft); }
+.dp-pd-av{ width:50px; height:50px; border-radius:50%; color:#fff; font-family:Poppins,Inter,system-ui,sans-serif; font-size:19px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+.dp-pd-deg{ width:100%; border-radius:10px 10px 0 0; color:#fff; font-family:Poppins,Inter,system-ui,sans-serif; font-size:34px; font-weight:800; display:flex; justify-content:center; padding-top:10px; box-sizing:border-box; }
+.dp-pd-lista{ background:var(--surface2); border-radius:12px; padding:4px; }
+.dp-pd-r{ display:flex; justify-content:space-between; gap:8px; padding:8px 10px; font-size:13px; border-bottom:1px solid var(--line); }
+.dp-pd-r:last-child{ border-bottom:0; }
+.dp-pd-r span b{ color:var(--ink-soft); margin-right:6px; }
+@media (max-width:1100px){ .dp-grid, .dp-pd-wrap{ grid-template-columns:1fr; } }
+
+/* Filtro de data da Produtividade no topo */
+.tb-datas{ display:flex; align-items:center; gap:4px; }
+.tb-datas span{ color:var(--ink-soft); font-size:12px; }
+.tb-datas input{ background:transparent; border:none; color:var(--orange); font-size:12.5px; font-weight:800; font-family:inherit; padding:0; margin:0; width:118px; cursor:pointer; color-scheme:light; }
+[data-theme="dark"] .tb-datas input{ color-scheme:dark; }
+.tb-datas input:focus{ outline:none; }
+/* Nada transborda nos painéis de produtividade */
+.dp-panel{ min-width:0; overflow:hidden; }
+.dp-eq-pp{ max-width:100%; overflow:hidden; text-overflow:ellipsis; font-size:11px; }
+.dp-eq-bar span{ font-size:11.5px; }
+.dp-pd small, .dp-pd b{ max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.dp-tl .as-qt, .dp-tl .as-pct, .dp-rk .as-qt, .dp-rk .as-pct{ white-space:nowrap; }
+.dp-pd .as-nome{ white-space:normal; overflow-wrap:anywhere; font-size:12.5px; line-height:1.2; }

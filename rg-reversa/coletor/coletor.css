@@ -3,7 +3,7 @@
   --success:#1F8A52; --danger:#C83812; --ink:#1D1F2A; --ink-soft:#6B7280; --line:#D5D8E0; --paper:#F4F5F7; --surface:#fff; --surface2:#EEF0F4; }
 *{ box-sizing:border-box; }
 html,body{ margin:0; height:100%; }
-body{ font-family:Inter,system-ui,sans-serif; background:var(--paper); color:var(--ink); font-size:15px; display:flex; flex-direction:column; min-height:100dvh; -webkit-tap-highlight-color:transparent; }
+body{ font-family:Inter,system-ui,sans-serif; background:var(--paper); color:var(--ink); font-size:15px; display:flex; flex-direction:column; min-height:calc(100dvh / var(--zoom, 1)); -webkit-tap-highlight-color:transparent; }
 button{ font-family:inherit; cursor:pointer; }
 
 .cl-top{ display:flex; align-items:center; gap:8px; padding:8px 10px; background:linear-gradient(115deg,#001A72,#0B1230); color:#fff; border-bottom:3px solid var(--orange); position:sticky; top:0; z-index:5; }
@@ -87,7 +87,7 @@ button{ font-family:inherit; cursor:pointer; }
   .cl-bezel-top{ display:flex; align-items:center; justify-content:center; gap:16px; height:30px; position:relative; }
   .cl-speaker{ width:80px; height:8px; border-radius:6px; background:repeating-linear-gradient(90deg,#050506 0 3px,#2A2C33 3px 6px); box-shadow:inset 0 1px 2px rgba(0,0,0,.8); }
   .cl-camera{ width:9px; height:9px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#3C4A7A,#05060A 70%); box-shadow:0 0 0 2px #1E2026; }
-  .cl-screen{ display:flex; flex-direction:column; position:relative; width:448px; height:max(480px, min(920px, calc(100vh - 124px))); min-height:0; background:var(--paper); border-radius:10px; overflow:hidden; transform:translateZ(0); box-shadow:0 0 0 3px #050506; }
+  .cl-screen{ display:flex; flex-direction:column; position:relative; width:448px; height:max(480px, min(920px, calc((100vh - 124px) / var(--zoom, 1)))); min-height:0; background:var(--paper); border-radius:10px; overflow:hidden; transform:translateZ(0); box-shadow:0 0 0 3px #050506; }
   .cl-status{ display:flex; justify-content:space-between; align-items:center; height:24px; padding:0 12px; background:#001A72; color:#fff; font:600 12px Inter,system-ui,sans-serif; flex:0 0 auto; }
   .cl-sicons{ display:flex; gap:7px; align-items:center; }
   .cl-wifi{ width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:10px solid #fff; border-radius:2px; opacity:.9; }
@@ -124,3 +124,9 @@ button{ font-family:inherit; cursor:pointer; }
 .cl-hit-top .cl-rel-n{ margin-left:auto; }
 .cl-hit-pend{ font-style:normal; font-size:10.5px; font-weight:800; color:#78350F; background:#FEF3C7; border:1px solid #F59E0B; border-radius:99px; padding:1px 8px; }
 .cl-pri:disabled{ background:#C9CCD6; }
+
+/* Zoom do coletor: só vale aqui (chave própria no aparelho), não mexe no zoom do dashboard nem da Central. */
+.cl-zoom{ position:fixed; right:12px; bottom:12px; z-index:60; display:flex; align-items:center; gap:2px; padding:3px; border-radius:999px; background:rgba(11,18,48,.88); border:1px solid rgba(255,255,255,.18); box-shadow:0 6px 18px rgba(0,0,0,.35); }
+.cl-zoom button{ width:34px; height:34px; border-radius:50%; border:0; background:rgba(255,255,255,.14); color:#fff; font-size:19px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; }
+.cl-zoom button:active{ background:var(--orange); }
+.cl-zoom span{ min-width:44px; text-align:center; font:700 12px 'SFMono-Regular',Consolas,monospace; color:#DCE1F7; }
