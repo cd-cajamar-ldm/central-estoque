@@ -222,6 +222,7 @@ async function irCarregarEssencial(){
     ]);
     IR.prioridadeConfig = prioridadeConfig; IR.prodMeta = prodMeta; IR.net410Legenda = net410Legenda;
     IR.net410Ignorados = net410Ignorados; IR.net410Padroes = net410Padroes; IR.ciclos = ciclos;
+    if(typeof irCarregarProdExcluidos==='function') await irCarregarProdExcluidos();
     let pCiclo = null;
     if(IR.ciclos.length){
       IR.cicloAtivo = IR.ciclos.find(c=>irCicloStatus(c)==='aberto') || irCicloMaisNovo(IR.ciclos) || IR.ciclos[0];
@@ -1159,7 +1160,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v295';
+const IR_APP_VERSION = 'v296';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1357,13 +1358,13 @@ const IR_ASSERT_MIN = 30; // contagens mínimas para entrar no ranking
 function irAssertividade(){
   const cid = (IR.cicloAtivo||{}).id;
   if(!cid || IR._cicloPesadoId !== cid) return null;
-  if(IR._assertCache && IR._assertCache.cid===cid && IR._assertCache.n===IR.contagens.length) return IR._assertCache.r;
+  if(IR._assertCache && IR._assertCache.cid===cid && IR._assertCache.n===IR.contagens.length && IR._assertCache.v===IR._prodExclVer) return IR._assertCache.r;
   const grupos = new Map(); // local|item -> Map(rodada -> {q, u})
   for(const c of IR.contagens||[]){
     if(!c.item) continue;
     const k = c.local+'|'+c.item;
     let g = grupos.get(k); if(!g){ g = new Map(); grupos.set(k, g); }
-    g.set(c.idConferencia, {q:c.qtFis||0, u:c.usuario||''});
+    g.set(c.idConferencia, {q:c.qtFis||0, u:c.usuario||'', d:irDiaDaContagem(c)});
   }
   const porUsuario = new Map();
   let julgadas = 0, acertos = 0, inconclusivos = 0;
@@ -1377,8 +1378,9 @@ function irAssertividade(){
     const confirmada = rodadas.some(r=>r!==ult && g.get(r).q===aceita);
     if(!confirmada){ inconclusivos++; continue; }
     for(const r of fisicas){
-      const {q, u} = g.get(r);
+      const {q, u, d} = g.get(r);
       if(!u) continue;
+      if(typeof irProdUsuarioConta==='function' && !irProdUsuarioConta(u, d)) continue; // quem não conta na produtividade
       const certo = q===aceita;
       const pu = porUsuario.get(u) || {usuario:u, contagens:0, acertos:0};
       pu.contagens++; if(certo) pu.acertos++;
@@ -1388,7 +1390,7 @@ function irAssertividade(){
   }
   const lista = Array.from(porUsuario.values()).map(p=>({...p, erros:p.contagens-p.acertos, pct:p.contagens?p.acertos/p.contagens:0}));
   const r = {lista, julgadas, acertos, inconclusivos, pct: julgadas?acertos/julgadas:null};
-  IR._assertCache = {cid, n:(IR.contagens||[]).length, r};
+  IR._assertCache = {cid, n:(IR.contagens||[]).length, v:IR._prodExclVer, r};
   return r;
 }
 function irRenderAssertividadePanel(){
@@ -2637,23 +2639,41 @@ function irHideDiaTooltip(){
   const tt = document.getElementById('irChartTooltip');
   if(tt){ tt.classList.add('hidden'); tt.classList.remove('lt-wrap','lt-wrap-big','ca-tip'); }
 }
+/* Ordenação por clique no título da coluna (tabelas simples). IR.tabOrdem[tabela] = {col, dir}. */
+function irOrdenarTab(tab, col){
+  IR.tabOrdem = IR.tabOrdem || {};
+  const o = IR.tabOrdem[tab];
+  IR.tabOrdem[tab] = (o && o.col===col) ? {col, dir:-o.dir} : {col, dir:-1};
+  irRenderView();
+}
+function irThOrd(tab, col, rot){
+  const o = (IR.tabOrdem||{})[tab];
+  const on = o && o.col===col;
+  return `<th class="th-ord${on?' on':''}" onclick="irOrdenarTab('${tab}','${col}')">${rot}<i>${on?(o.dir>0?'▲':'▼'):'↕'}</i></th>`;
+}
 function irRenderRuasMaisDivergentesPanel(ind){
-  const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>b.pecasDivergentes-a.pecasDivergentes);
-  if(!rows.length) return `<div class="panel"><h3>Ruas mais divergentes</h3><p class="field-hint">Nenhuma divergência registrada ainda.</p></div>`;
+  const base = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)');
+  if(!base.length) return `<div class="panel"><h3>Ruas mais divergentes</h3><p class="field-hint">Nenhuma divergência registrada ainda.</p></div>`;
   const meta = ind.meta;
-  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
+  const ordem = (IR.tabOrdem||{}).ruas || {col:'pecasDivergentes', dir:-1};
+  const val = (r, c)=> c==='pctContado' ? (r.locaisOrcados>0 ? r.locaisContados/r.locaisOrcados : 0) : (c==='chave' ? r.chave : (r[c]||0));
+  const rowsComPendentes = base.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)})).sort((a,b)=>{
+    const x = val(a, ordem.col), y = val(b, ordem.col);
+    const d = (typeof x==='string') ? String(x).localeCompare(String(y), 'pt-BR', {numeric:true}) : x-y;
+    return d*ordem.dir || (b.pecasDivergentes-a.pecasDivergentes);
+  });
+  const th = (c, r)=> irThOrd('ruas', c, r);
   return `<div class="panel">
     <h3>Ruas mais divergentes</h3>
-    <p class="panel-sub">Todas as ruas, ordenadas por peças divergentes (da maior para a menor).</p>
     <div class="table-wrap"><table class="table-grouped">
       <thead>
         <tr class="grupo"><th></th><th colspan="5">Locais</th><th colspan="2">Peças</th><th colspan="3">Valor</th><th colspan="3">Acurácias</th></tr>
         <tr class="cols">
-          <th>Rua</th>
-          <th>Orçados</th><th>Contados</th><th>% Contado</th><th>Divergentes</th><th>Pendentes</th>
-          <th>Contadas</th><th>Divergentes</th>
-          <th>Físico</th><th>Líquido</th><th>Absoluto</th>
-          <th>Peças</th><th>Posições</th><th>Valor</th>
+          ${th('chave','Rua')}
+          ${th('locaisOrcados','Orçados')}${th('locaisContados','Contados')}${th('pctContado','% Contado')}${th('locaisDivergentes','Divergentes')}${th('locaisPendentes','Pendentes')}
+          ${th('pecasContadas','Contadas')}${th('pecasDivergentes','Divergentes')}
+          ${th('vlFisicoTotal','Físico')}${th('valorDivergenteLiquido','Líquido')}${th('valorDivergenteAbsoluto','Absoluto')}
+          ${th('acuraciaPecas','Peças')}${th('acuraciaPosicoes','Posições')}${th('acuraciaValor','Valor')}
         </tr>
       </thead>
       <tbody>${rowsComPendentes.map(r=>{
@@ -4540,6 +4560,7 @@ function irProdContagensBase(applyDate){
     if(String(c.motivo||'').trim().toUpperCase()!=='AIR') return false;
     if(!irProdLinhaVale(c)) return false;
     if((incluirAbertura ? c.idConferencia<1 : c.idConferencia<=1) || !c.usuario || !c.dataInicioContagem) return false;
+    if(typeof irProdUsuarioConta==='function' && !irProdUsuarioConta(c.usuario, irDiaDaContagem(c))) return false;
     if(!applyDate) return true;
     const dia = c.dataInicioContagem.slice(0,10);
     if(de && dia<de) return false;
@@ -8269,6 +8290,7 @@ function irRenderConfiguracoes(){
   const soma = p.valor+p.quantidade+p.recontagens+p.reincidencia;
   const temaAtivo = localStorage.getItem('ir-app-theme') || 'padrao';
   return `
+  ${typeof irRenderProdPessoasPanel==='function' ? irRenderProdPessoasPanel() : ''}
   <div class="panel">
     <h3>Aparência — Tema visual</h3>
     <p class="field-hint" style="margin-bottom:14px;">Experimente os temas e escolha o que preferir — o modo claro/escuro (botão no rodapé do menu) continua funcionando dentro de qualquer um deles.</p>
@@ -8539,7 +8561,7 @@ function irSyncProdDatas(){
 function irDashProdDados(){
   const cid = (IR.cicloAtivo||{}).id;
   if(!cid || IR._cicloPesadoId !== cid) return null;
-  const chave = cid+'|'+IR.contagens.length+'|'+(IR.prodFilters.de||'')+'|'+(IR.prodFilters.ate||'');
+  const chave = cid+'|'+IR.contagens.length+'|'+(IR.prodFilters.de||'')+'|'+(IR.prodFilters.ate||'')+'|'+IR._prodExclVer;
   if(IR._dpCache && IR._dpCache.k===chave) return IR._dpCache.r;
   // A 1ª rodada é o sistema: só rodada física (2 em diante) conta como produção.
   const ate = IR.prodFilters.ate||'';
