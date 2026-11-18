@@ -18,3 +18,7 @@
   histórico sozinho (na primeira abertura e a cada importação de QRY0100/QRY0390). Sem histórico, o dashboard usa uma
   estimativa pela idade do RG e da peça sem RG. Zonas TRI e PIC ficam de fora (`SEM_MONITOR` em `js/app.js`). Tabela criada
   à mão com `rg-reversa/supabase/migrations/005_misto_historico.sql`. Não há aba própria para isso.
+- **QRY0110 · RG - Movimentos** (importação, soma sem duplicar; grupo `mov` guardado em `rg_dados`): alimenta a aba
+  **Produtividade** (movimentações por dia e por pessoa, RGs/hora trabalhada, fila da triagem, tempo até armazenar, retrabalho,
+  locais mais movimentados e conferência com o coletor via `rg_movimentacoes`) e dá a data exata de chegada do RG ao local
+  para o "Tempo em misto" do Dashboard. A "triagem" é a origem mais frequente das movimentações.

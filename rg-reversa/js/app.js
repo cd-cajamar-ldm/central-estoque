@@ -30,14 +30,16 @@ var TABS = {
   painel:['Dashboard','Implantação de RG na logística reversa — meta: 100% do estoque com RG.'],
   estoque:['Estoque × RG','Saldo da reversa por item e local.'],
   rgs:['Consulta de RGs','Cada RG é uma peça.'],
+  prod:['Produtividade','Movimentações da equipe, fila da triagem, retrabalho e conferência com o coletor.'],
   movs:['Movimentações','Relatório do coletor para baixar em Excel ou colar no PuTTY.'],
   importacao:['Importação','Relatórios do Bseller que alimentam o dashboard.']
 };
 
 var S = {
-  rgs:[], est:null, mult:null, hist:[], tab:'painel', D:null, ocupado:'', user:'', stamps:{}, nuvem:{ estado:'', msg:'' },
+  rgs:[], est:null, mult:null, hist:[], mov:[], tab:'painel', D:null, ocupado:'', user:'', stamps:{}, nuvem:{ estado:'', msg:'' },
   movs:null, movsBusy:false, movsErro:'',
-  mistos:null, mistosBusy:false, mistosErro:'', mistosAuto:false,
+  mistos:null, mistosBusy:false, mistosErro:'', mistosAuto:false, fMisQ:'', fMisFx:-1,
+  pPer:30, colMov:null, colBusy:false, colErro:'',
   fm:{ de:'', ate:'', st:'pend', q:'' }, lim:{}, sort:{},
   col:null,
   classe:'', ritmo:null, anima:true, q:'', fClassif:'', fOper:'', cobModo:'sem', cobQ:'', cobLocal:'', cobFaixa:''
@@ -127,13 +129,14 @@ function leArquivo(file){
           var aoa=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null,blankrows:false});
           for(var i=0;i<Math.min(aoa.length,12);i++){
             var h=(aoa[i]||[]).map(norm);
+            if(h.indexOf('data movimento')>=0 && h.indexOf('classe destino')>=0 && h.indexOf('rg')>=0){ achou={tipo:'mov',h:h,linhas:aoa.slice(i+1)}; return true; }
             if(h.indexOf('numero rg')>=0){ achou={tipo:'rg',h:h,linhas:aoa.slice(i+1)}; return true; }
             if(h.indexOf('item componente')>=0 && h.indexOf('item vol multiplo')>=0){ achou={tipo:'mult',h:h,linhas:aoa.slice(i+1)}; return true; }
             if(h.indexOf('classe local')>=0 && h.indexOf('quantidade')>=0 && h.indexOf('item')>=0){ achou={tipo:'est',h:h,linhas:aoa.slice(i+1)}; return true; }
           }
           return false;
         });
-        if(!achou) return rej(new Error('"'+file.name+'" não parece ser a QRY0100, a QRY0390 nem a ZBIQ0051.'));
+        if(!achou) return rej(new Error('"'+file.name+'" não parece ser a QRY0100, a QRY0110, a QRY0390 nem a ZBIQ0051.'));
         res(achou);
       } catch(e){ rej(new Error('Não consegui abrir "'+file.name+'".')); }
     };
@@ -164,6 +167,19 @@ function montaRgs(a){
 }
 /* A QRY0390 tem três colunas "Descrição": a do item, a da classe e a do local —
    cada uma logo depois da coluna que descreve. */
+/* QRY0110: uma linha = uma movimentação de RG (de um local para outro), com data, hora e operador. */
+function montaMov(a){
+  var c=function(n){ return a.h.indexOf(n); };
+  var ix={ t:c('data movimento'), rg:c('rg'), item:c('item'), oc:c('classe origem'), o:c('origem'), od:c('descricao origem'), dc:c('classe destino'), d:c('destino'), dd:c('descricao destino'), op:c('operador') };
+  var g=function(l,i){ return i>=0 ? l[i] : null; };
+  var out=[];
+  a.linhas.forEach(function(l){
+    var rg=cod(g(l,ix.rg)), t=parseData(g(l,ix.t)); if(!rg || !t) return;
+    out.push({ t:t, rg:rg, item:cod(g(l,ix.item)), oc:String(g(l,ix.oc)||'').trim(), o:cod(g(l,ix.o)), od:String(g(l,ix.od)||'').trim(),
+      dc:String(g(l,ix.dc)||'').trim(), d:cod(g(l,ix.d)), dd:String(g(l,ix.dd)||'').trim(), op:String(g(l,ix.op)||'').trim() });
+  });
+  return out;
+}
 function montaEstoque(a, nome){
   var c=function(n){ return a.h.indexOf(n); };
   var desc=function(i){ return (i>=0 && a.h[i+1]==='descricao') ? i+1 : -1; };
@@ -195,10 +211,10 @@ function montaMult(a, nome){
 }
 
 /* ---------- dados da última importação no servidor ---------- */
-var GRUPOS=['rgs','est','mult','hist'];
-function valorLocal(g){ return g==='rgs' ? S.rgs : g==='est' ? S.est : g==='mult' ? S.mult : S.hist; }
-function temLocal(g){ var v=valorLocal(g); return (g==='rgs'||g==='hist') ? v.length>0 : !!v; }
-function poeLocal(g,v){ if(g==='rgs') S.rgs=v||[]; else if(g==='est') S.est=v; else if(g==='mult') S.mult=v; else S.hist=v||[]; }
+var GRUPOS=['rgs','est','mult','hist','mov'];
+function valorLocal(g){ return g==='rgs' ? S.rgs : g==='est' ? S.est : g==='mult' ? S.mult : g==='mov' ? S.mov : S.hist; }
+function temLocal(g){ var v=valorLocal(g); return (g==='rgs'||g==='hist'||g==='mov') ? v.length>0 : !!v; }
+function poeLocal(g,v){ if(g==='rgs') S.rgs=v||[]; else if(g==='est') S.est=v; else if(g==='mult') S.mult=v; else if(g==='mov') S.mov=v||[]; else S.hist=v||[]; }
 /* Acesso "só visualizar": consulta e coletor, mas não importa nem apaga dados. */
 function leitura(){ return !!window.LDM_SOMENTE_LEITURA; }
 function empurra(g){
@@ -264,6 +280,16 @@ function importar(files){
         msgs.push(int(add)+' RGs novos'); mudados.add('rgs');
         return dbSet('rgs', S.rgs);
       }
+      if(a.tipo==='mov'){
+        var nm=montaMov(a), mm=new Map(), ant=S.mov.length, atM=0;
+        if(!nm.length) throw new Error('"'+f.name+'" não tem movimentações de RG.');
+        S.mov.forEach(function(m){ mm.set(m.rg+'|'+m.t+'|'+m.d,m); });
+        nm.forEach(function(m){ var k=m.rg+'|'+m.t+'|'+m.d; if(mm.has(k)) atM++; mm.set(k,m); });
+        S.mov=Array.from(mm.values()).sort(function(x,y){ return x.t-y.t; });
+        gravaLog({em:Date.now(), tipo:'QRY0110 · Movimentos', arquivo:f.name, resumo:int(nm.length)+' movimentações lidas · '+int(S.mov.length-ant)+' novas · '+int(atM)+' já existiam'});
+        msgs.push(int(S.mov.length-ant)+' movimentações novas'); mudados.add('mov');
+        return dbSet('mov', S.mov);
+      }
       if(a.tipo==='mult'){
         var mu=montaMult(a, f.name);
         if(!mu.rows.length) throw new Error('"'+f.name+'" não tem componentes de múltiplos.');
@@ -296,7 +322,7 @@ function importar(files){
       return seq.then(function(){ msgs.push('dados guardados no servidor'); return dbSet('stamps',S.stamps).catch(function(){}); })
         .catch(function(e){ erros.push('Não consegui guardar os dados no servidor: '+msgNuvem(e)); });
     }).then(function(){
-      if(!(mudados.has('rgs')||mudados.has('est')) || leitura()) return;
+      if(!(mudados.has('rgs')||mudados.has('est')||mudados.has('mov')) || leitura()) return;
       return registraMistos().then(function(r){ if(r) msgs.push('controle de mistos ('+int(r.novos)+' novos · '+int(r.resolvidos)+' resolvidos)'); })
         .catch(function(e){ erros.push(semTabelaMis(e) ? 'Controle de mistos: falta rodar a migração 005 no Supabase.' : 'Controle de mistos: '+msgNuvem(e)); });
     }).then(function(){
@@ -368,12 +394,21 @@ function deriva(){
   });
   /* Início estimado de cada local misto: o local passou a ser misto quando RG e peça sem RG passaram a conviver,
      isto é, no mais recente dos dois começos (idade da peça sem RG mais antiga × idade do RG mais antigo). */
-  var rgAntigo=new Map(); D.abertos.forEach(function(r){ if(r.dt && (!rgAntigo.has(r.local) || r.dt<rgAntigo.get(r.local))) rgAntigo.set(r.local,r.dt); });
+  /* Se a QRY0110 foi importada, a chegada do RG ao local é exata: é a data da última movimentação para lá. */
+  var ultMov=new Map(); S.mov.forEach(function(m){ var o=ultMov.get(m.rg); if(!o || m.t>=o.t) ultMov.set(m.rg,m); });
+  var rgAntigo=new Map(), rgExato=new Map();
+  D.abertos.forEach(function(r){
+    var m=ultMov.get(r.rg), ex=!!(m && m.d===r.local), t=ex ? soDia(m.t) : r.dt;
+    if(!t) return;
+    if(!rgAntigo.has(r.local) || t<rgAntigo.get(r.local)){ rgAntigo.set(r.local,t); rgExato.set(r.local,ex); }
+  });
   var semAntigo=new Map(); D.cov.forEach(function(c){ if(c.semRg>0 && c.dias!=null && c.dias>(semAntigo.has(c.local)?semAntigo.get(c.local):-1)) semAntigo.set(c.local,c.dias); });
   D.locais.forEach(function(l){
     if(l.st!=='misto') return;
     var a=semAntigo.has(l.local)?semAntigo.get(l.local):null, b=rgAntigo.has(l.local)?dias(rgAntigo.get(l.local)):null;
     l.estDias = a!=null && b!=null ? Math.min(a,b) : (a!=null?a:b);
+    /* exata quando quem define o início é a chegada do RG (o mais recente dos dois começos) e ela veio da QRY0110 */
+    l.estExata = !!(b!=null && rgExato.get(l.local) && (a==null || b<=a));
   });
   /* Ritmo: RGs por dia, usando os dias com geração (últimos 14 dias corridos até o dado mais novo). */
   var porDia=new Map(); D.rgs.forEach(function(r){ if(r.dt) porDia.set(r.dt,(porDia.get(r.dt)||0)+1); });
@@ -429,7 +464,7 @@ function prazoTxt(du){
 /* Foto diária da cobertura: é dela que sai o gráfico de evolução. */
 function snapshot(){
   var D=S.D; if(!S.est || !D || !D.tot.saldo) return;
-  var hoje=hoje0(), ent={ d:hoje, saldo:D.tot.saldo, comRg:D.tot.comRg, semRg:D.tot.semRg, locRg:D.loc.rg, locTot:D.loc.total, misto:D.loc.misto };
+  var hoje=hoje0(), ent={ d:hoje, saldo:D.tot.saldo, comRg:D.tot.comRg, semRg:D.tot.semRg, locRg:D.loc.rg, locTot:D.loc.total, misto:D.loc.misto, mi:D.locais.filter(function(l){ return l.st==='misto' && !l.fora; }).length };
   var i=S.hist.findIndex(function(h){ return h.d===hoje; });
   if(i>=0) S.hist[i]=ent; else S.hist.push(ent);
   S.hist.sort(function(a,b){ return a.d-b.d; });
@@ -750,9 +785,9 @@ function vPainel(){
       '<div class="panel">'+h3('Classificação das peças')+rosca()+'</div>'+
     '</div>'+
     '<div class="panel">'+h3('Mapa dos locais','<div class="cmp-legend"><span><span class="cmp-dot" style="background:#1F8A52"></span>100% RG · '+int(L.rg)+'</span><span><span class="cmp-dot" style="background:#FE5000"></span>Misto · '+int(L.misto)+'</span><span><span class="cmp-dot" style="background:var(--rv-blue)"></span>Sem RG · '+int(L.sem)+'</span></div>')+mapaLocais()+'</div>'+
-    '<div class="rgx-g rgx-g-d">'+
-      '<div class="panel">'+h3('Há quanto tempo estão mistos')+graficoMisto(MT)+'</div>'+
-      '<div class="panel">'+h3('Mistos há mais tempo')+antigosMisto(MT)+'</div>'+
+    '<div class="rgx-g rgx-g-m">'+
+      '<div class="panel">'+h3('Locais mistos · há quanto tempo')+listaMisto(MT)+'</div>'+
+      '<div class="panel">'+h3('Evolução dos locais mistos')+evolucaoMisto(MT)+'</div>'+
     '</div>'+
     '<div class="rgx-g rgx-g-c">'+
       '<div class="panel">'+h3('Idade do estoque sem RG')+regua()+'</div>'+
@@ -972,7 +1007,7 @@ function registraMistos(){
       if(a){ mantem.push(a.id); return; }
       var est=l.estDias!=null ? hoje0()-l.estDias*864e5 : agora;
       var desde=primeira ? est : Math.min(agora, Math.max(est, ultimo||est));
-      novos.push({ local:l.local, local_desc:l.localDesc||l.local, desde:iso(desde), origem:primeira?'estimado':'medido', visto_em:iso(agora) });
+      novos.push({ local:l.local, local_desc:l.localDesc||l.local, desde:iso(desde), origem:(l.estExata||!primeira)?'medido':'estimado', visto_em:iso(agora) });
     });
     abertos.forEach(function(a,loc){ if(!cur.has(loc)) fecha.push(a.id); });
     var seq=Promise.resolve();
@@ -989,7 +1024,7 @@ function mistoLista(){
   return D.locais.filter(function(l){ return l.st==='misto' && !l.fora; }).map(function(l){
     var x=abertos.get(l.local), d, o;
     if(x){ d=Math.max(0,Math.floor((agora-Date.parse(x.desde))/864e5)); o=x.origem; }
-    else { d=l.estDias; o='estimado'; }
+    else { d=l.estDias; o=l.estExata?'medido':'estimado'; }
     return d==null ? null : { local:l.local, desc:l.localDesc||l.local, dias:d, origem:o, semRg:l.semRg, rgs:l.rgs };
   }).filter(Boolean);
 }
@@ -998,18 +1033,200 @@ function resumoMisto(){
   L.forEach(function(r){ f[fxMis(r.dias)]++; soma+=r.dias; if(!maior || r.dias>maior.dias) maior=r; if(r.origem==='estimado') est=true; });
   return { lista:L, faixas:f, media:L.length?soma/L.length:0, maior:maior, est:est };
 }
-function graficoMisto(M){
-  if(!M.lista.length) return '<div class="rgx-ok">Nenhum local misto</div>';
-  var max=Math.max.apply(null,M.faixas)||1;
-  return '<div class="rgx-mt">'+MISTO_FX.map(function(f,i){
-    return '<div class="rgx-mt-c"'+tip(f[2],int(M.faixas[i])+' locais mistos',pct(M.faixas[i],M.lista.length))+'><b>'+int(M.faixas[i])+'</b><div class="rgx-mt-b"><i style="height:'+(M.faixas[i]/max*100).toFixed(1)+'%;background:'+f[3]+'"></i></div><span>'+f[2]+'</span></div>';
-  }).join('')+'</div>'+(M.est?'<div class="rgx-mt-nota">Datas estimadas pela idade do RG e da peça; ficam reais conforme as importações.</div>':'');
-}
-function antigosMisto(M){
-  var top=M.lista.slice().sort(function(a,b){ return b.dias-a.dias; }).slice(0,8).map(function(r){
-    return { l:r.desc, v:r.dias, txt:int(r.dias)+' d', cor:MISTO_FX[fxMis(r.dias)][3], t:r.desc+'\n'+int(r.dias)+' dias em misto'+(r.origem==='estimado'?' (estimado)':'')+'\n'+int(r.semRg)+' un sem RG · '+int(r.rgs)+' RGs' };
+function misFiltrados(M){
+  var q=norm(S.fMisQ), fx=S.fMisFx;
+  return M.lista.slice().sort(function(a,b){ return b.dias-a.dias; }).filter(function(r){
+    return (fx<0 || fxMis(r.dias)===fx) && (!q || norm(r.desc+' '+r.local).indexOf(q)>=0);
   });
-  return hbars(top,{vazio:'Nenhum local misto'});
+}
+/* painel da esquerda: régua de faixas, filtros, busca, Excel e lista com rolagem (cabem centenas de locais) */
+function listaMisto(M){
+  if(!M.lista.length) return '<div class="rgx-ok">Nenhum local misto</div>';
+  var tot=M.lista.length, lista=misFiltrados(M);
+  var reg='<div class="rgx-regua rgx-regua-fina">'+MISTO_FX.map(function(f,i){
+    var v=M.faixas[i]; if(!v) return '';
+    return '<button type="button" style="flex:'+Math.max(v/tot,0.03).toFixed(4)+';background:'+f[3]+'" data-act="mis-fx" data-i="'+i+'"'+tip(f[2],int(v)+' locais mistos',pct(v,tot))+'>'+(v/tot>=0.08?'<b>'+pct(v,tot,0)+'</b>':'')+'</button>';
+  }).join('')+'</div>';
+  var chip=function(i,rot,n){ return '<button type="button" class="chip'+(S.fMisFx===i?' active':'')+'" data-act="mis-fx" data-i="'+i+'">'+esc(rot)+' · '+int(n)+'</button>'; };
+  var linhas=lista.map(function(r){
+    var c=MISTO_FX[fxMis(r.dias)][3];
+    return '<button type="button" class="rgx-ml" data-act="local" data-l="'+esc(r.local)+'"'+tip(r.desc,int(r.dias)+' dias em misto'+(r.origem==='estimado'?' (estimado)':''),int(r.semRg)+' un sem RG · '+int(r.rgs)+' RGs')+'><span>'+esc(r.desc)+'</span><b style="color:'+c+'">'+int(r.dias)+' d</b><em>'+(r.origem==='estimado'?'est.':'')+'</em></button>';
+  }).join('') || '<div class="rgx-ok" style="padding:18px">Nenhum local encontrado</div>';
+  return reg+
+    '<div class="rgx-chips" style="margin-top:12px">'+chip(-1,'Todos',tot)+MISTO_FX.map(function(f,i){ return chip(i,f[2],M.faixas[i]); }).join('')+'</div>'+
+    '<div class="filter-bar" style="margin-top:8px"><input type="text" id="misQ" placeholder="Buscar local" value="'+esc(S.fMisQ)+'"><button class="btn btn-primary" data-act="mis-xlsx">Baixar Excel</button></div>'+
+    '<div class="rgx-ml-wrap"><div class="rgx-ml-cab"><span>Local</span><span>Tempo</span><span></span></div>'+linhas+'</div>'+
+    '<div class="rgx-mt-nota">'+int(lista.length)+' de '+int(tot)+' locais · do mais antigo para o mais novo'+(M.est?' · "est." = data estimada':'')+'</div>';
+}
+/* painel da direita: quantos locais estavam mistos a cada importação (meta: zero) */
+function evolucaoMisto(M){
+  var pts=S.hist.filter(function(h){ return (h.mi!=null?h.mi:h.misto)!=null; }).slice(-40).map(function(h){ var v=h.mi!=null?h.mi:h.misto; return { l:dm(h.d), y:v, t:dataBR(h.d)+'\n'+int(v)+' locais mistos' }; });
+  var kp='<div class="rgx-mk"><span>hoje<b>'+int(M.lista.length)+'</b></span><span>média<b>'+(M.lista.length?int(M.media)+' d':'—')+'</b></span><span>mais antigo<b>'+(M.maior?int(M.maior.dias)+' d':'—')+'</b></span><span>+ de 90 d<b style="color:#C83812">'+int(M.faixas[3])+'</b></span></div>';
+  var graf=pts.length>1 ? lineChart(pts) : '<div class="rv-empty" style="padding:30px 10px">A linha da evolução aparece a partir da segunda importação.</div>';
+  return graf+kp;
+}
+
+/* ---------- Produtividade (QRY0110 · movimentações de RG) ---------- */
+var CORES_OP=['#FE5000','#001A72','#1F8A52','#E0A100','#7D93E8','#8E99A8','#C83812'];
+var PAUSA=600000; /* intervalo maior que 10 min entre duas bipagens conta como pausa */
+function mediana(a){ if(!a.length) return null; var b=a.slice().sort(function(x,y){ return x-y; }), m=Math.floor(b.length/2); return b.length%2?b[m]:(b[m-1]+b[m])/2; }
+function rotPer(){ return S.pPer ? 'Últimos '+S.pPer+' dias' : 'Todo o período'; }
+function produtividade(){
+  var corte=S.pPer ? hoje0()-(S.pPer-1)*864e5 : 0;
+  var M=S.mov.filter(function(m){ return m.t>=corte; });
+  var R={ M:M, n:M.length };
+  /* origem da triagem = origem mais usada */
+  var co=new Map(); S.mov.forEach(function(m){ co.set(m.o,(co.get(m.o)||0)+1); });
+  var tri=null, mx=0; co.forEach(function(v,k){ if(v>mx){ mx=v; tri=k; } });
+  R.tri=tri; R.triDesc=''; S.mov.forEach(function(m){ if(m.o===tri && m.od) R.triDesc=m.od; });
+  /* por pessoa e por dia */
+  var ops=new Map(), diasM=new Map(), horas=new Array(24).fill(0);
+  M.forEach(function(m){
+    var o=ops.get(m.op); if(!o){ o={ op:m.op, n:0, dias:new Map(), ativo:0 }; ops.set(m.op,o); }
+    o.n++;
+    var d=soDia(m.t), od=o.dias.get(d); if(!od){ od={ n:0, ts:[] }; o.dias.set(d,od); } od.n++; od.ts.push(m.t);
+    var dd=diasM.get(d); if(!dd){ dd={ d:d, n:0, por:new Map() }; diasM.set(d,dd); } dd.n++; dd.por.set(m.op,(dd.por.get(m.op)||0)+1);
+    horas[new Date(m.t).getHours()]++;
+  });
+  R.horas=horas;
+  ops.forEach(function(o){
+    o.melhor=0; o.melhorD=null;
+    o.dias.forEach(function(v,d){
+      v.ts.sort(function(a,b){ return a-b; });
+      var at=0; for(var i=1;i<v.ts.length;i++){ var g=v.ts[i]-v.ts[i-1]; if(g<=PAUSA) at+=g; }
+      v.ativo=Math.max(at,60000); o.ativo+=v.ativo;
+      if(v.n>o.melhor){ o.melhor=v.n; o.melhorD=d; }
+    });
+    o.nd=o.dias.size; o.media=o.n/o.nd; o.porHora=o.n/(o.ativo/36e5);
+  });
+  R.ops=Array.from(ops.values()).sort(function(a,b){ return b.n-a.n; });
+  R.diasL=Array.from(diasM.values()).sort(function(a,b){ return a.d-b.d; });
+  R.nDias=R.diasL.length; R.media=R.nDias ? R.n/R.nDias : 0;
+  var at=R.ops.reduce(function(t,o){ return t+o.ativo; },0); R.porHora=at ? R.n/(at/36e5) : 0;
+  /* retrabalho: RG movido de novo depois de armazenado */
+  var porRg=new Map(); M.forEach(function(m){ var l=porRg.get(m.rg); if(!l){ l=[]; porRg.set(m.rg,l); } l.push(m); });
+  R.rgsDist=porRg.size; R.rgsRepet=0; porRg.forEach(function(l){ if(l.length>1) R.rgsRepet++; });
+  R.fora=M.filter(function(m){ return m.o!==tri; });
+  var rt=new Map(); M.forEach(function(m){ var o=rt.get(m.op)||{ op:m.op, n:0, rt:0 }; o.n++; if(m.o!==tri) o.rt++; rt.set(m.op,o); });
+  R.rtOps=Array.from(rt.values()).filter(function(o){ return o.rt>0; }).sort(function(a,b){ return b.rt-a.rt; });
+  var ro=new Map(); R.fora.forEach(function(m){ var k=m.od||m.o; ro.set(k,(ro.get(k)||0)+1); });
+  R.rtOrig=Array.from(ro.entries()).sort(function(a,b){ return b[1]-a[1]; }).slice(0,6);
+  /* locais mais movimentados (destino) */
+  var dl=new Map(); M.forEach(function(m){ var k=m.dd||m.d, o=dl.get(k); if(!o){ o={ l:k, n:0 }; dl.set(k,o); } o.n++; });
+  R.destinos=Array.from(dl.values()).sort(function(a,b){ return b.n-a.n; });
+  /* fila da triagem e tempo até armazenar (cruza com a QRY0100) */
+  var saiu=new Set(); S.mov.forEach(function(m){ if(m.o===tri) saiu.add(m.rg); });
+  var fila=S.D.abertos.filter(function(r){ return r.local===tri && !saiu.has(r.rg); });
+  R.fila=fila.length; R.filaIdade=[0,0,0,0];
+  var maiorFila=null;
+  fila.forEach(function(r){ var d=dias(r.dt); if(d==null) return; R.filaIdade[d<=1?0:d<=3?1:d<=7?2:3]++; if(!maiorFila || d>maiorFila) maiorFila=d; });
+  R.filaMax=maiorFila;
+  var lead=[]; var visto=new Set();
+  S.mov.forEach(function(m){ if(m.o!==tri || visto.has(m.rg)) return; visto.add(m.rg); var r=S.D.rgMap.get(m.rg); if(r && r.dt && m.t>=corte) lead.push(Math.max(0,Math.round((soDia(m.t)-r.dt)/864e5))); });
+  R.lead=lead; R.leadMed=mediana(lead); R.leadDist=[0,0,0,0,0];
+  lead.forEach(function(d){ R.leadDist[d===0?0:d===1?1:d===2?2:d<=5?3:4]++; });
+  R.ultima=S.mov.length ? S.mov[S.mov.length-1].t : null;
+  return R;
+}
+/* Conferência: o que foi bipado no coletor aparece na QRY0110? (a transferência massiva foi feita no sistema?) */
+function carregaColetor(){
+  if(S.colBusy) return;
+  var sb=window.rgSupa; if(!sb){ S.colMov=[]; return; }
+  S.colBusy=true; S.colErro='';
+  var corte=S.pPer ? new Date(hoje0()-(S.pPer-1)*864e5).toISOString() : '2000-01-01T00:00:00Z';
+  sb.from('rg_movimentacoes').select('rg,local_origem,local_destino,operador,criado_em').gte('criado_em',corte).order('criado_em',{ascending:false}).limit(20000).then(function(r){
+    if(r.error) throw r.error;
+    S.colMov=r.data||[];
+  }).catch(function(e){ S.colMov=[]; S.colErro=(e&&e.message)||'Não consegui ler as bipagens do coletor.'; })
+    .then(function(){ S.colBusy=false; if(S.tab==='prod') render(); });
+}
+function confereColetor(R){
+  var rows=S.colMov||[], porRg=new Map();
+  S.mov.forEach(function(m){ var l=porRg.get(m.rg); if(!l){ l=[]; porRg.set(m.rg,l); } l.push(m); });
+  var limite=R.ultima ? R.ultima-2*36e5 : 0, C={ total:rows.length, ok:0, pend:[], aguarda:0, atrasos:[] };
+  rows.forEach(function(c){
+    var rg=String(c.rg||'').replace(/\D/g,''), ts=Date.parse(c.criado_em), dest=RG.localCodigo(c.local_destino);
+    var ms=porRg.get(rg)||[], achou=null;
+    for(var i=0;i<ms.length;i++){ if(ms[i].t>=ts-36e5 && RG.localCodigo(ms[i].d)===dest){ achou=ms[i]; break; } }
+    if(achou){ C.ok++; C.atrasos.push((achou.t-ts)/6e4); }
+    else if(ts<=limite) C.pend.push({ rg:rg, dest:c.local_destino, op:c.operador||'', ts:ts, h:(R.ultima-ts)/36e5 });
+    else C.aguarda++;
+  });
+  C.pend.sort(function(a,b){ return a.ts-b.ts; });
+  C.atrasoMed=mediana(C.atrasos);
+  return C;
+}
+function pBarrasDia(R){
+  if(!R.diasL.length) return '<div class="rgx-ok">Sem movimentações</div>';
+  var max=Math.max.apply(null,R.diasL.map(function(d){ return d.n; }))||1;
+  var cor=function(op){ var i=R.ops.findIndex(function(o){ return o.op===op; }); return CORES_OP[i%CORES_OP.length]; };
+  return '<div class="rgx-pd">'+R.diasL.map(function(d){
+    var segs=Array.from(d.por.entries()).sort(function(a,b){ return b[1]-a[1]; });
+    return '<div class="rgx-pd-c"'+tip(dataBR(d.d),int(d.n)+' movimentações',segs.map(function(x){ return operNome(x[0])+': '+int(x[1]); }).join(' · '))+'><b>'+int(d.n)+'</b><div class="rgx-pd-b" style="height:'+(d.n/max*100).toFixed(1)+'%">'+segs.map(function(x){ return '<i style="flex:'+x[1]+';background:'+cor(x[0])+'"></i>'; }).join('')+'</div><span>'+dm(d.d)+'</span></div>';
+  }).join('')+'</div><div class="cmp-legend" style="margin-top:10px;flex-wrap:wrap">'+R.ops.slice(0,6).map(function(o,i){ return '<span><span class="cmp-dot" style="background:'+CORES_OP[i%CORES_OP.length]+'"></span>'+esc(operNome(o.op))+'</span>'; }).join('')+'</div>';
+}
+function pBarrasHora(R){
+  var ini=6, fim=20, max=Math.max.apply(null,R.horas)||1;
+  var pico=R.horas.indexOf(max);
+  var h='<div class="rgx-ph">';
+  for(var i=ini;i<=fim;i++) h+='<div class="rgx-ph-c"'+tip(d2(i)+'h',int(R.horas[i])+' movimentações')+'><b>'+(R.horas[i]?int(R.horas[i]):'')+'</b><div class="rgx-ph-b"><i style="height:'+(R.horas[i]/max*100).toFixed(1)+'%;'+(i===pico?'background:#FE5000':'')+'"></i></div><span>'+d2(i)+'</span></div>';
+  return h+'</div>';
+}
+function vProd(){
+  if(!S.mov.length) return '<div class="panel rgx-vazio"><div class="rgx-vazio-ic">🔀</div><h3>'+(leitura()?'Ainda não há movimentações importadas':'Falta importar a QRY0110')+'</h3><button class="btn btn-orange so-editor" data-act="tab" data-tab="importacao">Importar relatórios</button></div>';
+  if(!S.est && !S.rgs.length) return semDados('a QRY0100 e a QRY0390');
+  if(S.colMov==null && !S.colBusy) setTimeout(carregaColetor,0);
+  var R=produtividade(), C=confereColetor(R);
+  var h3=function(tit,extra){ return '<div class="dx-panel-h"><h3>'+tit+'</h3>'+(extra||'')+'</div>'; };
+  var tiles='<div class="rv-faixa">'+
+    tile('Movimentações', int(R.n), rotPer(), '')+
+    tile('Média por dia', int(R.media), int(R.nDias)+' dias com movimento', '')+
+    tile('RGs por hora', int(R.porHora), 'só horas bipando', '')+
+    tile('Na fila da triagem', int(R.fila), R.filaMax!=null?'mais antigo '+int(R.filaMax)+' d':'sem fila', R.fila?'blue':'good')+
+    tile('Até armazenar', R.leadMed!=null?int(R.leadMed)+' d':'—', 'mediana desde a criação do RG', '')+
+    tile('Retrabalho', pct(R.fora.length,R.n), int(R.fora.length)+' mov. fora da triagem', R.fora.length?'bad':'good')+
+    '</div>';
+  var rank=tabela('pRank',[
+    {k:'op',rot:'Operador',fmt:function(r){ return '<b>'+esc(operNome(r.op))+'</b>'; },val:function(r){ return operNome(r.op); }},
+    {k:'n',rot:'Movimentações',num:true,fmt:function(r){ return int(r.n); }},
+    {k:'nd',rot:'Dias',num:true,fmt:function(r){ return int(r.nd); }},
+    {k:'media',rot:'Média/dia',num:true,fmt:function(r){ return int(r.media); }},
+    {k:'porHora',rot:'RGs/hora',num:true,fmt:function(r){ return int(r.porHora); }},
+    {k:'melhor',rot:'Melhor dia',num:true,fmt:function(r){ return int(r.melhor)+(r.melhorD?' · '+dm(r.melhorD):''); }}
+  ],R.ops);
+  var filaTxt=['até 1 d','2–3 d','4–7 d','+ de 7 d'], filaCor=['#1F8A52','#E0A100','#FE5000','#C83812'];
+  var filaMax=Math.max.apply(null,R.filaIdade)||1;
+  var fila='<div class="rgx-fl">'+R.filaIdade.map(function(v,i){ return '<div class="rgx-fl-c"'+tip(filaTxt[i],int(v)+' RGs esperando')+'><b>'+int(v)+'</b><div class="rgx-fl-b"><i style="height:'+(v/filaMax*100).toFixed(1)+'%;background:'+filaCor[i]+'"></i></div><span>'+filaTxt[i]+'</span></div>'; }).join('')+'</div>'+
+    '<div class="rgx-mt-nota">RGs criados que ainda estão em '+esc(R.triDesc||'triagem')+' · idade desde a criação do RG</div>';
+  var leadTxt=['mesmo dia','1 dia','2 dias','3–5 dias','+ de 5 d'], leadMax=Math.max.apply(null,R.leadDist)||1;
+  var lead=R.lead.length ? '<div class="rgx-fl">'+R.leadDist.map(function(v,i){ return '<div class="rgx-fl-c"'+tip(leadTxt[i],int(v)+' RGs')+'><b>'+int(v)+'</b><div class="rgx-fl-b"><i style="height:'+(v/leadMax*100).toFixed(1)+'%;background:'+(i<3?'#1F8A52':i===3?'#E0A100':'#C83812')+'"></i></div><span>'+leadTxt[i]+'</span></div>'; }).join('')+'</div><div class="rgx-mt-nota">Tempo entre criar o RG e armazená-lo · '+int(R.lead.length)+' RGs</div>' : '<div class="rgx-ok">Sem RGs da QRY0100 nas movimentações</div>';
+  var retr='<div class="rgx-mk" style="margin:0 0 12px"><span>RGs movidos mais de 1 vez<b>'+int(R.rgsRepet)+'</b></span><span>de '+int(R.rgsDist)+' RGs<b>'+pct(R.rgsRepet,R.rgsDist)+'</b></span><span>mov. fora da triagem<b>'+int(R.fora.length)+'</b></span></div>'+
+    (R.rtOps.length ? hbars(R.rtOps.slice(0,6).map(function(o){ return { l:operNome(o.op), v:o.rt, txt:int(o.rt)+' · '+pct(o.rt,o.n,0), t:operNome(o.op)+'\n'+int(o.rt)+' de '+int(o.n)+' movimentações foram de RG já armazenado', cor:'linear-gradient(90deg,#C83812,#FE8A5C)' }; })) : '<div class="rgx-ok">Nenhum retrabalho no período</div>')+
+    (R.rtOrig.length ? '<div class="rgx-mt-nota" style="margin-top:10px">Mais saem de: '+R.rtOrig.slice(0,4).map(function(x){ return esc(x[0])+' ('+int(x[1])+')'; }).join(' · ')+'</div>' : '');
+  var dest=hbars(R.destinos.slice(0,10).map(function(o){ return { l:o.l, v:o.n, txt:int(o.n)+' · '+pct(o.n,R.n,0), t:o.l+'\n'+int(o.n)+' RGs recebidos ('+pct(o.n,R.n)+')' }; }),{cor:'linear-gradient(90deg,#001A72,#4A63C8)'});
+  var conf;
+  if(S.colErro) conf='<div class="rv-aviso"><strong>Erro:</strong> '+esc(S.colErro)+'</div>';
+  else if(S.colMov==null) conf='<div class="rv-empty">Carregando as bipagens do coletor…</div>';
+  else if(!C.total) conf='<div class="rgx-ok">Nenhuma bipagem do coletor no período</div>';
+  else {
+    var julg=C.ok+C.pend.length;
+    conf='<div class="rgx-mk" style="margin:0 0 12px"><span>Bipados no coletor<b>'+int(C.total)+'</b></span><span>Aparecem na QRY0110<b style="color:#1F8A52">'+int(C.ok)+'</b></span><span>Não aparecem<b style="color:'+(C.pend.length?'#C83812':'#1F8A52')+'">'+int(C.pend.length)+'</b></span><span>Ainda sem como conferir<b>'+int(C.aguarda)+'</b></span>'+(C.atrasoMed!=null?'<span>Tempo até o sistema<b>'+(C.atrasoMed<90?int(C.atrasoMed)+' min':int(C.atrasoMed/60)+' h')+'</b></span>':'')+'</div>'+
+      (C.pend.length ? '<div class="filter-bar" style="margin-bottom:8px"><button class="btn btn-primary" data-act="cf-xlsx">Baixar Excel</button></div>'+tabela('pPend',[
+        {k:'rg',rot:'RG',fmt:function(r){ return '<span class="rgx-mono">'+esc(r.rg)+'</span>'; }},
+        {k:'dest',rot:'Destino bipado',fmt:function(r){ return esc(r.dest); }},
+        {k:'op',rot:'Operador',fmt:function(r){ return esc(operNome(r.op)); }},
+        {k:'ts',rot:'Bipado em',num:true,fmt:function(r){ return dataHoraBR(r.ts); }},
+        {k:'h',rot:'Parado há',num:true,fmt:function(r){ return r.h<48?int(r.h)+' h':int(r.h/24)+' d'; }}
+      ],C.pend) : '<div class="rgx-ok">Tudo o que foi bipado já aparece na QRY0110</div>')+
+      '<div class="rgx-mt-nota">Só conta bipagem anterior ao último movimento importado ('+dataHoraBR(R.ultima)+'). Importe a QRY0110 de novo para conferir as mais novas.</div>';
+  }
+  var sel='<select data-f="pPer">'+[[7,'Últimos 7 dias'],[14,'Últimos 14 dias'],[30,'Últimos 30 dias'],[0,'Todo o período']].map(function(x){ return '<option value="'+x[0]+'"'+(S.pPer===x[0]?' selected':'')+'>'+x[1]+'</option>'; }).join('')+'</select>';
+  return '<div class="filter-bar" style="margin-bottom:12px">'+sel+'<span class="rgx-mt-nota" style="margin:0 0 0 6px">Movimentações até '+dataHoraBR(R.ultima)+'</span></div>'+tiles+
+    '<div class="rgx-g rgx-g-d"><div class="panel">'+h3('Movimentações por dia')+pBarrasDia(R)+'</div><div class="panel">'+h3('Horário de pico')+pBarrasHora(R)+'</div></div>'+
+    '<div class="panel" style="margin-top:14px">'+h3('Ranking da equipe')+rank+'</div>'+
+    '<div class="rgx-g rgx-g-d" style="margin-top:14px"><div class="panel">'+h3('Fila da triagem')+fila+'</div><div class="panel">'+h3('Do RG criado até armazenado')+lead+'</div></div>'+
+    '<div class="rgx-g rgx-g-d"><div class="panel">'+h3('Retrabalho')+retr+'</div><div class="panel">'+h3('Locais mais movimentados')+dest+'</div></div>'+
+    '<div class="panel" style="margin-top:14px">'+h3('Conferência com o coletor')+conf+'</div>';
 }
 
 /* ---------- painel lateral do local ---------- */
@@ -1148,6 +1365,8 @@ function vImportacao(){
   var rgDias=S.rgs.map(function(r){ return r.dt; }).filter(Boolean);
   var stRg = S.rgs.length ? '<span class="tag tag-good">Carregado</span> '+int(S.rgs.length)+' RGs'+(rgDias.length?' · de '+dataBR(Math.min.apply(null,rgDias))+' a '+dataBR(Math.max.apply(null,rgDias)):'') : '<span class="tag tag-muted">Ainda não importado</span>';
   var stEst = S.est ? '<span class="tag tag-good">Carregado</span> '+int(S.est.unidades)+' unidades · '+dataHoraBR(S.est.em) : '<span class="tag tag-muted">Ainda não importado</span>';
+  var movDias=S.mov.map(function(m){ return m.t; });
+  var stMov = S.mov.length ? '<span class="tag tag-good">Carregado</span> '+int(S.mov.length)+' movimentações'+(movDias.length?' · de '+dataBR(Math.min.apply(null,movDias))+' a '+dataBR(Math.max.apply(null,movDias)):'') : '<span class="tag tag-muted">Ainda não importado</span>';
   var stMu = S.mult ? '<span class="tag tag-good">Carregado</span> '+int(S.mult.rows.length)+' ligações · '+dataHoraBR(S.mult.em) : '<span class="tag tag-muted">Ainda não importado</span>';
   var h='';
   if(S.ocupado) h+='<div class="rv-aviso" style="margin-bottom:14px"><strong>Aguarde.</strong> '+esc(S.ocupado)+'</div>';
@@ -1155,20 +1374,21 @@ function vImportacao(){
     : '<div class="rv-hint" style="margin-bottom:12px">☁ A última importação fica guardada no servidor'+(S.stamps.est?' · estoque de <b>'+dataHoraBR(S.stamps.est)+'</b>':'')+(S.stamps.rgs?' · RGs de <b>'+dataHoraBR(S.stamps.rgs)+'</b>':'')+' — ao abrir o app, ela volta sozinha.</div>';
   h+='<div class="rv-imp">'+
     '<div class="dropzone'+(S.rgs.length?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🏷️</div><div class="dz-title">QRY0100 · RG - Produtividade</div><div class="dz-desc">Lista de RGs gerados. Cada importação <strong>soma</strong> os RGs novos e atualiza os existentes.</div><div class="rv-st">'+stRg+'</div></div>'+
+    '<div class="dropzone'+(S.mov.length?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🔀</div><div class="dz-title">QRY0110 · RG - Movimentos</div><div class="dz-desc">Cada RG movido de um local para outro. Cada importação <strong>soma</strong> as novas movimentações. '+stMov+'</div></div>'+
     '<div class="dropzone'+(S.est?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">📦</div><div class="dz-title">QRY0390 · Estoque por Local</div><div class="dz-desc">Foto do saldo. <strong>Substitui</strong> a anterior. Guarda só as classes '+CLASSES_REVERSA.join(' e ')+'.</div><div class="rv-st">'+stEst+'</div></div>'+
     '<div class="dropzone'+(S.mult?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🧩</div><div class="dz-title">ZBIQ0051 · Item x Múltiplo</div><div class="dz-desc">Liga item pai a componentes. <strong>Substitui</strong> a anterior. Alimenta o indicador de múltiplos.</div><div class="rv-st">'+stMu+'</div></div>'+
     '</div>';
   h+='<div class="panel" style="margin-top:14px"><h3>Como importar</h3><div class="panel-sub">Clique num quadro ou arraste os arquivos para cá. Pode soltar os três de uma vez — o app reconhece cada relatório sozinho. Os dados ficam salvos neste navegador.</div>'+
     '<ol style="margin:0 0 4px 18px;line-height:1.9"><li>Bseller: exporte a <strong>QRY0100</strong> (período desde a última importação), a <strong>QRY0390</strong> (CD inteiro) e a <strong>ZBIQ0051</strong>.</li><li>Solte os arquivos aqui.</li><li>A cada importação da QRY0390 o app guarda uma foto da cobertura — é ela que forma o gráfico de evolução.</li></ol></div>';
   var log=lsGet(LOG_KEY);
-  h+='<div class="panel" style="margin-top:14px"><div class="panel-head-row"><h3>Histórico de importações</h3><div><button class="btn-danger-text" data-act="limpa" data-k="rgs">Apagar RGs</button> <button class="btn-danger-text" data-act="limpa" data-k="est">Apagar estoque</button> <button class="btn-danger-text" data-act="limpa" data-k="mult">Apagar múltiplos</button> <button class="btn-danger-text" data-act="limpa" data-k="hist">Apagar evolução</button></div></div>';
+  h+='<div class="panel" style="margin-top:14px"><div class="panel-head-row"><h3>Histórico de importações</h3><div><button class="btn-danger-text" data-act="limpa" data-k="rgs">Apagar RGs</button> <button class="btn-danger-text" data-act="limpa" data-k="est">Apagar estoque</button> <button class="btn-danger-text" data-act="limpa" data-k="mult">Apagar múltiplos</button> <button class="btn-danger-text" data-act="limpa" data-k="mov">Apagar movimentos</button> <button class="btn-danger-text" data-act="limpa" data-k="hist">Apagar evolução</button></div></div>';
   if(!log.length) h+='<p class="field-hint">Nenhuma importação registrada neste navegador.</p>';
   else h+='<div class="table-wrap"><table><thead><tr><th>Quando</th><th>Relatório</th><th>Arquivo</th><th>Resultado</th></tr></thead><tbody>'+log.map(function(l){ return '<tr><td>'+dataHoraBR(l.em)+'</td><td>'+esc(l.tipo)+'</td><td>'+esc(l.arquivo)+'</td><td>'+esc(l.resumo)+'</td></tr>'; }).join('')+'</tbody></table></div>';
   return h+'</div>';
 }
 
 /* ---------- navegação ---------- */
-var VIEWS={ painel:vPainel, estoque:vEstoque, rgs:vRgs, movs:vMovs, importacao:vImportacao };
+var VIEWS={ painel:vPainel, estoque:vEstoque, rgs:vRgs, prod:vProd, movs:vMovs, importacao:vImportacao };
 function render(){
   var t=TABS[S.tab]; $('tabTitle').textContent=t[0]; $('tabSubtitle').textContent=t[1];
   Array.prototype.forEach.call(document.querySelectorAll('.nav-item[data-tab]'),function(b){ b.classList.toggle('active', b.dataset.tab===S.tab); });
@@ -1191,6 +1411,7 @@ function vaiPara(tab){
   try { history.replaceState(null,'','#'+tab); } catch(e){}
   $('sidebar').classList.remove('mobile-open');
   if(tab==='movs') S.movs=null;
+  if(tab==='prod') S.colMov=null;
   render();
   var sc=document.querySelector('.page-scroll'); if(sc) sc.scrollTop=0;
 }
@@ -1241,14 +1462,23 @@ function acao(el, ev){
   if(a==='ficha') return abreFicha(el.dataset.rg);
   if(a==='fecha-ficha') return fechaFicha();
   if(a==='relatorio') return baixaRelatorio();
+  if(a==='mis-fx'){ var mi=+el.dataset.i; S.fMisFx=S.fMisFx===mi?-1:mi; S.anima=false; return render(); }
+  if(a==='mis-xlsx'){
+    var ml=misFiltrados(resumoMisto()); if(!ml.length) return toast('Nada para exportar.', true);
+    return exporta('RG_Reversa_Locais_Mistos',['Local','Código','Dias em misto','Un sem RG','RGs','Início'],ml.map(function(r){ return [r.desc,r.local,r.dias,r.semRg,r.rgs,r.origem==='estimado'?'estimado':'medido']; }));
+  }
+  if(a==='cf-xlsx'){
+    var CC=confereColetor(produtividade()); if(!CC.pend.length) return toast('Nada para exportar.', true);
+    return exporta('RG_Reversa_Bipados_sem_QRY0110',['RG','Destino bipado','Operador','Bipado em','Parado (horas)'],CC.pend.map(function(r){ return [r.rg,r.dest,operNome(r.op),dataHoraBR(r.ts),Math.round(r.h)]; }));
+  }
   if(a==='exporta-rgs') return exportaRgs();
   if(a==='exporta-cov') return exporta('RG_Reversa_Estoque_x_RG', CAB_COV, linhasCov(covFiltrada()));
   if(a==='escolher'){ if(leitura()) return toast('Seu acesso não permite importar relatórios.', true); $('fileInput').click(); return; }
   if(a==='limpa'){
     if(leitura()) return toast('Seu acesso não permite apagar dados.', true);
     var k=el.dataset.k;
-    if(!confirm('Apagar '+({rgs:'os RGs',est:'o estoque',mult:'os múltiplos',hist:'o histórico de evolução'}[k])+' deste navegador?')) return;
-    if(k==='rgs') S.rgs=[]; if(k==='est') S.est=null; if(k==='mult') S.mult=null; if(k==='hist') S.hist=[];
+    if(!confirm('Apagar '+({rgs:'os RGs',est:'o estoque',mult:'os múltiplos',mov:'as movimentações',hist:'o histórico de evolução'}[k])+' deste navegador?')) return;
+    if(k==='rgs') S.rgs=[]; if(k==='est') S.est=null; if(k==='mult') S.mult=null; if(k==='hist') S.hist=[]; if(k==='mov') S.mov=[];
     return dbDel(k).then(function(){ S.anima=true; deriva(); render(); });
   }
   if(a==='mv-load'){ S.movs=null; return carregaMovs(); }
@@ -1266,7 +1496,7 @@ function inicia(){
   document.addEventListener('change', function(ev){
     var t=ev.target;
     if(t.id==='fileInput'){ importar(t.files); t.value=''; return; }
-    if(t.dataset && t.dataset.f){ S[t.dataset.f]=t.value; S.lim.cov=0; S.lim.rgs=0; return render(); }
+    if(t.dataset && t.dataset.f){ S[t.dataset.f]=(t.dataset.f==='pPer'?+t.value:t.value); S.lim.cov=0; S.lim.rgs=0; if(t.dataset.f==='pPer') S.colMov=null; return render(); }
     if(t.dataset && t.dataset.mv && t.dataset.mv!=='q'){ S.fm[t.dataset.mv]=t.value; S.lim.mv=0; S.movs=null; render(); }
   });
   var espera, colTimer;
@@ -1276,6 +1506,7 @@ function inicia(){
     if(t.id==='colRg'){ clearTimeout(colTimer); colTimer=setTimeout(function(){ if(t.value.trim().length>=3 && document.activeElement===t) colCommit('rg', t); }, 280); return; }
     if(t.id==='simRitmo'){ S.ritmo=+t.value; return atualizaSim(S.ritmo); }
     if(t.id==='fQ' || t.id==='fCobQ'){ clearTimeout(espera); espera=setTimeout(function(){ if(t.id==='fQ'){ S.q=t.value; S.lim.rgs=0; } else { S.cobQ=t.value; S.lim.cov=0; } renderFoco(t.id); }, 220); return; }
+    if(t.id==='misQ'){ clearTimeout(espera); espera=setTimeout(function(){ S.fMisQ=t.value; S.anima=false; renderFoco('misQ'); }, 220); return; }
     if(t.id==='mvQ'){ clearTimeout(espera); espera=setTimeout(function(){ S.fm.q=t.value; S.lim.mv=0; render(); var el=$('mvQ'); if(el){ el.focus(); var n=el.value.length; try { el.setSelectionRange(n,n); } catch(e){} } }, 220); }
   });
   document.addEventListener('keydown', function(ev){
@@ -1328,12 +1559,13 @@ window.rgIniciar=function(){
   try { window.rgSupa.auth.getSession().then(function(r){ var u=r.data && r.data.session && r.data.session.user; S.user=u&&u.email ? u.email.split('@')[0] : ''; }); } catch(e){}
   /* pede ao navegador para não apagar os dados do site por falta de espaço */
   try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
-  Promise.all([dbGet('rgs'), dbGet('est'), dbGet('mult'), dbGet('hist'), dbGet('stamps')]).then(function(r){
+  Promise.all([dbGet('rgs'), dbGet('est'), dbGet('mult'), dbGet('hist'), dbGet('stamps'), dbGet('mov')]).then(function(r){
     S.rgs=Array.isArray(r[0]) ? r[0] : [];
     S.est=r[1] && r[1].rows ? r[1] : null;
     S.mult=r[2] && r[2].rows ? r[2] : null;
     S.hist=Array.isArray(r[3]) ? r[3] : [];
     S.stamps=r[4] && typeof r[4]==='object' ? r[4] : {};
+    S.mov=Array.isArray(r[5]) ? r[5] : [];
   }).catch(function(){ toast('Não consegui abrir os dados salvos neste navegador.', true); }).then(function(){
     deriva();
     S.nuvem={ estado:'sync', msg:'Carregando os dados da última importação…' }; render();
