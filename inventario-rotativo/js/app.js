@@ -440,7 +440,7 @@ const IR_TAB_LABELS = {
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
   importacao:['Importação','Importe as planilhas e abra ou atualize um ciclo.'],
-  configuracoes:['Configurações','Pesos do Índice de Prioridade de Auditoria.'],
+  configuracoes:['Configurações','Ajustes do app.'],
   gestaoInventario:['Gestão de Inventário','Inventário + local com contagem errada, desconsiderados da acurácia com justificativa.'],
   exportar:['Exportar','Exporte toda a base, as regras/lógicas e os indicadores do sistema.'],
 };
@@ -1160,7 +1160,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v296';
+const IR_APP_VERSION = 'v297';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -8312,22 +8312,7 @@ function irRenderConfiguracoes(){
     <p class="field-hint" style="margin-top:8px;">Vários endereços: separe por ponto e vírgula ou vírgula.</p>
     <div class="form-actions"><button class="btn btn-primary" onclick="irSalvarBoletimEmailConfig()">Salvar destinatários</button></div>
   </div>
-  <div class="panel">
-    <h3>Índice de Prioridade de Auditoria — pesos</h3>
-    <p class="field-hint" style="margin-bottom:12px;">A soma deve ficar em 100%. Ajuste e salve para recalcular a prioridade no próximo processamento.</p>
-    <div class="two-col">
-      <div><label>Valor financeiro (%)</label><input type="number" id="ir-cfg-valor" min="0" max="100" value="${(p.valor*100).toFixed(0)}"></div>
-      <div><label>Quantidade divergente (%)</label><input type="number" id="ir-cfg-qtd" min="0" max="100" value="${(p.quantidade*100).toFixed(0)}"></div>
-    </div>
-    <div class="two-col">
-      <div><label>Nº de recontagens (%)</label><input type="number" id="ir-cfg-reconta" min="0" max="100" value="${(p.recontagens*100).toFixed(0)}"></div>
-      <div><label>Reincidência histórica (%)</label><input type="number" id="ir-cfg-reinc" min="0" max="100" value="${(p.reincidencia*100).toFixed(0)}"></div>
-    </div>
-    <p class="field-hint" id="ir-cfg-soma" style="margin-top:8px;">Soma atual: ${(soma*100).toFixed(0)}%</p>
-    <div class="form-actions"><button class="btn btn-primary" onclick="irSalvarPrioridadeConfig()">Salvar pesos</button></div>
-  </div>
   ${irRenderCiclosConfig()}
-  ${irRenderProdMetaConfig()}
   ${irRenderNet410LegendaConfig()}
   ${irRenderNet410IgnoradosConfig()}
   ${irRenderNet410PadroesConfig()}`;
