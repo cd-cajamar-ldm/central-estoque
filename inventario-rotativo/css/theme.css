@@ -2169,3 +2169,41 @@ table.pasta-table tr.pasta-novo td.mono{ color:var(--ink); }
 .ca-hero .dx-hero-row{ align-items:flex-end; }
 .dx-body.ca-wrap{ margin-top:-70px; }
 .ca-kpi{ box-shadow:0 16px 34px -18px rgba(0,26,114,.35); }
+
+/* Ordenar tabela clicando no título */
+th.th-ord{ cursor:pointer; user-select:none; white-space:nowrap; }
+th.th-ord i{ font-style:normal; margin-left:5px; opacity:.5; font-size:10px; }
+th.th-ord.on i{ opacity:1; }
+th.th-ord:hover{ filter:brightness(1.12); }
+/* Quem conta na produtividade */
+.pe-top{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+.pe-top h3{ margin:0; }
+.pe-k{ display:flex; gap:8px; }
+.pe-k div{ background:var(--surface2); border-radius:10px; padding:6px 12px; font-size:11.5px; color:var(--ink-soft); }
+.pe-k b{ display:block; font-family:Poppins,Inter,system-ui,sans-serif; font-size:18px; color:var(--ink); }
+.pe-k b.no{ color:#FE5000; }
+.pe-fil{ display:flex; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.pe-fil input{ flex:1; min-width:200px; }
+.pe-lista{ display:flex; flex-direction:column; max-height:520px; overflow:auto; }
+.pe-l{ display:grid; grid-template-columns:minmax(180px,260px) 170px minmax(0,1fr); gap:6px 14px; align-items:center; padding:8px 10px; border-bottom:1px solid var(--line); }
+.pe-l.off{ background:color-mix(in srgb, #FE5000 7%, var(--surface)); border-radius:10px; }
+.pe-l.off .pe-n b{ color:var(--ink-soft); text-decoration:line-through; }
+.pe-n{ display:flex; flex-direction:column; min-width:0; }
+.pe-n b{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pe-n small{ font-size:11.5px; color:var(--ink-soft); }
+.pe-st{ display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:800; }
+.pe-st i{ width:9px; height:9px; border-radius:50%; flex:none; }
+.pe-st.ok{ color:var(--success); } .pe-st.ok i{ background:var(--success); }
+.pe-st.no{ color:#FE5000; } .pe-st.no i{ background:#FE5000; }
+.pe-acao{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.pe-acao input{ padding:5px 8px; font-size:12.5px; }
+.pe-acao input[type=text]{ flex:1; min-width:140px; }
+.pe-acao .btn{ padding:6px 12px; font-size:12.5px; white-space:nowrap; }
+.pe-hist{ grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:6px; }
+.pe-per{ display:inline-flex; align-items:center; gap:6px; font-size:11.5px; padding:3px 4px 3px 10px; border-radius:999px; background:var(--surface2); color:var(--ink-soft); }
+.pe-per.atual{ background:color-mix(in srgb, #FE5000 14%, transparent); color:#C24000; font-weight:700; }
+.pe-per button{ border:none; background:transparent; color:inherit; cursor:pointer; font-size:14px; line-height:1; padding:0 6px; }
+.pe-acao{ flex-wrap:nowrap; }
+.pe-acao input[type=date]{ width:150px !important; flex:none; }
+.pe-acao input[type=text]{ width:auto !important; flex:1; min-width:120px; }
+.pe-acao .btn{ flex:none; }
