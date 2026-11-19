@@ -14,7 +14,7 @@
      • Ganho sem perda    — só ganhou no ano (possível duplicidade)
      • Ganhou mais que perdeu
    ============================================================ */
-IR.caS = IR.caS || {mes:null, dia:'', f:{}, met:'v', ord:{c:'v', d:1}};
+IR.caS = IR.caS || {mes:null, dia:'', f:{}, met:'v', tipo:'todos', ord:{c:'v', d:1}};
 const IR_CA_DIMS = [['mot','Motivo'],['dep','Depósito'],['depto','Departamento'],['forn','Fornecedor'],['usr','Usuário']];
 const IR_CA_CL = {perda:['Perda (não voltou)','#FE5000'], dup:['Ganho sem perda','#C8361B'], mais:['Ganhou mais que perdeu','#3A5BD9'], eq:['Equalizado','#1E8E4E']};
 const IR_CA_MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -65,9 +65,12 @@ function irCaSetDia(dd){ IR.caS.dia = IR.caS.dia===dd ? '' : dd; irRenderView();
 function irCaSetF(k, v){ const f = IR.caS.f; if(f[k]===v) delete f[k]; else f[k] = v; irRenderView(); }
 function irCaTiraF(k){ delete IR.caS.f[k]; irRenderView(); }
 function irCaSetMet(m){ IR.caS.met = m; irRenderView(); }
+function irCaSetTipo(t){ IR.caS.tipo = t; irRenderView(); }
+function irCaSetMesSel(m){ const S = IR.caS; S.mes = m; S.dia = ''; if(m) IR.net410MesSel = m; irRenderView(); }
+function irCaSetDiaSel(dd){ IR.caS.dia = dd; irRenderView(); }
 function irCaOrdenar(c){ const o = IR.caS.ord; IR.caS.ord = o.c===c ? {c, d:-o.d} : {c, d:(c==='v'||c==='a')?1:-1}; irRenderView(); }
 
-function irCaInfo(t){ return `<span class="ca-i">i<span class="ca-i-tt">${t}</span></span>`; }
+function irCaInfo(){ return ''; } // sem ícone de informação (pedido)
 function irCaPainel(t, corpo, dir, info, cls){
   return `<div class="panel ca-panel ${cls||''}"><div class="dx-panel-h"><h3>${t}${info?' '+irCaInfo(info):''}</h3>${dir?`<div class="cmp-legend">${dir}</div>`:''}</div>${corpo}</div>`;
 }
@@ -114,19 +117,33 @@ function irCaZeroSvg(net, passos, W){
   return s + '</svg>';
 }
 function irCaDiasSvg(dias, W, sel){
-  const H = 210, pl = 58, pr = 10, pt = 16, pb = 26;
+  const H = 230, pl = 58, pr = 10, pt = 18, pb = 26;
   const vals = dias.map(d=>d.v);
-  const hi = Math.max(0, ...vals)*1.2 + 1, lo = Math.min(0, ...vals)*1.15 - 1;
+  const hi = Math.max(0, ...vals)*1.25 + 1, lo = Math.min(0, ...vals)*1.22 - 1;
   const y = v=> pt + (hi-v)/(hi-lo)*(H-pt-pb);
   const sl = (W-pl-pr)/Math.max(1, dias.length), bw = Math.min(30, sl*0.6);
   let s = `<svg width="${W}" height="${H}" style="display:block">` + irCaEixo(W, pl, pr, y, lo, hi, 4);
   dias.forEach((d,i)=>{
     const x = pl+i*sl+(sl-bw)/2, a = Math.min(y(0), y(d.v)), b = Math.max(y(0), y(d.v)), on = !sel || sel===d.dia;
-    s += `<g style="cursor:pointer" onclick="irCaSetDia('${d.dia}')"><title>${d.dia.slice(8,10)}/${d.dia.slice(5,7)}: ${irCaR(d.v)}</title><rect x="${pl+i*sl}" y="${pt}" width="${sl}" height="${H-pt-pb}" fill="transparent"/><rect x="${x}" y="${a}" width="${bw}" height="${Math.max(2,b-a)}" rx="3" fill="${irCaCor(d.v)}" opacity="${on?1:.35}"/></g>`;
-    if(Math.abs(d.v) >= Math.max(...vals.map(Math.abs))*0.35) s += `<text x="${x+bw/2}" y="${d.v>=0?a-4:b+12}" font-size="10" font-weight="800" text-anchor="middle" fill="${irCaCor(d.v)}">${irCaK(d.v)}</text>`;
+    s += `<g style="cursor:pointer" onclick="irCaSetDia('${d.dia}')" onmouseenter="irCaDiaTip(event,'${d.dia}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"><rect x="${pl+i*sl}" y="${pt}" width="${sl}" height="${H-pt-pb}" fill="transparent"/><rect x="${x}" y="${a}" width="${bw}" height="${Math.max(2,b-a)}" rx="3" fill="${irCaCor(d.v)}" opacity="${on?1:.35}"/></g>`;
+    s += `<text x="${x+bw/2}" y="${d.v>=0?a-4:b+12}" font-size="${dias.length>22?9:10}" font-weight="800" text-anchor="middle" fill="${irCaCor(d.v)}">${irCaK(d.v)}</text>`;
     s += `<text x="${x+bw/2}" y="${H-8}" font-size="10.5" font-weight="${sel===d.dia?800:500}" text-anchor="middle" style="fill:${sel===d.dia?'var(--ink)':'var(--ink-soft)'}">${d.dia.slice(8,10)}</text>`;
   });
   return s + '</svg>';
+}
+
+/* Balão do Net por dia: itens divergentes do dia (maiores primeiro) com o Net do ano. */
+function irCaDiaTip(ev, dia){
+  const tt = document.getElementById('irChartTooltip'); const ctx = IR._caDiaItens; if(!tt || !ctx) return;
+  const g = new Map(); ctx.base.filter(l=>l.dia===dia).forEach(l=>{ let o = g.get(l.item); if(!o){ o = {item:l.item, nome:l.nome, mot:l.mot, v:0}; g.set(l.item, o); } o.v += irCaVal(l); });
+  const lst = Array.from(g.values()).filter(x=>x.v).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+  const tot = lst.reduce((s,x)=>s+x.v,0), mostra = lst.slice(0, 14);
+  tt.innerHTML = `<div class="ct-title">${dia.slice(8,10)}/${dia.slice(5,7)} · ${irCaR(tot)} · ${lst.length} itens</div>
+    <table><thead><tr><th>Item</th><th>Motivo</th><th style="text-align:right">Dia</th><th style="text-align:right">Net ano</th></tr></thead><tbody>
+    ${mostra.map(x=>{ const a = (ctx.itAno.get(x.item)||{}).a||0; return `<tr><td><b class="mono">${irEsc(x.item)}</b> ${irEsc(String(x.nome).slice(0,30))}</td><td>${irEsc(String(x.mot).split(' · ')[0])}</td><td class="mono" style="text-align:right;color:${irCaCor(x.v)};font-weight:800">${irCaR(x.v)}</td><td class="mono" style="text-align:right;color:${irCaCor(a)};font-weight:800">${irCaR(a)}</td></tr>`; }).join('')}
+    </tbody>${lst.length>mostra.length?`<tfoot><tr><td colspan="4">+${lst.length-mostra.length} itens</td></tr></tfoot>`:''}</table>`;
+  tt.classList.remove('hidden','lt-wrap','lt-wrap-big'); tt.classList.add('ca-tip');
+  irMoveDiaTooltip(ev);
 }
 
 /* ---------- ficha do item ---------- */
@@ -165,18 +182,18 @@ function irRenderCentralAjustes(){
   const esc = base.filter(irCaNoEscopo);
   // Item no ANO (sem recorte) para a situação.
   const itAno = new Map();
-  for(const l of todas){ let o = itAno.get(l.item); if(!o){ o = {a:0, neg:0, pos:0}; itAno.set(l.item, o); } const v = irCaVal(l); o.a += v; if(v<0) o.neg -= v; else o.pos += v; }
+  for(const l of todas){ let o = itAno.get(l.item); if(!o){ o = {a:0, neg:0, pos:0, r:0, q:0}; itAno.set(l.item, o); } const v = irCaVal(l); o.a += v; o.r += l.v; o.q += l.q; if(v<0) o.neg -= v; else o.pos += v; }
   const classe = i=>{ const o = itAno.get(i)||{a:0,neg:0,pos:0}, giro = Math.max(o.neg, o.pos);
     if(giro && Math.abs(o.a) <= giro*0.05) return 'eq'; if(o.a<0) return 'perda'; if(o.neg===0) return 'dup'; return 'mais'; };
   // Itens do escopo (só motivos que precisam de validação).
   const it = new Map(); let nv = 0;
   for(const l of esc){
     if(!l.validar){ nv += irCaVal(l); continue; }
-    let o = it.get(l.item); if(!o){ o = {item:l.item, nome:l.nome, v:0, mot:new Map(), dep:new Map()}; it.set(l.item, o); }
-    const v = irCaVal(l); o.v += v; o.mot.set(l.mot, (o.mot.get(l.mot)||0)+v); o.dep.set(l.dep, (o.dep.get(l.dep)||0)+v);
+    let o = it.get(l.item); if(!o){ o = {item:l.item, nome:l.nome, v:0, vr:0, vq:0, mot:new Map(), dep:new Map()}; it.set(l.item, o); }
+    const v = irCaVal(l); o.v += v; o.vr += l.v; o.vq += l.q; o.mot.set(l.mot, (o.mot.get(l.mot)||0)+v); o.dep.set(l.dep, (o.dep.get(l.dep)||0)+v);
   }
   const pior = m=> Array.from(m.entries()).sort((x,y)=>x[1]-y[1])[0][0];
-  const itens = Array.from(it.values()).map(o=>({...o, a:(itAno.get(o.item)||{}).a||0, c:classe(o.item), m:pior(o.mot), d:pior(o.dep)}));
+  const itens = Array.from(it.values()).map(o=>{ const an = itAno.get(o.item)||{}; return {...o, a:an.a||0, ar:an.r||0, aq:an.q||0, c:classe(o.item), m:pior(o.mot), d:pior(o.dep)}; });
   const ent = esc.reduce((s,l)=>s+Math.max(0,irCaVal(l)),0), sai = esc.reduce((s,l)=>s+Math.min(0,irCaVal(l)),0), net = ent+sai;
   const porMes = new Map(); base.forEach(l=>porMes.set(l.mes, (porMes.get(l.mes)||0)+irCaVal(l)));
   const netAno = Array.from(porMes.values()).reduce((a,b)=>a+b,0);
@@ -195,14 +212,13 @@ function irRenderCentralAjustes(){
       <div class="dx-marca"><span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span><div class="dx-marca-txt"><b>Oficina LDM</b><span>Inventário · CD Cajamar</span></div></div>
       <div class="dx-hero-row">
         <div class="dx-hero-tit"><h2>Central de Ajustes</h2><span class="dx-tag">Net ${d.ano} · ${lbl}</span></div>
-        <div class="ca-seg ca-seg-hero"><button type="button" class="${qtd?'':'on'}" onclick="irCaSetMet('v')">Valor R$</button><button type="button" class="${qtd?'on':''}" onclick="irCaSetMet('q')">Quantidade</button></div>
       </div>
       <div class="ca-esc"><button type="button" class="${!S.mes?'on':''}" onclick="irCaSetMes('')">Ano<small>${irCaK(netAno)}</small></button>${meses.map(m=>`<button type="button" class="${S.mes===m?'on':''}" onclick="irCaSetMes('${m}')">${rotMes(m)}<small>${irCaK(porMes.get(m)||0)}</small></button>`).join('')}</div>
       ${chips?`<div class="ca-chips">${chips}</div>`:''}
     </div></section>`;
 
   // ----- indicadores
-  const kc = (rot, val, sub, cor, info, cls)=>`<div class="ca-kpi ${cls||''}"><span>${rot} ${irCaInfo(info)}</span><b style="color:${cor}">${val}</b><small>${sub||''}</small></div>`;
+  const kc = (rot, val, sub, cor, info, cls)=>`<div class="ca-kpi ${cls||''}"><span>${rot}</span><b style="color:${cor}">${val}</b><small>${sub||''}</small></div>`;
   const kpis = `<div class="ca-kpis">
     ${kc('Net · '+lbl, irCaR(net), (S.mes?'ano '+irCaR(netAno):meses.length+' meses'), irCaCor(net), 'Entradas − saídas no período escolhido, com os filtros aplicados.', 'destaque')}
     ${kc('Entradas', irCaR(ent, true), esc.filter(l=>irCaVal(l)>0).length.toLocaleString('pt-BR')+' lançamentos', '#001A72', 'Tudo que aumentou o estoque no período.')}
@@ -218,18 +234,22 @@ function irRenderCentralAjustes(){
   const rowsMes = meses.map(m=>({mes:m, rot:rotMes(m), v:porMes.get(m)||0}));
   const gMes = irCaPainel('Net mês a mês', irFluid('caMes', w=>irCaMesesSvg(rowsMes, w, S.mes), 270),
     irCaLeg('#001A72','ganho')+irCaLeg('#FE5000','perda')+irCaLeg('var(--ca-linha)','acumulado',true), 'Barra = Net do mês. Linha = acumulado do ano. Clique num mês para abrir; clique de novo para voltar ao ano.');
-  const perdas = itens.filter(x=>x.c==='perda' && x.v<0).sort((a,b)=>a.v-b.v);
-  const passos = []; let acc = net, zera = 0;
-  for(const x of perdas){ if(passos.length>=14) break; passos.push({item:x.item, nome:x.nome, v:x.v, de:acc, ate:acc-x.v}); acc -= x.v; if(net<0 && acc>=0){ zera = passos.length; break; } }
-  const resto = perdas.slice(passos.length).reduce((s,x)=>s+x.v,0);
-  const zLeg = net>=0 ? '<span>Net já positivo</span>' : (zera ? `<span class="ca-ok">${zera} ${zera===1?'item zera':'itens zeram'} o Net</span>` : `<span>${passos.length} maiores: ${irCaR(-passos.reduce((s,p)=>s+p.v,0), true)} · faltam ${irCaR(resto)} em ${irFmtInt(perdas.length-passos.length)} itens</span>`);
-  const gZero = irCaPainel('Caminho até zerar', passos.length ? irFluid('caZero', w=>irCaZeroSvg(net, passos, w), 270) : '<p class="field-hint">Nenhuma perda sem retorno no período.</p>', zLeg,
-    'Começa no Net do período e soma, item a item, as maiores perdas que NÃO voltaram no ano. Cada degrau mostra quanto o Net sobe se o item for localizado. Clique no degrau para ver os movimentos.');
+  // Itens mais divergentes: maiores perdas × maiores ganhos do período, com o Net do ano de cada um (tracinho).
+  const lado = (lst, neg)=>{ const mx = Math.max(1, ...lst.map(x=>Math.abs(x.v)), ...lst.map(x=>Math.abs(x.a)));
+    return lst.length ? lst.map(x=>`<div class="ca-md" onclick="irCaAbrirItem('${irEsc(x.item)}')" title="${irEsc(x.item)} — ${irEsc(x.nome)} · ${IR_CA_CL[x.c][0]}">
+      <span class="ca-md-n"><b>${irEsc(x.item)}</b> ${irEsc(x.nome)}</span>
+      <div class="ca-md-t"><i style="width:${(Math.abs(x.v)/mx*100).toFixed(1)}%;background:${IR_CA_CL[x.c][1]}"></i>${x.a && Math.sign(x.a)===Math.sign(x.v)?`<em style="left:${(Math.min(Math.abs(x.a),mx)/mx*100).toFixed(1)}%"></em>`:''}</div>
+      <b style="color:${irCaCor(x.v)}">${irCaK(x.v)}</b><b class="ca-md-a" style="color:${irCaCor(x.a)}">${x.a?irCaK(x.a):'0'}</b></div>`).join('') : '<p class="field-hint">Nenhum.</p>'; };
+  const topP = itens.filter(x=>x.v<0).sort((a,b)=>a.v-b.v).slice(0,8), topG = itens.filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,8);
+  const cabMd = `<div class="ca-md ca-md-h"><span>Item</span><span></span><span>${lbl}</span><span>Ano</span></div>`;
+  const gZero = irCaPainel('Itens mais divergentes', `<div class="ca-md2"><div><div class="ca-md-tit p">Maiores perdas</div>${cabMd}${lado(topP)}</div><div><div class="ca-md-tit g">Maiores ganhos</div>${cabMd}${lado(topG)}</div></div>
+    <div class="cmp-legend ca-md-leg">${Object.entries(IR_CA_CL).map(([k,[t,c]])=>irCaLeg(c,t)).join('')}<span><span class="ca-leg-tick"></span>Net do ano</span></div>`);
   let gDia = '';
   if(S.mes){
     const pd = new Map(); base.filter(l=>l.mes===S.mes).forEach(l=>pd.set(l.dia, (pd.get(l.dia)||0)+irCaVal(l)));
     const dias = Array.from(pd.entries()).sort((a,b)=>a[0].localeCompare(b[0])).map(([dia,v])=>({dia, v}));
-    gDia = irCaPainel('Net por dia · '+rotMes(S.mes), irFluid('caDia', w=>irCaDiasSvg(dias, w, S.dia), 210), irCaLeg('#001A72','ganho')+irCaLeg('#FE5000','perda'), 'Clique num dia para olhar só ele.');
+    gDia = irCaPainel('Net por dia · '+rotMes(S.mes), irFluid('caDia', w=>irCaDiasSvg(dias, w, S.dia), 230), irCaLeg('#001A72','ganho')+irCaLeg('#FE5000','perda'), '');
+    IR._caDiaItens = {base:base.filter(l=>l.mes===S.mes && l.validar), itAno};
   }
   const dims = IR_CA_DIMS.map(([k,rot])=>{
     const g = new Map(); todas.filter(l=>irCaPassa(l,k) && irCaNoEscopo(l)).forEach(l=>g.set(l[k], (g.get(l[k])||0)+irCaVal(l)));
@@ -241,17 +261,28 @@ function irRenderCentralAjustes(){
   // ----- ofensores
   const o = S.ord;
   const val = (x,c)=> c==='c' ? Object.keys(IR_CA_CL).indexOf(x.c) : x[c];
-  const lista = itens.slice().sort((a,b)=>{ const p = val(a,o.c), q = val(b,o.c); return (typeof p==='string' ? String(p).localeCompare(String(q),'pt-BR',{numeric:true}) : p-q)*o.d; }).slice(0, 300);
+  const lista = itens.filter(x=> S.tipo==='perda' ? x.v<0 : (S.tipo==='ganho' ? x.v>0 : true)).slice().sort((a,b)=>{ const p = val(a,o.c), q = val(b,o.c); return (typeof p==='string' ? String(p).localeCompare(String(q),'pt-BR',{numeric:true}) : p-q)*o.d; }).slice(0, 300);
   const mesItem = new Map(); base.forEach(l=>{ let m = mesItem.get(l.item); if(!m){ m = {}; mesItem.set(l.item, m); } m[l.mes] = (m[l.mes]||0)+irCaVal(l); });
   const th = (c,t,cls)=>`<th class="${cls||''} ${o.c===c?'on':''}" onclick="irCaOrdenar('${c}')">${t}<i>${o.c===c?(o.d>0?'▲':'▼'):'↕'}</i></th>`;
-  const tab = `<div class="ca-tab"><table><thead><tr>${th('item','Item')}${th('nome','Descrição')}${th('d','Depósito')}${th('m','Motivo')}${th('v','Net '+lbl,'num')}${th('a','Net ano','num')}<th>Jan → Dez</th>${th('c','Situação')}</tr></thead><tbody>
+  const diasMes = S.mes ? Array.from(new Set(todas.filter(l=>l.mes===S.mes).map(l=>l.dia))).sort() : [];
+  const seg = (fn, val, atual, rot)=>`<button type="button" class="${atual===val?'on':''}" onclick="${fn}('${val}')">${rot}</button>`;
+  const ctl = `<div class="ca-tctl">
+      <label class="ca-sel"><span>Mês</span><select onchange="irCaSetMesSel(this.value)"><option value="" ${!S.mes?'selected':''}>Ano inteiro</option>${meses.map(m=>`<option value="${m}" ${S.mes===m?'selected':''}>${IR_MES_NOMES[parseInt(m.slice(5,7),10)-1]}</option>`).join('')}</select></label>
+      <label class="ca-sel"><span>Dia</span><select onchange="irCaSetDiaSel(this.value)" ${S.mes?'':'disabled'}><option value="">Todos</option>${diasMes.map(dd=>`<option value="${dd}" ${S.dia===dd?'selected':''}>${dd.slice(8,10)}/${dd.slice(5,7)}</option>`).join('')}</select></label>
+      <div class="ca-seg">${seg('irCaSetTipo','todos',S.tipo,'Todos')}${seg('irCaSetTipo','perda',S.tipo,'Perdas')}${seg('irCaSetTipo','ganho',S.tipo,'Ganhos')}</div>
+      <div class="ca-seg">${seg('irCaSetMet','v',S.met,'Valor R$')}${seg('irCaSetMet','q',S.met,'Quantidade')}</div>
+    </div>`;
+  const R$ = v=> (v<0?'−':(v>0?'+':''))+'R$ '+Math.round(Math.abs(v)).toLocaleString('pt-BR');
+  const PC = v=> (v<0?'−':(v>0?'+':''))+Math.round(Math.abs(v)).toLocaleString('pt-BR');
+  const tab = ctl + `<div class="ca-tab"><table><thead><tr>${th('item','Item')}${th('nome','Descrição')}${th('m','Motivo')}${th('vr','R$ '+lbl,'num')}${th('ar','R$ ano','num')}${th('vq','Pç '+lbl,'num')}${th('aq','Pç ano','num')}<th>Jan → Dez</th>${th('c','Situação')}</tr></thead><tbody>
     ${lista.map(x=>{ const m = mesItem.get(x.item)||{}; const mx = Math.max(1, ...Object.values(m).map(Math.abs));
-      return `<tr onclick="irCaAbrirItem('${irEsc(x.item)}')"><td><span class="ca-cod">${irEsc(x.item)}</span></td><td class="ca-desc" title="${irEsc(x.nome)}">${irEsc(x.nome)}</td><td class="ca-sec">${irEsc(x.d)}</td><td class="ca-sec">${irEsc(x.m)}</td>
-        <td class="num"><b style="color:${irCaCor(x.v)}">${irCaR(x.v)}</b></td><td class="num"><b style="color:${irCaCor(x.a)}">${irCaR(x.a)}</b></td>
+      return `<tr onclick="irCaAbrirItem('${irEsc(x.item)}')"><td><span class="ca-cod">${irEsc(x.item)}</span></td><td class="ca-desc" title="${irEsc(x.nome)}">${irEsc(x.nome)}</td><td class="ca-sec">${irEsc(x.m)}</td>
+        <td class="num"><b style="color:${irCaCor(x.vr)}">${R$(x.vr)}</b></td><td class="num"><b style="color:${irCaCor(x.ar)}">${R$(x.ar)}</b></td>
+        <td class="num"><b style="color:${irCaCor(x.vq)}">${PC(x.vq)}</b></td><td class="num"><b style="color:${irCaCor(x.aq)}">${PC(x.aq)}</b></td>
         <td><div class="ca-hm">${meses.map(mm=>{ const v = m[mm]||0, t = Math.abs(v)/mx; return `<span title="${rotMes(mm)}: ${irCaR(v)}" style="${v?`background:${v<0?`rgba(254,80,0,${(.2+t*.8).toFixed(2)})`:`rgba(0,26,114,${(.2+t*.8).toFixed(2)})`}`:''};${S.mes===mm?'outline:2px solid var(--ink)':''}"></span>`; }).join('')}</div></td>
         <td><span class="ca-badge" style="--c:${IR_CA_CL[x.c][1]}">${IR_CA_CL[x.c][0]}</span></td></tr>`; }).join('')}
     </tbody></table></div>`;
-  const gTab = irCaPainel('Ofensores · '+lbl, tab, Object.entries(IR_CA_CL).map(([k,[t,c]])=>`<span class="ca-badge" style="--c:${c}">${t} · ${irFmtInt(n(k))}</span>`).join(''),
+  const gTab = irCaPainel('Ofensores', tab, Object.entries(IR_CA_CL).map(([k,[t,c]])=>`<span class="ca-badge" style="--c:${c}">${t} · ${irFmtInt(n(k))}</span>`).join(''),
     '<b>Perda (não voltou)</b>: fecha o ano negativo. <b>Ganho sem perda</b>: entrou saldo sem perda antes — possível duplicidade. <b>Ganhou mais que perdeu</b>: voltou e passou. <b>Equalizado</b>: perdeu e voltou. Motivos marcados como "sem validação" não entram aqui. Clique na linha para ver os movimentos.');
 
   return `${cab}<div class="dx-body ca-wrap">

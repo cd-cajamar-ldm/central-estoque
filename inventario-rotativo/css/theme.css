@@ -2256,3 +2256,26 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .ca-dr-k span{ font-size:12px; color:var(--ink-soft); }
 .ca-dr-k b{ display:block; font:800 20px Poppins,Inter,sans-serif; }
 @media (max-width:1200px){ .ca-g-5{ grid-template-columns:repeat(2, minmax(0,1fr)); } .ca-g-a{ grid-template-columns:1fr; } }
+/* Itens mais divergentes (perdas × ganhos) */
+.ca-md2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.ca-md-tit{ font-size:11.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; margin-bottom:6px; }
+.ca-md-tit.p{ color:#FE5000; } .ca-md-tit.g{ color:#001A72; }
+.ca-md{ display:grid; grid-template-columns:minmax(0,1.3fr) minmax(40px,1fr) 52px 52px; gap:6px; align-items:center; font-size:11.5px; padding:3px 4px; border-radius:6px; cursor:pointer; }
+.ca-md:hover{ background:color-mix(in srgb, #FE5000 8%, var(--surface)); }
+.ca-md-h{ cursor:default; font-size:10px; font-weight:800; color:var(--ink-soft); text-transform:uppercase; }
+.ca-md-h:hover{ background:none; }
+.ca-md-h span:nth-child(3), .ca-md-h span:nth-child(4){ text-align:right; }
+.ca-md-n{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--ink); }
+.ca-md-n b{ font-family:ui-monospace,monospace; color:var(--ink-soft); }
+.ca-md-t{ position:relative; height:12px; background:var(--surface2); border-radius:4px; }
+.ca-md-t i{ position:absolute; left:0; top:0; bottom:0; border-radius:4px; }
+.ca-md-t em{ position:absolute; top:-3px; bottom:-3px; border-left:2px solid var(--ink); }
+.ca-md > b{ text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+/* Controles em cima da tabela de ofensores */
+.ca-tctl{ display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.ca-sel{ display:flex; flex-direction:column; gap:2px; }
+.ca-sel span{ font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+.ca-sel select{ padding:5px 8px; font-size:12.5px; font-weight:700; min-width:130px; }
+@media (max-width:1200px){ .ca-md2{ grid-template-columns:1fr; } }
+.ca-md-leg{ margin-top:10px; flex-wrap:wrap; gap:10px 14px; font-size:11.5px; }
+.ca-tab .ca-desc{ max-width:220px; }
