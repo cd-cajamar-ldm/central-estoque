@@ -2207,3 +2207,4 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .pe-acao input[type=date]{ width:150px !important; flex:none; }
 .pe-acao input[type=text]{ width:auto !important; flex:1; min-width:120px; }
 .pe-acao .btn{ flex:none; }
+.dx-secao-aba{ margin-top:0; }

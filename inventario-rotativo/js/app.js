@@ -330,13 +330,13 @@ async function irLoadCicloData(cicloId, opts){
       if(!ok || ['importacao','configuracoes','exportar'].includes(IR.currentTab)) return;
       /* No Dashboard só dois quadros dependem do pesado: troca só eles, em vez de
          redesenhar a tela inteira de novo (era a maior trava depois de abrir). */
-      if(IR.currentTab==='dashboard' && document.getElementById('dxItensDiv') && document.getElementById('dxAssert')){
+      if(IR.currentTab==='dashboard' && document.getElementById('dxItensDiv')){
         const rows = ((IR.indicadores||{}).divergentesPorDia||[]).slice(-7);
         const tmp = document.createElement('div');
         tmp.innerHTML = irRenderDivergentesPorDiaPanel(IR.indicadores);
         const novoItens = tmp.querySelector('#dxItensDiv');
         if(novoItens) document.getElementById('dxItensDiv').replaceWith(novoItens);
-        document.getElementById('dxAssert').outerHTML = irRenderAssertividadePanel();
+        const ass = document.getElementById('dxAssert'); if(ass) ass.outerHTML = irRenderAssertividadePanel();
         const prod = document.getElementById('dxProd'); if(prod) prod.outerHTML = irRenderDashProdSecao();
         irFluidAgendar();
       } else irRenderView();
@@ -435,7 +435,7 @@ function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)|
 const IR_TAB_LABELS = {
   dashboard:['Dashboard Inventário','Visão geral do ciclo ativo.'],
   ciclo:['Net','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
-  produtividade:['Produtividade','Aba em reconstrução.'],
+  produtividade:['Produtividade','Assertividade e produtividade da equipe.'],
   setores:['Overview','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
@@ -622,7 +622,7 @@ function irRenderView(){
     return;
   }
   const renderers = {
-    dashboard: irRenderDashboard, ciclo: irRenderGestaoCiclo, produtividade: irRenderProdutividade,
+    dashboard: irRenderDashboard, ciclo: irRenderGestaoCiclo, produtividade: irRenderProdutividadeAba,
     setores: irRenderSetores,
     divergencias: irRenderDivergencias,
     indicadores: irRenderIndicadores,
@@ -1160,7 +1160,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v298';
+const IR_APP_VERSION = 'v299';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1331,14 +1331,20 @@ function irRenderDashboard(){
       ${irRenderLogTablePanel(ind)}
       ${irRenderContadosPorDiaPanel(ind)}
       ${irRenderDivergentesPorDiaPanel(ind)}
-      <section class="dx-secao">
-        <div class="dx-secao-h"><span class="dx-secao-traco"></span><h2>Produtividade</h2></div>
-        <div class="dx-secao-corpo">
-          ${irRenderAssertividadePanel()}
-          ${irRenderDashProdSecao()}
-        </div>
-      </section>
     </div>
+  </div>`;
+}
+/* Aba Produtividade: a seção que antes ficava no fim do Dashboard (assertividade +
+   indicadores de produtividade). O layout antigo da aba (irRenderProdutividade) fica sem uso. */
+function irRenderProdutividadeAba(){
+  return `<div class="dx">
+    <section class="dx-secao dx-secao-aba">
+      <div class="dx-secao-h"><span class="dx-secao-traco"></span><h2>Produtividade</h2></div>
+      <div class="dx-secao-corpo">
+        ${irRenderAssertividadePanel()}
+        ${irRenderDashProdSecao()}
+      </div>
+    </section>
   </div>`;
 }
 /* ============================================================
