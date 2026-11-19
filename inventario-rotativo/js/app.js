@@ -330,13 +330,13 @@ async function irLoadCicloData(cicloId, opts){
       if(!ok || ['importacao','configuracoes','exportar'].includes(IR.currentTab)) return;
       /* No Dashboard só dois quadros dependem do pesado: troca só eles, em vez de
          redesenhar a tela inteira de novo (era a maior trava depois de abrir). */
-      if(IR.currentTab==='dashboard' && document.getElementById('dxItensDiv') && document.getElementById('dxAssert')){
+      if(IR.currentTab==='dashboard' && document.getElementById('dxItensDiv')){
         const rows = ((IR.indicadores||{}).divergentesPorDia||[]).slice(-7);
         const tmp = document.createElement('div');
         tmp.innerHTML = irRenderDivergentesPorDiaPanel(IR.indicadores);
         const novoItens = tmp.querySelector('#dxItensDiv');
         if(novoItens) document.getElementById('dxItensDiv').replaceWith(novoItens);
-        document.getElementById('dxAssert').outerHTML = irRenderAssertividadePanel();
+        const ass = document.getElementById('dxAssert'); if(ass) ass.outerHTML = irRenderAssertividadePanel();
         const prod = document.getElementById('dxProd'); if(prod) prod.outerHTML = irRenderDashProdSecao();
         irFluidAgendar();
       } else irRenderView();
@@ -435,7 +435,7 @@ function irZoomOut(){ irApplyZoom((parseInt(localStorage.getItem('ir-zoom'),10)|
 const IR_TAB_LABELS = {
   dashboard:['Dashboard Inventário','Visão geral do ciclo ativo.'],
   ciclo:['Net','Perdas e ganhos do CD (QRY410), por ano/mês — independente do ciclo rotativo.'],
-  produtividade:['Produtividade','Aba em reconstrução.'],
+  produtividade:['Produtividade','Assertividade e produtividade da equipe.'],
   setores:['Overview','Resumo por setor (rua) e ruas mais divergentes.'],
   divergencias:['Divergências','Itens com saldo final diferente do sistêmico.'],
   indicadores:['Indicadores','Todos os KPIs, com a fórmula de cada um.'],
@@ -502,7 +502,7 @@ function irSwitchTab(tab){
   const filtroNetAno = document.getElementById('tbFilterNetAno');
   if(filtroNetAno) filtroNetAno.hidden = !netTab;
   const filtroNetMes = document.getElementById('tbFilterNetMes');
-  if(filtroNetMes) filtroNetMes.hidden = !netTab;
+  if(filtroNetMes) filtroNetMes.hidden = true; // o mês fica dentro da Central de Ajustes
   if(netTab) irRenderNetTopFiltro();
   irRenderCycleBadge();
   irRenderView();
@@ -622,7 +622,7 @@ function irRenderView(){
     return;
   }
   const renderers = {
-    dashboard: irRenderDashboard, ciclo: irRenderGestaoCiclo, produtividade: irRenderProdutividade,
+    dashboard: irRenderDashboard, ciclo: irRenderGestaoCiclo, produtividade: irRenderProdutividadeAba,
     setores: irRenderSetores,
     divergencias: irRenderDivergencias,
     indicadores: irRenderIndicadores,
@@ -1160,7 +1160,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v298';
+const IR_APP_VERSION = 'v300';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1331,14 +1331,20 @@ function irRenderDashboard(){
       ${irRenderLogTablePanel(ind)}
       ${irRenderContadosPorDiaPanel(ind)}
       ${irRenderDivergentesPorDiaPanel(ind)}
-      <section class="dx-secao">
-        <div class="dx-secao-h"><span class="dx-secao-traco"></span><h2>Produtividade</h2></div>
-        <div class="dx-secao-corpo">
-          ${irRenderAssertividadePanel()}
-          ${irRenderDashProdSecao()}
-        </div>
-      </section>
     </div>
+  </div>`;
+}
+/* Aba Produtividade: a seção que antes ficava no fim do Dashboard (assertividade +
+   indicadores de produtividade). O layout antigo da aba (irRenderProdutividade) fica sem uso. */
+function irRenderProdutividadeAba(){
+  return `<div class="dx">
+    <section class="dx-secao dx-secao-aba">
+      <div class="dx-secao-h"><span class="dx-secao-traco"></span><h2>Produtividade</h2></div>
+      <div class="dx-secao-corpo">
+        ${irRenderAssertividadePanel()}
+        ${irRenderDashProdSecao()}
+      </div>
+    </section>
   </div>`;
 }
 /* ============================================================
@@ -8457,13 +8463,14 @@ function irRenderNet410LegendaConfig(){
     <td class="mono">${irEsc(l.id)}</td>
     <td><input type="text" value="${irEsc(l.legenda)}" onchange="irSetLegenda410Campo('${irEsc(l.id)}','legenda',this.value)"></td>
     <td style="text-align:center;"><input type="checkbox" ${l.considerarNet?'checked':''} onchange="irSetLegenda410Campo('${irEsc(l.id)}','considerarNet',this.checked)"></td>
+    <td style="text-align:center;"><input type="checkbox" ${irLegendaValidar(l)?'checked':''} ${l.considerarNet?'':'disabled'} onchange="irSetLegenda410Campo('${irEsc(l.id)}','validar',this.checked)"></td>
     <td><button class="btn-link" onclick="irRemoverLegenda410('${irEsc(l.id)}')">Remover</button></td>
   </tr>`;
   return `<div class="panel">
     <h3>Legenda de motivos da QRY410</h3>
     <p class="field-hint" style="margin-bottom:12px;">Mapeia o código no início da "Observação WMS" (ex.: AIR, ADE, LOJA) pro nome exibido nos painéis de Net, e se esse motivo entra no cálculo do Net. Código não listado aqui conta como "considera no Net" por padrão. "Considera no Net" só vale a partir da próxima vez que reimportar a QRY410.</p>
     <div class="table-wrap"><table>
-      <thead><tr><th>Código</th><th>Legenda</th><th style="text-align:center;">Considera no Net</th><th></th></tr></thead>
+      <thead><tr><th>Código</th><th>Legenda</th><th style="text-align:center;">Considera no Net</th><th style="text-align:center;">Validar ofensores</th><th></th></tr></thead>
       <tbody>${lista.map(row).join('')}</tbody>
     </table></div>
     <div class="two-col" style="margin-top:14px;">
@@ -8478,7 +8485,9 @@ async function irSetLegenda410Campo(id, campo, valor){
   if(!item) return;
   item[campo] = valor;
   await irSaveNet410LegendaItem({...item});
+  IR._caCache = null;
   irShowToast('Legenda salva.');
+  if(campo==='considerarNet') irRenderView();
 }
 async function irRemoverLegenda410(id){
   IR.net410Legenda = (IR.net410Legenda||[]).filter(l=>l.id!==id);

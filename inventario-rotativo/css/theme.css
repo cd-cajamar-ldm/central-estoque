@@ -2207,3 +2207,52 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .pe-acao input[type=date]{ width:150px !important; flex:none; }
 .pe-acao input[type=text]{ width:auto !important; flex:1; min-width:120px; }
 .pe-acao .btn{ flex:none; }
+.dx-secao-aba{ margin-top:0; }
+
+/* ===== Central de Ajustes — Fechamento do Net (Ano → Mês → Dia) ===== */
+.ca-i{ position:relative; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:var(--surface2); color:var(--ink-soft); font:800 10.5px Inter,sans-serif; cursor:help; text-transform:none; letter-spacing:0; vertical-align:1px; }
+.ca-i-tt{ display:none; position:absolute; left:0; top:21px; width:290px; background:#0F1530; color:#fff; font:500 12px/1.45 Inter,sans-serif; padding:9px 11px; border-radius:9px; z-index:40; box-shadow:0 12px 26px rgba(0,0,0,.28); text-align:left; white-space:normal; }
+.ca-i:hover .ca-i-tt{ display:block; }
+.ca-kpi span{ overflow:visible; }
+.ca-esc{ display:flex; gap:6px; flex-wrap:wrap; }
+.ca-esc button{ border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.1); color:#fff; font:800 12.5px Inter,sans-serif; padding:6px 11px; border-radius:9px; cursor:pointer; line-height:1.2; }
+.ca-esc button small{ display:block; font-weight:600; font-size:10.5px; opacity:.85; }
+.ca-esc button.on{ background:#FE5000; border-color:#FE5000; }
+.ca-esc button:not(.on):hover{ background:rgba(255,255,255,.2); }
+.ca-chips{ display:flex; gap:6px; flex-wrap:wrap; }
+.ca-chip{ border:none; background:#fff; color:#001A72; font:800 12px Inter,sans-serif; padding:5px 11px; border-radius:999px; cursor:pointer; }
+.ca-chip:hover{ background:#FFE3D6; }
+.ca-seg-hero{ background:rgba(255,255,255,.14); }
+.ca-seg-hero button{ color:#C9D1EC; }
+.ca-seg-hero button.on{ background:#fff; color:#001A72; }
+.ca-hero .dx-hero-in{ gap:16px; }
+.ca-g-a{ grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); }
+.ca-g-5{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:14px; }
+.ca-dim .dx-panel-h{ margin-bottom:6px; }
+.ca-dim-n{ font-size:11px; color:var(--ink-soft); }
+.ca-dim-l{ max-height:300px; overflow:auto; display:flex; flex-direction:column; gap:2px; padding-right:2px; }
+.ca-hb2{ display:grid; grid-template-columns:minmax(0,1fr) 58px; gap:2px 6px; align-items:center; font-size:12px; padding:3px 5px; border-radius:6px; cursor:pointer; }
+.ca-hb2:hover{ background:color-mix(in srgb, #FE5000 8%, var(--surface)); }
+.ca-hb2.on{ background:color-mix(in srgb, #FE5000 18%, var(--surface)); }
+.ca-hb2 span{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--ink); }
+.ca-hb2 b{ text-align:right; font-variant-numeric:tabular-nums; }
+.ca-hb2 div{ grid-column:1 / -1; height:5px; background:var(--surface2); border-radius:3px; display:flex; }
+.ca-hb2 div i{ display:block; height:100%; border-radius:3px; }
+.ca-ok{ color:#1E8E4E; font-weight:800; }
+.ca-hm{ display:flex; gap:2px; }
+.ca-hm span{ width:14px; height:14px; border-radius:3px; background:var(--surface2); flex:none; }
+.ca-tab tbody tr{ cursor:pointer; }
+.ca-tab td.num, .ca-tab th.num{ text-align:right; }
+.ca-nv td{ opacity:.55; }
+.ca-drw .ca-dr-ov{ position:fixed; inset:0; background:rgba(15,21,48,.45); z-index:200; }
+.ca-drw .ca-dr{ position:fixed; top:0; right:0; bottom:0; width:min(900px,96vw); background:var(--surface); z-index:201; display:flex; flex-direction:column; box-shadow:-18px 0 40px rgba(0,0,0,.25); }
+.ca-dr-h{ position:relative; background:linear-gradient(105deg,#001A72,#1B3FB8); color:#fff; padding:18px 22px; display:flex; flex-direction:column; gap:3px; }
+.ca-dr-h b{ font:800 18px Poppins,Inter,sans-serif; }
+.ca-dr-h small{ color:#C9D1EC; }
+.ca-dr-h button{ position:absolute; right:14px; top:12px; background:none; border:none; color:#fff; font-size:22px; cursor:pointer; }
+.ca-dr-b{ padding:16px 22px; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+.ca-dr-k{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.ca-dr-k div{ background:var(--surface2); border-radius:12px; padding:10px 14px; }
+.ca-dr-k span{ font-size:12px; color:var(--ink-soft); }
+.ca-dr-k b{ display:block; font:800 20px Poppins,Inter,sans-serif; }
+@media (max-width:1200px){ .ca-g-5{ grid-template-columns:repeat(2, minmax(0,1fr)); } .ca-g-a{ grid-template-columns:1fr; } }

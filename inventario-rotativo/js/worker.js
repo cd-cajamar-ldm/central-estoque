@@ -220,7 +220,7 @@ const ALIAS_410 = {
   // "por que esse item mudou" (ex.: "item X, doc 460816, fulano, 13/08 17:38").
   numDoc: ['Num Doc','Num.Doc','Numero Doc'], usuario: ['Usuário','Usuario'], dataHora: ['Data/Hora','Data Hora'],
   // Central de Ajustes: fornecedor e descrição do local, quando a planilha trouxer (opcionais).
-  fornecedor: ['Fornecedor','Nome Fornecedor','Razao Social Fornecedor','Razão Social Fornecedor'],
+  fornecedor: ['Fornecedor','Nome Fornecedor','Nome Forncedor','Razao Social Fornecedor','Razão Social Fornecedor'],
   localDesc: ['Descricao Local','Descrição Local','Desc Local','Endereco','Endereço','Local']
 };
 // Classificação de motivos (extrai o código do início de "Observacao WMS" e casa com

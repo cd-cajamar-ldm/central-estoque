@@ -36,7 +36,7 @@ const IR_410_LEGENDA = [
   {id:'LOJA', legenda:'Ajuste Loja', considerarNet:true},
   {id:'QBR', legenda:'Quebra CD', considerarNet:false},
   {id:'EPI', legenda:'Baixa EPI', considerarNet:false},
-  {id:'IMP', legenda:'Ajuste Importação', considerarNet:true},
+  {id:'IMP', legenda:'Ajuste Importação', considerarNet:true, validar:false}, // entra no Net, mas é erro externo: não precisa validar
   {id:'ASR', legenda:'Sobra Recebimento', considerarNet:true},
   {id:'BAI', legenda:'Baixa Insumo', considerarNet:false},
   {id:'INP', legenda:'Ajuste Pallets', considerarNet:false},
@@ -65,7 +65,8 @@ function irLegenda410(id, legendaList){
 // lista de legenda — pra rodar tanto com a lista padrão quanto com a editada pelo
 // usuário em Configurações.
 function irClassificarMotivo410(obsWmsRaw, legendaList){
-  const texto = String(obsWmsRaw||'').trim().toUpperCase();
+  // "_x000D_" é a quebra de linha que o Excel grava como texto — sem tirar, "_x000D_AIR" não virava AIR.
+  const texto = String(obsWmsRaw||'').replace(/_x000d_/gi,' ').replace(/[\r\n]+/g,' ').trim().toUpperCase();
   const lista = legendaList || IR_410_LEGENDA;
   if(!texto) return {id:'(sem observação)', legenda:'', considerarNet:true};
   /* O código casa quando a observação é ele sozinho ou quando ele vem seguido de
