@@ -502,7 +502,7 @@ function irSwitchTab(tab){
   const filtroNetAno = document.getElementById('tbFilterNetAno');
   if(filtroNetAno) filtroNetAno.hidden = !netTab;
   const filtroNetMes = document.getElementById('tbFilterNetMes');
-  if(filtroNetMes) filtroNetMes.hidden = !netTab;
+  if(filtroNetMes) filtroNetMes.hidden = true; // o mês fica dentro da Central de Ajustes
   if(netTab) irRenderNetTopFiltro();
   irRenderCycleBadge();
   irRenderView();
@@ -1160,7 +1160,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v299';
+const IR_APP_VERSION = 'v300';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -8463,13 +8463,14 @@ function irRenderNet410LegendaConfig(){
     <td class="mono">${irEsc(l.id)}</td>
     <td><input type="text" value="${irEsc(l.legenda)}" onchange="irSetLegenda410Campo('${irEsc(l.id)}','legenda',this.value)"></td>
     <td style="text-align:center;"><input type="checkbox" ${l.considerarNet?'checked':''} onchange="irSetLegenda410Campo('${irEsc(l.id)}','considerarNet',this.checked)"></td>
+    <td style="text-align:center;"><input type="checkbox" ${irLegendaValidar(l)?'checked':''} ${l.considerarNet?'':'disabled'} onchange="irSetLegenda410Campo('${irEsc(l.id)}','validar',this.checked)"></td>
     <td><button class="btn-link" onclick="irRemoverLegenda410('${irEsc(l.id)}')">Remover</button></td>
   </tr>`;
   return `<div class="panel">
     <h3>Legenda de motivos da QRY410</h3>
     <p class="field-hint" style="margin-bottom:12px;">Mapeia o código no início da "Observação WMS" (ex.: AIR, ADE, LOJA) pro nome exibido nos painéis de Net, e se esse motivo entra no cálculo do Net. Código não listado aqui conta como "considera no Net" por padrão. "Considera no Net" só vale a partir da próxima vez que reimportar a QRY410.</p>
     <div class="table-wrap"><table>
-      <thead><tr><th>Código</th><th>Legenda</th><th style="text-align:center;">Considera no Net</th><th></th></tr></thead>
+      <thead><tr><th>Código</th><th>Legenda</th><th style="text-align:center;">Considera no Net</th><th style="text-align:center;">Validar ofensores</th><th></th></tr></thead>
       <tbody>${lista.map(row).join('')}</tbody>
     </table></div>
     <div class="two-col" style="margin-top:14px;">
@@ -8484,7 +8485,9 @@ async function irSetLegenda410Campo(id, campo, valor){
   if(!item) return;
   item[campo] = valor;
   await irSaveNet410LegendaItem({...item});
+  IR._caCache = null;
   irShowToast('Legenda salva.');
+  if(campo==='considerarNet') irRenderView();
 }
 async function irRemoverLegenda410(id){
   IR.net410Legenda = (IR.net410Legenda||[]).filter(l=>l.id!==id);
