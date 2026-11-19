@@ -2279,3 +2279,4 @@ th.th-ord:hover{ filter:brightness(1.12); }
 @media (max-width:1200px){ .ca-md2{ grid-template-columns:1fr; } }
 .ca-md-leg{ margin-top:10px; flex-wrap:wrap; gap:10px 14px; font-size:11.5px; }
 .ca-tab .ca-desc{ max-width:220px; }
+.ca-doc{ color:var(--ink-soft); font-size:11.5px; } .ca-doc small{ color:#FE5000; font-weight:800; }
