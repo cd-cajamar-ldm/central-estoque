@@ -696,7 +696,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=3"></script>
+<script src="versao-hub.js?v=4"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
@@ -1992,8 +1992,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
         +     '<table class="access-tab"><thead><tr><th>Apps</th><th>Nível de acesso</th><th class="num">Nº de visitas</th><th>Último acesso</th></tr></thead><tbody>' + apps.map(function(a){
                 var marcado = !!marcados[a.key];
                 var freq = marcado && accessLogCache[p.id] ? accessLogCache[p.id][a.key] : null;
+                var nivelAtual = marcados[a.key] === 'visualizar' ? 'visualizar' : 'editar';
                 var nivelSel = marcado
-                  ? '<select class="access-nivel" data-app="' + a.key + '" title="Nível de acesso neste app"><option value="editar"' + (marcado && marcados[a.key] !== 'visualizar' ? ' selected' : '') + '>Pode editar</option><option value="visualizar"' + (marcados[a.key] === 'visualizar' ? ' selected' : '') + '>Só visualizar</option></select>'
+                  ? '<select class="access-nivel" data-app="' + a.key + '" data-nivel-atual="' + nivelAtual + '" title="Nível de acesso neste app"><option value="editar"' + (nivelAtual !== 'visualizar' ? ' selected' : '') + '>Pode editar</option><option value="visualizar"' + (nivelAtual === 'visualizar' ? ' selected' : '') + '>Só visualizar</option></select>'
                   : '<span class="access-tab-vazio">—</span>';
                 var visitas = marcado ? String(freq ? freq.total : 0) : '—';
                 var ultimo = freq && freq.ultimo ? new Date(freq.ultimo).toLocaleDateString('pt-BR') : (marcado ? 'Nunca acessou' : '—');
@@ -2201,43 +2202,62 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       /* Trava de segurança: o administrador não pode desativar a si mesmo nem tirar o próprio papel de admin
          (senão perde o acesso a esta tela e só dá para recuperar direto no banco). */
       if((e.target.classList.contains('access-cb-ativo') || e.target.classList.contains('access-cb-admin')) && !e.target.checked){
-        var { data: { session: sessaoAtual } } = await sbAcessos.auth.getSession();
-        var { data: alvo } = await sbAcessos.schema('acessos').from('pessoas').select('user_id').eq('id', id).maybeSingle();
-        if(sessaoAtual && alvo && alvo.user_id === sessaoAtual.user.id){
-          e.target.checked = true;
-          accessMsg('Você não pode desativar a sua própria conta nem tirar o seu próprio acesso de administrador. Peça para outro administrador fazer isso.');
+        try{
+          var { data: { session: sessaoAtual } } = await comLimite(sbAcessos.auth.getSession(), 12);
+          var { data: alvo } = await comLimite(sbAcessos.schema('acessos').from('pessoas').select('user_id').eq('id', id).maybeSingle(), 12);
+          if(sessaoAtual && alvo && alvo.user_id === sessaoAtual.user.id){
+            e.target.checked = true;
+            accessMsg('Você não pode desativar a sua própria conta nem tirar o seu próprio acesso de administrador. Peça para outro administrador fazer isso.');
+            return;
+          }
+        }catch(erroTravado){
+          e.target.checked = !e.target.checked;
+          accessMsg(erroTravado.message);
           return;
         }
       }
 
       if(e.target.classList.contains('access-cb-ativo')){
-        var { error } = await sbAcessos.schema('acessos').from('pessoas').update({ ativo: e.target.checked }).eq('id', id);
-        if(error){ accessMsg(accessEmPortugues(error.message)); e.target.checked = !e.target.checked; return; }
+        try{
+          var { error } = await comLimite(sbAcessos.schema('acessos').from('pessoas').update({ ativo: e.target.checked }).eq('id', id), 12);
+          if(error){ accessMsg(accessEmPortugues(error.message)); e.target.checked = !e.target.checked; return; }
+        }catch(erroTravado){ e.target.checked = !e.target.checked; accessMsg(erroTravado.message); return; }
         accessCarregarTudo();
         return;
       }
       if(e.target.classList.contains('access-cb-admin')){
         var novoPapel = e.target.checked ? 'admin' : 'colaborador';
-        var { error: errPapel } = await sbAcessos.schema('acessos').from('pessoas').update({ papel: novoPapel }).eq('id', id);
-        if(errPapel){ accessMsg(accessEmPortugues(errPapel.message)); e.target.checked = !e.target.checked; return; }
+        try{
+          var { error: errPapel } = await comLimite(sbAcessos.schema('acessos').from('pessoas').update({ papel: novoPapel }).eq('id', id), 12);
+          if(errPapel){ accessMsg(accessEmPortugues(errPapel.message)); e.target.checked = !e.target.checked; return; }
+        }catch(erroTravado){ e.target.checked = !e.target.checked; accessMsg(erroTravado.message); return; }
         accessCarregarTudo();
         return;
       }
       if(e.target.classList.contains('access-nivel')){
-        var { error: errNivel } = await sbAcessos.schema('acessos').from('permissoes').update({ nivel: e.target.value }).eq('pessoa_id', id).eq('app_key', e.target.dataset.app);
-        if(errNivel){ accessMsg(accessEmPortugues(errNivel.message)); }
+        var nivelAnterior = e.target.dataset.nivelAtual || 'editar';
+        try{
+          var { error: errNivel } = await comLimite(sbAcessos.schema('acessos').from('permissoes').update({ nivel: e.target.value }).eq('pessoa_id', id).eq('app_key', e.target.dataset.app), 12);
+          if(errNivel){ accessMsg(accessEmPortugues(errNivel.message)); e.target.value = nivelAnterior; return; }
+        }catch(erroTravado){ e.target.value = nivelAnterior; accessMsg(erroTravado.message); return; }
         accessAbertas[id] = true;
         accessCarregarTudo();
         return;
       }
       if(e.target.classList.contains('access-cb-app')){
         var appKey = e.target.dataset.app;
-        if(e.target.checked){
-          var { error: errIns } = await sbAcessos.schema('acessos').from('permissoes').insert({ pessoa_id: id, app_key: appKey });
-          if(errIns){ accessMsg(accessEmPortugues(errIns.message)); e.target.checked = false; return; }
-        } else {
-          var { error: errDel } = await sbAcessos.schema('acessos').from('permissoes').delete().eq('pessoa_id', id).eq('app_key', appKey);
-          if(errDel){ accessMsg(accessEmPortugues(errDel.message)); e.target.checked = true; return; }
+        try{
+          if(e.target.checked){
+            var { error: errIns } = await comLimite(sbAcessos.schema('acessos').from('permissoes').insert({ pessoa_id: id, app_key: appKey }), 12);
+            if(errIns){ accessMsg(accessEmPortugues(errIns.message)); e.target.checked = false; return; }
+          } else {
+            var { error: errDel } = await comLimite(sbAcessos.schema('acessos').from('permissoes').delete().eq('pessoa_id', id).eq('app_key', appKey), 12);
+            if(errDel){ accessMsg(accessEmPortugues(errDel.message)); e.target.checked = true; return; }
+          }
+        }catch(erroTravado){
+          e.target.checked = !e.target.checked;
+          accessMsg(erroTravado.message);
+          return;
         }
         accessAbertas[id] = true;
         accessCarregarTudo();
