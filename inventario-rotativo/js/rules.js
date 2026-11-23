@@ -256,11 +256,10 @@ function irPrioridadeCor(score){
 }
 
 /* ============================================================
-   OBS DO INVENTÁRIO (filtro do topo no Dashboard)
-   Quais prefixos de Obs Inventário entram nos números do inventário
-   (acurácia, divergentes por dia, contados, produtividade). Padrão: só AIR.
-   Guardado em config 'inv-obs' (vai para a nuvem). Ciclo 1/2 de 2026 seguem
-   a regra de quando fecharam (todo motivo).
+   OBS DO INVENTÁRIO
+   Prefixo de Obs Inventário que entra nos números do inventário (acurácia,
+   divergentes por dia, contados, produtividade): AIR. Ciclo 1/2 de 2026
+   seguem a regra de quando fecharam (todo motivo).
    ============================================================ */
 const IR_INV_OBS_PADRAO = ['AIR'];
 let IR_INV_OBS_SEL = new Set(IR_INV_OBS_PADRAO);

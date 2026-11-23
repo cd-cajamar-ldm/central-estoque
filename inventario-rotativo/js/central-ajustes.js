@@ -57,8 +57,6 @@ function irCaLinhasAno(d){
   IR._caCache = {k:chave, linhas};
   return linhas;
 }
-/* Linhas do ano sem as Obs desmarcadas no filtro do topo. */
-function irCaTodas(d){ const off = IR.caObsOff; return (off && off.size) ? irCaLinhasAno(d).filter(l=>!off.has(l.cod)) : irCaLinhasAno(d); }
 function irCaVal(l){ return irCaQtd() ? l.q : l.v; }
 function irCaPassa(l, sem){ const f = IR.caS.f; return Object.keys(f).every(k=> k===sem || l[k]===f[k]); }
 function irCaNoEscopo(l){ const S = IR.caS; return (!(S.meses||[]).length || S.meses.includes(l.mes)) && (!S.dias.length || S.dias.includes(l.dia)); }
@@ -187,7 +185,7 @@ function irRenderCentralAjustes(){
   if(!d) return `<div class="panel"><p class="field-hint">Carregando...</p></div>`;
   if(!(d.linhasLogica||[]).length) return `<div class="panel"><h3>Central de Ajustes</h3><p class="field-hint">Reimporte a QRY410 na aba <a href="#" onclick="irSwitchTab('importacao');return false;">Importação</a>.</p></div>`;
   const S = IR.caS, qtd = irCaQtd();
-  const todas = irCaTodas(d);
+  const todas = irCaLinhasAno(d);
   const meses = Array.from(new Set(irCaLinhasAno(d).map(l=>l.mes))).filter(Boolean).sort();
   if(S.meses===null) S.meses = meses.length ? [meses[meses.length-1]] : [];
   S.meses = S.meses.filter(m=>meses.includes(m)); S.dias = S.dias.filter(dd=>S.meses.includes(dd.slice(0,7)));
@@ -199,14 +197,22 @@ function irRenderCentralAjustes(){
   const classe = i=>{ const o = itAno.get(i)||{a:0,neg:0,pos:0}, giro = Math.max(o.neg, o.pos);
     if(giro && Math.abs(o.a) <= giro*0.05) return 'eq'; if(o.a<0) return 'perda'; if(o.neg===0) return 'dup'; return 'mais'; };
   // Itens do escopo (só motivos que precisam de validação).
-  const it = new Map(); let nv = 0;
-  for(const l of esc){
-    if(!l.validar){ nv += irCaVal(l); continue; }
-    let o = it.get(l.item); if(!o){ o = {item:l.item, nome:l.nome, v:0, vr:0, vq:0, mot:new Map(), dep:new Map(), docs:new Map()}; it.set(l.item, o); }
-    const v = irCaVal(l); o.v += v; o.vr += l.v; o.vq += l.q; o.mot.set(l.mot, (o.mot.get(l.mot)||0)+v); o.dep.set(l.dep, (o.dep.get(l.dep)||0)+v); if(l.doc) o.docs.set(l.doc, (o.docs.get(l.doc)||0)+Math.abs(l.v));
-  }
+  let nv = 0;
   const pior = m=> Array.from(m.entries()).sort((x,y)=>x[1]-y[1])[0][0];
-  const itens = Array.from(it.values()).map(o=>{ const an = itAno.get(o.item)||{}; const docs = Array.from(o.docs.entries()).sort((x,y)=>y[1]-x[1]); return {...o, a:an.a||0, ar:an.r||0, aq:an.q||0, c:classe(o.item), m:pior(o.mot), d:pior(o.dep), doc:docs.length?docs[0][0]:'', ndoc:docs.length}; });
+  const montaItens = linhas=>{
+    const it = new Map();
+    for(const l of linhas){
+      let o = it.get(l.item); if(!o){ o = {item:l.item, nome:l.nome, v:0, vr:0, vq:0, mot:new Map(), dep:new Map(), docs:new Map()}; it.set(l.item, o); }
+      const v = irCaVal(l); o.v += v; o.vr += l.v; o.vq += l.q; o.mot.set(l.mot, (o.mot.get(l.mot)||0)+v); o.dep.set(l.dep, (o.dep.get(l.dep)||0)+v); if(l.doc) o.docs.set(l.doc, (o.docs.get(l.doc)||0)+Math.abs(l.v));
+    }
+    return Array.from(it.values()).map(o=>{ const an = itAno.get(o.item)||{}; const docs = Array.from(o.docs.entries()).sort((x,y)=>y[1]-x[1]); return {...o, a:an.a||0, ar:an.r||0, aq:an.q||0, c:classe(o.item), m:pior(o.mot), d:pior(o.dep), doc:docs.length?docs[0][0]:'', ndoc:docs.length}; });
+  };
+  esc.forEach(l=>{ if(!l.validar) nv += irCaVal(l); });
+  const escVal = esc.filter(l=>l.validar);
+  const itens = montaItens(escVal);
+  // Tabela Ofensores: sem as Obs desmarcadas no filtro dela.
+  const off = IR.caObsOff || new Set();
+  const itensTab = off.size ? montaItens(escVal.filter(l=>!off.has(l.cod))) : itens;
   const ent = esc.reduce((s,l)=>s+Math.max(0,irCaVal(l)),0), sai = esc.reduce((s,l)=>s+Math.min(0,irCaVal(l)),0), net = ent+sai;
   const porMes = new Map(); base.forEach(l=>porMes.set(l.mes, (porMes.get(l.mes)||0)+irCaVal(l)));
   const netAno = Array.from(porMes.values()).reduce((a,b)=>a+b,0);
@@ -222,7 +228,7 @@ function irRenderCentralAjustes(){
   // ----- capa
   const chips = Object.entries(S.f).map(([k,v])=>`<button type="button" class="ca-chip" onclick="irCaTiraF('${k}')">${IR_CA_DIMS.find(x=>x[0]===k)[1]}: ${irEsc(v)} ✕</button>`).join('')
     + (S.dias.length ? `<button type="button" class="ca-chip" onclick="irCaLimparDias()">${S.dias.length===1?'Dia':'Dias'} ${lbl} ✕</button>` : '')
-    + (IR.caObsOff && IR.caObsOff.size ? `<button type="button" class="ca-chip" onclick="irToggleNetObs('*', true)">Sem ${irEsc(Array.from(IR.caObsOff).sort().join(', '))} ✕</button>` : '');
+;
   const cab = `<section class="dx-hero ca-hero"><div class="dx-hero-in">
       <div class="dx-marca"><span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span><div class="dx-marca-txt"><b>Oficina LDM</b><span>Inventário · CD Cajamar</span></div></div>
       <div class="dx-hero-row">
@@ -276,11 +282,12 @@ function irRenderCentralAjustes(){
   // ----- ofensores
   const o = S.ord;
   const val = (x,c)=> c==='c' ? Object.keys(IR_CA_CL).indexOf(x.c) : x[c];
-  const lista = itens.filter(x=> S.tipo==='perda' ? x.v<0 : (S.tipo==='ganho' ? x.v>0 : true)).slice().sort((a,b)=>{ const p = val(a,o.c), q = val(b,o.c); return (typeof p==='string' ? String(p).localeCompare(String(q),'pt-BR',{numeric:true}) : p-q)*o.d; }).slice(0, 300);
+  const lista = itensTab.filter(x=> S.tipo==='perda' ? x.v<0 : (S.tipo==='ganho' ? x.v>0 : true)).slice().sort((a,b)=>{ const p = val(a,o.c), q = val(b,o.c); return (typeof p==='string' ? String(p).localeCompare(String(q),'pt-BR',{numeric:true}) : p-q)*o.d; }).slice(0, 300);
   const mesItem = new Map(); base.forEach(l=>{ let m = mesItem.get(l.item); if(!m){ m = {}; mesItem.set(l.item, m); } m[l.mes] = (m[l.mes]||0)+irCaVal(l); });
   const th = (c,t,cls)=>`<th class="${cls||''} ${o.c===c?'on':''}" onclick="irCaOrdenar('${c}')">${t}<i>${o.c===c?(o.d>0?'▲':'▼'):'↕'}</i></th>`;
   const seg = (fn, val, atual, rot)=>`<button type="button" class="${atual===val?'on':''}" onclick="${fn}('${val}')">${rot}</button>`;
   const ctl = `<div class="ca-tctl">
+      <div class="ca-obsf">${irTopObsNet()}</div>
       <div class="ca-seg">${seg('irCaSetTipo','todos',S.tipo,'Todos')}${seg('irCaSetTipo','perda',S.tipo,'Perdas')}${seg('irCaSetTipo','ganho',S.tipo,'Ganhos')}</div>
       <div class="ca-seg">${seg('irCaSetMet','v',S.met,'Valor R$')}${seg('irCaSetMet','q',S.met,'Quantidade')}</div>
     </div>`;
