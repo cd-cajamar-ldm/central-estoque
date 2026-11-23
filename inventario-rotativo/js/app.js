@@ -223,7 +223,7 @@ async function irCarregarEssencial(){
     IR.prioridadeConfig = prioridadeConfig; IR.prodMeta = prodMeta; IR.net410Legenda = net410Legenda;
     IR.net410Ignorados = net410Ignorados; IR.net410Padroes = net410Padroes; IR.ciclos = ciclos;
     if(typeof irCarregarProdExcluidos==='function') await irCarregarProdExcluidos();
-    try{ irSetInvObs(await irGetConfig('inv-obs')); IR.caObsOff = new Set((await irGetConfig('net-obs-off'))||[]); }catch(e){}
+    try{ IR.caObsOff = new Set((await irGetConfig('net-obs-off'))||[]); }catch(e){}
     let pCiclo = null;
     if(IR.ciclos.length){
       IR.cicloAtivo = IR.ciclos.find(c=>irCicloStatus(c)==='aberto') || irCicloMaisNovo(IR.ciclos) || IR.ciclos[0];
@@ -616,6 +616,7 @@ let _irFluidT = null;
 function irFluidAgendar(){ clearTimeout(_irFluidT); _irFluidT = setTimeout(irFluidAjustar, 60); }
 window.addEventListener('resize', irFluidAgendar);
 function irRenderView(){
+  IR._msAbertos = Array.from(document.querySelectorAll('details.ms-drop[open]')).map(d=>d.id);
   irSyncProdDatas();
   const root = document.getElementById('viewRoot');
   /* A aba de Divergencias usa a identidade do modulo Projetos (roxo e
@@ -1176,7 +1177,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v305';
+const IR_APP_VERSION = 'v306';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.

@@ -262,7 +262,6 @@ self.onmessage = async (e)=>{
    cálculo (cancelamentos, tempo perdido): é copiado do indicador antigo. */
 async function recalcularIndicadores(cicloId){
   post('progress', {stage:'Relendo dados do ciclo...', pct:10});
-  irSetInvObs(await irGetConfig('inv-obs'));
   const ciclo = await irGetCiclo(cicloId);
   const antigo = (await irGetIndicadores(cicloId)) || {};
   const congelados = await irGetByCiclo(IR_STORES.locais, cicloId);
@@ -742,7 +741,6 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
 
   post('progress', {stage:'Processando contagens (QRY0843)...', pct:35});
   // Legenda de motivos — a mesma da QRY410, editável em Configurações.
-  irSetInvObs(await irGetConfig('inv-obs'));
   const legendaMotivos = await irSeedNet410LegendaIfEmpty();
   const contagens = [];
   let idx843 = 0, linhasSemDataDescartadas = 0;

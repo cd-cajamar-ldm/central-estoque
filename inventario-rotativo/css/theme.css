@@ -2300,3 +2300,8 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .ms-rod{ border-top:1px solid var(--line); margin-top:6px; padding-top:8px; display:flex; justify-content:flex-end; }
 .ms-rod .btn{ padding:6px 14px; font-size:12px; }
 .ms-rod .btn[disabled]{ opacity:.45; cursor:default; }
+
+/* Obs dentro da tabela Ofensores */
+.ca-obsf{ position:relative; display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:10px; padding:5px 12px; background:var(--surface); min-width:150px; }
+.ca-obsf > label{ font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+.ca-obsf .ms-pop{ left:0; right:auto; }
