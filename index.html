@@ -696,7 +696,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=4"></script>
+<script src="versao-hub.js?v=5"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
@@ -1830,7 +1830,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var accessPessoasCache = [];
   var accessPermissoesCache = {};
   var accessLogCache = {};
-  var accessLogRaw = [];
+  var accessLogResumo = [];
   var accessAbertas = {};
   var accessResumoEl = document.getElementById('accessResumoGrid');
   var accessRankingEl = document.getElementById('accessRankingApps');
@@ -1854,7 +1854,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       var resultados = await comLimite(Promise.all([
         sbAcessos.schema('acessos').from('pessoas').select('*').order('nome'),
         sbAcessos.schema('acessos').from('permissoes').select('*'),
-        sbAcessos.schema('acessos').from('log').select('pessoa_id,app_key,acessado_em')
+        sbAcessos.rpc('ldm_log_resumo')
       ]), 12);
       pessoas = resultados[0].data; errP = resultados[0].error;
       permissoes = resultados[1].data; errPerm = resultados[1].error;
@@ -1870,18 +1870,16 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       if(!accessPermissoesCache[p.pessoa_id]) accessPermissoesCache[p.pessoa_id] = {};
       accessPermissoesCache[p.pessoa_id][p.app_key] = p.nivel || 'editar';
     });
-    /* Frequência: quantos acessos e qual o mais recente, por pessoa+app.
-       A tabela de log é nova — se ainda não existir (migração não rodada),
+    /* Frequência: quantos acessos e qual o mais recente, por pessoa+app —
+       já vem somado do banco (ldm_log_resumo), uma linha por par, não uma
+       por visita. Se a função ainda não existir (migração não rodada),
        só não mostra frequência, sem travar o resto do painel. */
     accessLogCache = {};
-    accessLogRaw = errLog ? [] : (log || []);
+    accessLogResumo = errLog ? [] : (log || []);
     if(!errLog){
-      accessLogRaw.forEach(function(l){
+      accessLogResumo.forEach(function(l){
         if(!accessLogCache[l.pessoa_id]) accessLogCache[l.pessoa_id] = {};
-        var atual = accessLogCache[l.pessoa_id][l.app_key];
-        if(!atual) atual = accessLogCache[l.pessoa_id][l.app_key] = { total: 0, ultimo: null };
-        atual.total++;
-        if(!atual.ultimo || l.acessado_em > atual.ultimo) atual.ultimo = l.acessado_em;
+        accessLogCache[l.pessoa_id][l.app_key] = { total: l.total, ultimo: l.ultimo };
       });
     }
     accessRenderPessoas();
@@ -1904,7 +1902,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       var marcados = accessPermissoesCache[p.id] || {};
       return Object.keys(marcados).length === 0;
     });
-    var totalAcessos = accessLogRaw.length;
+    var totalAcessos = accessLogResumo.reduce(function(soma, l){ return soma + Number(l.total || 0); }, 0);
 
     accessResumoEl.innerHTML = [
       { num: ativas.length, label: 'Pessoas ativas' },
@@ -1918,7 +1916,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     /* Ranking: total de acessos por app, maior primeiro. Só entram apps com
        pelo menos 1 acesso registrado -- sem poluir com todo o catálogo. */
     var totalPorApp = {};
-    accessLogRaw.forEach(function(l){ totalPorApp[l.app_key] = (totalPorApp[l.app_key] || 0) + 1; });
+    accessLogResumo.forEach(function(l){ totalPorApp[l.app_key] = (totalPorApp[l.app_key] || 0) + Number(l.total || 0); });
     var ranking = Object.keys(totalPorApp)
       .map(function(key){ return { app: appPorChave[key], total: totalPorApp[key] }; })
       .filter(function(r){ return r.app; })
