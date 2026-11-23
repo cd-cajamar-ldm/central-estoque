@@ -254,3 +254,20 @@ function irPrioridadeCor(score){
   if(score>=40) return '#FA4616';
   return '#33488E';
 }
+
+/* ============================================================
+   OBS DO INVENTÁRIO (filtro do topo no Dashboard)
+   Quais prefixos de Obs Inventário entram nos números do inventário
+   (acurácia, divergentes por dia, contados, produtividade). Padrão: só AIR.
+   Guardado em config 'inv-obs' (vai para a nuvem). Ciclo 1/2 de 2026 seguem
+   a regra de quando fecharam (todo motivo).
+   ============================================================ */
+const IR_INV_OBS_PADRAO = ['AIR'];
+let IR_INV_OBS_SEL = new Set(IR_INV_OBS_PADRAO);
+function irSetInvObs(lista){
+  const l = (Array.isArray(lista) ? lista : []).map(s=>String(s||'').trim().toUpperCase()).filter(Boolean);
+  IR_INV_OBS_SEL = new Set(l.length ? l : IR_INV_OBS_PADRAO);
+}
+function irInvObsLista(){ return Array.from(IR_INV_OBS_SEL).sort(); }
+function irInvObsChave(){ return irInvObsLista().join(','); }
+function irEhMotivoInv(m){ return IR_INV_OBS_SEL.has(String(m||'').trim().toUpperCase()); }

@@ -2280,3 +2280,23 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .ca-md-leg{ margin-top:10px; flex-wrap:wrap; gap:10px 14px; font-size:11.5px; }
 .ca-tab .ca-desc{ max-width:220px; }
 .ca-doc{ color:var(--ink-soft); font-size:11.5px; } .ca-doc small{ color:#FE5000; font-weight:800; }
+
+/* Filtros do topo com caixinhas (Obs, Mês, Dia) */
+.tb-filter{ position:relative; }
+.ms-drop{ position:static; }
+.ms-drop > summary{ list-style:none; cursor:pointer; color:var(--orange); font-size:12.5px; font-weight:800; white-space:nowrap; max-width:190px; overflow:hidden; text-overflow:ellipsis; padding-right:14px; position:relative; }
+.ms-drop > summary::-webkit-details-marker{ display:none; }
+.ms-drop > summary::after{ content:'▾'; position:absolute; right:0; top:0; font-size:11px; color:var(--ink-soft); }
+.ms-drop[data-off] > summary{ color:var(--ink-soft); cursor:default; pointer-events:none; }
+.ms-pop{ position:absolute; top:calc(100% + 6px); right:0; z-index:60; min-width:260px; max-width:340px; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 34px rgba(0,26,114,.18); padding:8px; }
+.ms-acoes{ display:flex; gap:6px; padding:2px 2px 8px; border-bottom:1px solid var(--line); margin-bottom:6px; }
+.ms-acoes button{ flex:1; border:1px solid var(--line); background:var(--paper); color:#001A72; font-weight:700; font-size:11.5px; border-radius:8px; padding:5px 8px; cursor:pointer; font-family:inherit; }
+.ms-acoes button:hover{ border-color:#FE5000; color:#FE5000; }
+.ms-lista{ max-height:320px; overflow:auto; scrollbar-width:thin; }
+.ms-op{ display:flex !important; align-items:center; gap:8px; padding:5px 6px; border-radius:7px; cursor:pointer; font-size:12.5px !important; font-weight:500 !important; text-transform:none !important; letter-spacing:0 !important; color:var(--ink) !important; }
+.ms-op:hover{ background:var(--paper); }
+.ms-op input{ accent-color:#FE5000; width:15px; height:15px; margin:0; flex-shrink:0; }
+.ms-op b{ color:#001A72; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; min-width:34px; display:inline-block; }
+.ms-rod{ border-top:1px solid var(--line); margin-top:6px; padding-top:8px; display:flex; justify-content:flex-end; }
+.ms-rod .btn{ padding:6px 14px; font-size:12px; }
+.ms-rod .btn[disabled]{ opacity:.45; cursor:default; }

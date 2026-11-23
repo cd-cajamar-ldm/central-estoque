@@ -14,7 +14,7 @@
      • Ganho sem perda    — só ganhou no ano (possível duplicidade)
      • Ganhou mais que perdeu
    ============================================================ */
-IR.caS = IR.caS || {mes:null, dia:'', f:{}, met:'v', tipo:'todos', ord:{c:'v', d:1}};
+IR.caS = IR.caS || {meses:null, dias:[], f:{}, met:'v', tipo:'todos', ord:{c:'v', d:1}};
 const IR_CA_DIMS = [['mot','Motivo'],['dep','Depósito'],['depto','Departamento'],['forn','Fornecedor'],['usr','Usuário']];
 const IR_CA_CL = {perda:['Perda (não voltou)','#FE5000'], dup:['Ganho sem perda','#C8361B'], mais:['Voltou e passou','#3A5BD9'], eq:['Equalizado','#1E8E4E']};
 const IR_CA_MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -50,24 +50,27 @@ function irCaLinhasAno(d){
     const dt = String(l.dtMov||'');
     linhas.push({
       item:l.item, nome:l.nome, depto:l.depto||'(sem depto)', forn:l.fornecedor||'(sem fornecedor)', dep:l.deposito||'(sem depósito)',
-      usr:l.usuario||'(sem usuário)', doc:l.numDoc||'', mot: cls.id + (cls.legenda ? ' · '+cls.legenda : ''),
+      usr:l.usuario||'(sem usuário)', doc:l.numDoc||'', mot: cls.id + (cls.legenda ? ' · '+cls.legenda : ''), cod:cls.id, leg:cls.legenda||'',
       validar: irLegendaValidar(porId.get(cls.id)), mes:l.mes || dt.slice(0,7), dia:dt.slice(0,10), v:l.valor||0, q:l.qtd||0
     });
   }
   IR._caCache = {k:chave, linhas};
   return linhas;
 }
+/* Linhas do ano sem as Obs desmarcadas no filtro do topo. */
+function irCaTodas(d){ const off = IR.caObsOff; return (off && off.size) ? irCaLinhasAno(d).filter(l=>!off.has(l.cod)) : irCaLinhasAno(d); }
 function irCaVal(l){ return irCaQtd() ? l.q : l.v; }
 function irCaPassa(l, sem){ const f = IR.caS.f; return Object.keys(f).every(k=> k===sem || l[k]===f[k]); }
-function irCaNoEscopo(l){ const S = IR.caS; return (!S.mes || l.mes===S.mes) && (!S.dia || l.dia===S.dia); }
-function irCaSetMes(m){ const S = IR.caS; S.mes = (S.mes===m) ? '' : m; S.dia = ''; if(S.mes) IR.net410MesSel = S.mes; irRenderView(); }
-function irCaSetDia(dd){ IR.caS.dia = IR.caS.dia===dd ? '' : dd; irRenderView(); }
+function irCaNoEscopo(l){ const S = IR.caS; return (!(S.meses||[]).length || S.meses.includes(l.mes)) && (!S.dias.length || S.dias.includes(l.dia)); }
+/* Meses: vários de uma vez (vazio = ano inteiro). Dia fora dos meses escolhidos sai. */
+function irCaDefMeses(l){ const S = IR.caS; S.meses = Array.from(new Set(l)).sort(); S.dias = S.dias.filter(dd=>S.meses.includes(dd.slice(0,7))); irRenderView(); }
+function irCaSetMes(m){ const S = IR.caS; if(!m) return irCaDefMeses([]); const l = (S.meses||[]).slice(); const i = l.indexOf(m); if(i>=0) l.splice(i,1); else l.push(m); irCaDefMeses(l); }
+function irCaSetDia(dd){ const S = IR.caS; const i = S.dias.indexOf(dd); if(i>=0) S.dias.splice(i,1); else S.dias.push(dd); irRenderView(); }
+function irCaLimparDias(){ IR.caS.dias = []; irRenderView(); }
 function irCaSetF(k, v){ const f = IR.caS.f; if(f[k]===v) delete f[k]; else f[k] = v; irRenderView(); }
 function irCaTiraF(k){ delete IR.caS.f[k]; irRenderView(); }
 function irCaSetMet(m){ IR.caS.met = m; irRenderView(); }
 function irCaSetTipo(t){ IR.caS.tipo = t; irRenderView(); }
-function irCaSetMesSel(m){ const S = IR.caS; S.mes = m; S.dia = ''; if(m) IR.net410MesSel = m; irRenderView(); }
-function irCaSetDiaSel(dd){ IR.caS.dia = dd; irRenderView(); }
 function irCaOrdenar(c){ const o = IR.caS.ord; IR.caS.ord = o.c===c ? {c, d:-o.d} : {c, d:(c==='v'||c==='a')?1:-1}; irRenderView(); }
 
 function irCaInfo(){ return ''; } // sem ícone de informação (pedido)
@@ -97,10 +100,10 @@ function irCaMesesSvg(rows, W, sel, total){
     s += `<text x="${x+bw/2}" y="${H-8}" font-size="11" font-weight="800" text-anchor="middle" style="fill:var(--ink)">Total</text>`;
   }
   rows.forEach((r,i)=>{
-    const x = pl+i*sl+(sl-bw)/2, a = Math.min(y(0), y(r.v)), b = Math.max(y(0), y(r.v)), on = !sel || sel===r.mes;
+    const x = pl+i*sl+(sl-bw)/2, a = Math.min(y(0), y(r.v)), b = Math.max(y(0), y(r.v)), esc = sel.includes(r.mes), on = !sel.length || esc;
     s += `<g style="cursor:pointer" onclick="irCaSetMes('${r.mes}')"><title>${r.rot}: ${irCaR(r.v)}</title><rect x="${pl+i*sl}" y="${pt}" width="${sl}" height="${H-pt-pb}" fill="transparent"/><rect x="${x}" y="${a}" width="${bw}" height="${Math.max(2,b-a)}" rx="4" fill="${irCaCor(r.v)}" opacity="${on?1:.35}"/></g>`;
     s += `<text x="${x+bw/2}" y="${r.v>=0?a-5:b+13}" font-size="10.5" font-weight="800" text-anchor="middle" fill="${irCaCor(r.v)}">${irCaK(r.v)}</text>`;
-    s += `<text x="${x+bw/2}" y="${H-8}" font-size="11" font-weight="${sel===r.mes?800:600}" text-anchor="middle" style="fill:${sel===r.mes?'var(--ink)':'var(--ink-soft)'}">${r.rot}</text>`;
+    s += `<text x="${x+bw/2}" y="${H-8}" font-size="11" font-weight="${esc?800:600}" text-anchor="middle" style="fill:${esc?'var(--ink)':'var(--ink-soft)'}">${r.rot}</text>`;
   });
   s += `<polyline points="${ac.map((v,i)=>(pl+i*sl+sl/2).toFixed(1)+','+y(v).toFixed(1)).join(' ')}" fill="none" style="stroke:var(--ca-linha)" stroke-width="2.2"/>`;
   s += ac.map((v,i)=>`<circle cx="${pl+i*sl+sl/2}" cy="${y(v)}" r="3" style="fill:var(--surface);stroke:var(--ca-linha)" stroke-width="2"/>`).join('');
@@ -125,6 +128,7 @@ function irCaZeroSvg(net, passos, W){
   return s + '</svg>';
 }
 function irCaDiasSvg(dias, W, sel){
+  const multi = new Set(dias.map(d=>d.dia.slice(0,7))).size>1;
   const H = 230, pl = 58, pr = 10, pt = 18, pb = 26;
   const vals = dias.map(d=>d.v);
   const hi = Math.max(0, ...vals)*1.25 + 1, lo = Math.min(0, ...vals)*1.22 - 1;
@@ -132,10 +136,10 @@ function irCaDiasSvg(dias, W, sel){
   const sl = (W-pl-pr)/Math.max(1, dias.length), bw = Math.min(30, sl*0.6);
   let s = `<svg width="${W}" height="${H}" style="display:block">` + irCaEixo(W, pl, pr, y, lo, hi, 4);
   dias.forEach((d,i)=>{
-    const x = pl+i*sl+(sl-bw)/2, a = Math.min(y(0), y(d.v)), b = Math.max(y(0), y(d.v)), on = !sel || sel===d.dia;
+    const x = pl+i*sl+(sl-bw)/2, a = Math.min(y(0), y(d.v)), b = Math.max(y(0), y(d.v)), esc = sel.includes(d.dia), on = !sel.length || esc;
     s += `<g style="cursor:pointer" onclick="irCaSetDia('${d.dia}')" onmouseenter="irCaDiaTip(event,'${d.dia}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"><rect x="${pl+i*sl}" y="${pt}" width="${sl}" height="${H-pt-pb}" fill="transparent"/><rect x="${x}" y="${a}" width="${bw}" height="${Math.max(2,b-a)}" rx="3" fill="${irCaCor(d.v)}" opacity="${on?1:.35}"/></g>`;
     s += `<text x="${x+bw/2}" y="${d.v>=0?a-4:b+12}" font-size="${dias.length>22?9:10}" font-weight="800" text-anchor="middle" fill="${irCaCor(d.v)}">${irCaK(d.v)}</text>`;
-    s += `<text x="${x+bw/2}" y="${H-8}" font-size="10.5" font-weight="${sel===d.dia?800:500}" text-anchor="middle" style="fill:${sel===d.dia?'var(--ink)':'var(--ink-soft)'}">${d.dia.slice(8,10)}</text>`;
+    s += `<text x="${x+bw/2}" y="${H-8}" font-size="10.5" font-weight="${esc?800:500}" text-anchor="middle" style="fill:${esc?'var(--ink)':'var(--ink-soft)'}">${d.dia.slice(8,10)}${multi?'/'+d.dia.slice(5,7):''}</text>`;
   });
   return s + '</svg>';
 }
@@ -183,9 +187,10 @@ function irRenderCentralAjustes(){
   if(!d) return `<div class="panel"><p class="field-hint">Carregando...</p></div>`;
   if(!(d.linhasLogica||[]).length) return `<div class="panel"><h3>Central de Ajustes</h3><p class="field-hint">Reimporte a QRY410 na aba <a href="#" onclick="irSwitchTab('importacao');return false;">Importação</a>.</p></div>`;
   const S = IR.caS, qtd = irCaQtd();
-  const todas = irCaLinhasAno(d);
-  const meses = Array.from(new Set(todas.map(l=>l.mes))).filter(Boolean).sort();
-  if(S.mes===null || (S.mes && !meses.includes(S.mes))){ S.mes = meses[meses.length-1]; S.dia = ''; }
+  const todas = irCaTodas(d);
+  const meses = Array.from(new Set(irCaLinhasAno(d).map(l=>l.mes))).filter(Boolean).sort();
+  if(S.meses===null) S.meses = meses.length ? [meses[meses.length-1]] : [];
+  S.meses = S.meses.filter(m=>meses.includes(m)); S.dias = S.dias.filter(dd=>S.meses.includes(dd.slice(0,7)));
   const base = todas.filter(l=>irCaPassa(l));
   const esc = base.filter(irCaNoEscopo);
   // Item no ANO (sem recorte) para a situação.
@@ -211,24 +216,26 @@ function irRenderCentralAjustes(){
   const vEq = itens.filter(x=>x.c==='eq').reduce((s,x)=>s+((itAno.get(x.item)||{}).neg||0),0);
   const maior = itens.slice().sort((a,b)=>a.a-b.a)[0];
   const rotMes = m=> IR_CA_MES[parseInt(m.slice(5,7),10)-1];
-  const lbl = S.dia ? S.dia.slice(8,10)+'/'+S.dia.slice(5,7) : (S.mes ? rotMes(S.mes) : 'Ano');
+  const lblMes = !S.meses.length ? 'Ano' : (S.meses.length<=3 ? S.meses.map(rotMes).join('+') : S.meses.length+' meses');
+  const lbl = S.dias.length ? (S.dias.length===1 ? S.dias[0].slice(8,10)+'/'+S.dias[0].slice(5,7) : S.dias.length+' dias') : lblMes;
 
   // ----- capa
   const chips = Object.entries(S.f).map(([k,v])=>`<button type="button" class="ca-chip" onclick="irCaTiraF('${k}')">${IR_CA_DIMS.find(x=>x[0]===k)[1]}: ${irEsc(v)} ✕</button>`).join('')
-    + (S.dia ? `<button type="button" class="ca-chip" onclick="irCaSetDia('${S.dia}')">Dia ${lbl} ✕</button>` : '');
+    + (S.dias.length ? `<button type="button" class="ca-chip" onclick="irCaLimparDias()">${S.dias.length===1?'Dia':'Dias'} ${lbl} ✕</button>` : '')
+    + (IR.caObsOff && IR.caObsOff.size ? `<button type="button" class="ca-chip" onclick="irToggleNetObs('*', true)">Sem ${irEsc(Array.from(IR.caObsOff).sort().join(', '))} ✕</button>` : '');
   const cab = `<section class="dx-hero ca-hero"><div class="dx-hero-in">
       <div class="dx-marca"><span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span><div class="dx-marca-txt"><b>Oficina LDM</b><span>Inventário · CD Cajamar</span></div></div>
       <div class="dx-hero-row">
         <div class="dx-hero-tit"><h2>Central de Ajustes</h2><span class="dx-tag">Net ${d.ano} · ${lbl}</span></div>
       </div>
-      <div class="ca-esc"><button type="button" class="${!S.mes?'on':''}" onclick="irCaSetMes('')">Ano<small>${irCaK(netAno)}</small></button>${meses.map(m=>`<button type="button" class="${S.mes===m?'on':''}" onclick="irCaSetMes('${m}')">${rotMes(m)}<small>${irCaK(porMes.get(m)||0)}</small></button>`).join('')}</div>
+      <div class="ca-esc"><button type="button" class="${!S.meses.length?'on':''}" onclick="irCaSetMes('')">Ano<small>${irCaK(netAno)}</small></button>${meses.map(m=>`<button type="button" class="${S.meses.includes(m)?'on':''}" onclick="irCaSetMes('${m}')">${rotMes(m)}<small>${irCaK(porMes.get(m)||0)}</small></button>`).join('')}</div>
       ${chips?`<div class="ca-chips">${chips}</div>`:''}
     </div></section>`;
 
   // ----- indicadores
   const kc = (rot, val, sub, cor, info, cls)=>`<div class="ca-kpi ${cls||''}"><span>${rot}</span><b style="color:${cor}">${val}</b><small>${sub||''}</small></div>`;
   const kpis = `<div class="ca-kpis">
-    ${kc('Net · '+lbl, irCaR(net), (S.mes?'ano '+irCaR(netAno):meses.length+' meses'), irCaCor(net), 'Entradas − saídas no período escolhido, com os filtros aplicados.', 'destaque')}
+    ${kc('Net · '+lbl, irCaR(net), (S.meses.length?'ano '+irCaR(netAno):meses.length+' meses'), irCaCor(net), 'Entradas − saídas no período escolhido, com os filtros aplicados.', 'destaque')}
     ${kc('Entradas', irCaR(ent, true), esc.filter(l=>irCaVal(l)>0).length.toLocaleString('pt-BR')+' lançamentos', '#001A72', 'Tudo que aumentou o estoque no período.')}
     ${kc('Saídas', irCaR(sai), esc.filter(l=>irCaVal(l)<0).length.toLocaleString('pt-BR')+' lançamentos', '#FE5000', 'Tudo que reduziu o estoque no período.')}
     ${kc('Sem validação', irCaR(nv), 'motivos já conhecidos (ex.: IMP)', 'var(--ink-soft)', 'Motivos que entram no Net mas não precisam ser validados (marcados na legenda de Configurações). Ficam fora dos ofensores.')}
@@ -240,7 +247,7 @@ function irRenderCentralAjustes(){
 
   // ----- gráficos
   const rowsMes = meses.map(m=>({mes:m, rot:rotMes(m), v:porMes.get(m)||0}));
-  const gMes = irCaPainel('NET', irFluid('caMes', w=>irCaMesesSvg(rowsMes, w, S.mes, netAno), 270),
+  const gMes = irCaPainel('NET', irFluid('caMes', w=>irCaMesesSvg(rowsMes, w, S.meses, netAno), 270),
     irCaLeg('#001A72','ganho')+irCaLeg('#FE5000','perda')+irCaLeg('var(--ca-linha)','acumulado',true), 'Barra = Net do mês. Linha = acumulado do ano. Clique num mês para abrir; clique de novo para voltar ao ano.');
   // Itens mais divergentes: maiores perdas × maiores ganhos do período, com o Net do ano de cada um (tracinho).
   const lado = (lst, neg)=>{ const mx = Math.max(1, ...lst.map(x=>Math.abs(x.v)), ...lst.map(x=>Math.abs(x.a)));
@@ -253,11 +260,11 @@ function irRenderCentralAjustes(){
   const gZero = irCaPainel('Itens mais divergentes', `<div class="ca-md2"><div><div class="ca-md-tit p">Maiores perdas</div>${cabMd}${lado(topP)}</div><div><div class="ca-md-tit g">Maiores ganhos</div>${cabMd}${lado(topG)}</div></div>
     <div class="cmp-legend ca-md-leg">${Object.entries(IR_CA_CL).map(([k,[t,c]])=>irCaLeg(c,t)).join('')}<span><span class="ca-leg-tick"></span>Net do ano</span></div>`);
   let gDia = '';
-  if(S.mes){
-    const pd = new Map(); base.filter(l=>l.mes===S.mes).forEach(l=>pd.set(l.dia, (pd.get(l.dia)||0)+irCaVal(l)));
+  if(S.meses.length){
+    const pd = new Map(); base.filter(l=>S.meses.includes(l.mes)).forEach(l=>pd.set(l.dia, (pd.get(l.dia)||0)+irCaVal(l)));
     const dias = Array.from(pd.entries()).sort((a,b)=>a[0].localeCompare(b[0])).map(([dia,v])=>({dia, v}));
-    gDia = irCaPainel('Net por dia · '+rotMes(S.mes), irFluid('caDia', w=>irCaDiasSvg(dias, w, S.dia), 230), irCaLeg('#001A72','ganho')+irCaLeg('#FE5000','perda'), '');
-    IR._caDiaItens = {base:base.filter(l=>l.mes===S.mes && l.validar), itAno};
+    gDia = irCaPainel('Net por dia · '+lblMes, irFluid('caDia', w=>irCaDiasSvg(dias, w, S.dias), 230), irCaLeg('#001A72','ganho')+irCaLeg('#FE5000','perda'), '');
+    IR._caDiaItens = {base:base.filter(l=>S.meses.includes(l.mes) && l.validar), itAno};
   }
   const dims = IR_CA_DIMS.map(([k,rot])=>{
     const g = new Map(); todas.filter(l=>irCaPassa(l,k) && irCaNoEscopo(l)).forEach(l=>g.set(l[k], (g.get(l[k])||0)+irCaVal(l)));
@@ -272,11 +279,8 @@ function irRenderCentralAjustes(){
   const lista = itens.filter(x=> S.tipo==='perda' ? x.v<0 : (S.tipo==='ganho' ? x.v>0 : true)).slice().sort((a,b)=>{ const p = val(a,o.c), q = val(b,o.c); return (typeof p==='string' ? String(p).localeCompare(String(q),'pt-BR',{numeric:true}) : p-q)*o.d; }).slice(0, 300);
   const mesItem = new Map(); base.forEach(l=>{ let m = mesItem.get(l.item); if(!m){ m = {}; mesItem.set(l.item, m); } m[l.mes] = (m[l.mes]||0)+irCaVal(l); });
   const th = (c,t,cls)=>`<th class="${cls||''} ${o.c===c?'on':''}" onclick="irCaOrdenar('${c}')">${t}<i>${o.c===c?(o.d>0?'▲':'▼'):'↕'}</i></th>`;
-  const diasMes = S.mes ? Array.from(new Set(todas.filter(l=>l.mes===S.mes).map(l=>l.dia))).sort() : [];
   const seg = (fn, val, atual, rot)=>`<button type="button" class="${atual===val?'on':''}" onclick="${fn}('${val}')">${rot}</button>`;
   const ctl = `<div class="ca-tctl">
-      <label class="ca-sel"><span>Mês</span><select onchange="irCaSetMesSel(this.value)"><option value="" ${!S.mes?'selected':''}>Ano inteiro</option>${meses.map(m=>`<option value="${m}" ${S.mes===m?'selected':''}>${IR_MES_NOMES[parseInt(m.slice(5,7),10)-1]}</option>`).join('')}</select></label>
-      <label class="ca-sel"><span>Dia</span><select onchange="irCaSetDiaSel(this.value)" ${S.mes?'':'disabled'}><option value="">Todos</option>${diasMes.map(dd=>`<option value="${dd}" ${S.dia===dd?'selected':''}>${dd.slice(8,10)}/${dd.slice(5,7)}</option>`).join('')}</select></label>
       <div class="ca-seg">${seg('irCaSetTipo','todos',S.tipo,'Todos')}${seg('irCaSetTipo','perda',S.tipo,'Perdas')}${seg('irCaSetTipo','ganho',S.tipo,'Ganhos')}</div>
       <div class="ca-seg">${seg('irCaSetMet','v',S.met,'Valor R$')}${seg('irCaSetMet','q',S.met,'Quantidade')}</div>
     </div>`;
@@ -287,7 +291,7 @@ function irRenderCentralAjustes(){
       return `<tr onclick="irCaAbrirItem('${irEsc(x.item)}')"><td><span class="ca-cod">${irEsc(x.item)}</span></td><td class="ca-desc" title="${irEsc(x.nome)}">${irEsc(x.nome)}</td><td class="mono ca-doc" title="${x.ndoc>1?x.ndoc+' documentos':''}">${irEsc(x.doc||'—')}${x.ndoc>1?` <small>+${x.ndoc-1}</small>`:''}</td><td class="ca-sec" title="${irEsc(x.m)}"><b>${irEsc(String(x.m).split(' · ')[0])}</b></td>
         <td class="num"><b style="color:${irCaCor(x.vr)}">${R$(x.vr)}</b></td><td class="num"><b style="color:${irCaCor(x.ar)}">${R$(x.ar)}</b></td>
         <td class="num"><b style="color:${irCaCor(x.vq)}">${PC(x.vq)}</b></td><td class="num"><b style="color:${irCaCor(x.aq)}">${PC(x.aq)}</b></td>
-        <td><div class="ca-hm">${meses.map(mm=>{ const v = m[mm]||0, t = Math.abs(v)/mx; return `<span title="${rotMes(mm)}: ${irCaR(v)}" style="${v?`background:${v<0?`rgba(254,80,0,${(.2+t*.8).toFixed(2)})`:`rgba(0,26,114,${(.2+t*.8).toFixed(2)})`}`:''};${S.mes===mm?'outline:2px solid var(--ink)':''}"></span>`; }).join('')}</div></td>
+        <td><div class="ca-hm">${meses.map(mm=>{ const v = m[mm]||0, t = Math.abs(v)/mx; return `<span title="${rotMes(mm)}: ${irCaR(v)}" style="${v?`background:${v<0?`rgba(254,80,0,${(.2+t*.8).toFixed(2)})`:`rgba(0,26,114,${(.2+t*.8).toFixed(2)})`}`:''};${S.meses.includes(mm)?'outline:2px solid var(--ink)':''}"></span>`; }).join('')}</div></td>
         <td><span class="ca-badge" style="--c:${IR_CA_CL[x.c][1]}">${IR_CA_CL[x.c][0]}</span></td></tr>`; }).join('')}
     </tbody></table></div>`;
   const gTab = irCaPainel('Ofensores', tab, '',

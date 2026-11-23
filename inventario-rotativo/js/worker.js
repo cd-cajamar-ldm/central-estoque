@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 31;
+const IR_INDICADORES_VERSION = 32;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -262,6 +262,7 @@ self.onmessage = async (e)=>{
    cálculo (cancelamentos, tempo perdido): é copiado do indicador antigo. */
 async function recalcularIndicadores(cicloId){
   post('progress', {stage:'Relendo dados do ciclo...', pct:10});
+  irSetInvObs(await irGetConfig('inv-obs'));
   const ciclo = await irGetCiclo(cicloId);
   const antigo = (await irGetIndicadores(cicloId)) || {};
   const congelados = await irGetByCiclo(IR_STORES.locais, cicloId);
@@ -293,7 +294,7 @@ async function recalcularIndicadores(cicloId){
     const st = {status:'convergido', rodadas:maxRodada};
     const atualTodo = statusPorLocalTodoMotivo.get(local);
     if(!atualTodo || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atualTodo.status]) statusPorLocalTodoMotivo.set(local, st);
-    if(!lista.some(c=>String(c.motivo||'').trim().toUpperCase()==='AIR')) continue;
+    if(!lista.some(c=>irEhMotivoInv(c.motivo))) continue;
     const atual = statusPorLocalAIR.get(local);
     if(!atual || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atual.status]) statusPorLocalAIR.set(local, st);
   }
@@ -741,6 +742,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
 
   post('progress', {stage:'Processando contagens (QRY0843)...', pct:35});
   // Legenda de motivos — a mesma da QRY410, editável em Configurações.
+  irSetInvObs(await irGetConfig('inv-obs'));
   const legendaMotivos = await irSeedNet410LegendaIfEmpty();
   const contagens = [];
   let idx843 = 0, linhasSemDataDescartadas = 0;
@@ -969,7 +971,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   const statusPorLocalAIR = new Map();
   const visitaEhAIR = new Map(); // chave -> bool
   for(const [chave, lista] of porVisitaBruto){
-    visitaEhAIR.set(chave, lista.some(c=>String(c.motivo||'').trim().toUpperCase()==='AIR'));
+    visitaEhAIR.set(chave, lista.some(c=>irEhMotivoInv(c.motivo)));
   }
   for(const [chave, st] of statusPorVisita){
     const local = localDaVisita.get(chave);
@@ -1176,7 +1178,7 @@ function irNumInventario(v){
    é o da própria rodada (Id Conferência 1 dela), então não há o risco de contar
    venda e reposição do intervalo como erro de contagem. */
 function irDivergenciasDoCiclo(divergencias){
-  const air = divergencias.filter(d=>String(d.motivo||'').trim().toUpperCase()==='AIR');
+  const air = divergencias.filter(d=>irEhMotivoInv(d.motivo));
   const ultima = new Map(); // local -> maior Nº Inventário entre as rodadas AIR
   for(const d of air){
     const n = irNumInventario(d.inventario);
@@ -1489,6 +1491,9 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   const diaFinalPorLocal = new Map(); // local -> {dia, rodada}
   for(const c of contagens){
     if(c.idConferencia<=1 || !c.dataSituacao) continue;
+    // Só as Obs escolhidas no filtro do topo: uma auditoria (ADE) no mesmo local
+    // não pode puxar o "dia final" do local para o dia dela.
+    if(!modoLegado && !irEhMotivoInv(c.motivo)) continue;
     // Mesmo norte do resto: só local da base congelada. Sem isso, "locais contados"
     // saía de um universo maior que o de peças/valor e que o de locais divergentes —
     // um mês podia mostrar local contado com zero peça e zero valor, e a Acurácia
@@ -1507,7 +1512,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   const diaFinalPorLocalAIR = new Map(); // local -> {dia, rodada}
   for(const c of contagens){
     if(c.idConferencia<2 || !c.dataSituacao) continue;
-    if(String(c.motivo||'').trim().toUpperCase()!=='AIR') continue;
+    if(!irEhMotivoInv(c.motivo)) continue;
     if(!noCiclo.has(c.local)) continue;
     const dia = c.dataSituacao.slice(0,10);
     const atual = diaFinalPorLocalAIR.get(c.local);
@@ -1672,7 +1677,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   })).sort((a,b)=>b.locais-a.locais);
 
   const indicadoresFinais = {
-    _v: IR_INDICADORES_VERSION,
+    _v: IR_INDICADORES_VERSION, obsInv: irInvObsChave(),
     locaisCongelados, locaisContadosTotal, locaisConcluidos, locaisPendentes, locaisEmContagem, locaisNaoIniciados,
     andamentoCiclo, acuraciaPecas, acuraciaLocal, acuraciaValor, meta: IR_META_ACURACIA,
     // Gestão de Inventário: quantos locais saíram da acurácia por exclusão manual,
