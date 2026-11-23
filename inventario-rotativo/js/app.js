@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v308';
+const IR_APP_VERSION = 'v309';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -7944,69 +7944,64 @@ function irRenderGestaoInventario(){
     }
   }
   const rankUsuarios = Array.from(porUsuario.values()).sort((a,b)=>b.pecas-a.pecas || b.locais-a.locais);
-  const kpis = irKpiBlock('orange', '🚫', 'Divergência desconsiderada — ciclo ativo',
-    irKpiTile('📍', irFmtInt(aplicadas.length), 'Locais desconsiderados', '', `${irFmtInt(lista.length)} cadastrado(s) no total`)
-    + irKpiTile('📦', irFmtInt(tot.pecas), 'Peças divergentes desconsideradas', '', `${irFmtInt(tot.itens)} item(ns) divergente(s)`)
-    + irKpiTile('💰', irFmtMoneyCompact(tot.valor), 'Valor divergente desconsiderado', '', irFmtMoneyInt(tot.valor))
-    + irKpiTile('👤', irFmtInt(rankUsuarios.length), 'Usuários envolvidos', '', 'contaram alguma rodada física')
-    + (impacto ? irKpiTile('📉', irFmtPct(impacto.sem), 'Acurácia Peças sem a gestão', '', 'se as contagens erradas valessem')
-      + irKpiTile('🎯', irFmtPct(impacto.com), 'Acurácia Peças com a gestão', '', `impacto ${(impacto.pp>=0?'+':'')+irFmtNum(impacto.pp,2)} p.p.`) : ''));
-  return `
-  <div class="panel">
-    <h3>Desconsiderar contagem da acurácia</h3>
-    <p class="panel-sub">Informe o Nº do inventário e o local com contagem errada. Só aquele inventário daquele local sai da acurácia (peças, local e valor, inclusive nas quebras por rua, setor e mês) — os demais locais do mesmo inventário continuam contando. Andamento e locais concluídos não mudam: o local foi trabalhado, só o resultado da contagem não vale.</p>
-    <div class="gi-form">
+  const kc = (rot, val, sub, cor, cls)=>`<div class="ca-kpi ${cls||''}"><span>${rot}</span><b style="color:${cor}">${val}</b><small>${sub||''}</small></div>`;
+  const kpis = `<div class="ca-kpis gi-kpis">
+    ${kc('Locais desconsiderados', irFmtInt(aplicadas.length), irFmtInt(lista.length)+' cadastrado(s) no total', '#FE5000', 'destaque')}
+    ${kc('Peças divergentes', irFmtInt(tot.pecas), irFmtInt(tot.itens)+' item(ns) divergente(s)', '#001A72')}
+    ${kc('Valor divergente', irFmtMoneyInt(tot.valor), 'desconsiderado no ciclo ativo', '#001A72')}
+    ${kc('Usuários envolvidos', irFmtInt(rankUsuarios.length), 'contaram alguma rodada física', '#001A72')}
+    ${impacto ? kc('Acurácia peças sem a gestão', irFmtPct(impacto.sem), 'se as contagens erradas valessem', '#FE5000')
+      + kc('Acurácia peças com a gestão', irFmtPct(impacto.com), `impacto ${(impacto.pp>=0?'+':'')+irFmtNum(impacto.pp,2)} p.p.`, '#1E8E4E') : ''}
+  </div>`;
+  const pnl = (t, corpo, dir)=>`<div class="panel ca-panel"><div class="dx-panel-h"><h3>${t}</h3>${dir?`<div class="cmp-legend">${dir}</div>`:''}</div>${corpo}</div>`;
+  const cab = `<section class="dx-hero ca-hero gi-hero"><div class="dx-hero-in">
+      <div class="dx-marca"><span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span><div class="dx-marca-txt"><b>Oficina LDM</b><span>Inventário · CD Cajamar</span></div></div>
+      <div class="dx-hero-row"><div class="dx-hero-tit"><h2>Gestão de Inventário</h2><span class="dx-tag">Contagens desconsideradas da acurácia</span></div></div>
+    </div></section>`;
+  const form = pnl('Desconsiderar contagem da acurácia', `<div class="gi-form gi-form-ca">
       <div><label>Nº Inventário</label><input type="text" id="ir-gi-inv" placeholder="ex.: 485919"></div>
       <div><label>Local (código ou endereço)</label><input type="text" id="ir-gi-local" placeholder="ex.: 708184 ou PP 003 090 05"></div>
-      <div><label>Justificativa</label><input type="text" id="ir-gi-just" placeholder="ex.: contagem lançada no endereço errado, confirmada em recontagem"></div>
-    </div>
-    <div class="form-actions"><button class="btn btn-primary" ${ocupado?'disabled':''} onclick="irAdicionarExclusao()">${ocupado?'Recalculando...':'Desconsiderar da acurácia'}</button></div>
-  </div>
-  <div class="kpi-blocks" style="margin-bottom:14px;">${kpis}</div>
-  <div class="panel">
-    <h3>Locais desconsiderados (${irFmtInt(lista.length)})</h3>
-    <p class="panel-sub">${ind && ind.locaisDesconsiderados!=null ? `No ciclo ativo, ${irFmtInt(ind.locaisDesconsiderados)} local(is) estão fora da acurácia. ` : ''}Só tem efeito o inventário que FECHOU o local (a última rodada AIR dele) — rodada intermediária já não entra na conta. Ciclos 1 e 2 de 2026 têm o número publicado travado e não mudam. Usuários = quem contou cada rodada física (2ª em diante) daquele inventário; "final" é a rodada que valeu como contagem física.</p>
-    ${lista.length ? `<div class="table-wrap gi-excl-wrap"><table class="gi-excl">
-      <thead><tr><th>Nº Inv.</th><th>Local</th><th class="gi-excl-txt">Endereço</th><th class="gi-excl-txt">Usuário</th><th>Rodada</th><th class="num">Peças div.</th><th class="num">Valor div.</th><th class="gi-excl-just">Justificativa</th><th>Cadastro</th><th></th></tr></thead>
+      <div><label>Justificativa</label><input type="text" id="ir-gi-just" placeholder="ex.: contagem lançada no endereço errado"></div>
+      <div class="gi-form-bt"><button class="btn btn-primary" ${ocupado?'disabled':''} onclick="irAdicionarExclusao()">${ocupado?'Recalculando...':'Desconsiderar'}</button></div>
+    </div>`);
+  const tabLocais = lista.length ? `<div class="ca-tab"><table class="gi-ca">
+      <thead><tr><th>Nº Inv.</th><th>Local</th><th>Endereço</th><th>Usuário</th><th>Rodada</th><th class="num">Peças div.</th><th class="num">Valor div.</th><th>Justificativa</th><th>Cadastro</th><th></th></tr></thead>
       <tbody>${lista.map(e=>{
         const d = dets.get(e.id);
-        // Uma linha por usuário: mesmo inventário+local, desconsiderado do
-        // mesmo jeito — só separa quem errou. Peças/valor são do local.
-        // Sem coluna de situação: exclusão sem efeito no ciclo ativo mostra
-        // "—" em peças/valor, com o motivo ao passar o mouse.
         const porUsuario = d.usuarios.length ? d.usuarios : [null];
         const semEfeito = d.aplicada ? '' : ` title="${irEsc(d.situacao.txt)}"`;
         const dtCad = e.criadoEm ? new Date(e.criadoEm) : null;
         const cad = dtCad ? dtCad.toLocaleDateString('pt-BR')+' '+dtCad.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '—';
         return porUsuario.map(u=>`<tr>
-          <td class="mono">${irEsc(e.inventario)}</td>
+          <td><span class="ca-cod">${irEsc(e.inventario)}</span></td>
           <td class="mono">${irEsc(e.local)}</td>
-          <td class="gi-excl-txt">${irEsc(irDescLocal(e.local)||'—')}</td>
-          <td class="gi-excl-txt">${u ? (u.final?'<strong>':'')+irEsc(irProdNome(u.usuario))+(u.final?'</strong>':'') : '—'}</td>
+          <td title="${irEsc(irDescLocal(e.local)||'')}">${irEsc(irDescLocal(e.local)||'—')}</td>
+          <td>${u ? (u.final?'<b>':'')+irEsc(irProdNome(u.usuario))+(u.final?'</b>':'') : '—'}</td>
           <td>${u ? u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':'') : '—'}</td>
-          <td class="mono num"${semEfeito}>${d.aplicada ? irFmtInt(d.pecas) : '—'}</td>
-          <td class="mono num"${semEfeito}>${d.aplicada ? irFmtMoney(d.valor) : '—'}</td>
-          <td class="gi-excl-just">${irEsc(e.justificativa)}</td>
+          <td class="num"${semEfeito}><b style="color:#FE5000">${d.aplicada ? irFmtInt(d.pecas) : '—'}</b></td>
+          <td class="num"${semEfeito}><b style="color:#FE5000">${d.aplicada ? irFmtMoney(d.valor) : '—'}</b></td>
+          <td class="gi-just" title="${irEsc(e.justificativa)}">${irEsc(e.justificativa)}</td>
           <td>${irEsc(cad)}</td>
-          <td class="num"><button class="btn-link" style="color:var(--danger);" title="Remove o inventário ${irEsc(e.inventario)} + local ${irEsc(e.local)} (todas as linhas dele)" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
+          <td class="num"><button class="btn-link gi-rem" title="Remover inventário ${irEsc(e.inventario)} + local ${irEsc(e.local)}" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
         </tr>`).join('');
       }).join('')}</tbody>
-    </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>'}
-  </div>
-  ${rankUsuarios.length ? `<div class="panel">
-    <h3>Desconsiderados por usuário (ciclo ativo)</h3>
-    <p class="panel-sub">Local contado por mais de uma pessoa conta pra cada uma delas. "Na rodada final" = locais em que a contagem que valeu foi a dele.</p>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Usuário</th><th>Locais</th><th>Na rodada final</th><th>Peças div. desconsideradas</th><th>Valor div. desconsiderado</th></tr></thead>
+    </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>';
+  const tabUsr = rankUsuarios.length ? pnl('Desconsiderados por usuário', `<div class="ca-tab"><table>
+      <thead><tr><th>Usuário</th><th class="num">Locais</th><th class="num">Na rodada final</th><th class="num">Peças div.</th><th class="num">Valor div.</th></tr></thead>
       <tbody>${rankUsuarios.map(g=>`<tr>
-        <td><strong>${irEsc(irProdNome(g.usuario))}</strong></td>
-        <td class="mono">${irFmtInt(g.locais)}</td>
-        <td class="mono">${irFmtInt(g.finais)}</td>
-        <td class="mono">${irFmtInt(g.pecas)}</td>
-        <td class="mono">${irFmtMoney(g.valor)}</td>
+        <td><b>${irEsc(irProdNome(g.usuario))}</b></td>
+        <td class="num">${irFmtInt(g.locais)}</td>
+        <td class="num">${irFmtInt(g.finais)}</td>
+        <td class="num"><b style="color:#FE5000">${irFmtInt(g.pecas)}</b></td>
+        <td class="num"><b style="color:#FE5000">${irFmtMoney(g.valor)}</b></td>
       </tr>`).join('')}</tbody>
-    </table></div>
-  </div>` : ''}`;
+    </table></div>`) : '';
+  return `${cab}<div class="dx-body ca-wrap">
+    ${kpis}
+    ${form}
+    ${pnl('Locais desconsiderados', tabLocais, `<span class="ca-dim-n">${irFmtInt(lista.length)}</span>`)}
+    ${tabUsr}
+  </div>`;
 }
 /* ============================================================
    ABA EXPORTAR (Sistema) — exportação completa + referência de regras e

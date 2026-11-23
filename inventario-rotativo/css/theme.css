@@ -2305,3 +2305,16 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .ca-obsf{ position:relative; display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:10px; padding:5px 12px; background:var(--surface); min-width:150px; }
 .ca-obsf > label{ font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
 .ca-obsf .ms-pop{ left:0; right:auto; }
+
+/* Gestão de Inventário no layout da aba Net */
+.gi-form-ca{ display:grid; grid-template-columns:160px 230px minmax(0,1fr) auto; gap:10px; align-items:end; }
+.gi-form-ca label{ display:block; font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:3px; }
+.gi-form-ca input{ width:100%; padding:7px 10px; font-size:12.5px; }
+.gi-form-bt .btn{ padding:8px 16px; white-space:nowrap; }
+@media(max-width:900px){ .gi-form-ca{ grid-template-columns:1fr; } }
+.gi-ca td.gi-just{ max-width:340px; overflow:hidden; text-overflow:ellipsis; }
+.gi-ca td:nth-child(2){ max-width:none; }
+.gi-ca td:nth-child(3){ max-width:130px; }
+.gi-rem{ color:var(--danger) !important; font-size:12px; }
+.ca-kpis.gi-kpis{ grid-template-columns:repeat(3, minmax(0,1fr)); }
+@media(max-width:900px){ .ca-kpis.gi-kpis{ grid-template-columns:1fr 1fr; } }
