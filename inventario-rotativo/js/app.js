@@ -488,6 +488,7 @@ function irRenderEmConstrucao(area){
   return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores desta aba vão aparecer aqui.</p></div>`;
 }
 function irSwitchTab(tab){
+  if(tab==='exportar') tab = 'dashboard'; // aba Exportar retirada do menu
   IR.currentTab = tab;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   irAplicarGrupos();
@@ -1177,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v306';
+const IR_APP_VERSION = 'v307';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
