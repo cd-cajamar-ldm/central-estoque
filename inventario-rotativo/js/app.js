@@ -1174,7 +1174,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v303';
+const IR_APP_VERSION = 'v304';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -8633,11 +8633,11 @@ function irDpKpi(rot, val, sub, cls){
 function irDpLeg(cor, txt, linha){
   return `<span>${linha?`<span class="dx-meta-leg" style="border-color:${cor}"></span>`:`<span class="cmp-dot" style="background:${cor};"></span>`}${txt}</span>`;
 }
-const IR_DP_MIN_HH = 4; // horas-homem mínimas para entrar nos rankings de ritmo
+const IR_DP_MIN_HH = 0; // sem trava: todo mundo que contou aparece
 
 /* PX1 — locais por hora-homem, por colaborador */
 function irDpRanking(d){
-  const lista = d.a.colaboradores.filter(c=>c.horasHomem>=IR_DP_MIN_HH).sort((x,y)=>y.locaisHora-x.locaisHora);
+  const lista = d.a.colaboradores.filter(c=>c.horasHomem>IR_DP_MIN_HH).sort((x,y)=>y.locaisHora-x.locaisHora);
   if(!lista.length) return irDpPainel('Produtividade por colaborador','', '<p class="field-hint">Sem horas de contagem suficientes no período escolhido.</p>');
   const metaV = d.meta.valor||0;
   const mx = Math.max(metaV*1.15, ...lista.map(c=>c.locaisHora));
@@ -8660,7 +8660,7 @@ function irDpRanking(d){
 
 /* PX2 — velocidade × assertividade (bolhas) */
 function irDpDispersao(d){
-  const pts = d.a.colaboradores.filter(c=>c.horasHomem>=IR_DP_MIN_HH && d.assertPor.has(c.usuario) && d.assertPor.get(c.usuario).contagens>=IR_ASSERT_MIN)
+  const pts = d.a.colaboradores.filter(c=>c.horasHomem>IR_DP_MIN_HH && d.assertPor.has(c.usuario))
     .map(c=>({n:irProdNome(c.usuario), v:c.locaisHora, a:d.assertPor.get(c.usuario).pct, h:c.horasHomem}));
   if(!pts.length) return irDpPainel('Velocidade × assertividade','', '<p class="field-hint">Sem colaboradores com horas suficientes no período escolhido.</p>');
   const metaV = d.meta.valor||0, metaA = IR_META_ACURACIA;
@@ -8787,7 +8787,7 @@ function irDpTurno(d){
 function irDpRitmo(d){
   const dias = d.diasTend.slice(-7);
   const metaV = d.meta.valor||0;
-  const top = d.a.colaboradores.filter(c=>c.horasHomem>=IR_DP_MIN_HH)
+  const top = d.a.colaboradores.filter(c=>c.horasHomem>IR_DP_MIN_HH)
     .map(c=>({c, serie:dias.map(dd=>{ const ud = d.porUD.get(c.usuario+'|'+dd); return ud&&ud.blocos.size ? ud.locais.size/ud.blocos.size : null; })}))
     .filter(x=>x.serie.some(v=>v!=null))
     .sort((p,q)=>q.c.locais-p.c.locais).slice(0,8);
@@ -8843,7 +8843,7 @@ function irDpEquipe(d){
 /* PX7 — retrabalho: recontagens que a contagem de cada um gerou */
 function irDpRetrabalho(d){
   const tx = irProdTaxasPorUsuario(d.base);
-  const lista = Array.from(tx.entries()).map(([u,t])=>({u, ...t, taxa:t.visitas?t.recontadas/t.visitas:0})).filter(x=>x.visitas>=IR_ASSERT_MIN).sort((p,q)=>q.taxa-p.taxa);
+  const lista = Array.from(tx.entries()).map(([u,t])=>({u, ...t, taxa:t.visitas?t.recontadas/t.visitas:0})).filter(x=>x.visitas>0).sort((p,q)=>q.taxa-p.taxa);
   if(!lista.length) return irDpPainel('Retrabalho: recontagens causadas','', '<p class="field-hint">Sem contagens suficientes no período escolhido.</p>');
   const tRec = lista.reduce((s,x)=>s+x.recontadas,0), tVis = lista.reduce((s,x)=>s+x.visitas,0);
   const minLocal = d.a.minPorLocal||0;
