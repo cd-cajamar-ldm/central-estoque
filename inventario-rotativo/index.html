@@ -164,9 +164,13 @@
           <label>Ciclo</label>
           <div id="cycleBadge">Nenhum ciclo ativo</div>
         </div>
-        <div class="tb-filter" id="tbFilterMesGeral">
-          <label>Mês</label>
-          <select id="monthFilterSelect" onchange="irSetMonthFilter(this.value)"><option value="">Todos</option></select>
+        <div class="tb-filter" id="tbFilterInv">
+          <label>Inventário</label>
+          <select id="invTipoSelect" onchange="irSetInvTipo(this.value)">
+            <option value="rotativo">Rotativo</option>
+            <option value="reversa">Reversa</option>
+            <option value="insumo">Insumos</option>
+          </select>
         </div>
         <div class="tb-filter" id="tbFilterNetAno" hidden>
           <label>Ano</label>

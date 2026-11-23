@@ -474,6 +474,15 @@ function irToggleGrupo(chave){
   if(IR.menuAbertos.has(chave)) IR.menuAbertos.delete(chave); else IR.menuAbertos.add(chave);
   irAplicarGrupos();
 }
+/* Área (rotativo / reversa / insumo) e aba-base de uma aba. */
+function irAreaDaAba(tab){ const m = /^(reversa|insumo)_/.exec(tab||''); return m ? m[1] : 'rotativo'; }
+function irBaseDaAba(tab){ return String(tab||'').replace(/^(reversa|insumo)_/, ''); }
+function irSetInvTipo(area){
+  const base = IR_ABAS_AREA.includes(irBaseDaAba(IR.currentTab)) ? irBaseDaAba(IR.currentTab) : 'dashboard';
+  const tab = area==='rotativo' ? base : area+'_'+base;
+  IR.menuAbertos.add('inventario'); IR.menuAbertos.add(area);
+  irSwitchTab(tab);
+}
 function irRenderEmConstrucao(area){
   return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores desta aba vão aparecer aqui.</p></div>`;
 }
@@ -488,17 +497,22 @@ function irSwitchTab(tab){
   // ficava no topo sem efeito nenhum sobre a tela, sugerindo um recorte que a
   // aba não faz.
   const filtros = document.getElementById('topbarFilters');
-  if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab) || irTabEhAreaExtra(tab);
+  if(filtros) filtros.hidden = IR_TAB_SEM_CICLO.has(tab);
+  const areaExtra = irTabEhAreaExtra(tab);
   // Net é independente do ciclo rotativo (QRY410 é por ano, não por ciclo): troca
   // Ciclo/Mês (que não têm efeito nenhum sobre a Net) pelo Ano/Mês da própria QRY410
   // no topo — mesmo lugar de sempre, só que com o filtro certo pra essa aba.
   const netTab = (tab==='ciclo');
   const filtroCiclo = document.getElementById('tbFilterCiclo');
-  if(filtroCiclo) filtroCiclo.hidden = netTab;
-  const filtroMesGeral = document.getElementById('tbFilterMesGeral');
-  if(filtroMesGeral) filtroMesGeral.hidden = netTab;
+  if(filtroCiclo) filtroCiclo.hidden = netTab || areaExtra;
+  // Filtro "Inventário" (Rotativo / Reversa / Insumos): troca de área mantendo a aba.
+  const filtroInv = document.getElementById('tbFilterInv');
+  const baseAba = irBaseDaAba(tab);
+  if(filtroInv) filtroInv.hidden = netTab || !IR_ABAS_AREA.includes(baseAba);
+  const selInv = document.getElementById('invTipoSelect');
+  if(selInv) selInv.value = irAreaDaAba(tab);
   const filtroProdData = document.getElementById('tbFilterProdData');
-  if(filtroProdData) filtroProdData.hidden = netTab;
+  if(filtroProdData) filtroProdData.hidden = netTab || areaExtra;
   const filtroNetAno = document.getElementById('tbFilterNetAno');
   if(filtroNetAno) filtroNetAno.hidden = !netTab;
   const filtroNetMes = document.getElementById('tbFilterNetMes');
@@ -1160,7 +1174,7 @@ const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v302';
+const IR_APP_VERSION = 'v303';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
