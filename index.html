@@ -696,7 +696,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=5"></script>
+<script src="versao-hub.js?v=6"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
@@ -1001,18 +1001,16 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     var ab = !!acessoApps[key];
     return '<span class="card-lock ' + (ab ? 'aberto' : 'fechado') + '" data-lock="' + key + '" title="' + (ab ? 'Você tem acesso' : 'Sem acesso — peça ao administrador') + '" aria-label="' + (ab ? 'Você tem acesso' : 'Sem acesso') + '">' + (ab ? LOCK_ABERTO : LOCK_FECHADO) + '</span>';
   }
-  async function atualizarCadeados(){
-    if(!sbAcessos) return;
-    var novo = {};
-    try {
-      var { data: { session } } = await sbAcessos.auth.getSession();
-      if(session){
-        await Promise.all(getAllApps().map(function(app){
-          return sbAcessos.rpc('ldm_nivel_acesso', { p_app_key: app.key }).then(function(r){ novo[app.key] = !!(r && r.data); }).catch(function(){});
-        }));
-      }
-    } catch(e){}
-    acessoApps = novo;
+  /* Os cadeados não podem fechar por falha passageira: quando um app da Oficina
+     está aberto em outra aba (ou recarrega depois de uma atualização), o login
+     fica ocupado por ele e a consulta aqui demora ou falha. Antes, qualquer falha
+     virava "sem acesso" em todos os cards. Agora: cada consulta tem tempo limite,
+     falha mantém o último estado conhecido (guardado no aparelho) e tenta de novo. */
+  var CADEADO_KEY = 'ldm-hub-cadeados';
+  try { acessoApps = JSON.parse(localStorage.getItem(CADEADO_KEY) || '{}') || {}; } catch(e){ acessoApps = {}; }
+  var cadeadoTentativa = 0, cadeadoTimer = null, cadeadoRodando = false;
+  function cadeadoLimite(p, seg){ return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('tempo')); }, seg*1000); })]); }
+  function pintarCadeados(){
     Array.prototype.forEach.call(document.querySelectorAll('.card-lock'), function(el){
       var ab = !!acessoApps[el.getAttribute('data-lock')];
       el.className = 'card-lock ' + (ab ? 'aberto' : 'fechado');
@@ -1021,6 +1019,46 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       el.setAttribute('aria-label', ab ? 'Você tem acesso' : 'Sem acesso');
     });
   }
+  function reagendarCadeados(){
+    clearTimeout(cadeadoTimer);
+    if(cadeadoTentativa >= 6) return;
+    cadeadoTimer = setTimeout(atualizarCadeados, Math.min(30, 3 * Math.pow(2, cadeadoTentativa)) * 1000);
+    cadeadoTentativa++;
+  }
+  async function atualizarCadeados(){
+    if(!sbAcessos || cadeadoRodando) return;
+    cadeadoRodando = true;
+    try {
+      var session = null;
+      try { session = (await cadeadoLimite(sbAcessos.auth.getSession(), 10)).data.session; }
+      catch(e){ reagendarCadeados(); return; } // login ocupado por outra aba: mantém e tenta de novo
+      if(!session){
+        acessoApps = {}; try { localStorage.removeItem(CADEADO_KEY); } catch(e){}
+        pintarCadeados(); return;
+      }
+      var novo = {}, falhou = false;
+      var consulta = function(){
+        return Promise.all(getAllApps().map(function(app){
+          return cadeadoLimite(sbAcessos.rpc('ldm_nivel_acesso', { p_app_key: app.key }), 12)
+            .then(function(r){ if(r && r.error){ falhou = true; return; } novo[app.key] = !!(r && r.data); })
+            .catch(function(){ falhou = true; });
+        }));
+      };
+      await consulta();
+      if(falhou){
+        // Token vencido é a falha mais comum: renova uma vez e consulta de novo.
+        try { await cadeadoLimite(sbAcessos.auth.refreshSession(), 10); } catch(e){}
+        falhou = false; novo = {};
+        await consulta();
+      }
+      if(falhou){ reagendarCadeados(); return; } // não troca o que já estava na tela
+      acessoApps = novo; cadeadoTentativa = 0;
+      try { localStorage.setItem(CADEADO_KEY, JSON.stringify(acessoApps)); } catch(e){}
+      pintarCadeados();
+    } finally { cadeadoRodando = false; }
+  }
+  // Voltou para a aba do Painel: confere de novo.
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden){ cadeadoTentativa = 0; atualizarCadeados(); } });
 
   function cardHTML(app, isFav){
     var dot = STATUS_COLOR[app.status] || STATUS_COLOR['Disponível'];
