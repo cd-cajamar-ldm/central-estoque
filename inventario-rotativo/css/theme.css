@@ -2316,5 +2316,10 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .gi-ca td:nth-child(2){ max-width:none; }
 .gi-ca td:nth-child(3){ max-width:130px; }
 .gi-rem{ color:var(--danger) !important; font-size:12px; }
-.ca-kpis.gi-kpis{ grid-template-columns:repeat(3, minmax(0,1fr)); }
-@media(max-width:900px){ .ca-kpis.gi-kpis{ grid-template-columns:1fr 1fr; } }
+.ca-kpis.gi-kpis{ grid-template-columns:repeat(6, minmax(0,1fr)); gap:10px; }
+.gi-kpis .ca-kpi{ padding:9px 12px; gap:2px; border-radius:12px; }
+.gi-kpis .ca-kpi span{ font-size:11px; }
+.gi-kpis .ca-kpi b{ font-size:18px; }
+.gi-kpis .ca-kpi small{ font-size:10.5px; }
+@media(max-width:1100px){ .ca-kpis.gi-kpis{ grid-template-columns:repeat(3, minmax(0,1fr)); } }
+@media(max-width:700px){ .ca-kpis.gi-kpis{ grid-template-columns:1fr 1fr; } }
