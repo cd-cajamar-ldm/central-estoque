@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v314';
+const IR_APP_VERSION = 'v315';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -8860,59 +8860,64 @@ function irDpTurno(d){
      <div class="as-lista dp-tl-lista">${linhas.map(lin).join('') || '<p class="field-hint">Ninguém marcado no filtro Equipe.</p>'}</div>`);
 }
 
-/* Produtividade hora a hora: locais contados em cada hora, por colaborador (barras
-   empilhadas), no período escolhido. Mesmo filtro Equipe do Turno. */
+/* Produtividade hora a hora: colaboradores nas linhas, horas nas colunas; em cada
+   quadro, locais, peças ou valor contados naquela hora (filtro discreto no
+   cabeçalho). Mesmo filtro Equipe do Turno. Valor = peças × preço do item no ciclo. */
+IR.dpHHMet = IR.dpHHMet || 'locais';
+function irDpHHSetMet(m){ IR.dpHHMet = m; irRenderView(); }
+function irDpPrecoItens(){
+  const n = (IR.divergencias||[]).length;
+  if(IR._dpPreco && IR._dpPreco.n===n && IR._dpPreco.c===(IR.cicloAtivo||{}).id) return IR._dpPreco.m;
+  const m = new Map();
+  for(const d of (IR.divergencias||[])){
+    const p = d.precoUnitario || (d.qtdeSistema ? (d.vlSistema||0)/d.qtdeSistema : 0);
+    if(p && !m.has(d.item)) m.set(d.item, p);
+  }
+  IR._dpPreco = {n, c:(IR.cicloAtivo||{}).id, m};
+  return m;
+}
 function irDpHoraHora(d){
   const horas = []; for(let h=IR_HORA_INICIO; h<=IR_HORA_FIM; h++) horas.push(h);
-  const por = new Map(); // usuario -> Map(hora -> Set(local|dia))
+  const met = IR.dpHHMet;
+  const preco = met==='valor' ? irDpPrecoItens() : null;
+  const por = new Map(); // usuario -> Map(hora -> {loc:Set, pc, vl})
   for(const c of d.base){
     const ref = c.dataFimContagem || c.dataInicioContagem; if(!ref || !c.usuario) continue;
     const h = parseInt(ref.slice(11,13),10); if(!(h>=IR_HORA_INICIO && h<=IR_HORA_FIM)) continue;
     let mu = por.get(c.usuario); if(!mu){ mu = new Map(); por.set(c.usuario, mu); }
-    let st = mu.get(h); if(!st){ st = new Set(); mu.set(h, st); }
-    st.add(c.local+'|'+ref.slice(0,10)+'|'+c.idConferencia);
+    let g = mu.get(h); if(!g){ g = {loc:new Set(), pc:0, vl:0}; mu.set(h, g); }
+    g.loc.add(c.local+'|'+ref.slice(0,10)+'|'+c.idConferencia);
+    g.pc += (c.qtFis||0);
+    if(preco) g.vl += (c.qtFis||0) * (preco.get(c.item)||0);
   }
   if(!por.size) return irDpPainel('Produtividade hora a hora','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
   const filtro = irDpEquipeFiltro(Array.from(por.keys()));
-  const ordem = Array.from(por.keys()).map(u=>({u, t:Array.from(por.get(u).values()).reduce((s,x)=>s+x.size,0)})).sort((a,b)=>b.t-a.t).map(x=>x.u);
-  const usuarios = ordem.filter(u=>!IR.dpEquipeOff.has(u));
-  const CORES = ['#001A72','#FE5000','#3A5BD9','#1E8E4E','#E8A33D','#8A6FD1','#C8361B','#2BA3B8','#7A8499','#B5527E','#4E7A2E','#D17A00'];
-  const cor = i=> CORES[ordem.indexOf(usuarios[i]) % CORES.length]; // cor fixa por pessoa, mesmo filtrando
-  const tot = horas.map(h=>usuarios.reduce((s,u)=>s+((por.get(u).get(h)||{size:0}).size),0));
-  const ativas = horas.filter((h,i)=>tot[i]>0);
-  const mxT = Math.max(1, ...tot);
-  const iPico = tot.indexOf(Math.max(...tot));
-  const totalG = tot.reduce((a,b)=>a+b,0);
-  const svg = W=>{
-    const H = 250, pl = 40, pr = 10, pt = 22, pb = 26;
-    const hi = mxT*1.15;
-    const sl = (W-pl-pr)/horas.length, bw = Math.min(46, sl*0.66);
-    const y = v=> pt + (1 - v/hi)*(H-pt-pb);
-    let g = `<svg width="${W}" height="${H}" style="display:block">`;
-    for(let k=0;k<=4;k++){ const v = hi*k/4; g += `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line)" stroke-opacity=".7"/><text x="${pl-6}" y="${y(v)+4}" font-size="10" text-anchor="end" style="fill:var(--ink-soft)">${irFmtNum(v,0)}</text>`; }
-    horas.forEach((h,i)=>{
-      const x = pl + i*sl + (sl-bw)/2;
-      let acc = 0;
-      const tip = usuarios.map(u=>[u, (por.get(u).get(h)||{size:0}).size]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]).map(([u,n])=>irProdNome(u)+': '+n).join('\n');
-      g += `<g><title>${String(h).padStart(2,'0')}h — ${irFmtInt(tot[i])} locais${tip?'\n'+tip:''}</title><rect x="${pl+i*sl}" y="${pt}" width="${sl}" height="${H-pt-pb}" fill="transparent"/>`;
-      usuarios.forEach((u,ui)=>{ const n = (por.get(u).get(h)||{size:0}).size; if(!n) return;
-        const y0 = y(acc), y1 = y(acc+n); acc += n;
-        g += `<rect x="${x}" y="${y1}" width="${bw}" height="${Math.max(1, y0-y1)}" fill="${cor(ui)}"/>`; });
-      g += `</g>`;
-      if(tot[i]) g += `<text x="${x+bw/2}" y="${y(tot[i])-6}" font-size="10.5" font-weight="800" text-anchor="middle" fill="${i===iPico?'#FE5000':'var(--ink)'}">${irFmtInt(tot[i])}</text>`;
-      g += `<text x="${x+bw/2}" y="${H-8}" font-size="10.5" font-weight="${i===iPico?800:500}" text-anchor="middle" style="fill:${i===iPico?'var(--ink)':'var(--ink-soft)'}">${String(h).padStart(2,'0')}h</text>`;
-    });
-    return g + '</svg>';
-  };
-  const leg = usuarios.map((u,i)=>`<span><span class="cmp-dot" style="background:${cor(i)};border-radius:3px"></span>${irEsc(irProdNome(u))}</span>`).join('');
-  return irDpPainel('Produtividade hora a hora', filtro + '<span>locais por hora</span>',
+  const val = g=> !g ? 0 : (met==='locais' ? g.loc.size : (met==='pecas' ? g.pc : g.vl));
+  const fmt = v=> !v ? '' : (met==='valor' ? irFmtMoneyCompact(v) : irFmtInt(v));
+  const usuarios = Array.from(por.keys()).filter(u=>!IR.dpEquipeOff.has(u))
+    .map(u=>({u, t:horas.reduce((s,h)=>s+val(por.get(u).get(h)),0)})).sort((a,b)=>b.t-a.t);
+  const cols = horas.filter(h=>usuarios.some(x=>val(por.get(x.u).get(h))>0));
+  const hs = cols.length ? cols : horas;
+  const totH = hs.map(h=>usuarios.reduce((s,x)=>s+val(por.get(x.u).get(h)),0));
+  const totalG = totH.reduce((a,b)=>a+b,0);
+  const mx = Math.max(1, ...usuarios.flatMap(x=>hs.map(h=>val(por.get(x.u).get(h)))));
+  const iPico = totH.indexOf(Math.max(...totH));
+  const cel = v=>{ if(!v) return '<td class="dp-hh-c"></td>'; const t = v/mx;
+    return `<td class="dp-hh-c" style="background:rgba(254,80,0,${(0.08+t*0.85).toFixed(2)});color:${t>0.55?'#fff':'var(--ink)'}">${fmt(v)}</td>`; };
+  const rot = {locais:'Locais', pecas:'Peças', valor:'Valor'};
+  const seg = ['locais','pecas','valor'].map(m=>`<button type="button" class="${met===m?'on':''}" onclick="irDpHHSetMet('${m}')">${rot[m]}</button>`).join('');
+  const tab = `<div class="dp-hh-wrap"><table class="dp-hh">
+    <thead><tr><th></th>${hs.map((h,i)=>`<th class="${i===iPico?'pico':''}">${String(h).padStart(2,'0')}h</th>`).join('')}<th class="tot">Total</th></tr></thead>
+    <tbody>${usuarios.map(x=>`<tr><th>${irEsc(irProdNome(x.u))}</th>${hs.map(h=>cel(val(por.get(x.u).get(h)))).join('')}<td class="tot">${fmt(x.t)||'0'}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><th>Equipe</th>${totH.map((v,i)=>`<td class="${i===iPico?'pico':''}">${fmt(v)}</td>`).join('')}<td class="tot">${fmt(totalG)||'0'}</td></tr></tfoot>
+  </table></div>`;
+  return irDpPainel('Produtividade hora a hora', filtro + `<div class="dp-hh-met">${seg}</div>`,
     `<div class="as-topo">
-      ${irDpKpi('Hora de pico', horas[iPico] != null ? String(horas[iPico]).padStart(2,'0')+'h' : '—', irFmtInt(tot[iPico]||0)+' locais')}
-      ${irDpKpi('Média por hora', irFmtNum(ativas.length ? totalG/ativas.length : 0, 1), 'entre as '+ativas.length+' horas com contagem')}
-      ${irDpKpi('Locais no período', irFmtInt(totalG), usuarios.length+' colaborador(es)')}
+      ${irDpKpi('Hora de pico', hs[iPico]!=null ? String(hs[iPico]).padStart(2,'0')+'h' : '—', (fmt(totH[iPico])||'0')+' '+rot[met].toLowerCase())}
+      ${irDpKpi('Média por hora', fmt(cols.length ? totalG/cols.length : 0) || '0', 'entre as '+cols.length+' horas com contagem')}
+      ${irDpKpi(rot[met]+' no período', fmt(totalG) || '0', usuarios.length+' colaborador(es)')}
     </div>
-    ${irFluid('dpHoraHora', svg, 250)}
-    <div class="cmp-legend dp-hh-leg">${leg}</div>`);
+    ${tab}`);
 }
 
 
