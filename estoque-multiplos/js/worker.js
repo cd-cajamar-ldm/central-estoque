@@ -22,7 +22,9 @@ self.onmessage = e => {
     const estoque = EM_REGRAS.lerEstoque(linhasDe(buf390), pecas);
     aviso('Calculando casados e descasados…', 88);
     const painel = EM_REGRAS.montar(pais, estoque, mapaCustos);
-    self.postMessage({tipo: 'pronto', painel, estrutura: [...pais.entries()], custos: [...mapaCustos.entries()]});
+    // guarda só o custo das peças de múltiplo (a base inteira não precisa ir para o servidor)
+    const custosUteis = [...mapaCustos.entries()].filter(([item]) => pecas.has(item));
+    self.postMessage({tipo: 'pronto', painel, estrutura: [...pais.entries()], custos: custosUteis});
   } catch (err){
     self.postMessage({tipo: 'erro', texto: err.message || String(err)});
   }

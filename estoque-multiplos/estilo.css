@@ -189,3 +189,7 @@ dialog input{display:block;width:100%;margin-top:4px;border:1px solid var(--linh
   .bloco,.kpi{break-inside:avoid}
   .rolagem{overflow:visible}
 }
+
+/* Acesso "só visualizar": nada que importe ou altere dados aparece. */
+html.somente-leitura #btAtualizar,html.somente-leitura [data-editar],html.somente-leitura [data-apagar-foto]{display:none!important}
+main{padding-bottom:64px}

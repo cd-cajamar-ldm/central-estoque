@@ -17,7 +17,7 @@
 
   const E = {
     painel: null, estrutura: null, custos: null, historico: [],
-    ajustes: lerLocal('em-ajustes', {}),
+    ajustes: {},
     aba: lerLocal('em-aba', 'visao'),
     tipo: '', fornecedor: '', peso: '',
     status: '', busca: '', abertos: new Set(), abertosOp: new Set(),
@@ -36,12 +36,43 @@
       r.onsuccess = () => ok(r.result); r.onerror = () => falha(r.error);
     });
   }
-  async function guardar(chave, v){ try { const db = await banco(); db.transaction('dados', 'readwrite').objectStore('dados').put(v, chave); } catch (e){ /* segue */ } }
-  async function buscar(chave){
+  /* Tudo fica num store só ("dados"), uma chave por pedaço, e esse store é
+     copiado para o servidor (js/nuvem-idb.js, tabela app_dados): quem abrir o
+     app em outro computador vê a mesma importação. Cada múltiplo é uma chave
+     ("c:<item pai>") para o envio ser dividido em partes pequenas. */
+  const somenteLeitura = () => !!window.LDM_SOMENTE_LEITURA;
+  function avisarNuvem(){ if (window.LDM_NUVEM && !somenteLeitura()) window.LDM_NUVEM.marcar(); }
+  async function gravar(pares, limpar){
+    if (somenteLeitura()) return;
     try {
       const db = await banco();
-      return await new Promise(ok => { const r = db.transaction('dados').objectStore('dados').get(chave); r.onsuccess = () => ok(r.result); r.onerror = () => ok(null); });
-    } catch (e){ return null; }
+      await new Promise((ok, falha) => {
+        const tx = db.transaction('dados', 'readwrite'), st = tx.objectStore('dados');
+        if (limpar) st.clear();
+        pares.forEach(([k, v]) => st.put(v, k));
+        tx.oncomplete = ok; tx.onerror = () => falha(tx.error);
+      });
+      db.close();
+      avisarNuvem();
+    } catch (e){ /* segue sem guardar */ }
+  }
+  async function lerTudo(){
+    try {
+      const db = await banco();
+      const tudo = await new Promise(ok => {
+        const out = {}, c = db.transaction('dados').objectStore('dados').openCursor();
+        c.onsuccess = e => { const cur = e.target.result; if (cur){ out[cur.key] = cur.value; cur.continue(); } else ok(out); };
+        c.onerror = () => ok(out);
+      });
+      db.close();
+      return tudo;
+    } catch (e){ return {}; }
+  }
+  function salvarTudo(){
+    const meta = Object.assign({}, E.painel); delete meta.conjuntos;
+    const pares = [['meta', meta], ['estrutura', E.estrutura], ['custos', E.custos || []], ['historico', E.historico], ['ajustes', E.ajustes]];
+    E.painel.conjuntos.forEach(c => pares.push(['c:' + c.pai, c]));
+    return gravar(pares, true);
   }
 
   /* ---------- dados ---------- */
@@ -303,7 +334,6 @@
     agruparPor(todos, 'fornecedor').forEach((l, k) => { f.fornecedor[k] = fotoDe(l); });
     E.historico = E.historico.filter(x => x.data !== f.data).concat(f);
     E.historico.sort((a, b) => ordData(a.data) - ordData(b.data));
-    guardar('historico', E.historico);
   }
   function ordData(t){ const m = String(t).match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? +(m[3] + m[2] + m[1]) : 0; }
   function vistaEvolucao(){
@@ -376,6 +406,11 @@
   /* ---------- importação ---------- */
   const arq = {f390: null, f051: null, fCusto: null};
   function abrirImportar(){
+    if (somenteLeitura()){
+      $('importar').hidden = false; $('painel').hidden = true; $('abas').hidden = true;
+      $('importar').innerHTML = '<h2>Ainda não há dados</h2><p class="dica">Seu acesso é de visualização. Assim que alguém com permissão de edição carregar as bases, o painel aparece aqui (atualize a página).</p>';
+      return;
+    }
     $('importar').hidden = false; $('painel').hidden = true; $('abas').hidden = true;
     $('btCancelar').hidden = !E.painel;
     $('st051').textContent = E.estrutura ? 'Já guardada — só envie se a composição mudou' : 'Obrigatória na primeira vez';
@@ -409,8 +444,7 @@
         else if (m.tipo === 'pronto'){
           w.terminate();
           E.painel = m.painel; E.estrutura = m.estrutura; E.custos = m.custos;
-          guardar('painel', m.painel); guardar('estrutura', m.estrutura); guardar('custos', m.custos);
-          aplicarAjustes(); tirarFoto(); desenhar();
+          aplicarAjustes(); tirarFoto(); salvarTudo(); desenhar();
         }
       };
       const transf = [buf390, buf051, bufCusto].filter(Boolean);
@@ -422,6 +456,7 @@
   /* ---------- correção manual ---------- */
   let editando = null;
   function abrirEdicao(pai){
+    if (somenteLeitura()) return;
     const c = todos.find(x => x.pai === pai); if (!c) return;
     editando = pai;
     $('dlgNome').textContent = c.nome + ' (item pai ' + c.pai + ')';
@@ -440,7 +475,7 @@
       pesoKg: kg, peso: kg ? R.rotuloPeso(kg) : (txt || 'Sem peso'),
       modelo: $('eModelo').value.trim().toUpperCase() || 'Sem modelo'
     };
-    gravarLocal('em-ajustes', E.ajustes); aplicarAjustes(); desenhar();
+    gravar([['ajustes', E.ajustes]]); aplicarAjustes(); desenhar();
   }
 
   /* ---------- Excel ---------- */
@@ -507,7 +542,8 @@
     if ((x = t.closest('[data-fop]'))){ E.filtroOp = x.dataset.fop; desenhar(); return; }
     if ((x = t.closest('[data-apagar-foto]'))){
       if (!confirm('Apagar a foto de ' + x.dataset.apagarFoto + ' da evolução?')) return;
-      E.historico = E.historico.filter(f => f.data !== x.dataset.apagarFoto); guardar('historico', E.historico); desenhar(); return;
+      if (somenteLeitura()) return;
+      E.historico = E.historico.filter(f => f.data !== x.dataset.apagarFoto); gravar([['historico', E.historico]]); desenhar(); return;
     }
     if ((x = t.closest('tr[data-op]'))){ const k = x.dataset.op; E.abertosOp.has(k) ? E.abertosOp.delete(k) : E.abertosOp.add(k); desenhar(); return; }
     if ((x = t.closest('tr[data-pai]'))){ const k = x.dataset.pai; E.abertos.has(k) ? E.abertos.delete(k) : E.abertos.add(k); desenhar(); }
@@ -520,14 +556,18 @@
   });
   $('dlgForm').addEventListener('submit', salvarEdicao);
   $('dlgFechar').addEventListener('click', () => $('dlg').close());
-  $('dlgRestaurar').addEventListener('click', () => { delete E.ajustes[editando]; gravarLocal('em-ajustes', E.ajustes); aplicarAjustes(); $('dlg').close(); desenhar(); });
+  $('dlgRestaurar').addEventListener('click', () => { delete E.ajustes[editando]; gravar([['ajustes', E.ajustes]]); aplicarAjustes(); $('dlg').close(); desenhar(); });
 
   /* ---------- início ---------- */
-  (async function(){
-    const [p, est, cus, hist] = await Promise.all([buscar('painel'), buscar('estrutura'), buscar('custos'), buscar('historico')]);
-    E.estrutura = est || null; E.custos = cus || null; E.historico = hist || [];
-    // painel salvo por uma versão antiga (sem "semPar") não serve: pede as bases de novo
-    if (p && p.conjuntos && p.conjuntos.every(c => c.semPar)){ E.painel = p; aplicarAjustes(); desenhar(); }
+  /* Só roda depois do login confirmado (js/acesso.js chama LDM_INICIAR). */
+  window.LDM_INICIAR = async function(){
+    const d = await lerTudo();
+    E.estrutura = d.estrutura || null; E.custos = d.custos || null; E.historico = d.historico || []; E.ajustes = d.ajustes || {};
+    const conj = Object.keys(d).filter(k => k.startsWith('c:')).map(k => d[k]);
+    if (d.meta && conj.length && conj.every(c => c.semPar)){ E.painel = Object.assign({}, d.meta, {conjuntos: conj}); aplicarAjustes(); desenhar(); }
     else abrirImportar();
-  })();
+    // o nível "só visualizar" chega logo depois do início: redesenha sem os botões de edição
+    new MutationObserver(() => { if (E.painel) desenhar(); else abrirImportar(); })
+      .observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
+  };
 })();
