@@ -1155,89 +1155,12 @@ function irTransSvgHistorico(historico, campo, cor){
     ${dots}${labels}
   </svg>`;
 }
+/* Em branco de propósito: o conteúdo antigo (cartões, ranking, risco de perda,
+   gráfico de evolução) foi apagado a pedido do usuário pra reconstruir o
+   painel do zero, peça por peça, com o layout aprovado. Até lá, só o título. */
 function irRenderTransIndicadores(){
-  if(!IR.est390Locais){ irCarregarEstoque390(); return irDivCarregando(); }
-  const c = irTransCalc();
-  const setores = c.lista.filter(g=>g.setor && g.setor!=='IGN');
-  const temData = irTransTemData();
-  irTransSnapshotSeNecessario(c, setores);
-  const historico = IR.transHistorico || [];
-
-  let foraValorTotal = 0;
-  const ofensores = temData ? setores.map(g=>({g, foraValor: irTransForaValor(g)||0}))
-    .sort((a,b)=>b.foraValor-a.foraValor) : [];
-  for(const o of ofensores) foraValorTotal += o.foraValor;
-  const foraPctGlobal = temData && c.valorTotal ? Math.round(foraValorTotal/c.valorTotal*100) : null;
-
-  const risco = irTransRiscoPerda(setores);
-  const riscoTotal = Object.values(risco).reduce((s,b)=>s+b.valor, 0);
-
-  const kpi = (rot, val, hint, cls) => `<article class="dx-card">
-    <div class="dx-card-top"><span class="dx-card-rot">${irEsc(rot)}</span></div>
-    <div class="dx-card-val"><span class="dx-num ${cls||''}">${val}</span></div>
-    ${hint?`<span class="dx-card-hint">${irEsc(hint)}</span>`:''}
-  </article>`;
-
-  const corSeveridade = v => v==null ? '' : (v>=50 ? 'bad' : '');
-
-  return `<div class="dx">
-    <section class="dx-hero">
-      <div class="dx-hero-in">
-        <div class="dx-marca">
-          <span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span>
-          <div class="dx-marca-txt"><b>Oficina LDM</b><span>Gestão de Transitórios · CD Cajamar</span></div>
-        </div>
-        <div class="dx-hero-row">
-          <div class="dx-hero-tit">
-            <h2>Indicadores</h2>
-            <span class="dx-tag">Setores ofensores, risco de perda e evolução do saldo parado</span>
-          </div>
-        </div>
-      </div>
-    </section>
-    <div class="dx-body">
-      <section class="dx-cards">
-        ${kpi('Parado no CD', irFmtMoney(c.valorTotal), irFmtInt(c.pecasTotal)+' peças · '+irFmtInt(c.nLocais)+' endereços')}
-        ${kpi('Fora do prazo', foraPctGlobal==null?'—':foraPctGlobal+'%', foraPctGlobal==null?'importe a QRY0160 pra calcular':irFmtMoney(foraValorTotal)+' acima de 48h', corSeveridade(foraPctGlobal))}
-        ${kpi('Risco de virar perda', temData?irFmtMoney(riscoTotal):'—', temData?'parado há 7 dias ou mais':'importe a QRY0160 pra calcular', (temData&&riscoTotal>0)?'bad':'')}
-        ${kpi('Setores', irFmtInt(setores.length), irFmtInt(c.nLocais)+' endereços transitórios no total')}
-      </section>
-
-      <div class="panel">
-        <div class="ofe-head"><h3>Setores ofensores</h3>
-          <span class="field-hint">Quem concentra mais valor fora do prazo de 48h agora</span></div>
-        ${!temData ? '<p class="field-hint">Importe a QRY0160 na aba Importação pra abrir esse ranking — a QRY0390 não traz data de movimento.</p>' : ofensores.map(o=>{
-          const pct = o.g.valor ? Math.round(o.foraValor/o.g.valor*100) : 0;
-          const cor = IR_TRANS_SETOR_COR[o.g.setor] || 'var(--blue)';
-          return `<div class="dx-rank-row">
-            <span class="dx-rank-bar" style="background:${cor}"></span>
-            <span class="dx-rank-nome">${irEsc(IR_TRANS_SETOR_NOME[o.g.setor]||o.g.setor)}</span>
-            <div class="dx-rank-track"><i style="width:${Math.max(2,pct)}%;background:${cor};"></i></div>
-            <span class="dx-rank-pct">${pct}%</span>
-            <span class="dx-rank-valor">${irFmtMoney(o.foraValor)}</span>
-          </div>`;
-        }).join('')}
-      </div>
-
-      <div class="panel">
-        <div class="ofe-head"><h3>Risco de virar perda</h3>
-          <span class="field-hint">Saldo parado há mais de uma semana — quanto mais velho, mais perto de virar quebra</span></div>
-        ${!temData ? '<p class="field-hint">Importe a QRY0160 na aba Importação pra abrir esse indicador.</p>' : `<div class="dx-faixa">
-          ${IR_TRANS_RISCO_FAIXAS.map(f=>{ const b = risco[f.k];
-            return `<div class="dx-tile"><span class="dx-tile-rot">${irEsc(f.rot)}</span>
-              <span class="dx-tile-val ${b.valor>0?'bad':''}">${irFmtMoney(b.valor)}</span>
-              <span class="dx-tile-hint">${irFmtInt(b.qtd)} peças</span></div>`;
-          }).join('')}
-        </div>`}
-      </div>
-
-      <div class="panel">
-        <div class="ofe-head"><h3>Evolução do saldo parado</h3>
-          <span class="field-hint">Total parado (R$) a cada vez que esse painel foi aberto</span></div>
-        ${irTransSvgHistorico(historico, 'valorTotal', 'var(--blue)')}
-      </div>
-    </div>
-  </div>`;
+  return `<div class="ofe-head"><h3>Indicadores</h3>
+    <span class="field-hint">Em construção — layout sendo refeito do zero.</span></div>`;
 }
 /* Layout único do relatório: o boletim por e-mail e a tela do app usam esta mesma
    montagem (hero com KPIs, locais ofensores, um bloco por setor). `classe` troca só
