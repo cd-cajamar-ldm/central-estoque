@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estoque de Múltiplos — Loja do Mecânico</title>
+<link rel="icon" href="../brand/Logo_LDM_icon.png">
+<link rel="stylesheet" href="./estilo.css">
+</head>
+<body>
+<header class="topo">
+  <a class="topo-logo" href="../" title="Voltar para a Oficina LDM"><img src="../brand/Logo_LDM_hor_2_Branco.png" alt="Loja do Mecânico"></a>
+  <div class="topo-titulo">
+    <h1>Estoque de Múltiplos</h1>
+    <p>Gestão de casados e descasados · CD Cajamar <span id="dataBase"></span></p>
+  </div>
+  <div class="topo-acoes" id="acoes" hidden>
+    <button type="button" class="btn btn-claro" id="btAtualizar">Atualizar bases</button>
+    <button type="button" class="btn btn-claro" id="btExcel">Exportar Excel</button>
+    <button type="button" class="btn btn-laranja" id="btImprimir">Imprimir / PDF</button>
+  </div>
+</header>
+
+<nav class="abas" id="abas" hidden>
+  <button type="button" data-aba="visao">Visão geral</button>
+  <button type="button" data-aba="fornecedores">Fornecedores</button>
+  <button type="button" data-aba="gargalos">Gargalos</button>
+  <button type="button" data-aba="oportunidades">Oportunidades</button>
+  <button type="button" data-aba="multiplos">Múltiplos</button>
+  <button type="button" data-aba="evolucao">Evolução</button>
+</nav>
+
+<main>
+  <section class="importar" id="importar" hidden>
+    <h2>Carregar as bases</h2>
+    <p class="dica">Os arquivos são lidos só neste computador. Nada é enviado para fora.</p>
+    <div class="arquivos">
+      <label class="arquivo" id="cx390">
+        <strong>QRY0390 — Estoque por Local</strong>
+        <em>Obrigatória toda vez</em>
+        <span class="arq-nome" id="nm390">Escolher arquivo</span>
+        <input type="file" id="f390" accept=".xlsx,.xls,.csv">
+      </label>
+      <label class="arquivo" id="cx051">
+        <strong>ZBIQ0051 — Itens do múltiplo</strong>
+        <em id="st051">Obrigatória na primeira vez</em>
+        <span class="arq-nome" id="nm051">Escolher arquivo</span>
+        <input type="file" id="f051" accept=".xlsx,.xls,.csv">
+      </label>
+      <label class="arquivo" id="cxCusto">
+        <strong>Custo dos itens (QRY0278)</strong>
+        <em id="stCusto">Opcional — libera os valores em R$</em>
+        <span class="arq-nome" id="nmCusto">Escolher arquivo</span>
+        <input type="file" id="fCusto" accept=".xlsx,.xls,.csv">
+      </label>
+    </div>
+    <div class="importar-acoes">
+      <button type="button" class="btn btn-laranja" id="btProcessar" disabled>Montar painel</button>
+      <button type="button" class="btn btn-borda" id="btCancelar" hidden>Cancelar</button>
+    </div>
+    <div class="progresso" id="progresso" hidden><div class="barra-prog"><i id="barra"></i></div><span id="progTexto"></span></div>
+    <p class="erro" id="erro" hidden></p>
+  </section>
+
+  <section id="painel" hidden>
+    <div class="filtros-globais">
+      <label>Tipo <select id="gTipo"></select></label>
+      <label>Fornecedor <select id="gFornecedor"></select></label>
+      <label id="lbPeso" hidden>Peso <select id="gPeso"></select></label>
+      <button type="button" class="btn btn-borda" id="gLimpar" hidden>Limpar filtros</button>
+      <span class="filtro-resumo" id="gResumo"></span>
+    </div>
+    <p class="faixa" id="faixaCusto" hidden></p>
+    <div id="vista"></div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h3>Corrigir classificação</h3>
+    <p class="dica" id="dlgNome"></p>
+    <label>Fornecedor <input id="eFornecedor" list="lsFornecedor" required></label>
+    <label>Tipo <input id="eTipo" list="lsTipo" required></label>
+    <label>Peso (ex.: 2,5 T ou 500 kg) <input id="ePeso"></label>
+    <label>Modelo <input id="eModelo"></label>
+    <datalist id="lsFornecedor"></datalist><datalist id="lsTipo"></datalist>
+    <div class="dlg-acoes">
+      <button type="button" class="btn btn-borda" id="dlgRestaurar">Voltar ao automático</button>
+      <span></span>
+      <button type="button" class="btn btn-borda" id="dlgFechar">Cancelar</button>
+      <button type="submit" class="btn btn-laranja">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="./js/regras.js"></script>
+<script src="./js/app.js"></script>
+</body>
+</html>
