@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v310';
+const IR_APP_VERSION = 'v311';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -8624,9 +8624,19 @@ function irDashProdDados(){
   IR._dpCache = {k:chave, r};
   return r;
 }
+/* Período do filtro do topo, em letra pequena no canto de cada quadro. */
+function irDpPeriodoTxt(){
+  const {de, ate} = IR.prodFilters||{};
+  const f = x=> x.slice(8,10)+'/'+x.slice(5,7);
+  const sem = x=> ['dom','seg','ter','qua','qui','sex','sáb'][new Date(x+'T12:00:00').getDay()];
+  if(de && ate) return de===ate ? f(de)+' · '+sem(de) : f(de)+' – '+f(ate);
+  if(de) return 'desde '+f(de);
+  if(ate) return 'até '+f(ate);
+  return 'ciclo inteiro';
+}
 function irDpPainel(titulo, leg, corpo, extra){
   return `<div class="panel dp-panel"${extra||''}>
-    <div class="dx-panel-h"><h3>${titulo}</h3>${leg?`<div class="cmp-legend">${leg}</div>`:''}</div>
+    <div class="dx-panel-h"><h3>${titulo}</h3><div class="dp-h-dir">${leg?`<div class="cmp-legend">${leg}</div>`:''}<span class="dp-per">${irDpPeriodoTxt()}</span></div></div>
     ${corpo}
   </div>`;
 }
@@ -8637,26 +8647,28 @@ function irDpLeg(cor, txt, linha){
   return `<span>${linha?`<span class="dx-meta-leg" style="border-color:${cor}"></span>`:`<span class="cmp-dot" style="background:${cor};"></span>`}${txt}</span>`;
 }
 const IR_DP_MIN_HH = 0; // sem trava: todo mundo que contou aparece
+const IR_DP_POUCO_H = 2; // menos que isso: fica no fim da lista, em cinza, "pouco tempo"
 
 /* PX1 — locais por hora-homem, por colaborador */
 function irDpRanking(d){
-  const lista = d.a.colaboradores.filter(c=>c.horasHomem>IR_DP_MIN_HH).sort((x,y)=>y.locaisHora-x.locaisHora);
+  const todos = d.a.colaboradores.filter(c=>c.horasHomem>IR_DP_MIN_HH).sort((x,y)=>y.locaisHora-x.locaisHora);
+  const lista = todos.filter(c=>c.horasHomem>=IR_DP_POUCO_H).concat(todos.filter(c=>c.horasHomem<IR_DP_POUCO_H));
   if(!lista.length) return irDpPainel('Produtividade por colaborador','', '<p class="field-hint">Sem horas de contagem suficientes no período escolhido.</p>');
   const metaV = d.meta.valor||0;
   const mx = Math.max(metaV*1.15, ...lista.map(c=>c.locaisHora));
-  const lin = (c,i)=>`<div class="dp-rk" title="${irEsc(c.usuario)}: ${irFmtInt(c.locais)} locais em ${irFmtInt(c.horasHomem)} h">
-      <span class="as-pos">${i+1}</span><span class="as-nome">${irEsc(irProdNome(c.usuario))}</span>
-      <div class="dp-rk-bar"><i class="${c.locaisHora>=metaV?'ok':''}" style="width:${(c.locaisHora/mx*100).toFixed(1)}%"></i>${metaV?`<em style="left:${(metaV/mx*100).toFixed(1)}%"></em>`:''}</div>
+  const lin = (c,i)=>{ const pouco = c.horasHomem<IR_DP_POUCO_H; return `<div class="dp-rk${pouco?' pouco':''}" title="${irEsc(c.usuario)}: ${irFmtInt(c.locais)} locais em ${irFmtNum(c.horasHomem,1)} h${pouco?' — pouco tempo contando, fora do ranking':''}">
+      <span class="as-pos">${pouco?'–':i+1}</span><span class="as-nome">${irEsc(irProdNome(c.usuario))}${pouco?' <em class="dp-pouco" title="Menos de 2 h contando: fora do ranking">&lt; 2 h</em>':''}</span>
+      <div class="dp-rk-bar"><i class="${!pouco && c.locaisHora>=metaV?'ok':''}" style="width:${(c.locaisHora/mx*100).toFixed(1)}%"></i>${metaV?`<em style="left:${(metaV/mx*100).toFixed(1)}%"></em>`:''}</div>
       <span class="as-qt">${irFmtNum(c.locaisHora,1)} <small>locais/h</small></span>
-      <span class="as-qt">${irFmtInt(c.horasHomem)} <small>h</small></span>
-    </div>`;
+      <span class="as-qt">${c.horasHomem<IR_DP_POUCO_H ? irFmtNum(c.horasHomem,1) : irFmtInt(c.horasHomem)} <small>h</small></span>
+    </div>`; };
   const m = lista[0];
   return irDpPainel('Produtividade por colaborador',
     irDpLeg('var(--dx-local,#001A72)','acima da meta')+irDpLeg('#9AA3BF','abaixo')+irDpLeg('var(--orange)', (d.meta.origem==='cadastrada'?'meta ':'média ')+irFmtNum(metaV,1)+'/h', true),
     `<div class="as-topo">
       ${irDpKpi('Média da equipe', irFmtNum(d.a.locaisHora,1)+' <small>locais/h</small>', d.meta.origem==='cadastrada'?'meta '+irFmtNum(metaV,1)+' locais/h':'sem meta cadastrada')}
       ${irDpKpi('Mais rápido', irEsc(irProdNome(m.usuario)), irFmtNum(m.locaisHora,1)+' locais/h · '+irFmtInt(m.horasHomem)+' h contando')}
-      ${irDpKpi('Horas contando no ciclo', irFmtInt(d.a.horasHomem)+' h', irFmtInt(d.a.colaboradores.length)+' colaboradores')}
+      ${irDpKpi('Horas contando no período', irFmtInt(d.a.horasHomem)+' h', irFmtInt(d.a.colaboradores.length)+' colaboradores')}
     </div>
     <div class="as-lista">${lista.map(lin).join('')}</div>`);
 }
@@ -8846,14 +8858,17 @@ function irDpEquipe(d){
 /* PX7 — retrabalho: recontagens que a contagem de cada um gerou */
 function irDpRetrabalho(d){
   const tx = irProdTaxasPorUsuario(d.base);
-  const lista = Array.from(tx.entries()).map(([u,t])=>({u, ...t, taxa:t.visitas?t.recontadas/t.visitas:0})).filter(x=>x.visitas>0).sort((p,q)=>q.taxa-p.taxa);
+  const horas = new Map(d.a.colaboradores.map(c=>[c.usuario, c.horasHomem]));
+  const pouco = u=> (horas.get(u)||0) < IR_DP_POUCO_H;
+  const lista = Array.from(tx.entries()).map(([u,t])=>({u, ...t, taxa:t.visitas?t.recontadas/t.visitas:0})).filter(x=>x.visitas>0)
+    .sort((p,q)=> (pouco(p.u)-pouco(q.u)) || q.taxa-p.taxa);
   if(!lista.length) return irDpPainel('Retrabalho: recontagens causadas','', '<p class="field-hint">Sem contagens suficientes no período escolhido.</p>');
   const tRec = lista.reduce((s,x)=>s+x.recontadas,0), tVis = lista.reduce((s,x)=>s+x.visitas,0);
   const minLocal = d.a.minPorLocal||0;
   const mx = Math.max(...lista.map(x=>x.taxa), 0.0001);
   const cls = t=> t>0.10?'bad':(t>0.05?'warn':'good');
-  const lin = x=>`<div class="dp-rk dp-rt-lin" title="${irEsc(x.u)}: ${irFmtInt(x.recontadas)} de ${irFmtInt(x.visitas)} locais precisaram de nova contagem">
-      <span class="as-nome">${irEsc(irProdNome(x.u))}</span>
+  const lin = x=>`<div class="dp-rk dp-rt-lin${pouco(x.u)?' pouco':''}" title="${irEsc(x.u)}: ${irFmtInt(x.recontadas)} de ${irFmtInt(x.visitas)} locais precisaram de nova contagem">
+      <span class="as-nome">${irEsc(irProdNome(x.u))}${pouco(x.u)?' <em class="dp-pouco" title="Menos de 2 h contando: fora do ranking">&lt; 2 h</em>':''}</span>
       <div class="dp-rk-bar"><i class="${cls(x.taxa)}" style="width:${(x.taxa/mx*100).toFixed(1)}%"></i></div>
       <span class="as-qt">${irFmtInt(x.recontadas)} <small>recontagens</small></span>
       <span class="as-pct ${cls(x.taxa)}">${irFmtPct(x.taxa)}</span>
