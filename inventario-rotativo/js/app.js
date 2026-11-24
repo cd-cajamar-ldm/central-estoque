@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v312';
+const IR_APP_VERSION = 'v313';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -4619,32 +4619,52 @@ const IR_HORA_FIM = 21;    // último bloco de hora do expediente (21:00–22:00
      pela regra de sempre — rodada 1 é o sistema, a última é o físico). Visita
      recontada por duas pessoas conta pras duas, igual ao resto da aba, que
      mede esforço de quem participou e não deduplicação. */
+/* Retrabalho = contagem que ERROU: a pessoa contou uma rodada que não foi a
+   final do local e o que ela contou ficou diferente do resultado final
+   (algum item com quantidade diferente, a mais ou a menos). Se a recontagem
+   confirmou o número dela, ela acertou — o erro foi de quem veio antes ou do
+   sistema — e não conta contra ela. Local ainda em recontagem (rodada final
+   não liquidada) fica de fora até fechar. */
 function irProdTaxasPorUsuario(contagens){
-  // Rodada máxima de cada visita e quem contou cada rodada — vem da base inteira
-  // (IR.contagens), não do recorte filtrado, senão um filtro por período cortaria
-  // a recontagem que aconteceu no dia seguinte e zeraria a taxa.
-  const rodadaMaxima = new Map();   // visita -> maior idConferencia
+  // Quantidade por item em cada rodada de cada visita, da base inteira
+  // (a recontagem pode ter acontecido fora do período filtrado).
+  const rodadas = new Map(); // visita -> Map(rodada -> {itens:Map(item->qt), liq:bool})
   for(const c of (IR.contagens||[])){
+    if(!(c.idConferencia>=2)) continue;
     const v = c.local+'|'+c.inventario;
-    if(!rodadaMaxima.has(v) || c.idConferencia > rodadaMaxima.get(v)) rodadaMaxima.set(v, c.idConferencia);
+    let rv = rodadas.get(v); if(!rv){ rv = new Map(); rodadas.set(v, rv); }
+    let r = rv.get(c.idConferencia); if(!r){ r = {itens:new Map(), liq:true}; rv.set(c.idConferencia, r); }
+    if(c.liquidada===false) r.liq = false;
+    if(c.item) r.itens.set(c.item, (r.itens.get(c.item)||0) + (c.qtFis||0));
   }
+  const iguais = (a, b)=>{
+    const ks = new Set([...a.keys(), ...b.keys()]);
+    for(const k of ks) if(Math.abs((a.get(k)||0) - (b.get(k)||0)) > 1e-9) return false;
+    return true;
+  };
   const visitasDivergentes = new Set();
   for(const d of (IR.divergencias||[])) if(d.diferenca) visitasDivergentes.add(d.local+'|'+d.inventario);
-  // Por usuário: visitas distintas e, dentro delas, a rodada mais alta que ele contou.
+  // Por usuário: rodadas que ele contou em cada visita.
   const porUsuario = new Map();
   for(const c of contagens){
-    if(!c.usuario) continue;
+    if(!c.usuario || !(c.idConferencia>=2)) continue;
     const v = c.local+'|'+c.inventario;
     let u = porUsuario.get(c.usuario);
     if(!u){ u = new Map(); porUsuario.set(c.usuario, u); }
-    if(!u.has(v) || c.idConferencia < u.get(v)) u.set(v, c.idConferencia);
+    if(!u.has(v)) u.set(v, new Set());
+    u.get(v).add(c.idConferencia);
   }
   const out = new Map();
   for(const [usuario, visitas] of porUsuario){
     let recontadas = 0, divergentes = 0;
-    for(const [v, primeiraRodada] of visitas){
-      if((rodadaMaxima.get(v)||primeiraRodada) > primeiraRodada) recontadas++;
+    for(const [v, suas] of visitas){
       if(visitasDivergentes.has(v)) divergentes++;
+      const rv = rodadas.get(v); if(!rv) continue;
+      const final = Math.max(...rv.keys());
+      const rf = rv.get(final);
+      if(!rf.liq) continue; // ainda em recontagem
+      const errou = Array.from(suas).some(r=> r<final && rv.has(r) && !iguais(rv.get(r).itens, rf.itens));
+      if(errou) recontadas++;
     }
     out.set(usuario, {visitas: visitas.size, recontadas, divergentes});
   }
@@ -8884,20 +8904,20 @@ function irDpRetrabalho(d){
   const pouco = u=> (horas.get(u)||0) < IR_DP_POUCO_H;
   const lista = Array.from(tx.entries()).map(([u,t])=>({u, ...t, taxa:t.visitas?t.recontadas/t.visitas:0})).filter(x=>x.visitas>0)
     .sort((p,q)=> (pouco(p.u)-pouco(q.u)) || q.taxa-p.taxa);
-  if(!lista.length) return irDpPainel('Retrabalho: recontagens causadas','', '<p class="field-hint">Sem contagens suficientes no período escolhido.</p>');
+  if(!lista.length) return irDpPainel('Retrabalho: contagens erradas','', '<p class="field-hint">Sem contagens suficientes no período escolhido.</p>');
   const tRec = lista.reduce((s,x)=>s+x.recontadas,0), tVis = lista.reduce((s,x)=>s+x.visitas,0);
   const minLocal = d.a.minPorLocal||0;
   const mx = Math.max(...lista.map(x=>x.taxa), 0.0001);
   const cls = t=> t>0.10?'bad':(t>0.05?'warn':'good');
-  const lin = x=>`<div class="dp-rk dp-rt-lin${pouco(x.u)?' pouco':''}" title="${irEsc(x.u)}: ${irFmtInt(x.recontadas)} de ${irFmtInt(x.visitas)} locais precisaram de nova contagem">
+  const lin = x=>`<div class="dp-rk dp-rt-lin${pouco(x.u)?' pouco':''}" title="${irEsc(x.u)}: ${irFmtInt(x.recontadas)} de ${irFmtInt(x.visitas)} locais contados ficaram diferentes do resultado final">
       <span class="as-nome">${irEsc(irProdNome(x.u))}${pouco(x.u)?' <em class="dp-pouco" title="Menos de 2 h contando: fora do ranking">&lt; 2 h</em>':''}</span>
       <div class="dp-rk-bar"><i class="${cls(x.taxa)}" style="width:${(x.taxa/mx*100).toFixed(1)}%"></i></div>
-      <span class="as-qt">${irFmtInt(x.recontadas)} <small>recontagens</small></span>
+      <span class="as-qt">${irFmtInt(x.recontadas)} <small>erros</small></span>
       <span class="as-pct ${cls(x.taxa)}">${irFmtPct(x.taxa)}</span>
     </div>`;
-  return irDpPainel('Retrabalho: recontagens causadas', irDpLeg('var(--success)','até 5%')+irDpLeg('#E8A33D','5–10%')+irDpLeg('var(--danger)','acima de 10%'),
+  return irDpPainel('Retrabalho: contagens erradas', irDpLeg('var(--success)','até 5%')+irDpLeg('#E8A33D','5–10%')+irDpLeg('var(--danger)','acima de 10%'),
     `<div class="as-topo">
-      ${irDpKpi('Recontagens geradas', irFmtInt(tRec), 'locais que precisaram de nova contagem', 'bad')}
+      ${irDpKpi('Contagens erradas', irFmtInt(tRec), 'locais em que a contagem ficou diferente do final', 'bad')}
       ${irDpKpi('Tempo perdido estimado', irFmtNum(tRec*minLocal/60,1)+' h', '≈ '+irFmtNum(minLocal,1)+' min por local')}
       ${irDpKpi('Taxa da equipe', irFmtPct(tVis?tRec/tVis:0), 'dos locais contados')}
     </div>
