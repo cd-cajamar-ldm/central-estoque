@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v311';
+const IR_APP_VERSION = 'v312';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -8738,7 +8738,7 @@ function irDpDispersao(d){
 function irDpCalor(d){
   const horas = []; for(let h=IR_HORA_INICIO; h<=IR_HORA_FIM; h++) horas.push(h);
   const dows = [1,2,3,4,5,6,0].filter(w=>d.diasPorDow.get(w));
-  if(!dows.length) return irDpPainel('Em que horário a equipe conta','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
+  if(!dows.length) return irDpPainel('Pico','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
   const val = (w,h)=> (d.calor.get(w+'|'+h)||{size:0}).size / (d.diasPorDow.get(w)||1);
   let mx = 0; const porHora = horas.map(h=>dows.reduce((s,w)=>s+val(w,h),0));
   dows.forEach(w=>horas.forEach(h=>{ mx = Math.max(mx, val(w,h)); }));
@@ -8747,19 +8747,40 @@ function irDpCalor(d){
   const melhorDow = porDow.slice().sort((p,q)=>q.t-p.t)[0];
   const ativas = horas.filter((h,i)=>porHora[i]>0);
   const fraca = ativas.length ? ativas.reduce((b,h)=> porHora[horas.indexOf(h)] < porHora[horas.indexOf(b)] ? h : b, ativas[0]) : null;
-  const cel = (w,h)=>{ const v = val(w,h); if(!v) return '<div class="dp-hm-c"></div>';
-    const t = v/(mx||1);
-    return `<div class="dp-hm-c" style="background:rgba(254,80,0,${(0.1+t*0.9).toFixed(2)});color:${t>0.55?'#fff':'var(--ink)'}" title="${IR_DP_SEM[w].toUpperCase()} ${String(h).padStart(2,'0')}h: ${irFmtNum(v,0)} locais (média por dia)">${irFmtNum(v,0)}</div>`; };
-  return irDpPainel('Em que horário a equipe conta', '<span>locais contados por hora · média por dia</span>',
+  const CORES = ['#FE5000','#001A72','#3A5BD9','#1E8E4E','#C8361B','#E8A33D','#8A6FD1'];
+  const cor = i=> CORES[i % CORES.length];
+  const um = dows.length===1;
+  const svg = W=>{
+    const H = 260, pl = 40, pr = 14, pt = 24, pb = 28;
+    const hi = (mx||1)*1.18;
+    const x = i=> pl + (W-pl-pr) * (horas.length>1 ? i/(horas.length-1) : .5);
+    const y = v=> pt + (1 - v/hi) * (H-pt-pb);
+    let g = `<svg width="${W}" height="${H}" style="display:block">`;
+    for(let k=0;k<=4;k++){ const v = hi*k/4; g += `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line)" stroke-opacity=".7"/><text x="${pl-6}" y="${y(v)+4}" font-size="10" text-anchor="end" style="fill:var(--ink-soft)">${irFmtNum(v,0)}</text>`; }
+    const iPico = horas.indexOf(pico);
+    g += `<line x1="${x(iPico)}" x2="${x(iPico)}" y1="${pt-6}" y2="${H-pb}" stroke="#FE5000" stroke-dasharray="4 4" stroke-opacity=".55"/>`;
+    horas.forEach((h,i)=>{ g += `<text x="${x(i)}" y="${H-8}" font-size="10.5" font-weight="${h===pico?800:500}" text-anchor="middle" style="fill:${h===pico?'var(--ink)':'var(--ink-soft)'}">${String(h).padStart(2,'0')}h</text>`; });
+    dows.forEach((w,di)=>{
+      const c = cor(di);
+      const pts = horas.map((h,i)=>[x(i), y(val(w,h)), val(w,h), h]);
+      const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+      if(um) g += `<path d="${d} L${pts[pts.length-1][0].toFixed(1)},${y(0)} L${pts[0][0].toFixed(1)},${y(0)} Z" fill="${c}" fill-opacity=".08"/>`;
+      g += `<path d="${d}" fill="none" stroke="${c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+      pts.forEach(p=>{
+        g += `<g><title>${IR_DP_SEM[w].toUpperCase()} ${String(p[3]).padStart(2,'0')}h: ${irFmtNum(p[2],0)} locais (média por dia)</title><circle cx="${p[0]}" cy="${p[1]}" r="${p[3]===pico&&um?5:3.5}" style="fill:var(--surface)" stroke="${c}" stroke-width="2"/></g>`;
+        if(um && p[2]>0) g += `<text x="${p[0]}" y="${p[1]-9}" font-size="10.5" font-weight="800" text-anchor="middle" fill="${p[3]===pico?'#FE5000':'var(--ink)'}">${irFmtNum(p[2],0)}</text>`;
+      });
+    });
+    return g + '</svg>';
+  };
+  const leg = (um ? '' : dows.map((w,i)=>irDpLeg(cor(i), IR_DP_SEM[w].toUpperCase(), true)).join('')) + '<span>locais por hora · média por dia</span>';
+  return irDpPainel('Pico', leg,
     `<div class="as-topo">
       ${irDpKpi('Horário de pico', String(pico).padStart(2,'0')+'h', irFmtNum(Math.max(...porHora)/dows.length,0)+' locais em média por dia')}
       ${irDpKpi('Dia da semana mais forte', IR_DP_SEM[melhorDow.w].toUpperCase(), irFmtNum(melhorDow.t,0)+' locais em média')}
       ${fraca!=null?irDpKpi('Horário mais fraco', String(fraca).padStart(2,'0')+'h', 'entre as horas com contagem'):''}
     </div>
-    <div class="dp-hm" style="grid-template-columns:44px repeat(${horas.length}, minmax(0,1fr))">
-      <div></div>${horas.map(h=>`<div class="dp-hm-h">${String(h).padStart(2,'0')}h</div>`).join('')}
-      ${dows.map(w=>`<div class="dp-hm-d${w===0||w===6?' fds':''}">${IR_DP_SEM[w].toUpperCase()}</div>${horas.map(h=>cel(w,h)).join('')}`).join('')}
-    </div>`);
+    ${irFluid('dpPico', svg, 260)}`);
 }
 
 /* PX4 — linha do tempo do último dia com contagem */
@@ -8774,6 +8795,7 @@ function irDpTurno(d){
     const iv = Array.from(su.values()).sort((p,q)=>p[0]-q[0]);
     const m = [];
     for(const s of iv){ const ult = m[m.length-1]; if(ult && s[0] <= ult[1]+2) ult[1] = Math.max(ult[1], s[1]); else m.push([s[0], s[1]]); }
+    if(!m.length) continue;
     const contando = m.reduce((t,s)=>t+(s[1]-s[0]),0);
     const turno = m[m.length-1][1]-m[0][0];
     const base0 = irDpMin(dia+'T00:00:00');
