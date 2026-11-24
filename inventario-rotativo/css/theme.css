@@ -2331,3 +2331,18 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .dp-rk.pouco .dp-rk-bar i{ background:#C3C8D6 !important; }
 .dp-rk.pouco .as-nome{ overflow:visible; }
 .dp-pouco{ font-style:normal; font-size:9.5px; white-space:nowrap; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); border:1px solid var(--line); border-radius:999px; padding:0 6px; margin-left:4px; vertical-align:1px; }
+
+/* Turno do dia: mais largo, mais baixo e com minutos; filtro Equipe discreto */
+.dp-tl{ grid-template-columns:minmax(100px,170px) minmax(0,1fr) 46px 46px 54px 54px; gap:8px; font-size:12.5px; }
+.dp-tl-lista{ gap:5px !important; }
+.dp-tl-trilho{ height:16px; border-radius:5px; }
+.dp-tl-trilho i{ top:2px; bottom:2px; border-radius:2px; z-index:1; }
+.dp-tl-trilho b{ position:absolute; top:0; bottom:0; width:1px; background:rgba(0,26,114,.10); }
+.dp-tl-trilho b.meia{ background:rgba(0,26,114,.05); }
+.dp-eqf{ position:relative; display:inline-flex; align-items:center; gap:5px; }
+.dp-eqf > label{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+.dp-eqf .ms-drop > summary{ font-size:11.5px; color:var(--ink-soft); font-weight:700; }
+.dp-eqf .ms-pop{ right:auto; left:0; }
+.dp-hh-leg{ margin-top:6px; justify-content:center; flex-wrap:wrap; }
+.dp-panel{ overflow:visible !important; }
+.dp-eqf .ms-pop{ z-index:80; }

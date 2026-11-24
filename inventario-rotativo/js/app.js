@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v313';
+const IR_APP_VERSION = 'v314';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -8804,11 +8804,26 @@ function irDpCalor(d){
 }
 
 /* PX4 — linha do tempo do último dia com contagem */
+/* Filtro "Equipe" (Turno do dia e Hora a hora): quem aparece. Vale enquanto a
+   página está aberta e fica guardado no aparelho. */
+IR.dpEquipeOff = IR.dpEquipeOff || (()=>{ try{ return new Set(JSON.parse(localStorage.getItem('ir-dp-equipe-off')||'[]')); }catch(e){ return new Set(); } })();
+function irDpEquipeSalvar(){ try{ localStorage.setItem('ir-dp-equipe-off', JSON.stringify(Array.from(IR.dpEquipeOff))); }catch(e){} }
+function irDpEquipeToggle(u, on){
+  if(u==='*'){ if(on) IR.dpEquipeOff = new Set(); else IR.dpEquipeOff = new Set(IR._dpEquipeTodos||[]); }
+  else if(on) IR.dpEquipeOff.delete(u); else IR.dpEquipeOff.add(u);
+  irDpEquipeSalvar(); irRenderView();
+}
+function irDpEquipeFiltro(usuarios){
+  IR._dpEquipeTodos = usuarios.slice();
+  const ops = usuarios.slice().sort((a,b)=>irProdNome(a).localeCompare(irProdNome(b))).map(u=>({v:u, t:irProdNome(u), c:'', on:!IR.dpEquipeOff.has(u)}));
+  const n = ops.filter(o=>o.on).length;
+  return `<div class="dp-eqf">${irMsDrop('msDpEquipe', 'Equipe', ops, 'irDpEquipeToggle', {resumo: n===ops.length ? 'Todos' : n+' de '+ops.length})}</div>`;
+}
+const irDpHHMM = m=>{ const t = new Date(m*60000); return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'); };
 function irDpTurno(d){
   const dia = d.dias[d.dias.length-1];
-  if(!dia) return irDpPainel('Turno','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
-  const linhas = [];
-  let hIni = 24, hFim = 0;
+  if(!dia) return irDpPainel('Turno do dia','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
+  const todas = [];
   for(const [k, su] of d.sessoes){
     const [u, dd] = k.split('|');
     if(dd!==dia) continue;
@@ -8818,57 +8833,88 @@ function irDpTurno(d){
     if(!m.length) continue;
     const contando = m.reduce((t,s)=>t+(s[1]-s[0]),0);
     const turno = m[m.length-1][1]-m[0][0];
-    const base0 = irDpMin(dia+'T00:00:00');
-    hIni = Math.min(hIni, Math.floor((m[0][0]-base0)/60)); hFim = Math.max(hFim, Math.ceil((m[m.length-1][1]-base0)/60));
-    linhas.push({u, m, contando, turno, base0});
+    todas.push({u, m, contando, turno, locais:iv.length, base0:irDpMin(dia+'T00:00:00')});
   }
-  if(!linhas.length) return irDpPainel('Turno','', '<p class="field-hint">Sem horários de início e fim no último dia.</p>');
+  if(!todas.length) return irDpPainel('Turno do dia','', '<p class="field-hint">Sem horários de início e fim no último dia.</p>');
+  const filtro = irDpEquipeFiltro(todas.map(l=>l.u));
+  const linhas = todas.filter(l=>!IR.dpEquipeOff.has(l.u)).sort((p,q)=>q.contando-p.contando);
+  let hIni = 24, hFim = 0;
+  linhas.forEach(l=>{ hIni = Math.min(hIni, Math.floor((l.m[0][0]-l.base0)/60)); hFim = Math.max(hFim, Math.ceil((l.m[l.m.length-1][1]-l.base0)/60)); });
+  if(!linhas.length){ hIni = 8; hFim = 18; }
   hFim = Math.max(hFim, hIni+1);
-  linhas.sort((p,q)=>q.contando-p.contando);
   const xp = (min,b0)=> ((min-b0)/60 - hIni)/(hFim-hIni)*100;
-  const passo = (hFim-hIni)>8 ? 2 : 1;
-  const horas = []; for(let h=hIni; h<=hFim; h+=passo) horas.push(h);
+  const horas = []; for(let h=hIni; h<=hFim; h++) horas.push(h);
+  const grade = horas.map(h=>`<b style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('')
+    + horas.slice(0,-1).map(h=>`<b class="meia" style="left:${((h+0.5-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('');
   const lin = l=>{ const parado = l.turno>0 ? 1-l.contando/l.turno : 0;
     return `<div class="dp-tl">
       <span class="as-nome">${irEsc(irProdNome(l.u))}</span>
-      <div class="dp-tl-trilho">${l.m.map(s=>`<i style="left:${xp(s[0],l.base0).toFixed(2)}%;width:${Math.max(0.3, xp(s[1],l.base0)-xp(s[0],l.base0)).toFixed(2)}%" title="${new Date(s[0]*60000).toTimeString().slice(0,5)}–${new Date(s[1]*60000).toTimeString().slice(0,5)}"></i>`).join('')}</div>
-      <span class="as-qt">${irFmtNum(l.contando/60,1)} h</span>
+      <div class="dp-tl-trilho">${grade}${l.m.map(s=>`<i style="left:${xp(s[0],l.base0).toFixed(3)}%;width:${Math.max(0.15, xp(s[1],l.base0)-xp(s[0],l.base0)).toFixed(3)}%" title="${irDpHHMM(s[0])}–${irDpHHMM(s[1])} · ${irFmtInt(Math.max(1,Math.round(s[1]-s[0])))} min"></i>`).join('')}</div>
+      <span class="as-qt">${irDpHHMM(l.m[0][0])}</span>
+      <span class="as-qt">${irDpHHMM(l.m[l.m.length-1][1])}</span>
+      <span class="as-qt">${Math.floor(l.contando/60)}h${String(Math.round(l.contando%60)).padStart(2,'0')}</span>
       <span class="as-pct ${parado>0.25?'bad':''}">${irFmtPct(parado)}</span>
     </div>`; };
-  return irDpPainel('Turno do dia', irDpLeg('var(--dx-local,#001A72)','contando')+irDpLeg('var(--surface2)','intervalo entre contagens'),
-    `<div class="dp-tl dp-tl-eixo"><span></span><div class="dp-tl-horas">${horas.map(h=>`<span style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%">${String(h).padStart(2,'0')}h</span>`).join('')}</div><span class="as-qt"><small>contando</small></span><span class="as-qt"><small>parado</small></span></div>
-     <div class="as-lista">${linhas.map(lin).join('')}</div>`);
+  return irDpPainel('Turno do dia', filtro + irDpLeg('var(--dx-local,#001A72)','contando')+irDpLeg('var(--surface2)','sem local aberto'),
+    `<div class="dp-tl dp-tl-eixo"><span></span><div class="dp-tl-horas">${horas.map(h=>`<span style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%">${String(h).padStart(2,'0')}h</span>`).join('')}</div><span class="as-qt"><small>início</small></span><span class="as-qt"><small>fim</small></span><span class="as-qt"><small>contando</small></span><span class="as-qt"><small>parado</small></span></div>
+     <div class="as-lista dp-tl-lista">${linhas.map(lin).join('') || '<p class="field-hint">Ninguém marcado no filtro Equipe.</p>'}</div>`);
 }
 
-/* PX5 — ritmo dos últimos 7 dias por colaborador */
-function irDpRitmo(d){
-  const dias = d.diasTend.slice(-7);
-  const metaV = d.meta.valor||0;
-  const top = d.a.colaboradores.filter(c=>c.horasHomem>IR_DP_MIN_HH)
-    .map(c=>({c, serie:dias.map(dd=>{ const ud = d.porUD.get(c.usuario+'|'+dd); return ud&&ud.blocos.size ? ud.locais.size/ud.blocos.size : null; })}))
-    .filter(x=>x.serie.some(v=>v!=null))
-    .sort((p,q)=>q.c.locais-p.c.locais).slice(0,8);
-  if(!top.length) return irDpPainel('Ritmo dos últimos 7 dias','', '<p class="field-hint">Sem contagens nos últimos dias.</p>');
-  const vMax = Math.max(metaV*1.3, ...top.flatMap(x=>x.serie.filter(v=>v!=null)));
-  const card = x=>{
-    const w = 240, h = 64, vals = x.serie;
-    const px = i=> 6 + i*(w-12)/Math.max(1, vals.length-1);
-    const py = v=> h-6 - v/vMax*(h-12);
-    const pts = vals.map((v,i)=>v==null?null:[px(i),py(v)]).filter(Boolean);
-    const val = vals.filter(v=>v!=null);
-    const ult = val[val.length-1], tend = val.length>1 ? Math.round(ult-val[0]) : 0;
-    const svg = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="dp-sp">
-      ${metaV?`<line x1="0" x2="${w}" y1="${py(metaV)}" y2="${py(metaV)}" stroke="var(--orange)" stroke-dasharray="4 3" stroke-opacity=".8" vector-effect="non-scaling-stroke"/>`:''}
-      <polyline points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}" fill="none" stroke="var(--dx-local,#001A72)" stroke-width="2.4" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-    </svg>`;
-    return `<div class="dp-rt" title="${dias.map((dd,i)=>irDpDiaRot(dd)+': '+(vals[i]==null?'—':irFmtNum(vals[i],1))).join(' · ')}">
-      <div class="dp-rt-h"><span class="as-nome">${irEsc(irProdNome(x.c.usuario))}</span><b class="${tend>=0?'good':'bad'}">${tend>=0?'+':''}${irFmtNum(tend,0)}/h</b></div>
-      <div class="dp-rt-v">${irFmtNum(ult,0)} <small>locais/h no último dia</small></div>${svg}
-    </div>`;
+/* Produtividade hora a hora: locais contados em cada hora, por colaborador (barras
+   empilhadas), no período escolhido. Mesmo filtro Equipe do Turno. */
+function irDpHoraHora(d){
+  const horas = []; for(let h=IR_HORA_INICIO; h<=IR_HORA_FIM; h++) horas.push(h);
+  const por = new Map(); // usuario -> Map(hora -> Set(local|dia))
+  for(const c of d.base){
+    const ref = c.dataFimContagem || c.dataInicioContagem; if(!ref || !c.usuario) continue;
+    const h = parseInt(ref.slice(11,13),10); if(!(h>=IR_HORA_INICIO && h<=IR_HORA_FIM)) continue;
+    let mu = por.get(c.usuario); if(!mu){ mu = new Map(); por.set(c.usuario, mu); }
+    let st = mu.get(h); if(!st){ st = new Set(); mu.set(h, st); }
+    st.add(c.local+'|'+ref.slice(0,10)+'|'+c.idConferencia);
+  }
+  if(!por.size) return irDpPainel('Produtividade hora a hora','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
+  const filtro = irDpEquipeFiltro(Array.from(por.keys()));
+  const ordem = Array.from(por.keys()).map(u=>({u, t:Array.from(por.get(u).values()).reduce((s,x)=>s+x.size,0)})).sort((a,b)=>b.t-a.t).map(x=>x.u);
+  const usuarios = ordem.filter(u=>!IR.dpEquipeOff.has(u));
+  const CORES = ['#001A72','#FE5000','#3A5BD9','#1E8E4E','#E8A33D','#8A6FD1','#C8361B','#2BA3B8','#7A8499','#B5527E','#4E7A2E','#D17A00'];
+  const cor = i=> CORES[ordem.indexOf(usuarios[i]) % CORES.length]; // cor fixa por pessoa, mesmo filtrando
+  const tot = horas.map(h=>usuarios.reduce((s,u)=>s+((por.get(u).get(h)||{size:0}).size),0));
+  const ativas = horas.filter((h,i)=>tot[i]>0);
+  const mxT = Math.max(1, ...tot);
+  const iPico = tot.indexOf(Math.max(...tot));
+  const totalG = tot.reduce((a,b)=>a+b,0);
+  const svg = W=>{
+    const H = 250, pl = 40, pr = 10, pt = 22, pb = 26;
+    const hi = mxT*1.15;
+    const sl = (W-pl-pr)/horas.length, bw = Math.min(46, sl*0.66);
+    const y = v=> pt + (1 - v/hi)*(H-pt-pb);
+    let g = `<svg width="${W}" height="${H}" style="display:block">`;
+    for(let k=0;k<=4;k++){ const v = hi*k/4; g += `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line)" stroke-opacity=".7"/><text x="${pl-6}" y="${y(v)+4}" font-size="10" text-anchor="end" style="fill:var(--ink-soft)">${irFmtNum(v,0)}</text>`; }
+    horas.forEach((h,i)=>{
+      const x = pl + i*sl + (sl-bw)/2;
+      let acc = 0;
+      const tip = usuarios.map(u=>[u, (por.get(u).get(h)||{size:0}).size]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]).map(([u,n])=>irProdNome(u)+': '+n).join('\n');
+      g += `<g><title>${String(h).padStart(2,'0')}h — ${irFmtInt(tot[i])} locais${tip?'\n'+tip:''}</title><rect x="${pl+i*sl}" y="${pt}" width="${sl}" height="${H-pt-pb}" fill="transparent"/>`;
+      usuarios.forEach((u,ui)=>{ const n = (por.get(u).get(h)||{size:0}).size; if(!n) return;
+        const y0 = y(acc), y1 = y(acc+n); acc += n;
+        g += `<rect x="${x}" y="${y1}" width="${bw}" height="${Math.max(1, y0-y1)}" fill="${cor(ui)}"/>`; });
+      g += `</g>`;
+      if(tot[i]) g += `<text x="${x+bw/2}" y="${y(tot[i])-6}" font-size="10.5" font-weight="800" text-anchor="middle" fill="${i===iPico?'#FE5000':'var(--ink)'}">${irFmtInt(tot[i])}</text>`;
+      g += `<text x="${x+bw/2}" y="${H-8}" font-size="10.5" font-weight="${i===iPico?800:500}" text-anchor="middle" style="fill:${i===iPico?'var(--ink)':'var(--ink-soft)'}">${String(h).padStart(2,'0')}h</text>`;
+    });
+    return g + '</svg>';
   };
-  return irDpPainel('Ritmo dos últimos 7 dias', irDpLeg('var(--dx-local,#001A72)','locais por hora')+(metaV?irDpLeg('var(--orange)',(d.meta.origem==='cadastrada'?'meta ':'média ')+irFmtNum(metaV,1)+'/h',true):''),
-    `<div class="dp-rt-grid">${top.map(card).join('')}</div>`);
+  const leg = usuarios.map((u,i)=>`<span><span class="cmp-dot" style="background:${cor(i)};border-radius:3px"></span>${irEsc(irProdNome(u))}</span>`).join('');
+  return irDpPainel('Produtividade hora a hora', filtro + '<span>locais por hora</span>',
+    `<div class="as-topo">
+      ${irDpKpi('Hora de pico', horas[iPico] != null ? String(horas[iPico]).padStart(2,'0')+'h' : '—', irFmtInt(tot[iPico]||0)+' locais')}
+      ${irDpKpi('Média por hora', irFmtNum(ativas.length ? totalG/ativas.length : 0, 1), 'entre as '+ativas.length+' horas com contagem')}
+      ${irDpKpi('Locais no período', irFmtInt(totalG), usuarios.length+' colaborador(es)')}
+    </div>
+    ${irFluid('dpHoraHora', svg, 250)}
+    <div class="cmp-legend dp-hh-leg">${leg}</div>`);
 }
+
 
 /* PX6 — equipe do dia × produção por pessoa */
 function irDpEquipe(d){
@@ -8958,8 +9004,8 @@ function irRenderDashProdSecao(){
     <div class="dp-grid">${irDpRanking(d)}${irDpRetrabalho(d)}</div>
     ${irDpDispersao(d)}
     ${irDpCalor(d)}
-    <div class="dp-grid">${irDpTurno(d)}${irDpPlacar(d)}</div>
-    ${irDpRitmo(d)}
-    ${irDpEquipe(d)}
+    ${irDpTurno(d)}
+    ${irDpHoraHora(d)}
+    <div class="dp-grid">${irDpPlacar(d)}${irDpEquipe(d)}</div>
   </div>`;
 }
