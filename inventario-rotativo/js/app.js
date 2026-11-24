@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v315';
+const IR_APP_VERSION = 'v316';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1359,7 +1359,6 @@ function irRenderProdutividadeAba(){
     <section class="dx-secao dx-secao-aba">
       <div class="dx-secao-h"><span class="dx-secao-traco"></span><h2>Produtividade</h2></div>
       <div class="dx-secao-corpo">
-        ${irRenderAssertividadePanel()}
         ${irRenderDashProdSecao()}
       </div>
     </section>
@@ -9006,11 +9005,12 @@ function irRenderDashProdSecao(){
   const d = irDashProdDados();
   if(!d) return `<div id="dxProd" class="dp-wrap"><div class="panel"><p class="field-hint">Carregando as contagens do ciclo...</p></div></div>`;
   return `<div id="dxProd" class="dp-wrap">
+    ${irDpHoraHora(d)}
+    ${irRenderAssertividadePanel()}
     <div class="dp-grid">${irDpRanking(d)}${irDpRetrabalho(d)}</div>
     ${irDpDispersao(d)}
     ${irDpCalor(d)}
     ${irDpTurno(d)}
-    ${irDpHoraHora(d)}
     <div class="dp-grid">${irDpPlacar(d)}${irDpEquipe(d)}</div>
   </div>`;
 }
