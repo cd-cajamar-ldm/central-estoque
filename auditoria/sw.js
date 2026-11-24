@@ -3,7 +3,7 @@
    Precache do shell do app + runtime cache (stale-while-revalidate)
    para os CDNs (fontes e SheetJS) usados pelo módulo de auditoria.
    ============================================================ */
-const CACHE_VERSION = 'central-estoque-v9';
+const CACHE_VERSION = 'central-estoque-v10';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -42,6 +42,8 @@ self.addEventListener('fetch', (event)=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
+  // Banco (Supabase) nunca passa pelo cache: login, permissão e dados vêm sempre da internet.
+  if(/supabase\.co$/.test(url.hostname)) return;
   /* Supabase (login e dados) nunca passa pelo cache: seria devolver resposta velha ou de outra pessoa. */
   if(url.hostname.endsWith('.supabase.co')) return;
 
