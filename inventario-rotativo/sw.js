@@ -4,7 +4,7 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'inventario-rotativo-v339';
+const CACHE_VERSION = 'inventario-rotativo-v340';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -52,6 +52,10 @@ self.addEventListener('fetch', (event)=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
+  /* Banco (Supabase) nunca passa pelo cache: login, permissão e dados têm de vir
+     sempre da internet. Antes, leituras do banco eram guardadas aqui e podiam
+     voltar uma resposta velha (de outra sessão) depois de uma atualização. */
+  if(/supabase\.co$/.test(url.hostname)) return;
 
   if(isSameOrigin){
     // cache:'no-cache' revalida no servidor mesmo dentro da janela de max-age. Sem
