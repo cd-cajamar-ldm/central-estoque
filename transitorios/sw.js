@@ -4,7 +4,7 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'transitorios-v10';
+const CACHE_VERSION = 'transitorios-v11';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -47,6 +47,8 @@ self.addEventListener('fetch', (event)=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
+  // Banco (Supabase) nunca passa pelo cache: login, permissão e dados vêm sempre da internet.
+  if(/supabase\.co$/.test(url.hostname)) return;
   /* Supabase (login e dados) nunca passa pelo cache: seria devolver resposta velha ou de outra pessoa. */
   if(url.hostname.endsWith('.supabase.co')) return;
 
