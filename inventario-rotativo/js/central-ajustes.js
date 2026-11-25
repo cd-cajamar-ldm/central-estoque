@@ -135,23 +135,37 @@ function irCaDiasSvg(dias, W, sel){
   let s = `<svg width="${W}" height="${H}" style="display:block">` + irCaEixo(W, pl, pr, y, lo, hi, 4);
   dias.forEach((d,i)=>{
     const x = pl+i*sl+(sl-bw)/2, a = Math.min(y(0), y(d.v)), b = Math.max(y(0), y(d.v)), esc = sel.includes(d.dia), on = !sel.length || esc;
-    s += `<g style="cursor:pointer" onclick="irCaSetDia('${d.dia}')" onmouseenter="irCaDiaTip(event,'${d.dia}')" onmousemove="irMoveDiaTooltip(event)" onmouseleave="irHideDiaTooltip()"><rect x="${pl+i*sl}" y="${pt}" width="${sl}" height="${H-pt-pb}" fill="transparent"/><rect x="${x}" y="${a}" width="${bw}" height="${Math.max(2,b-a)}" rx="3" fill="${irCaCor(d.v)}" opacity="${on?1:.35}"/></g>`;
+    s += `<g style="cursor:pointer" onclick="irCaDiaFixar(event,'${d.dia}')" onmouseenter="irCaDiaTip(event,'${d.dia}')" onmousemove="irCaTipMover(event)" onmouseleave="irCaTipSair()"><rect x="${pl+i*sl}" y="${pt}" width="${sl}" height="${H-pt-pb}" fill="transparent"/><rect x="${x}" y="${a}" width="${bw}" height="${Math.max(2,b-a)}" rx="3" fill="${irCaCor(d.v)}" opacity="${on?1:.35}"/></g>`;
     s += `<text x="${x+bw/2}" y="${d.v>=0?a-4:b+12}" font-size="${dias.length>22?9:10}" font-weight="800" text-anchor="middle" fill="${irCaCor(d.v)}">${irCaK(d.v)}</text>`;
     s += `<text x="${x+bw/2}" y="${H-8}" font-size="10.5" font-weight="${esc?800:500}" text-anchor="middle" style="fill:${esc?'var(--ink)':'var(--ink-soft)'}">${d.dia.slice(8,10)}${multi?'/'+d.dia.slice(5,7):''}</text>`;
   });
   return s + '</svg>';
 }
 
-/* Balão do Net por dia: itens divergentes do dia (maiores primeiro) com o Net do ano. */
-function irCaDiaTip(ev, dia){
+/* Balão do Net por dia. Passar o mouse mostra uma prévia; CLICAR na barra fixa o
+   balão: dá para rolar a lista inteira, clicar num item (abre a ficha) ou filtrar
+   o dia. Fecha no ✕, no Esc ou clicando fora. Vale para a Net e para Divergências. */
+function irCaTipMover(ev){ if(!IR._tipFixo) irMoveDiaTooltip(ev); }
+function irCaTipSair(){ if(!IR._tipFixo) irHideDiaTooltip(); }
+function irCaTipFechar(){ IR._tipFixo = false; const tt = document.getElementById('irChartTooltip'); if(tt) tt.classList.remove('fixo'); irHideDiaTooltip(); }
+function irCaTipFixar(ev, montar){
+  IR._tipFixo = false; montar(true); IR._tipFixo = true;
+  const tt = document.getElementById('irChartTooltip'); if(tt) tt.classList.add('fixo');
+  if(ev) ev.stopPropagation();
+}
+document.addEventListener('click', ev=>{ if(!IR._tipFixo) return; const tt = document.getElementById('irChartTooltip'); if(tt && !tt.contains(ev.target)) irCaTipFechar(); });
+document.addEventListener('keydown', ev=>{ if(ev.key==='Escape' && IR._tipFixo) irCaTipFechar(); });
+function irCaDiaFixar(ev, dia){ irCaTipFixar(ev, fixo=>irCaDiaTip(ev, dia, fixo)); }
+function irCaDiaTip(ev, dia, fixo){
+  if(IR._tipFixo) return;
   const tt = document.getElementById('irChartTooltip'); const ctx = IR._caDiaItens; if(!tt || !ctx) return;
   const g = new Map(); ctx.base.filter(l=>l.dia===dia).forEach(l=>{ let o = g.get(l.item); if(!o){ o = {item:l.item, nome:l.nome, mot:l.mot, v:0}; g.set(l.item, o); } o.v += irCaVal(l); });
   const lst = Array.from(g.values()).filter(x=>x.v).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
-  const tot = lst.reduce((s,x)=>s+x.v,0), mostra = lst.slice(0, 14);
-  tt.innerHTML = `<div class="ct-title">${dia.slice(8,10)}/${dia.slice(5,7)} · ${irCaR(tot)} · ${lst.length} itens</div>
-    <table><thead><tr><th>Item</th><th>Motivo</th><th style="text-align:right">Dia</th><th style="text-align:right">Net ano</th></tr></thead><tbody>
-    ${mostra.map(x=>{ const a = (ctx.itAno.get(x.item)||{}).a||0; return `<tr><td><b class="mono">${irEsc(x.item)}</b> ${irEsc(String(x.nome).slice(0,30))}</td><td>${irEsc(String(x.mot).split(' · ')[0])}</td><td class="mono" style="text-align:right;color:${irCaCor(x.v)};font-weight:800">${irCaR(x.v)}</td><td class="mono" style="text-align:right;color:${irCaCor(a)};font-weight:800">${irCaR(a)}</td></tr>`; }).join('')}
-    </tbody>${lst.length>mostra.length?`<tfoot><tr><td colspan="4">+${lst.length-mostra.length} itens</td></tr></tfoot>`:''}</table>`;
+  const tot = lst.reduce((s,x)=>s+x.v,0), mostra = fixo ? lst : lst.slice(0, 14);
+  tt.innerHTML = `<div class="ct-title">${dia.slice(8,10)}/${dia.slice(5,7)} · ${irCaR(tot)} · ${lst.length} itens${fixo?`<span class="ct-acoes"><button type="button" onclick="irCaTipFechar();irCaSetDia('${dia}')">Filtrar dia</button><button type="button" class="x" onclick="irCaTipFechar()">✕</button></span>`:''}</div>
+    <div class="ct-rol"><table><thead><tr><th>Item</th><th>Motivo</th><th style="text-align:right">Dia</th><th style="text-align:right">Net ano</th></tr></thead><tbody>
+    ${mostra.map(x=>{ const a = (ctx.itAno.get(x.item)||{}).a||0; return `<tr${fixo?` class="clic" onclick="irCaTipFechar();irCaAbrirItem('${irEsc(x.item)}')"`:''}><td><b class="mono">${irEsc(x.item)}</b> ${irEsc(String(x.nome).slice(0,30))}</td><td>${irEsc(String(x.mot).split(' · ')[0])}</td><td class="mono" style="text-align:right;color:${irCaCor(x.v)};font-weight:800">${irCaR(x.v)}</td><td class="mono" style="text-align:right;color:${irCaCor(a)};font-weight:800">${irCaR(a)}</td></tr>`; }).join('')}
+    </tbody>${lst.length>mostra.length?`<tfoot><tr><td colspan="4">+${lst.length-mostra.length} itens · clique na barra para ver todos</td></tr></tfoot>`:''}</table></div>`;
   tt.classList.remove('hidden','lt-wrap','lt-wrap-big'); tt.classList.add('ca-tip');
   irMoveDiaTooltip(ev);
 }
