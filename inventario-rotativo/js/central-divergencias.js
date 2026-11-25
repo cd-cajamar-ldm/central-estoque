@@ -143,15 +143,17 @@ function irTopMesDiaCd(){
 }
 
 /* ---------- balão do Net por dia ---------- */
-function irCdDiaTip(ev, dia){
+function irCdDiaFixar(ev, dia){ irCaTipFixar(ev, fixo=>irCdDiaTip(ev, dia, fixo)); }
+function irCdDiaTip(ev, dia, fixo){
+  if(IR._tipFixo) return;
   const tt = document.getElementById('irChartTooltip'); const ctx = IR._cdDiaItens; if(!tt || !ctx) return;
   const g = new Map(); ctx.base.filter(l=>l.dia===dia).forEach(l=>{ const k = l.item+'|'+l.local; let o = g.get(k); if(!o){ o = {item:l.item, nome:l.nome, local:l.local, end:l.end, cod:l.cod, v:0}; g.set(k, o); } o.v += irCdVal(l); });
   const lst = Array.from(g.values()).filter(x=>x.v).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
-  const tot = lst.reduce((s,x)=>s+x.v,0), mostra = lst.slice(0, 14);
-  tt.innerHTML = `<div class="ct-title">${dia.slice(8,10)}/${dia.slice(5,7)} · ${irCdR(tot)} · ${lst.length} item×local</div>
-    <table><thead><tr><th>Item</th><th>Endereço</th><th>Obs</th><th style="text-align:right">Dia</th><th style="text-align:right">Net ano</th></tr></thead><tbody>
-    ${mostra.map(x=>{ const a = (ctx.itAno.get(x.item)||{}).a||0; return `<tr><td><b class="mono">${irEsc(x.item)}</b> ${irEsc(String(x.nome).slice(0,26))}</td><td>${irEsc(x.end||x.local)}</td><td>${irEsc(x.cod)}</td><td class="mono" style="text-align:right;color:${irCaCor(x.v)};font-weight:800">${irCdR(x.v)}</td><td class="mono" style="text-align:right;color:${irCaCor(a)};font-weight:800">${irCdR(a)}</td></tr>`; }).join('')}
-    </tbody>${lst.length>mostra.length?`<tfoot><tr><td colspan="5">+${lst.length-mostra.length}</td></tr></tfoot>`:''}</table>`;
+  const tot = lst.reduce((s,x)=>s+x.v,0), mostra = fixo ? lst : lst.slice(0, 14);
+  tt.innerHTML = `<div class="ct-title">${dia.slice(8,10)}/${dia.slice(5,7)} · ${irCdR(tot)} · ${lst.length} item×local${fixo?`<span class="ct-acoes"><button type="button" onclick="irCaTipFechar();irCdSetDia('${dia}')">Filtrar dia</button><button type="button" class="x" onclick="irCaTipFechar()">✕</button></span>`:''}</div>
+    <div class="ct-rol"><table><thead><tr><th>Item</th><th>Endereço</th><th>Obs</th><th style="text-align:right">Dia</th><th style="text-align:right">Net ano</th></tr></thead><tbody>
+    ${mostra.map(x=>{ const a = (ctx.itAno.get(x.item)||{}).a||0; return `<tr${fixo?` class="clic" onclick="irCaTipFechar();irCdAbrirItem('${irEsc(x.item)}')"`:''}><td><b class="mono">${irEsc(x.item)}</b> ${irEsc(String(x.nome).slice(0,26))}</td><td>${irEsc(x.end||x.local)}</td><td>${irEsc(x.cod)}</td><td class="mono" style="text-align:right;color:${irCaCor(x.v)};font-weight:800">${irCdR(x.v)}</td><td class="mono" style="text-align:right;color:${irCaCor(a)};font-weight:800">${irCdR(a)}</td></tr>`; }).join('')}
+    </tbody>${lst.length>mostra.length?`<tfoot><tr><td colspan="5">+${lst.length-mostra.length} · clique na barra para ver todos</td></tr></tfoot>`:''}</table></div>`;
   tt.classList.remove('hidden','lt-wrap','lt-wrap-big'); tt.classList.add('ca-tip');
   irMoveDiaTooltip(ev);
 }
@@ -264,7 +266,7 @@ function irRenderCentralDivergencias(){
 
   // ----- gráficos (mesmos desenhos da aba Net)
   const rowsMes = meses.map(m=>({mes:m, rot:rotMes(m), v:porMes.get(m)||0}));
-  const comoCd = s=> s.replace(/irCaSetMes\(/g, 'irCdSetMes(').replace(/irCaSetDia\(/g, 'irCdSetDia(').replace(/irCaDiaTip\(/g, 'irCdDiaTip(');
+  const comoCd = s=> s.replace(/irCaSetMes\(/g, 'irCdSetMes(').replace(/irCaSetDia\(/g, 'irCdSetDia(').replace(/irCaDiaTip\(/g, 'irCdDiaTip(').replace(/irCaDiaFixar\(/g, 'irCdDiaFixar(');
   const comQtd = fn=>{ const met = IR.caS.met; IR.caS.met = S.met; try{ return fn(); } finally{ IR.caS.met = met; } };
   const gMes = irCaPainel('NET', irFluid('cdMes', w=>comoCd(comQtd(()=>irCaMesesSvg(rowsMes, w, S.meses, netAno))), 270),
     irCaLeg('#001A72','sobra')+irCaLeg('#FE5000','falta')+irCaLeg('var(--ca-linha)','acumulado',true));

@@ -2372,3 +2372,14 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .cd-ano option{ color:#1D1F2A; }
 .cd-aud{ margin-left:auto; padding:6px 14px; font-size:12px; }
 .cd-voltar{ margin-bottom:12px; }
+
+/* Balão do Net por dia fixado (clique na barra): interage, rola e fecha */
+.chart-tooltip.ca-tip.fixo{ pointer-events:auto !important; box-shadow:0 18px 44px rgba(0,26,114,.28); border:1px solid rgba(0,26,114,.18); }
+.chart-tooltip.ca-tip .ct-title{ display:flex; align-items:center; gap:10px; }
+.chart-tooltip.ca-tip .ct-acoes{ margin-left:auto; display:inline-flex; gap:6px; }
+.chart-tooltip.ca-tip .ct-acoes button{ border:1px solid var(--line); background:var(--paper); color:#001A72; font:inherit; font-size:11.5px; font-weight:700; border-radius:8px; padding:3px 10px; cursor:pointer; }
+.chart-tooltip.ca-tip .ct-acoes button:hover{ border-color:#FE5000; color:#FE5000; }
+.chart-tooltip.ca-tip .ct-acoes button.x{ padding:3px 8px; }
+.chart-tooltip.ca-tip.fixo .ct-rol{ max-height:min(420px, 60vh); overflow:auto; scrollbar-width:thin; }
+.chart-tooltip.ca-tip tr.clic{ cursor:pointer; }
+.chart-tooltip.ca-tip tr.clic:hover td{ background:rgba(254,80,0,.08); }
