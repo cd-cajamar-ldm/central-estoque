@@ -22,3 +22,8 @@
   **Produtividade** (movimentações por dia e por pessoa, RGs/hora trabalhada, fila da triagem, tempo até armazenar, retrabalho,
   locais mais movimentados e conferência com o coletor via `rg_movimentacoes`) e dá a data exata de chegada do RG ao local
   para o "Tempo em misto" do Dashboard. A "triagem" é a origem mais frequente das movimentações.
+- **Valoração** (SIGEQ278 · Preço de custo, grupo `preco`, substitui a anterior): valor = quantidade × preço de custo unitário.
+  Item comum: custo da SIGEQ278. Componente de kit (ZBIQ0051): `in_interface` = N vale R$ 0 (de propósito); = S usa o custo do
+  item pai (`item_vol_multiplo`) e, se o pai não tiver preço, o do próprio componente. Sem preço vale R$ 0 e entra no
+  diagnóstico "Itens sem preço" (exceto os N). Sem a SIGEQ278 o app volta a usar o PRECO da QRY0100. A ZBIQ0051 precisa ter a
+  coluna `in_interface`; sem ela o app avisa e trata o item como comum. Código: `mkValor()` em `js/app.js`.
