@@ -2365,3 +2365,10 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .dp-hh thead tr, .dp-hh thead th{ background:transparent !important; color:var(--ink-soft) !important; text-transform:none !important; letter-spacing:0 !important; border:none !important; }
 .dp-hh thead th.pico{ color:#FE5000 !important; }
 .dp-hh thead th.tot{ color:#001A72 !important; }
+
+/* Central de Divergências (aba Divergências, formato da Net) */
+.dx-hero.cd-hero{ background-image:linear-gradient(90deg, rgba(0,18,82,.94) 0%, rgba(0,18,82,.78) 45%, rgba(0,18,82,.25) 100%), url(../brand/dash-hero.jpg); }
+.cd-ano{ margin-left:10px; background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:3px 10px; font-weight:700; font-size:12px; }
+.cd-ano option{ color:#1D1F2A; }
+.cd-aud{ margin-left:auto; padding:6px 14px; font-size:12px; }
+.cd-voltar{ margin-bottom:12px; }

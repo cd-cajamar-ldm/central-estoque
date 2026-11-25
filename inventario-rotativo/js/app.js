@@ -506,7 +506,7 @@ function irSwitchTab(tab){
   // no topo — mesmo lugar de sempre, só que com o filtro certo pra essa aba.
   const netTab = (tab==='ciclo');
   const filtroCiclo = document.getElementById('tbFilterCiclo');
-  if(filtroCiclo) filtroCiclo.hidden = netTab || areaExtra;
+  if(filtroCiclo) filtroCiclo.hidden = netTab || areaExtra || (tab==='divergencias' && !IR.divModoAuditoria);
   // Filtro "Inventário" (Rotativo / Reversa / Insumos): troca de área mantendo a aba.
   const filtroInv = document.getElementById('tbFilterInv');
   const baseAba = irBaseDaAba(tab);
@@ -514,7 +514,7 @@ function irSwitchTab(tab){
   const selInv = document.getElementById('invTipoSelect');
   if(selInv) selInv.value = irAreaDaAba(tab);
   const filtroProdData = document.getElementById('tbFilterProdData');
-  if(filtroProdData) filtroProdData.hidden = netTab || areaExtra;
+  if(filtroProdData) filtroProdData.hidden = netTab || areaExtra || irBaseDaAba(tab)==='divergencias';
   const filtroNetAno = document.getElementById('tbFilterNetAno');
   if(filtroNetAno) filtroNetAno.hidden = !netTab;
   const filtroNetMes = document.getElementById('tbFilterNetMes');
@@ -625,7 +625,7 @@ function irRenderView(){
      as outras abas continuam com o azul e o laranja da marca. Fica antes
      de qualquer saida da funcao para valer tambem no aviso de "nenhum
      ciclo importado". */
-  if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias');
+  if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias' && !!IR.divModoAuditoria);
   // Transitórios não depende de ciclo importado: é um controle próprio, não uma
   // leitura da contagem.
   const SEM_CICLO = new Set(['importacao','configuracoes','exportar','gestaoInventario']);
@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v317';
+const IR_APP_VERSION = 'v318';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -7500,6 +7500,12 @@ async function irAudToggleVirtuais(){
 }
 function irDivFecharAuditoria(){ IR.divAuditoria = null; irRenderView(); }
 function irRenderDivergencias(){
+  // Visão principal: Central de Divergências (formato da aba Net). A tela antiga
+  // (filtros por ciclo, seleção e folha de auditoria) abre pelo botão "Auditoria".
+  if(!IR.divModoAuditoria) return irRenderCentralDivergencias();
+  return `<div class="cd-voltar"><button type="button" class="btn btn-secondary" onclick="irCdAuditoria(false)">← Central de Divergências</button></div>` + irRenderDivergenciasAuditoria();
+}
+function irRenderDivergenciasAuditoria(){
   if(!IR.divergencias.length) return irEmptyState('Sem divergências carregadas', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   if(!irDivEscopoPronto()){
     // Uma carga por vez: o placeholder rerenderiza, e sem a trava ele dispararia

@@ -602,11 +602,11 @@ function tile(t1,t2,t3,cls,tip){ return '<div class="rv-tile"'+(tip?tipA(tip):''
 function tip(){ return tipA(Array.prototype.slice.call(arguments).filter(Boolean).join('\n')); }
 /* Anéis concêntricos: unidades, locais e linhas item × local. */
 function aneis(lista){
-  var h='<svg class="rgx-aneis" viewBox="0 0 220 220" role="img">', r0=96;
+  var h='<svg class="rgx-aneis" viewBox="0 0 220 220" role="img">', r0=98;
   lista.forEach(function(a,i){
-    var r=r0-i*24, c=2*Math.PI*r, p=Math.max(0,Math.min(1,a.p)), vis=p>0?Math.max(p,0.012):0;
-    h+='<circle cx="110" cy="110" r="'+r+'" fill="none" stroke="var(--surface2)" stroke-width="15"/>'+
-       '<circle class="rgx-arco" cx="110" cy="110" r="'+r+'" fill="none" stroke="'+a.cor+'" stroke-width="15" stroke-linecap="round" transform="rotate(-90 110 110)" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+c.toFixed(1)+'" data-off="'+(c*(1-vis)).toFixed(1)+'"'+tip(a.rot, int(a.a)+' de '+int(a.b), pct(a.a,a.b))+'/>';
+    var r=r0-i*25, c=2*Math.PI*r, p=Math.max(0,Math.min(1,a.p)), vis=p>0?Math.max(p,0.012):0;
+    h+='<circle cx="110" cy="110" r="'+r+'" fill="none" stroke="var(--surface2)" stroke-width="19"/>'+
+       '<circle class="rgx-arco" cx="110" cy="110" r="'+r+'" fill="none" stroke="'+a.cor+'" stroke-width="19" stroke-linecap="round" transform="rotate(-90 110 110)" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+c.toFixed(1)+'" data-off="'+(c*(1-vis)).toFixed(1)+'"'+tip(a.rot, int(a.a)+' de '+int(a.b), pct(a.a,a.b))+'/>';
   });
   h+='<text x="110" y="106" text-anchor="middle" class="rgx-aneis-n">'+pct(lista[0].a,lista[0].b)+'</text><text x="110" y="126" text-anchor="middle" class="rgx-aneis-l">COBERTURA</text></svg>';
   return h;

@@ -243,10 +243,10 @@ a.nav-item{ display:flex; align-items:center; }
 
 /* Anéis */
 .rgx-aneis-box{ display:flex; align-items:center; gap:22px; flex-wrap:wrap; justify-content:center; padding:6px 0 2px; }
-.rgx-aneis{ width:220px; height:220px; flex-shrink:0; }
+.rgx-aneis{ width:300px; height:300px; max-width:100%; flex-shrink:0; }
 .rgx-arco{ transition:stroke-dashoffset 1.3s cubic-bezier(.2,.8,.2,1); cursor:pointer; }
 .rgx-arco:hover{ filter:brightness(1.12); }
-.rgx-aneis-n{ font:800 30px Poppins,sans-serif; fill:var(--ink); }
+.rgx-aneis-n{ font:800 28px Poppins,sans-serif; fill:var(--ink); }
 .rgx-aneis-l{ font:700 9px 'Inter',sans-serif; letter-spacing:.14em; fill:var(--ink-soft); }
 .rgx-aneis-leg{ display:flex; flex-direction:column; gap:14px; flex:1; min-width:190px; }
 .rgx-aneis-leg div{ display:grid; grid-template-columns:12px 1fr auto; gap:2px 9px; align-items:center; }
