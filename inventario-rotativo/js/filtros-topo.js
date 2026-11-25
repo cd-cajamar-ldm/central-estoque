@@ -38,8 +38,10 @@ function irRenderTopMulti(){
   const tab = IR.currentTab;
   const netTab = tab==='ciclo';
   elObs.hidden = true; elObs.innerHTML = ''; // Obs fica na tabela Ofensores (aba Net)
-  elMes.hidden = elDia.hidden = !netTab;
+  const cdTab = tab==='divergencias' && !IR.divModoAuditoria && typeof irTopMesDiaCd==='function';
+  elMes.hidden = elDia.hidden = !(netTab || cdTab);
   if(netTab){ const [m, d] = irTopMesDiaNet(); elMes.innerHTML = m; elDia.innerHTML = d; }
+  else if(cdTab){ const [m, d] = irTopMesDiaCd(); elMes.innerHTML = m; elDia.innerHTML = d; if(!m) elMes.hidden = elDia.hidden = true; }
   else { elMes.innerHTML = elDia.innerHTML = ''; }
   aberto.forEach(id=>{ const d = document.getElementById(id); if(d) d.open = true; });
 }
