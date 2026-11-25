@@ -139,7 +139,7 @@ RG.nuvem = (function(){
     });
   }
   var N = {};
-  N.chaveMeta = function(g){ return g === 'est' ? 'est_meta' : g === 'mult' ? 'mult_meta' : g; };
+  N.chaveMeta = function(g){ return g === 'est' ? 'est_meta' : g === 'mult' ? 'mult_meta' : g === 'preco' ? 'preco_meta' : g; };
   /* quando (e quem) gravou cada chave — é a parte 0 de cada uma */
   N.metas = function(supa){
     return supa.from('rg_dados').select('chave,atualizado_em,usuario').eq('parte', 0).then(function(r){
@@ -150,7 +150,7 @@ RG.nuvem = (function(){
   /* grupos: rgs (lista), est e mult (objeto com rows), hist (lista). Devolve o carimbo gravado. */
   N.salvaGrupo = function(supa, g, valor, usuario){
     var agora = new Date().toISOString();
-    if(g === 'est' || g === 'mult'){
+    if(g === 'est' || g === 'mult' || g === 'preco'){
       var meta = {}; Object.keys(valor).forEach(function(k){ if(k !== 'rows' && k !== 'locais') meta[k] = valor[k]; });
       /* as linhas primeiro; o "meta" por último marca que a gravação terminou */
       return salvaChave(supa, g + '_rows', valor.rows, agora, usuario).then(function(){ return salvaChave(supa, g + '_meta', meta, agora, usuario); }).then(function(){ return agora; });
@@ -158,7 +158,7 @@ RG.nuvem = (function(){
     return salvaChave(supa, g, valor, agora, usuario).then(function(){ return agora; });
   };
   N.carregaGrupo = function(supa, g){
-    if(g === 'est' || g === 'mult'){
+    if(g === 'est' || g === 'mult' || g === 'preco'){
       return carregaChave(supa, g + '_meta').then(function(m){
         if(!m) return null;
         return carregaChave(supa, g + '_rows').then(function(rw){

@@ -483,3 +483,6 @@ tr.rgx-click{ cursor:pointer; }
 .rgx-fl-b i{ display:block; width:100%; min-height:3px; border-radius:6px 6px 0 0; }
 .rgx-fl-c span{ font-size:10.5px; color:var(--ink-soft); text-align:center; }
 .rgx-mono{ font-family:'SFMono-Regular',Consolas,monospace; font-size:12px; }
+
+button.rv-tile-btn{ border:0; border-right:1px solid var(--line); background:none; font:inherit; text-align:left; cursor:pointer; color:inherit; }
+button.rv-tile-btn:hover{ background:var(--surface2); }
