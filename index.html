@@ -48,7 +48,7 @@
   .brand-logo:hover{transform:translateY(-2px) scale(1.045);}
   .brand-logo::before{content:'';position:absolute;top:-50%;left:-70%;width:55%;height:220%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:rotate(18deg);animation:shine 5s ease-in-out infinite;}
   @keyframes shine{0%{left:-70%;}38%{left:150%;}100%{left:150%;}}
-  .brand-logo img{position:relative;z-index:1;width:70%;height:70%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));pointer-events:none;}
+  .brand-logo img{position:relative;z-index:1;width:92%;height:92%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));pointer-events:none;}
   .brand-logo:hover img{animation:wiggle 1s ease-in-out infinite;}
   @keyframes wiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
   .brand-logo.spin img{animation:spin360 .6s cubic-bezier(.34,1.56,.64,1);}
@@ -77,7 +77,7 @@
   .wheel-mark{position:absolute;left:50%;top:50%;width:620px;height:620px;transform:translate(-50%,-50%);opacity:.08;pointer-events:none;z-index:0;color:var(--ink);animation:wheelspin 20s linear infinite;}
   @keyframes wheelspin{to{transform:translate(-50%,-50%) rotate(360deg);}}
 
-  .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;z-index:2;}
+  .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;z-index:15;}
   .topbar h1{font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;margin:0;}
   .topbar p{margin:5px 0 0;color:var(--ink-soft);font-size:13.5px;max-width:480px;}
   .topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;}
@@ -729,7 +729,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=12"></script>
+<script src="versao-hub.js?v=13"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
