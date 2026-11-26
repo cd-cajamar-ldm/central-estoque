@@ -1,0 +1,71 @@
+/* Check Volume — layout (tokens do theme.css; cores da marca LDM). */
+.cv-gap{ margin-top:16px; }
+.cv-tab{ font-size:13px; }
+.cv-tab th.n, .cv-tab td.n{ text-align:right; white-space:nowrap; }
+.cv-tab td{ padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+.cv-tab tr.clicavel{ cursor:pointer; }
+.cv-tab tr.clicavel:hover td{ background:var(--orange-light); }
+.cv-tab tr.cv-det td{ background:var(--surface2); }
+.cv-desc{ max-width:340px; }
+.cv-mono{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; }
+.cv-pill{ display:inline-block; color:#fff; font-size:11px; font-weight:700; padding:2px 9px; border-radius:100px; white-space:nowrap; }
+.cv-ok{ background:var(--success); } .cv-falta{ background:#F59E0B; } .cv-sobra{ background:var(--danger); } .cv-pend{ background:#6B7280; } .cv-ean{ background:#7C3AED; }
+.cv-msg{ margin-top:10px; font-size:13px; color:var(--orange); font-weight:600; min-height:18px; }
+.cv-st{ display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px; flex-wrap:wrap; }
+.cv-st b{ min-width:170px; } .cv-st span{ color:var(--ink-soft); }
+.cv-st.ok b::before{ content:"✓ "; color:var(--success); }
+.cv-regras p{ margin:0 0 8px; font-size:13px; line-height:1.5; }
+.panel-sub code, .cv-regras code{ background:var(--surface2); padding:1px 5px; border-radius:4px; font-size:12px; }
+.cv-drop{ cursor:pointer; }
+.cv-in{ width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:6px; padding:8px 10px; background:var(--surface); color:var(--ink); font-size:13px; }
+
+/* Faixa de topo */
+.cv-hero{ background:linear-gradient(120deg,#001A72 0%,#0B2A8F 70%,#1E3AA8 100%); color:#fff; border-radius:var(--radius-lg); padding:18px 22px; margin-bottom:16px; border-bottom:4px solid #FE5000; box-shadow:0 10px 24px -14px rgba(0,26,114,.6); }
+.cv-hero-tag{ font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#FFB08A; }
+.cv-hero h2{ margin:4px 0 6px; font-size:22px; font-weight:800; }
+.cv-hero p{ margin:0; font-size:13px; color:rgba(255,255,255,.82); }
+.cv-hero b{ color:#fff; }
+
+/* Identificação da entrega e bipagem */
+.cv-busca{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.cv-busca input{ flex:1; min-width:220px; font-size:20px; font-weight:700; padding:12px 14px; border:2px solid var(--line); border-radius:var(--radius); background:var(--surface); color:var(--ink); }
+.cv-busca input:focus{ outline:none; border-color:var(--orange); box-shadow:0 0 0 3px var(--accent-glow); }
+.cv-bip input{ border-color:var(--blue); }
+.cv-bip-ult{ margin-top:10px; padding:10px 14px; border-radius:var(--radius); font-size:14px; font-weight:700; background:var(--surface2); color:var(--ink-soft); border-left:5px solid var(--line); }
+.cv-bip-ult.ok{ background:var(--success-light); color:var(--success); border-left-color:var(--success); }
+.cv-bip-ult.sobra{ background:var(--danger-light); color:var(--danger); border-left-color:var(--danger); }
+.cv-bip-ult.ean{ background:rgba(124,58,237,.12); color:#7C3AED; border-left-color:#7C3AED; }
+.cv-meta{ display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-soft); margin-top:12px; }
+.cv-meta b{ color:var(--ink); }
+.cv-barra{ height:10px; border-radius:6px; background:var(--surface2); overflow:hidden; margin-top:12px; }
+.cv-barra i{ display:block; height:100%; background:var(--success); border-radius:6px; transition:width .2s; }
+.cv-acoes{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+
+/* Cartões de indicador */
+.cv-kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:16px 0; }
+.cv-kpi{ position:relative; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); padding:12px 14px 12px 18px; overflow:hidden; }
+.cv-kpi::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--c,var(--blue)); }
+.cv-kpi span{ font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); }
+.cv-kpi b{ display:block; font-size:28px; font-weight:800; color:var(--ink); line-height:1.15; }
+
+/* Resultado e falta */
+.cv-res{ border-radius:var(--radius-lg); padding:14px 18px; margin-bottom:16px; font-weight:700; border:1px solid var(--line); }
+.cv-res.ok{ background:var(--success-light); color:var(--success); border-color:var(--success); }
+.cv-res.div{ background:var(--danger-light); color:var(--danger); border-color:var(--danger); }
+.cv-res small{ display:block; font-weight:500; color:var(--ink-soft); margin-top:3px; }
+.cv-falta-card{ border:1px solid var(--line); border-left:5px solid #F59E0B; border-radius:var(--radius-lg); background:var(--surface); padding:14px 16px; margin-bottom:12px; }
+.cv-falta-card h4{ margin:0 0 2px; font-size:14.5px; font-weight:800; color:var(--ink); }
+.cv-falta-card .sub{ font-size:12.5px; color:var(--ink-soft); margin-bottom:10px; }
+.cv-falta-card .qtd{ float:right; font-size:13px; font-weight:800; color:#B45309; background:rgba(245,158,11,.15); padding:3px 10px; border-radius:100px; }
+.cv-loc{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px; padding:6px 0; border-top:1px dashed var(--line); }
+.cv-loc .rot{ font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; min-width:90px; color:var(--ink-soft); }
+.cv-loc code{ font-weight:800; background:var(--blue-light); color:var(--blue); padding:2px 8px; border-radius:5px; font-size:12.5px; }
+html[data-theme="dark"] .cv-loc code{ color:#fff; }
+.cv-loc .sd{ color:var(--ink-soft); }
+.cv-loc .sd b{ color:var(--ink); }
+.cv-loc.orig .rot{ color:var(--orange); }
+.cv-vazio{ font-size:12.5px; color:var(--ink-soft); padding:6px 0; }
+.cv-sec-t{ margin:20px 0 10px; font-size:15px; font-weight:800; color:var(--ink); }
+.cv-sec-t span{ font-size:12px; font-weight:500; color:var(--ink-soft); margin-left:8px; }
+.cv-pag{ display:flex; gap:12px; align-items:center; justify-content:center; margin-top:12px; font-size:13px; color:var(--ink-soft); }
+@media (max-width:860px){ .cv-busca input{ font-size:17px; } .cv-kpi b{ font-size:23px; } }
