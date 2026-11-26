@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 33; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v322';
+const IR_APP_VERSION = 'v323';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1860,8 +1860,7 @@ function irRenderPorRuaPanel(ind){
     <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por rua.</p>
     ${totalPendentes>0 ? `<div class="form-actions pend-acoes" style="margin:0 0 12px;">
         <button class="btn-link" id="irPendBtn" onclick="irExportarLocaisPendentesCsv()">📤 Baixar locais pendentes (${irFmtInt(totalPendentes)})</button>
-        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>
-        <button class="btn-link" onclick="irPendMarcarTodas(true)">Marcar todas</button>`:''}
+        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>`:''}
       </div>
       ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
