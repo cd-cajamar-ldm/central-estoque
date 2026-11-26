@@ -1,4 +1,4 @@
 /* Versão da Central da Oficina (hub). A CADA alteração no index.html da raiz:
    aumente `n`, atualize `data` e troque o ?v=<n> do <script> no index.html —
    sem isso o navegador reaproveita o arquivo antigo e o número no rodapé não muda. */
-window.LDM_HUB_VERSAO = { n: 5, data: '23/11/2026 00:10' };
+window.LDM_HUB_VERSAO = { n: 6, data: '26/11/2026 18:15' };
