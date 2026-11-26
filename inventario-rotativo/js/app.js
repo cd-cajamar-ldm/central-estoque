@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v319';
+const IR_APP_VERSION = 'v320';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -8827,7 +8827,7 @@ function irDpEquipeFiltro(usuarios){
 const irDpHHMM = m=>{ const t = new Date(m*60000); return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'); };
 function irDpTurno(d){
   const dia = d.dias[d.dias.length-1];
-  if(!dia) return irDpPainel('Turno do dia','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
+  if(!dia) return irDpPainel('Tempo de Ociosidade','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
   const todas = [];
   for(const [k, su] of d.sessoes){
     const [u, dd] = k.split('|');
@@ -8840,7 +8840,7 @@ function irDpTurno(d){
     const turno = m[m.length-1][1]-m[0][0];
     todas.push({u, m, contando, turno, locais:iv.length, base0:irDpMin(dia+'T00:00:00')});
   }
-  if(!todas.length) return irDpPainel('Turno do dia','', '<p class="field-hint">Sem horários de início e fim no último dia.</p>');
+  if(!todas.length) return irDpPainel('Tempo de Ociosidade','', '<p class="field-hint">Sem horários de início e fim no último dia.</p>');
   const filtro = irDpEquipeFiltro(todas.map(l=>l.u));
   const linhas = todas.filter(l=>!IR.dpEquipeOff.has(l.u)).sort((p,q)=>q.contando-p.contando);
   let hIni = 24, hFim = 0;
@@ -8850,7 +8850,9 @@ function irDpTurno(d){
   const xp = (min,b0)=> ((min-b0)/60 - hIni)/(hFim-hIni)*100;
   const horas = []; for(let h=hIni; h<=hFim; h++) horas.push(h);
   const grade = horas.map(h=>`<b style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('')
-    + horas.slice(0,-1).map(h=>`<b class="meia" style="left:${((h+0.5-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('');
+    + horas.slice(0,-1).map(h=>`<b class="meia" style="left:${((h+0.5-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('')
+    // linhas de 10 em 10 minutos (as de :30 já estão acima)
+    + horas.slice(0,-1).flatMap(h=>[10,20,40,50].map(mi=>`<b class="min" style="left:${((h+mi/60-hIni)/(hFim-hIni)*100).toFixed(3)}%"></b>`)).join('');
   const lin = l=>{ const parado = l.turno>0 ? 1-l.contando/l.turno : 0;
     return `<div class="dp-tl">
       <span class="as-nome">${irEsc(irProdNome(l.u))}</span>
@@ -8860,7 +8862,7 @@ function irDpTurno(d){
       <span class="as-qt">${Math.floor(l.contando/60)}h${String(Math.round(l.contando%60)).padStart(2,'0')}</span>
       <span class="as-pct ${parado>0.25?'bad':''}">${irFmtPct(parado)}</span>
     </div>`; };
-  return irDpPainel('Turno do dia', filtro + irDpLeg('var(--dx-local,#001A72)','contando')+irDpLeg('var(--surface2)','sem local aberto'),
+  return irDpPainel('Tempo de Ociosidade', filtro + irDpLeg('var(--dx-local,#001A72)','contando')+irDpLeg('var(--surface2)','sem local aberto'),
     `<div class="dp-tl dp-tl-eixo"><span></span><div class="dp-tl-horas">${horas.map(h=>`<span style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%">${String(h).padStart(2,'0')}h</span>`).join('')}</div><span class="as-qt"><small>início</small></span><span class="as-qt"><small>fim</small></span><span class="as-qt"><small>contando</small></span><span class="as-qt"><small>parado</small></span></div>
      <div class="as-lista dp-tl-lista">${linhas.map(lin).join('') || '<p class="field-hint">Ninguém marcado no filtro Equipe.</p>'}</div>`);
 }

@@ -2383,3 +2383,6 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .chart-tooltip.ca-tip.fixo .ct-rol{ max-height:min(420px, 60vh); overflow:auto; scrollbar-width:thin; }
 .chart-tooltip.ca-tip tr.clic{ cursor:pointer; }
 .chart-tooltip.ca-tip tr.clic:hover td{ background:rgba(254,80,0,.08); }
+.dp-tl-trilho b{ background:rgba(0,26,114,.14) !important; }
+.dp-tl-trilho b.meia{ background:rgba(0,26,114,.08) !important; }
+.dp-tl-trilho b.min{ background:rgba(0,26,114,.045) !important; }
