@@ -6,12 +6,14 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 4; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 5; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
   entregas: ['Entregas', 'Entregas da QRY0180 importada.'],
-  importacao: ['Importação', 'QRY0180 (entregas), QRY0390 (estoque) e cadastro de fotos.'],
+  controle: ['Controle de Entregas', 'Divergências apontadas e ocorrências fora da conferência.'],
+  dashboard: ['Dashboard de divergências', 'Indicadores das ocorrências registradas.'],
+  importacao: ['Importação', 'Bases do Check Volume.'],
   configuracoes: ['Configurações', 'Regras das sugestões de outros locais.']
 };
 const CV = {
@@ -19,7 +21,8 @@ const CV = {
   fotos: new Map(),
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
-  ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set()
+  ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set(),
+  ctrl: [], cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
 };
 
 /* ---------- utilitários ---------- */
@@ -97,6 +100,8 @@ function indexar(){
   CV.ent.forEach(r => { let a = CV.porEnt.get(r.e); if(!a) CV.porEnt.set(r.e, a = []); a.push(r); });
   CV.eanMap = new Map();
   Object.keys(CV.itens).forEach(i => (CV.itens[i].e || []).forEach(e => { const k = normEan(e); if(k && !CV.eanMap.has(k)) CV.eanMap.set(k, i); }));
+  CV.eansExtra = new Map();
+  (CV.eanRows || []).forEach(r => { const k = normEan(r[1]); if(!k) return; let a = CV.eansExtra.get(r[0]); if(!a) CV.eansExtra.set(r[0], a = []); if(a.indexOf(r[1]) < 0) a.push(r[1]); if(!CV.eanMap.has(k)) CV.eanMap.set(k, r[0]); });
   CV.fotoMap = new Map();
   (CV.fotoRows || []).forEach(f => { CV.fotoMap.set(f[0], f[1]); const k = normEan(f[2]); if(k && !CV.eanMap.has(k)) CV.eanMap.set(k, f[0]); });
   CV.saldoItem = new Map();
@@ -104,14 +109,16 @@ function indexar(){
 }
 async function carregar(){
   try {
-    const [cfg, ent, ei, es, ft, ec, ed] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo'), nuvemLer('fotos'), nuvemLer('ent_cab'), nuvemLer('ent_desc')]);
+    const [cfg, ent, ei, es, ft, ec, ed, en2] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo'), nuvemLer('fotos'), nuvemLer('ent_cab'), nuvemLer('ent_desc'), nuvemLer('eans')]);
     if(cfg && cfg.dados && cfg.dados.cfg) Object.assign(CV.cfg, cfg.dados.cfg);
     CV.ent = !ent ? [] : (ent.dados && ent.dados.fmt === 2 ? montarEnt(ent.linhas, ec ? ec.linhas : [], ed ? ed.linhas : []) : ent.linhas);
     CV.itens = {}; (ei ? ei.linhas : []).forEach(x => { CV.itens[x[0]] = {d: x[1], e: x[2]}; });
     CV.saldo = es ? es.linhas : [];
     CV.fotoRows = ft ? ft.linhas : [];
-    CV.meta = {ent: ent && ent.meta, est: es && es.meta, foto: ft && ft.meta};
+    CV.eanRows = en2 ? en2.linhas : [];
+    CV.meta = {ent: ent && ent.meta, est: es && es.meta, foto: ft && ft.meta, ean: en2 && en2.meta};
     indexar();
+    CV.ctrl = await ctrlLer().catch(() => []);
   } catch(e){
     CV.erro = 'Não consegui ler os dados: ' + (e.message || e) + (/app_dados|relation|does not exist/i.test(String(e.message)) ? ' — a tabela app_dados ainda não foi criada no banco (migração 008).' : '');
   }
@@ -130,7 +137,7 @@ function montarLinhas(rows){
   const m = new Map();
   rows.forEach(r => {
     let x = m.get(r.i);
-    if(!x){ x = {i: r.i, d: r.d || (CV.itens[r.i] && CV.itens[r.i].d) || '', prev: 0, orig: [], eans: (CV.itens[r.i] && CV.itens[r.i].e) || []}; m.set(r.i, x); }
+    if(!x){ x = {i: r.i, d: r.d || (CV.itens[r.i] && CV.itens[r.i].d) || '', prev: 0, orig: [], eans: Array.from(new Set(((CV.itens[r.i] && CV.itens[r.i].e) || []).concat(CV.eansExtra.get(r.i) || [])))}; m.set(r.i, x); }
     x.prev += r.q;
     const o = r.o || r.pk || r.de;
     if(o && x.orig.indexOf(o) < 0) x.orig.push(o);
@@ -207,7 +214,10 @@ function cvMenos(i){
   const p = CV.sess.log.map(l => l.i).lastIndexOf(i); if(p >= 0) CV.sess.log.splice(p, 1);
   gravarSessao(); atualizar();
 }
-function cvFinalizar(){ if(!CV.sess) return; CV.sess.fin = true; gravarSessao(); CV.aberto = new Set(); renderView(); }
+function cvFinalizar(){
+  if(!CV.sess) return; CV.sess.fin = true; gravarSessao(); CV.aberto = new Set(); renderView();
+  ctrlDaConferencia().then(n => { if(n) toast(n + ' divergência(s) registrada(s) em Controle de Entregas.'); }).catch(e => toast('Não consegui registrar no Controle de Entregas: ' + ((e && e.message) || e), true));
+}
 function cvReabrir(){ if(!CV.sess) return; CV.sess.fin = false; gravarSessao(); renderView(); setTimeout(focoBip, 0); }
 function cvZerar(){
   if(!CV.sess || !confirm('Zerar toda a bipagem da entrega ' + CV.num + '?')) return;
@@ -318,10 +328,10 @@ function atualizar(){
   // tabela de itens
   const ordem = {falta: 0, sobra: 1, pend: 2, ok: 3};
   const ls = CV.linhas.slice().sort((a, b) => ordem[cvSituacao(a)] - ordem[cvSituacao(b)] || a.d.localeCompare(b.d));
-  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>toque numa linha com pendência para ver onde achar</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody>' +
+  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? 'toque numa linha com pendência para ver onde achar' : 'sem fotos: importe o cadastro em Importação') + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody>' +
     ls.map(x => {
       const b = s.bips[x.i] || 0, st = cvSituacao(x), pen = Math.max(x.prev - b, 0), ab = CV.aberto.has(x.i);
-      return '<tr class="' + (pen ? 'clicavel ' : '') + (st === 'falta' ? 'r-falta' : st === 'sobra' ? 'r-sobra' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td>' + fotoHtml(x.i, 'cv-th') + '</td><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc">' + esc(x.d) + '<div class="field-hint">EAN ' + (x.eans.length ? esc(x.eans.join(' / ')) : 'não cadastrado') + '</div></td>' +
+      return '<tr class="' + (pen ? 'clicavel ' : '') + (st === 'falta' ? 'r-falta' : st === 'sobra' ? 'r-sobra' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td>' + fotoHtml(x.i, 'cv-th') + '</td><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc">' + esc(x.d) + '<div class="field-hint">EAN ' + (x.eans.length ? esc(x.eans.slice(0, 3).join(' / ')) + (x.eans.length > 3 ? ' +' + (x.eans.length - 3) : '') : 'não cadastrado') + '</div></td>' +
         '<td class="n">' + fInt(x.prev) + '</td><td class="n"><b>' + fInt(b) + '</b></td><td class="n">' + fInt(pen) + (b > x.prev ? ' <span style="color:var(--danger)">(+' + fInt(b - x.prev) + ')</span>' : '') + '</td>' +
         '<td><span class="cv-pill cv-' + st + '">' + ROT[st] + '</span></td><td class="n">' + (b ? '<button class="btn-link" onclick="event.stopPropagation();cvMenos(\'' + esc(x.i) + '\')" title="Tirar uma bipagem">−1</button>' : '') + '</td></tr>' +
         (pen && ab ? '<tr class="cv-det"><td colspan="8"><b>Faltam ' + fInt(pen) + '</b> — onde achar:' + blocoLocais(x) + '</td></tr>' : '');
@@ -356,22 +366,27 @@ function viewEntregas(){
   if(q) lista = lista.filter(o => o.e.includes(q) || (o.t || '').toLowerCase().includes(q) || (o.ev || '').toLowerCase().includes(q));
   const pags = Math.max(1, Math.ceil(lista.length / POR)); if(CV.pag >= pags) CV.pag = pags - 1;
   return '<div class="filter-bar"><input type="text" id="cvBusca" placeholder="Buscar entrega, transportadora ou evento..." value="' + esc(CV.busca) + '" oninput="cvBuscaEnt(this.value)"><span class="field-hint">' + fInt(lista.length) + ' entregas · ' + esc(chipEnt()) + '</span></div>' +
-    '<div class="table-wrap"><table class="cv-tab"><thead><tr><th>Entrega</th><th>Transportadora</th><th>Evento</th><th>Limite</th><th class="n">Itens</th><th class="n">Peças</th><th>Conferência</th><th></th></tr></thead><tbody>' +
-    lista.slice(CV.pag * POR, CV.pag * POR + POR).map(o => { const st = statusEnt(o.e); return '<tr><td class="cv-mono"><b>' + esc(o.e) + '</b></td><td>' + esc(o.t) + '</td><td>' + esc(o.ev) + '</td><td>' + fData(o.li) + '</td><td class="n">' + o.itens + '</td><td class="n">' + fInt(o.pecas) + '</td><td>' + (st ? '<span class="cv-pill ' + (st === 'Finalizada' ? 'cv-ok' : 'cv-pend') + '">' + st + '</span>' : '<span class="field-hint">—</span>') + '</td><td class="n"><button class="btn btn-secondary" onclick="abrirEntrega(\'' + esc(o.e) + '\')">Conferir</button></td></tr>'; }).join('') + '</tbody></table></div>' +
+    '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Entrega</th><th>Transportadora</th><th>Evento</th><th>Limite</th><th class="n">Itens</th><th class="n">Peças</th><th>Conferência</th><th></th></tr></thead><tbody>' +
+    lista.slice(CV.pag * POR, CV.pag * POR + POR).map(o => { const st = statusEnt(o.e); return '<tr><td class="cv-mono"><b>' + esc(o.e) + '</b></td><td>' + esc(o.t) + '</td><td>' + esc(o.ev) + '</td><td>' + fData(o.li) + '</td><td class="n">' + o.itens + '</td><td class="n">' + fInt(o.pecas) + '</td><td>' + (st ? '<span class="cv-pill ' + (st === 'Finalizada' ? 'cv-ok' : 'cv-pend') + '">' + st + '</span>' : '<span class="field-hint">—</span>') + '</td><td class="n"><button class="btn btn-secondary btn-sm" onclick="abrirEntrega(\'' + esc(o.e) + '\')">Conferir</button></td></tr>'; }).join('') + '</tbody></table></div>' +
     (pags > 1 ? '<div class="cv-pag"><button class="btn btn-secondary" onclick="cvPag(-1)"' + (CV.pag === 0 ? ' disabled' : '') + '>←</button><span>Página ' + (CV.pag + 1) + ' de ' + pags + '</span><button class="btn btn-secondary" onclick="cvPag(1)"' + (CV.pag >= pags - 1 ? ' disabled' : '') + '>→</button></div>' : '');
 }
+function cardBase(ic, titulo, sub, m, det){
+  const ok = !!m;
+  return '<label class="cv-bs ' + (ok ? 'ok' : '') + '"><span class="cv-bs-ic">' + ic + '</span><span class="cv-bs-t"><b>' + titulo + '</b><small>' + sub + '</small></span>' +
+    '<span class="cv-bs-st">' + (ok ? '✓ ' + fData((m.importadoEm || '').slice(0, 10)) + ' · ' + det : 'Não importada') + '</span>' +
+    (ok && m.por ? '<span class="cv-bs-por">' + esc(m.por) + '</span>' : '<span class="cv-bs-por"></span>') +
+    '<span class="btn btn-orange cv-bs-btn">' + (ok ? 'Atualizar' : 'Importar') + '</span>' +
+    '<input type="file" accept=".xlsx,.xls" multiple hidden onchange="importar(Array.from(this.files)); this.value=\'\'"></label>';
+}
 function viewImportacao(){
-  const e = CV.meta.ent, s = CV.meta.est, f = CV.meta.foto;
-  const linha = (rot, ok, txt) => '<div class="cv-st ' + (ok ? 'ok' : '') + '"><b>' + rot + '</b><span>' + txt + '</span></div>';
-  return '<div class="panel"><h3>Importar bases</h3><div class="panel-sub">Selecione os arquivos de uma vez (ou só o que mudou) — o app reconhece cada um pelo cabeçalho. Cada importação <b>substitui</b> a anterior e fica disponível para todos com acesso.</div>' +
-    '<label class="dropzone cv-drop" id="cvDrop"><div class="dz-icon">📥</div><div class="dz-title">Arraste ou clique para escolher</div><div class="dz-desc">QRY0180 (entregas) · QRY0390 (estoque) · cadastro com URL Foto — .xlsx</div>' +
-    '<input type="file" id="cvArq" accept=".xlsx,.xls" multiple hidden onchange="importar(Array.from(this.files)); this.value=\'\'"></label>' +
-    '<div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div>' + (CV.erroImp ? '<div class="cv-res div" style="margin-top:10px">⚠ ' + esc(CV.erroImp) + '</div>' : '') + '</div>' +
-    '<div class="panel cv-gap"><h3>Situação das bases</h3>' +
-    linha('QRY0180 · entregas', !!e, e ? esc(e.arquivo) + ' · ' + fInt(e.linhas) + ' linhas · <b>' + fInt(e.entregas) + ' entregas</b>' + (e.itens ? ' · ' + fInt(e.itens) + ' itens' : '') + ' · ' + fData((e.importadoEm || '').slice(0, 10)) + (e.por ? ' por ' + esc(e.por) : '') : 'Não importada.') +
-    linha('QRY0390 · estoque', !!s, s ? esc(s.arquivo) + ' · ' + fInt(s.linhas) + ' linhas · <b>' + fInt(s.itens) + ' itens com EAN</b> · ' + fInt(s.locais) + ' saldos por local · ' + fData((s.importadoEm || '').slice(0, 10)) + (s.por ? ' por ' + esc(s.por) : '') : 'Não importada. Sem ela não há EAN para bipar nem sugestão de outros locais.') +
-    linha('Cadastro · fotos', !!f, f ? esc(f.arquivo) + ' · ' + fInt(f.linhas) + ' linhas · <b>' + fInt(f.itens) + ' itens com foto</b> · ' + fData((f.importadoEm || '').slice(0, 10)) + (f.por ? ' por ' + esc(f.por) : '') : 'Não importada (opcional). Planilha De-Para com as colunas Id Item e URL Foto; sem ela a foto não aparece.') + '</div>' +
-    '<div class="panel cv-gap"><h3>Como funciona</h3><div class="cv-regras"><p><b>Entrega:</b> itens, quantidades e local de coleta vêm da QRY0180.</p><p><b>EAN:</b> o EAN de cada item vem da QRY0390 (coluna EAN).</p><p><b>Locais alternativos:</b> saldo disponível (<code>QTDE_DISP</code>) da QRY0390 em outros locais, conforme as regras de Configurações. O saldo é o da data da importação.</p></div></div>';
+  const e = CV.meta.ent, s = CV.meta.est, f = CV.meta.foto, n = CV.meta.ean;
+  return '<div class="cv-bases" id="cvDrop">' +
+    cardBase('📦', 'QRY0180', 'Entregas', e, e ? fInt(e.entregas) + ' entregas · ' + fInt(e.linhas) + ' linhas' : '') +
+    cardBase('🏬', 'QRY0390', 'Estoque', s, s ? fInt(s.itens) + ' itens · ' + fInt(s.locais) + ' saldos' : '') +
+    cardBase('▥', 'SIGEQ230', 'EANs por item', n, n ? fInt(n.eans) + ' EANs · ' + fInt(n.itens) + ' itens' : '') +
+    cardBase('🖼', 'Cadastro', 'Fotos dos itens', f, f ? fInt(f.itens) + ' itens com foto' : '') +
+    '</div><div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div>' +
+    (CV.erroImp ? '<div class="cv-res div">⚠ ' + esc(CV.erroImp) + '</div>' : '');
 }
 function viewConfig(){
   return '<div class="panel"><h3>Classes de local ignoradas nas sugestões</h3><div class="panel-sub">Coluna <code>CLAL</code> da QRY0390, separadas por vírgula. Locais dessas classes (ex.: reversa e avaria) não são sugeridos.</div><div class="filter-bar"><input type="text" id="cfgIg" value="' + esc(CV.cfg.ignorar.join(', ')) + '"></div></div>' +
@@ -389,6 +404,162 @@ async function cvSalvarCfg(){
   try { await nuvemGravar('cfg', null, {cfg: CV.cfg}, []); toast('Configurações salvas.'); } catch(e){ toast(e.message || String(e), true); }
   renderView();
 }
+
+/* ---------- Controle de Entregas (divergências apontadas) ---------- */
+/* Cada ocorrência é uma linha própria em app_dados (chave 'ctrl', versão = id): várias pessoas
+   registram ao mesmo tempo sem sobrescrever o trabalho umas das outras. */
+const TIPOS = ['Falta', 'Sobra', 'EAN não identificado', 'Avaria', 'Item não localizado', 'Outro'];
+const TIPO_COR = {'Falta': '#F59E0B', 'Sobra': '#7E22CE', 'EAN não identificado': '#C83812', 'Avaria': '#0E7490', 'Item não localizado': '#6B7280', 'Outro': '#001A72'};
+async function ctrlLer(){
+  const out = []; let a = 0;
+  while(true){
+    const { data, error } = await cvSupa.from(CV_TAB).select('versao,dados').eq('app', CV_APP).eq('chave', 'ctrl').eq('parte', 0).order('versao').range(a, a + 999);
+    if(error) throw error;
+    (data || []).forEach(r => { if(r.dados) out.push(r.dados); });
+    if(!data || data.length < 1000) break;
+    a += 1000;
+  }
+  return out;
+}
+async function ctrlSalvar(reg){
+  if(somenteLeitura()) throw new Error('Seu acesso é só de visualização.');
+  await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', 'ctrl').eq('versao', reg.id).eq('parte', 0);
+  const { error } = await cvSupa.from(CV_TAB).insert({app: CV_APP, chave: 'ctrl', versao: reg.id, parte: 0, dados: reg});
+  if(error) throw error;
+  const i = CV.ctrl.findIndex(c => c.id === reg.id);
+  if(i >= 0) CV.ctrl[i] = reg; else CV.ctrl.push(reg);
+}
+async function ctrlExcluir(id){
+  if(somenteLeitura()) throw new Error('Seu acesso é só de visualização.');
+  const { error } = await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', 'ctrl').eq('versao', id).eq('parte', 0);
+  if(error) throw error;
+  CV.ctrl = CV.ctrl.filter(c => c.id !== id);
+}
+/* Ao finalizar uma conferência, as divergências viram ocorrências (sem duplicar se finalizar de novo). */
+async function ctrlDaConferencia(){
+  if(somenteLeitura() || !CV.sess || !CV.porEnt.get(CV.num)) return 0;
+  const s = CV.sess, r0 = CV.porEnt.get(CV.num)[0], agora = new Date().toISOString(), novos = [];
+  CV.linhas.forEach(x => {
+    const b = s.bips[x.i] || 0;
+    if(b < x.prev) novos.push({tipo: 'Falta', item: x.i, d: x.d, q: x.prev - b, orig: x.orig.join(' / ')});
+    else if(b > x.prev) novos.push({tipo: 'Sobra', item: x.i, d: x.d, q: b - x.prev, orig: x.orig.join(' / ')});
+  });
+  Object.keys(s.desc).forEach(k => novos.push({tipo: 'EAN não identificado', item: k, d: s.desc[k].nome || '', q: s.desc[k].n, orig: ''}));
+  const ids = new Set();
+  for(const n of novos){
+    const id = [CV.num, n.tipo === 'EAN não identificado' ? 'EAN' : n.tipo, n.item].join('|'); ids.add(id);
+    const ant = CV.ctrl.find(c => c.id === id);
+    if(ant && ant.q === n.q) continue;
+    await ctrlSalvar(Object.assign({}, ant || {}, {id, ts: ant ? ant.ts : agora, por: ant ? ant.por : CV.email, ent: CV.num, item: n.item, d: n.d, tipo: n.tipo, q: n.q, orig: n.orig, t: r0.t || '', src: 'conferencia', st: ant ? ant.st : 'aberta', obs: ant ? (ant.obs || '') : ''}));
+  }
+  for(const c of CV.ctrl.filter(c => c.ent === CV.num && c.src === 'conferencia' && c.st === 'aberta' && !ids.has(c.id))) await ctrlExcluir(c.id);
+  return novos.length;
+}
+const dtBR = iso => iso ? fData(iso.slice(0, 10)) + ' ' + iso.slice(11, 16) : '';
+const hojeISO = () => new Date().toISOString().slice(0, 10);
+function ctrlFiltradas(){
+  const f = CV.cf, q = f.busca.trim().toLowerCase();
+  return CV.ctrl.filter(c => (!f.st || c.st === f.st) && (!f.tipo || c.tipo === f.tipo) && (!f.de || c.ts.slice(0, 10) >= f.de) && (!f.ate || c.ts.slice(0, 10) <= f.ate) &&
+    (!q || [c.ent, c.item, c.d, c.t, c.orig, c.obs, c.por].join(' ').toLowerCase().indexOf(q) >= 0)).sort((a, b) => b.ts.localeCompare(a.ts));
+}
+function viewControle(){
+  if(CV.carregando) return '<p class="field-hint">Carregando...</p>';
+  const POR = 100, lista = ctrlFiltradas(), ro = somenteLeitura();
+  const pags = Math.max(1, Math.ceil(lista.length / POR)); if(CV.cpag >= pags) CV.cpag = pags - 1;
+  const chip = (v, t) => '<button class="chip' + (CV.cf.st === v ? ' active' : '') + '" onclick="cvCF(\'st\',\'' + v + '\')">' + t + '</button>';
+  const abertas = CV.ctrl.filter(c => c.st === 'aberta').length;
+  let h = '<div class="filter-bar cv-fb">' + chip('', 'Todas · ' + CV.ctrl.length) + chip('aberta', 'Abertas · ' + abertas) + chip('atendida', 'Atendidas · ' + (CV.ctrl.length - abertas)) +
+    '<select class="cv-in-s" onchange="cvCF(\'tipo\',this.value)"><option value="">Todos os tipos</option>' + TIPOS.map(t => '<option' + (CV.cf.tipo === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>' +
+    '<input type="date" class="cv-in-s" value="' + CV.cf.de + '" onchange="cvCF(\'de\',this.value)" title="De"><input type="date" class="cv-in-s" value="' + CV.cf.ate + '" onchange="cvCF(\'ate\',this.value)" title="Até">' +
+    '<input type="text" id="cvCBusca" class="cv-in-s" style="flex:1;min-width:180px" placeholder="Buscar entrega, item, transportadora..." value="' + esc(CV.cf.busca) + '" oninput="cvCBusca(this.value)">' +
+    (ro ? '' : '<button class="btn btn-orange btn-sm" onclick="cvCNovo()">+ Nova ocorrência</button>') + '<button class="btn btn-secondary btn-sm" onclick="cvCExportar()">Exportar</button></div>';
+  if(CV.cnovo && !ro){
+    h += '<div class="cv-card cv-novo"><div><span class="cv-lab">Entrega</span><input id="cnEnt" class="cv-in-s" inputmode="numeric"></div><div><span class="cv-lab">Item (código)</span><input id="cnItem" class="cv-in-s" placeholder="opcional"></div>' +
+      '<div><span class="cv-lab">Tipo</span><select id="cnTipo" class="cv-in-s">' + TIPOS.map(t => '<option' + (t === 'Avaria' ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div><div><span class="cv-lab">Qtd</span><input id="cnQtd" type="number" min="1" value="1" class="cv-in-s" style="width:70px"></div>' +
+      '<div><span class="cv-lab">Local</span><input id="cnOrig" class="cv-in-s" placeholder="opcional"></div><div style="flex:1;min-width:200px"><span class="cv-lab">Observação</span><input id="cnObs" class="cv-in-s" style="width:100%"></div>' +
+      '<button class="btn btn-orange btn-sm" onclick="cvCSalvarNovo()">Registrar</button><button class="btn btn-secondary btn-sm" onclick="cvCNovo()">Cancelar</button></div>';
+  }
+  h += '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Data</th><th>Entrega</th><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Transportadora</th><th>Observação</th><th>Por</th><th>Status</th><th></th></tr></thead><tbody>' +
+    (lista.length ? lista.slice(CV.cpag * POR, CV.cpag * POR + POR).map(c => '<tr><td>' + dtBR(c.ts) + '</td><td class="cv-mono"><b>' + esc(c.ent) + '</b></td><td class="cv-mono">' + esc(c.item || '') + '</td><td class="cv-cut" title="' + esc(c.d) + '">' + esc(c.d) + '</td>' +
+      '<td><span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span></td><td class="n"><b>' + fInt(c.q) + '</b></td><td class="cv-cut" title="' + esc(c.orig) + '">' + esc(c.orig || '') + '</td><td class="cv-cut">' + esc(c.t || '') + '</td>' +
+      '<td class="cv-cut" title="' + esc(c.obs) + '">' + esc(c.obs || '') + '</td><td class="cv-cut" title="' + esc(c.por) + '">' + esc((c.por || '').split('@')[0]) + '</td>' +
+      '<td><span class="cv-pill ' + (c.st === 'atendida' ? 'cv-ok' : 'cv-falta') + '">' + (c.st === 'atendida' ? 'Atendida' : 'Aberta') + '</span></td><td class="n cv-act">' + (ro ? '' :
+      '<button class="btn-link" onclick="cvCAtender(\'' + esc(c.id).replace(/'/g, '') + '\')">' + (c.st === 'atendida' ? 'Reabrir' : 'Atender') + '</button> <button class="btn-link" onclick="cvCObs(\'' + esc(c.id).replace(/'/g, '') + '\')">Obs</button> <button class="btn-danger-text" onclick="cvCExcluir(\'' + esc(c.id).replace(/'/g, '') + '\')">Excluir</button>') + '</td></tr>').join('')
+      : '<tr><td colspan="12" class="field-hint" style="padding:16px">Nenhuma ocorrência. As divergências aparecem aqui ao finalizar uma conferência.</td></tr>') + '</tbody></table></div>' +
+    (pags > 1 ? '<div class="cv-pag"><button class="btn btn-secondary" onclick="cvCPag(-1)"' + (CV.cpag === 0 ? ' disabled' : '') + '>←</button><span>Página ' + (CV.cpag + 1) + ' de ' + pags + ' · ' + fInt(lista.length) + ' ocorrências</span><button class="btn btn-secondary" onclick="cvCPag(1)"' + (CV.cpag >= pags - 1 ? ' disabled' : '') + '>→</button></div>' : '');
+  return h;
+}
+function cvCF(k, v){ CV.cf[k] = v; CV.cpag = 0; renderView(); }
+function cvCPag(n){ CV.cpag += n; renderView(); }
+let _cvCB; function cvCBusca(v){ CV.cf.busca = v; CV.cpag = 0; clearTimeout(_cvCB); _cvCB = setTimeout(() => { renderView(); const i = $('cvCBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
+function cvCNovo(){ CV.cnovo = !CV.cnovo; renderView(); }
+function achaCtrl(id){ return CV.ctrl.find(c => c.id === id); }
+async function cvCSalvarNovo(){
+  const ent = String($('cnEnt').value).replace(/\D/g, ''), item = $('cnItem').value.trim(), tipo = $('cnTipo').value, q = Math.max(1, parseInt($('cnQtd').value, 10) || 1);
+  if(!ent) return toast('Informe a entrega.', true);
+  const rows = CV.porEnt.get(ent) || [], r = item ? rows.find(x => x.i === item) : null;
+  const reg = {id: 'M|' + Date.now() + '|' + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), por: CV.email, ent, item, d: r ? r.d : ((CV.itens[item] && CV.itens[item].d) || ''), tipo, q, orig: $('cnOrig').value.trim() || (r ? r.o : ''), t: rows[0] ? rows[0].t : '', src: 'manual', st: 'aberta', obs: $('cnObs').value.trim()};
+  try { await ctrlSalvar(reg); CV.cnovo = false; toast('Ocorrência registrada.'); } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+async function cvCAtender(id){
+  const c = achaCtrl(id); if(!c) return;
+  const at = c.st !== 'atendida';
+  try { await ctrlSalvar(Object.assign({}, c, {st: at ? 'atendida' : 'aberta', at: at ? new Date().toISOString() : '', atpor: at ? CV.email : ''})); } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+async function cvCObs(id){
+  const c = achaCtrl(id); if(!c) return;
+  const v = prompt('Observação:', c.obs || ''); if(v === null) return;
+  try { await ctrlSalvar(Object.assign({}, c, {obs: v.trim()})); } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+async function cvCExcluir(id){
+  if(!achaCtrl(id) || !confirm('Excluir esta ocorrência?')) return;
+  try { await ctrlExcluir(id); } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+function cvCExportar(){
+  if(!window.XLSX) return toast('Biblioteca de Excel ainda carregando, tente de novo.', true);
+  const l = [['Data', 'Entrega', 'Item', 'Descrição', 'Tipo', 'Quantidade', 'Local', 'Transportadora', 'Observação', 'Registrado por', 'Origem', 'Status', 'Atendida em', 'Atendida por']];
+  ctrlFiltradas().forEach(c => l.push([dtBR(c.ts), c.ent, c.item || '', c.d || '', c.tipo, c.q, c.orig || '', c.t || '', c.obs || '', c.por || '', c.src === 'manual' ? 'Manual' : 'Conferência', c.st === 'atendida' ? 'Atendida' : 'Aberta', dtBR(c.at || ''), c.atpor || '']));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, planilha(l, [17, 12, 11, 44, 20, 10, 18, 22, 30, 20, 12, 10, 17, 20]), 'Controle de Entregas');
+  XLSX.writeFile(wb, 'controle-de-entregas.xlsx');
+}
+
+/* ---------- Dashboard das divergências ---------- */
+function barrasH(lista, cor, max){
+  const m = Math.max(1, ...lista.map(x => x[1]));
+  return lista.length ? '<div class="cv-bh">' + lista.slice(0, max || 8).map(x => '<div class="cv-bh-l" title="' + esc(x[0]) + ': ' + fInt(x[1]) + '"><span class="n">' + esc(x[0] || '—') + '</span><span class="b"><i style="width:' + (x[1] / m * 100) + '%;background:' + (x[2] || cor) + '"></i></span><b>' + fInt(x[1]) + '</b></div>').join('') + '</div>' : '<div class="field-hint">Sem dados no período.</div>';
+}
+function conta(lista, fn){ const m = new Map(); lista.forEach(c => { const k = fn(c) || '—'; m.set(k, (m.get(k) || 0) + 1); }); return Array.from(m.entries()).sort((a, b) => b[1] - a[1]); }
+function viewDashboard(){
+  if(CV.carregando) return '<p class="field-hint">Carregando...</p>';
+  const f = CV.df, L = CV.ctrl.filter(c => (!f.de || c.ts.slice(0, 10) >= f.de) && (!f.ate || c.ts.slice(0, 10) <= f.ate));
+  const preset = d => { const x = new Date(); x.setDate(x.getDate() - d); return x.toISOString().slice(0, 10); };
+  const h0 = hojeISO(), at = L.filter(c => c.st === 'atendida').length, ab = L.length - at;
+  const pecas = L.reduce((a, c) => a + (c.q || 0), 0), ents = new Set(L.map(c => c.ent)).size;
+  const kp = (rot, v, cor) => '<div class="cv-kpi" style="--c:' + cor + '"><span>' + rot + '</span><b>' + v + '</b></div>';
+  // por dia (últimos 30 dias com a janela do filtro)
+  const dias = []; const ini = f.de || preset(29), fim = f.ate || h0;
+  for(let d = new Date(ini + 'T12:00:00'), n = 0; d <= new Date(fim + 'T12:00:00') && n < 62; d.setDate(d.getDate() + 1), n++) dias.push(d.toISOString().slice(0, 10));
+  const porDia = new Map(); L.forEach(c => { const k = c.ts.slice(0, 10); porDia.set(k, (porDia.get(k) || 0) + 1); });
+  const mx = Math.max(1, ...dias.map(d => porDia.get(d) || 0));
+  const colunas = '<div class="cv-col">' + dias.map(d => { const v = porDia.get(d) || 0; return '<div class="cv-col-i" title="' + fData(d) + ': ' + v + ' ocorrência(s)"><b>' + (v || '') + '</b><i style="height:' + (v / mx * 100) + '%"></i><span>' + d.slice(8) + '</span></div>'; }).join('') + '</div>';
+  const pct = L.length ? Math.round(at / L.length * 100) : 0;
+  return '<div class="filter-bar cv-fb"><button class="chip' + (!f.de && !f.ate ? ' active' : '') + '" onclick="cvDF(\'\',\'\')">Tudo</button><button class="chip" onclick="cvDF(\'' + preset(6) + '\',\'\')">7 dias</button><button class="chip" onclick="cvDF(\'' + preset(29) + '\',\'\')">30 dias</button>' +
+    '<input type="date" class="cv-in-s" value="' + f.de + '" onchange="cvDF(this.value,CV.df.ate)"><input type="date" class="cv-in-s" value="' + f.ate + '" onchange="cvDF(CV.df.de,this.value)"></div>' +
+    '<div class="cv-kpis">' + kp('Ocorrências', fInt(L.length), '#001A72') + kp('Abertas', fInt(ab), '#F59E0B') + kp('Atendidas', fInt(at), '#1F8A52') + kp('% atendidas', pct + '%', '#0E7490') + kp('Peças em divergência', fInt(pecas), '#C83812') + kp('Entregas afetadas', fInt(ents), '#7E22CE') + '</div>' +
+    '<div class="cv-dgrid"><div class="cv-card cv-dc"><h4>Ocorrências por dia</h4>' + colunas + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Por tipo</h4>' + barrasH(conta(L, c => c.tipo).map(x => [x[0], x[1], TIPO_COR[x[0]]]), '#001A72') + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Situação</h4><div class="cv-donut"><div class="cv-donut-r" style="background:conic-gradient(#1F8A52 0 ' + pct + '%,#F59E0B ' + pct + '% 100%)"><span>' + pct + '%</span></div><div class="cv-leg"><div><i style="background:#1F8A52"></i>Atendidas ' + fInt(at) + '</div><div><i style="background:#F59E0B"></i>Abertas ' + fInt(ab) + '</div></div></div></div>' +
+    '<div class="cv-card cv-dc"><h4>Itens com mais divergências</h4>' + barrasH(conta(L.filter(c => c.item), c => c.item + ' · ' + (c.d || '').slice(0, 26)), '#FE5000', 8) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Por transportadora</h4>' + barrasH(conta(L, c => c.t), '#001A72', 8) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Por local de origem</h4>' + barrasH(conta(L.filter(c => c.orig), c => c.orig.split(' / ')[0]), '#0E7490', 8) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Por usuário</h4>' + barrasH(conta(L, c => (c.por || '').split('@')[0]), '#7E22CE', 8) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Origem do registro</h4>' + barrasH(conta(L, c => c.src === 'manual' ? 'Manual' : 'Conferência'), '#33488E', 4) + '</div></div>';
+}
+function cvDF(de, ate){ CV.df = {de, ate}; renderView(); }
 
 /* ---------- importação ---------- */
 function lerArquivo(file){
@@ -419,6 +590,11 @@ async function importar(files){
         await nuvemGravar('ent_cab', null, {}, dividir(r.dados.cabs, 400000));
         await nuvemGravar('ent', meta, {fmt: 2}, dividir(r.dados.linhas, 400000));
         CV.ent = montarEnt(r.dados.linhas, r.dados.cabs, r.dados.descs); CV.meta.ent = meta;
+      } else if(r.base === 'ean'){
+        CV.msg = 'Gravando EANs na nuvem...'; renderMsg();
+        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, itens: new Set(r.dados.map(x => x[0])).size, eans: r.dados.length};
+        await nuvemGravar('eans', meta, {}, dividir(r.dados, 400000));
+        CV.eanRows = r.dados; CV.meta.ean = meta;
       } else if(r.base === 'foto'){
         CV.msg = 'Gravando cadastro de fotos na nuvem...'; renderMsg();
         const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, itens: r.dados.length};
@@ -507,7 +683,7 @@ function cvExportar(){
 }
 
 /* ---------- navegação / estado ---------- */
-const VIEWS = {conferir: viewConferir, entregas: viewEntregas, importacao: viewImportacao, configuracoes: viewConfig};
+const VIEWS = {conferir: viewConferir, entregas: viewEntregas, controle: viewControle, dashboard: viewDashboard, importacao: viewImportacao, configuracoes: viewConfig};
 function renderMsg(){ const el = $('cvMsg'); if(el) el.textContent = CV.ocupado ? '⏳ ' + CV.msg : ''; }
 function renderView(){
   if(CV.erro && !CV.ent.length && !CV.saldo.length && CV.tab !== 'importacao' && CV.tab !== 'configuracoes'){ $('viewRoot').innerHTML = vazio(); return; }
@@ -527,21 +703,33 @@ function renderView(){
   if(CV.tab === 'conferir' && CV.sess) atualizar();
   if(sc) sc.scrollTop = y;
 }
-function cvTab(t){ CV.tab = t; CV.pag = 0; renderView(); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
+function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard') ctrlLer().then(l => { CV.ctrl = l; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
 function cvPag(n){ CV.pag += n; renderView(); }
 let _cvBT; function cvBuscaEnt(v){ CV.busca = v; CV.pag = 0; clearTimeout(_cvBT); _cvBT = setTimeout(() => { renderView(); const i = $('cvBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
 function cvToggleSidebar(){ const el = $('sidebar'); if(matchMedia('(max-width:860px)').matches) el.classList.toggle('mobile-open'); else el.classList.toggle('collapsed'); }
 function cvCloseSidebarMobile(){ if(matchMedia('(max-width:860px)').matches) $('sidebar').classList.remove('mobile-open'); }
-function cvToggleTheme(){
-  const cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  const n = cur === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', n);
-  try { localStorage.setItem('cv-theme', n); } catch(e){}
+/* Tema: mesmo botão/menu da Central e a mesma preferência (ldm-theme) — claro/escuro vale para os dois. */
+function cvInitTema(){
+  const btn = $('layoutBtn'), panel = $('layoutPanel'), opts = document.querySelectorAll('.layout-opt[data-tema]');
+  function aplicar(dark){
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    opts.forEach(o => o.classList.toggle('active', (o.dataset.tema === 'dark') === dark));
+  }
+  let dark = false;
+  try { const t = localStorage.getItem('ldm-theme') || localStorage.getItem('cv-theme'); dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; } catch(e){}
+  aplicar(dark);
+  opts.forEach(o => o.addEventListener('click', () => { dark = o.dataset.tema === 'dark'; aplicar(dark); try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){} }));
+  if(btn && panel){
+    btn.addEventListener('click', e => { e.stopPropagation(); panel.hidden = !panel.hidden; btn.classList.toggle('on', !panel.hidden); });
+    document.addEventListener('click', e => { if(!panel.hidden && !panel.contains(e.target) && e.target !== btn){ panel.hidden = true; btn.classList.remove('on'); } });
+  }
 }
 window.cvAplicarNivel = () => renderView();
 
 /* ---------- início (chamado por acesso.js depois do login) ---------- */
 async function cvInit(){
-  try { const t = localStorage.getItem('cv-theme'); if(t) document.documentElement.setAttribute('data-theme', t); } catch(e){}
+  cvInitTema();
+  try { cvSupa.auth.getSession().then(r => { CV.email = (r.data.session && r.data.session.user.email) || ''; }); } catch(e){}
   const v = $('sidebarVersao'); if(v) v.textContent = 'Check Volume · v' + CV_VERSAO;
   renderView();
   await carregar();
