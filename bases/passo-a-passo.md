@@ -7,10 +7,13 @@ Tempo total: cerca de **1 hora**, uma vez só. Siga na ordem.
 ## A ideia, e por que ela não precisa ser refeita depois
 
 ```
-Fluxos de dados             Modelo no Power BI              Power Automate                 SharePoint
-(workspace Operação    →    "Central de Estoque – Bases"  →  lê CADA receita da pasta  →   pasta "Bases"
- CD Cajamar, do Jorran)     (workspace Controle de Estoque)  "Receitas" e salva um CSV       (o app lê daqui)
+Fluxos de dados ──┐
+(Operação CD       │     Modelo no Power BI              Power Automate                 SharePoint              Oficina
+ Cajamar, Jorran)  ├──►  "Central de Estoque – Bases" ──► lê CADA receita da pasta  ──► pasta "Bases"  ──► Almoxarifado ──► apps
+Snowflake ─────────┘     (workspace Controle de Estoque)  "Receitas" e salva um CSV                          (uma linha por query)
 ```
+
+As duas origens entram **no mesmo modelo**. A meta é migrar tudo para o Snowflake; enquanto isso, as duas convivem e o resto do caminho não muda.
 
 - **Um modelo só para a Central inteira**, não um por app. Relatório novo é só marcar mais uma tabela.
 - **Um despertador só, que lê a pasta "Receitas".** Para incluir um relatório novo, basta colocar mais um arquivo `.dax` nessa pasta. **O Power Automate não precisa ser mexido.**
@@ -53,6 +56,21 @@ O **nome do arquivo de receita** decide o nome do relatório salvo: `QRY0390_par
 ### Conferência antes de seguir
 
 Na **Exibição de consulta DAX**, cole o conteúdo de [`conferencias/CONTAGEM_LINHAS.dax`](conferencias/CONTAGEM_LINHAS.dax) e clique em **Executar**. Cada parte precisa ficar **abaixo de 35 mil linhas**. Se passar, ou se der erro, mande um print para o Claude.
+
+---
+
+## Etapa 2B: trazer as queries do Snowflake para o mesmo modelo (15 min)
+
+As queries que vêm do Snowflake (hoje: **QRY0390** e **QRY410**) entram **no mesmo modelo** da Etapa 2. Assim o resto do caminho (Power Automate, pasta e Almoxarifado) é igual para as duas origens.
+
+1. No arquivo **Central de Estoque – Bases**, clique em **Obter dados → Mais… → Snowflake**.
+   - Use o conector **Snowflake**, **não o ODBC**: com o ODBC, a atualização agendada precisaria de um computador ligado o tempo todo.
+2. Servidor e Warehouse: os mesmos que você já usa no Excel ou no Power BI. Entre com **a sua conta** (nenhuma senha fica em arquivo).
+3. Na lista que abrir, **não marque nada ainda**. Tire um **print da lista de bancos, esquemas e tabelas** e mande para o Claude, que diz quais tabelas marcar e escreve as receitas.
+4. Depois de marcar as tabelas indicadas: **Carregar → Salvar → Publicar → Controle de Estoque → Substituir**.
+5. No site (app.powerbi.com), em **Configurações** do modelo, confira em **Credenciais da fonte de dados** se o **Snowflake** aparece com a sua conta.
+
+**Quando uma query mudar de origem** (sair do fluxo de dados e passar para o Snowflake): troque a tabela no modelo **mantendo o mesmo nome de tabela** e avise o Claude, que ajusta a receita (se os nomes das colunas mudarem) e a origem no Almoxarifado.
 
 ---
 
@@ -122,15 +140,15 @@ Para tirar um relatório, apague a receita da pasta **`Receitas`** (e o CSV anti
 
 ---
 
-## Etapa 4: ligar o app na pasta (2 min, uma vez só)
+## Etapa 4: conectar a pasta no Almoxarifado da Oficina (2 min, uma vez só)
 
-1. Abra o **Inventário Rotativo** no **Chrome ou Edge** → aba **Importação**.
-2. No quadro **Pasta conectada**, clique em **Conectar pasta** → escolha **`Bases`** → **Permitir**.
-3. O app lê a pasta e importa sozinho. No topo do quadro aparece **"Dados de DD/MM HH:MM"**: é a hora do arquivo mais antigo entre os automáticos.
+1. Abra a **Oficina** no **Chrome ou Edge** → menu **Almoxarifado**.
+2. Clique em **Conectar pasta** → escolha **`Bases`** → **Permitir**.
+3. Cada query da pasta aparece numa linha, com a origem na frente (**Snowflake**, **Fluxo de dados** ou **Manual**) e **de quando são os dados**. Query nova aparece sozinha, como **"A definir"**, até o Claude cadastrar.
 
-**No dia a dia:** ao abrir o app, se ele pedir, clique em **Permitir acesso** (o navegador exige esse clique por segurança). Para puxar o que chegou depois, clique em **Buscar novidades**.
+**No dia a dia:** ao abrir, se pedir, clique em **Permitir acesso** (o navegador exige esse clique por segurança). Para puxar o que chegou depois, clique em **Buscar novidades**.
 
-Os relatórios manuais (**QRY410 até ela ficar automática, QRY0843 e a Base Congelada**) podem ser salvos na mesma pasta **`Bases`**: o app lê tudo junto.
+As queries manuais (**QRY0843** e a **Base Congelada**) podem ser salvas na mesma pasta **`Bases`**, com o código no nome do arquivo.
 
 ---
 
@@ -141,5 +159,5 @@ Os relatórios manuais (**QRY410 até ela ficar automática, QRY0843 e a Base Co
 | E-mail "Falhou a atualização" | Abra o fluxo no Power Automate → **Histórico de execuções** → clique na que falhou e mande um print da etapa vermelha para o Claude |
 | Erro na ação 2b falando de `base64` | A receita já veio como texto: troque a expressão por `body('Obter_conteúdo_do_arquivo')` |
 | No app: "colunas obrigatórias não encontradas" | O nome de alguma coluna mudou no fluxo de dados. Mande o print da mensagem para o Claude ajustar a receita |
-| No app: "Dados de" mostra uma hora antiga | Confira se o Power Automate rodou e se a pasta está como **Sempre manter neste dispositivo** |
+| No Almoxarifado, uma query aparece **Atrasada** | Confira se o Power Automate rodou e se a pasta está como **Sempre manter neste dispositivo** |
 | QRY0160 / QRY410 não mudam durante o dia | Normal: o fluxo de dados delas só atualiza de madrugada |
