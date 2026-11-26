@@ -58,8 +58,10 @@ function parseDateVal(v){
     const d = new Date(+yy, +mm-1, +dd, +(H||0), +(M||0), +(S||0));
     return isNaN(d.getTime()) ? null : d;
   }
-  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if(m) return new Date(+m[1], +m[2]-1, +m[3]);
+  // Com hora quando vier ("2026-11-03 15:20:00", formato da exportação automática):
+  // sem ela, toda contagem caía à meia-noite.
+  m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
+  if(m) return new Date(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0));
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
 }
@@ -77,9 +79,16 @@ function irNormItemKey(v){
   return (Number.isFinite(n) && Number.isInteger(n)) ? String(n) : s;
 }
 
+/* A exportação automática (Power BI -> Power Automate) nomeia a coluna como
+   "Tabela[COLUNA]" ou "[COLUNA]". Compara só o que está dentro dos colchetes —
+   o nome de verdade —, senão nenhuma coluna obrigatória era reconhecida. */
+function irTirarTabelaDoCabecalho(h){
+  const m = /^[^\[]*\[(.+)\]$/.exec(String(h ?? '').trim());
+  return m ? m[1] : h;
+}
 function buildAliasResolver(headers, aliasMap){
   const resolved = {};
-  const normHeaders = headers.map(h=>({raw:h, norm: irNormKey(h)}));
+  const normHeaders = headers.map(h=>({raw:h, norm: irNormKey(irTirarTabelaDoCabecalho(h))}));
   for(const canon in aliasMap){
     let found = null;
     for(const cand of aliasMap[canon]){
@@ -171,8 +180,8 @@ const ALIAS_390 = {
   qtdeDisp: ['QTDE_DISP'], qtdeRom: ['QTDE_ROM'],
   classeSku: ['CURVA_ABC','Classe Sku'],
   ean: ['EAN','Ean','Código de Barras','Codigo de Barras','Cod Barras','Cód.Barras','Cod.Barras'],
-  valoriza: ['VALORIZA'], valorUnitario: ['VALOR_UNITARIO'],
-  log: ['LOG_ITEM'], x1: ['X1'], x2: ['X2'], predio: ['PREDIO'], classeLocal: ['CLAL'],
+  valoriza: ['VALORIZA'], valorUnitario: ['VALOR_UNITARIO'], valorItemLocal: ['VALOR_ITEM_LOCAL'],
+  log: ['LOG_ITEM'], x1: ['X1'], x2: ['X2'], predio: ['PREDIO'], classeLocal: ['CLAL','Classe Local'],
   setor: ['NM_SETOR'], familia: ['NM_FAMILIA'], marca: ['NM_MARCA'],
   atualizadoEm: ['ULTIMA_ATUALIZACAO']
 };
@@ -334,7 +343,7 @@ async function recalcularIndicadores(cicloId){
 function detectarCiclo843(bufs){
   let rows = [];
   for(const buf of (bufs||[])){
-    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const wb = irLerPlanilha(buf);
     rows = rows.concat(sheetToRows(wb, ALIAS_843, ['local','item','idConferencia','qtFis','usuario']));
   }
   if(!rows.length) return {erro:'QRY0843: planilha vazia.'};
@@ -388,6 +397,33 @@ function detectarCiclo843(bufs){
 }
 function post(type, data){ self.postMessage({type, ...data}); }
 
+/* Abre a planilha seja .xlsx/.xls ou .csv. O CSV é o que o Power Automate gera na
+   atualização automática; lido como "array", o SheetJS trata os bytes como
+   Latin-1 e os acentos viravam lixo ("EndereÃ§o"). Por isso o CSV é decodificado
+   como UTF-8 antes. Planilha do Excel começa com a assinatura do zip ("PK") ou do
+   formato antigo (D0 CF) — qualquer outra coisa é texto. */
+function irLerPlanilha(buf, opts){
+  const b = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+  const ehExcel = (b[0]===0x50 && b[1]===0x4B) || (b[0]===0xD0 && b[1]===0xCF);
+  if(ehExcel) return XLSX.read(buf, {type:'array', cellDates: !(opts && opts.semCellDates)});
+  let texto = new TextDecoder('utf-8').decode(buf);
+  if(texto.charCodeAt(0) === 0xFEFF) texto = texto.slice(1);
+  /* raw: o SheetJS adivinha data em CSV no formato americano — "03/11/2026" virava
+     11 de março. Lido como texto, quem interpreta a data é o parseDateVal, que já
+     entende dd/mm/aaaa e aaaa-mm-dd. Número puro ("12.5", "-3") volta a ser número,
+     como numa planilha do Excel. */
+  const wb = XLSX.read(texto, {type:'string', raw:true});
+  for(const nome of wb.SheetNames){
+    const ws = wb.Sheets[nome];
+    for(const ref in ws){
+      const c = ws[ref];
+      if(ref[0] === '!' || !c || c.t !== 's') continue;
+      if(/^-?\d+(\.\d+)?$/.test(c.v)){ c.t = 'n'; c.v = Number(c.v); }
+    }
+  }
+  return wb;
+}
+
 /* QRY0160 — estoque por restrição. Mesma foto da 390, mas com DATA MOVIMENTO por
    item x endereço x unidade de estoque: é a única base que diz HÁ QUANTO TEMPO o
    saldo está ali, e sem isso não existe pendência de movimentação (D0, D+1, D+4).
@@ -402,7 +438,7 @@ const ALIAS_160 = {
 };
 async function runPipeline160({buf160}){
   post('progress', {stage:'Lendo QRY0160...', pct:5});
-  const wb = XLSX.read(buf160, {type:'array', cellDates:true});
+  const wb = irLerPlanilha(buf160);
   const rows = sheetToRows(wb, ALIAS_160, ['item','local','qtd','dataMovimento']);
   if(!rows.length) throw new Error('QRY0160: planilha vazia.');
   const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_160);
@@ -472,7 +508,7 @@ async function runPipeline160({buf160}){
    O detalhe item a item continua saindo do processamento do ciclo. */
 async function runPipeline390({buf390}){
   post('progress', {stage:'Lendo QRY0390...', pct:5});
-  const wb = XLSX.read(buf390, {type:'array', cellDates:true});
+  const wb = irLerPlanilha(buf390);
   const rows = sheetToRows(wb, ALIAS_390, ['item','local','quantidade']);
   if(!rows.length) throw new Error('QRY0390: planilha vazia.');
   const r = buildAliasResolver(Object.keys(rows[0]), ALIAS_390);
@@ -507,10 +543,11 @@ async function runPipeline390({buf390}){
         locais: []});
     }
     const qtd = parseNumber(getVal(row, r.quantidade));
-    // VALOR_ITEM_LOCAL não está no alias porque só existe no layout novo; quando
-    // falta, o valor sai de quantidade x valor unitário.
+    // VALOR_ITEM_LOCAL só existe no layout novo; quando falta, o valor sai de
+    // quantidade x valor unitário. Vai pelo alias (e não pelo nome cru) pra ser
+    // achado também como "QRY0390[VALOR_ITEM_LOCAL]", o nome da exportação automática.
     const vUnit = parseNumber(getVal(row, r.valorUnitario));
-    const valor = parseNumber(getVal(row, 'VALOR_ITEM_LOCAL')) || (qtd * vUnit);
+    const valor = parseNumber(getVal(row, r.valorItemLocal)) || (qtd * vUnit);
     let g = porLocal.get(local);
     if(!g){
       g = {local,
@@ -579,7 +616,7 @@ async function runPipeline390({buf390}){
 function readMultiSheet(bufs, aliasMap, requiredCols, label, keyFields){
   let rowsRaw = [];
   for(const buf of bufs){
-    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const wb = irLerPlanilha(buf);
     rowsRaw = rowsRaw.concat(sheetToRows(wb, aliasMap, requiredCols));
   }
   if(!rowsRaw.length) throw new Error(label+': planilha vazia.');
@@ -621,7 +658,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // hoje não alimenta nenhum indicador calculado aqui, só é lida se o usuário mandar.
   let rows390 = [], r390 = null;
   if(buf390){
-    const wb390 = XLSX.read(buf390, {type:'array', cellDates:true});
+    const wb390 = irLerPlanilha(buf390);
     rows390 = sheetToRows(wb390, ALIAS_390, ['item','local','quantidade']);
     if(rows390.length){
       r390 = buildAliasResolver(Object.keys(rows390[0]), ALIAS_390);
@@ -1720,7 +1757,7 @@ async function runPipeline410({buf410}){
   // jogava todo lançamento depois das 21h do último dia pro mês seguinte (em
   // UTC-3, 31/10 22:30 é 01/11 01:30 UTC) — foi a diferença de R$ 47,45 do AIR
   // de outubro contra a dinâmica da 410.
-  const wb410 = XLSX.read(buf410, {type:'array'});
+  const wb410 = irLerPlanilha(buf410, {semCellDates:true});
   const rows410 = sheetToRows(wb410, ALIAS_410, ['dtMov','sentido','vlMov']);
   if(!rows410.length) throw new Error('QRY410: planilha vazia.');
   const r410 = buildAliasResolver(Object.keys(rows410[0]), ALIAS_410);
