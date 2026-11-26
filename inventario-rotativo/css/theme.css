@@ -2392,3 +2392,4 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .rt-picking{ background:rgba(254,80,0,.12); color:#C24000; }
 .rt-nao{ background:rgba(0,26,114,.10); color:#001A72; }
 .rt-sem{ background:rgba(120,130,150,.14); color:var(--ink-soft); }
+table.table-grouped thead tr.grupo th.grupo-cor:first-child{ background:var(--orange); }
