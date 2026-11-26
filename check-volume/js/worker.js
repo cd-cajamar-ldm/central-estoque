@@ -1,7 +1,8 @@
 /* Lê as planilhas do Check Volume fora da tela principal.
    O tipo é detectado pelo cabeçalho (a ordem/nome do arquivo não importa):
    - QRY0180 (entregas): tem ENTREGA + QT_PCS;
-   - QRY0390 (estoque):  tem ID_ITEM_FILHO + EAN + QTDE_DISP. */
+   - QRY0390 (estoque):  tem ID_ITEM_FILHO + EAN + QTDE_DISP;
+   - cadastro de fotos (De-Para): tem Id Item + URL Foto. */
 importScripts('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
 
 function norm(s){ return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
@@ -35,6 +36,7 @@ self.onmessage = (e) => {
 
     const cEnt = achar(cab, ['ENTREGA']), cQt = achar(cab, ['QT_PCS']);
     const cFilho = achar(cab, ['ID_ITEM_FILHO']), cDisp = achar(cab, ['QTDE_DISP']);
+    const cFotoId = achar(cab, ['Id Item']), cFotoUrl = achar(cab, ['URL Foto']), cFotoEan = achar(cab, ['Id EAN']);
 
     if(cEnt && cQt){ // QRY0180 — itens por entrega
       const c = {
@@ -75,8 +77,16 @@ self.onmessage = (e) => {
         if(x) x[2] += q; else saldo.set(k, [i, loc, q, cl, rs]);
       }
       self.postMessage({tipo: 'ok', base: '390', nome, linhas: rows.length, dados: {itens, saldo: Array.from(saldo.values())}});
+    } else if(cFotoId && cFotoUrl){ // cadastro de itens com link da foto (De-Para)
+      const BASE = 'https://img.lojadomecanico.com.br/IMAGENS/', vistos = new Set(), out = [];
+      for(const r of rows){
+        const i = chave(r[cFotoId]), u = txt(r[cFotoUrl]); if(!i || !u || vistos.has(i)) continue;
+        vistos.add(i);
+        out.push([i, u.indexOf(BASE) === 0 ? u.slice(BASE.length) : u, cFotoEan ? chave(r[cFotoEan]) : '']);
+      }
+      self.postMessage({tipo: 'ok', base: 'foto', nome, linhas: rows.length, dados: out});
     } else {
-      throw new Error('não reconheci a planilha (esperado QRY0180 de entregas ou QRY0390 de estoque).');
+      throw new Error('não reconheci a planilha (esperado QRY0180 de entregas, QRY0390 de estoque ou o cadastro com URL Foto).');
     }
   } catch(err){
     self.postMessage({tipo: 'erro', nome, msg: err.message || String(err)});
