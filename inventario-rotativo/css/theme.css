@@ -2386,3 +2386,12 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .dp-tl-trilho b{ background:rgba(0,26,114,.14) !important; }
 .dp-tl-trilho b.meia{ background:rgba(0,26,114,.08) !important; }
 .dp-tl-trilho b.min{ background:rgba(0,26,114,.045) !important; }
+
+/* Overview: filtro Picking × Não picking */
+.rt-filtro{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 12px; }
+.rt-cont{ font-size:12px; color:var(--ink-soft); }
+.rt-tag{ display:inline-block; font-size:10.5px; font-weight:700; border-radius:999px; padding:1px 8px; white-space:nowrap; }
+.rt-picking{ background:rgba(254,80,0,.12); color:#C24000; }
+.rt-nao{ background:rgba(0,26,114,.10); color:#001A72; }
+.rt-misto{ background:rgba(138,111,209,.14); color:#6B4FB8; }
+.rt-sem{ color:var(--ink-soft); }

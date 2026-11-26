@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v320';
+const IR_APP_VERSION = 'v321';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1830,16 +1830,69 @@ function irHeatStyle(val, meta){
 /* ============================================================
    SETORES (Resumo por Rua + Ruas mais divergentes)
    ============================================================ */
+/* ============================================================
+   PICKING × NÃO PICKING (Overview). Classes marcadas pelo usuário em 26/11.
+   A classe vem da coluna "Classe Local" da Base Congelada (código, "código -
+   descrição" ou só a descrição). Uma rua (X1 + X2) é Picking quando todos os
+   locais dela são de classe picking, Não picking quando nenhum é, Misto quando
+   tem dos dois — a rua mista aparece nos dois filtros.
+   ============================================================ */
+const IR_CLASSES_PICKING = {PPBA1:'PORTA PALLET BAIXO 1', PPPC:'PORTA PALLET PICKING CURVA C', MZN:'MEZANINO', MZN2:'MEZANINO', MZKT:'MZN MARKETPLACE', BLO:'BLOCADO', DRV:'DRIVE IN', GLP:'GALPAO 4 EXTRA PESADO', RMOV:'LOG 1 - GALPAO NOVO', COF:'COFRE', ESC:'ESCADAS', MAC:'MACACO HIDRAULICO'};
+const IR_CLASSES_NAO_PICKING = {PPAL1:'PORTA PALLET ALTO 1', MZN01:'MEZANINO 01', GLP23:'GALPAO 2 E 3', UMA:'UNIDADE MINIMA DE ARMAZENAGEM', SUPRI:'SUPRIMENTOS', SUPR2:'SUPRIMENTOS', REV:'LOGISTICA REVERSA', AVA:'AVARIA', INB:'INBOUND', OUT:'OUTBOUND', DENT:'DOCA DE ENTRADA', DSAI:'DOCA DE SAIDA', CARGA:'CARGA - GAIOLA', CROSS:'CROSSDOCKING', 'C.E':'CONTROLE DE ESTOQUE', PALET:'PALLETS', ATI:'ASSISTENCIA TECNICA', TSF:'TRANSFERENCIA', CAN:'CANCELAMENTO', PAR:'DEVOLUCAO PARCIAL', DEV:'DEVOLUCAO MERCADORIA', TRANS:'TRANSPORTE', TRP:'TRANSPORTE ADM'};
+function irNormClasse(v){ return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
+function irClasseEhPicking(classe){
+  const s = irNormClasse(classe); if(!s) return null;
+  const cod = s.split(/[\s·-]+/)[0];
+  if(IR_CLASSES_PICKING[cod]!==undefined) return true;
+  if(IR_CLASSES_NAO_PICKING[cod]!==undefined) return false;
+  const desc = s.replace(/^[A-Z0-9.]+\s*[-·]\s*/, '');
+  if(Object.values(IR_CLASSES_PICKING).includes(desc)) return true;
+  if(Object.values(IR_CLASSES_NAO_PICKING).includes(desc)) return false;
+  return null;
+}
+function irRuaTipoMapa(){
+  const k = (IR.cicloAtivo||{}).id+'|'+(IR.locais||[]).length;
+  if(IR._ruaTipo && IR._ruaTipo.k===k) return IR._ruaTipo.m;
+  const g = new Map();
+  for(const l of (IR.locais||[])){
+    const rua = irRuaDoLocal(l) || '(sem rua)';
+    let o = g.get(rua); if(!o){ o = {p:0, n:0, x:0}; g.set(rua, o); }
+    const t = irClasseEhPicking(l.classeLocal);
+    if(t===true) o.p++; else if(t===false) o.n++; else o.x++;
+  }
+  const m = new Map();
+  g.forEach((o, rua)=> m.set(rua, o.p && !o.n ? 'picking' : (o.n && !o.p ? 'nao' : (o.p && o.n ? 'misto' : 'sem'))));
+  IR._ruaTipo = {k, m};
+  return m;
+}
+IR.ruaTipo = IR.ruaTipo || 'todos';
+function irSetRuaTipo(t){ IR.ruaTipo = t; irRenderView(); }
+function irRuaPassaTipo(chave){
+  const f = IR.ruaTipo; if(f==='todos') return true;
+  const t = irRuaTipoMapa().get(chave) || 'sem';
+  return t==='misto' || t===f;
+}
+function irRuaTipoTag(chave){
+  const t = irRuaTipoMapa().get(chave) || 'sem';
+  const rot = {picking:'Picking', nao:'Não picking', misto:'Misto', sem:'—'}[t];
+  return `<span class="rt-tag rt-${t}">${rot}</span>`;
+}
+function irRenderRuaTipoFiltro(){
+  const b = (v, r)=>`<button type="button" class="${IR.ruaTipo===v?'on':''}" onclick="irSetRuaTipo('${v}')">${r}</button>`;
+  const m = irRuaTipoMapa(); let p=0, n=0, x=0; m.forEach((t,r)=>{ if(r==='(sem rua)') return; if(t==='picking') p++; else if(t==='nao') n++; else if(t==='misto') x++; });
+  return `<div class="rt-filtro"><div class="ca-seg">${b('todos','Todas')}${b('picking','Picking')}${b('nao','Não picking')}</div><span class="rt-cont">${p} picking · ${n} não picking · ${x} mistas</span></div>`;
+}
 function irRenderSetores(){
   const ind = IR.indicadores;
   if(!ind) return irEmptyState('Sem indicadores', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   return `
+    ${(IR.locais||[]).length ? irRenderRuaTipoFiltro() : ''}
     ${irRenderPorRuaPanel(ind)}
     ${irRenderRuasMaisDivergentesPanel(ind)}
   `;
 }
 function irRenderPorRuaPanel(ind){
-  const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
+  const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)' && irRuaPassaTipo(r.chave)).slice().sort((a,b)=>a.chave.localeCompare(b.chave));
   if(!rows.length) return '';
   const meta = ind.meta;
   // Pendente aqui usa a mesma regra do módulo de Inventário: local sem NENHUMA linha
@@ -1862,10 +1915,10 @@ function irRenderPorRuaPanel(ind){
     :''}
     <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-grouped tbl-sticky-head">
       <thead>
-        <tr class="grupo"><th colspan="2"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
+        <tr class="grupo"><th colspan="3"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
         <tr class="cols">
           <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
-          <th>Rua</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
+          <th>Rua</th><th>Tipo</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
           <th>Contadas</th><th>Divergentes</th>
           <th>Peças</th><th>Posições</th><th>Valor</th>
         </tr>
@@ -1878,6 +1931,7 @@ function irRenderPorRuaPanel(ind){
           ? `<input type="checkbox" class="pend-chk" checked value="${irEsc(r.chave)}" data-pend="${r.locaisPendentes}" onchange="irPendAtualizarBotao()">`
           : `<input type="checkbox" disabled title="Nenhum local pendente nesta rua">`}</td>
         <td class="mono">${irEsc(r.chave)}</td>
+        <td>${irRuaTipoTag(r.chave)}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
         <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
@@ -1890,7 +1944,7 @@ function irRenderPorRuaPanel(ind){
       </tr>`).join('')}</tbody>
       <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
         <td class="pend-col"></td>
-        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td>
+        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) || IR.ruaTipo!=='todos' ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td><td></td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisDivergentes,0))}</td>
@@ -2678,7 +2732,7 @@ function irThOrd(tab, col, rot){
   return `<th class="th-ord${on?' on':''}" onclick="irOrdenarTab('${tab}','${col}')">${rot}<i>${on?(o.dir>0?'▲':'▼'):'↕'}</i></th>`;
 }
 function irRenderRuasMaisDivergentesPanel(ind){
-  const base = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)');
+  const base = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)' && irRuaPassaTipo(r.chave));
   if(!base.length) return `<div class="panel"><h3>Ruas mais divergentes</h3><p class="field-hint">Nenhuma divergência registrada ainda.</p></div>`;
   const meta = ind.meta;
   const ordem = (IR.tabOrdem||{}).ruas || {col:'pecasDivergentes', dir:-1};
@@ -2693,9 +2747,9 @@ function irRenderRuasMaisDivergentesPanel(ind){
     <h3>Ruas mais divergentes</h3>
     <div class="table-wrap"><table class="table-grouped">
       <thead>
-        <tr class="grupo"><th></th><th colspan="5">Locais</th><th colspan="2">Peças</th><th colspan="3">Valor</th><th colspan="3">Acurácias</th></tr>
+        <tr class="grupo"><th colspan="2"></th><th colspan="5">Locais</th><th colspan="2">Peças</th><th colspan="3">Valor</th><th colspan="3">Acurácias</th></tr>
         <tr class="cols">
-          ${th('chave','Rua')}
+          ${th('chave','Rua')}<th>Tipo</th>
           ${th('locaisOrcados','Orçados')}${th('locaisContados','Contados')}${th('pctContado','% Contado')}${th('locaisDivergentes','Divergentes')}${th('locaisPendentes','Pendentes')}
           ${th('pecasContadas','Contadas')}${th('pecasDivergentes','Divergentes')}
           ${th('vlFisicoTotal','Físico')}${th('valorDivergenteLiquido','Líquido')}${th('valorDivergenteAbsoluto','Absoluto')}
@@ -2708,6 +2762,7 @@ function irRenderRuasMaisDivergentesPanel(ind){
         const corLiquido = liquido<0 ? 'color:var(--danger);' : liquido>0 ? 'color:var(--success);' : '';
         return `<tr${r.pecasDivergentes===0?' style="color:var(--ink-soft);"':''}>
         <td class="mono">${irEsc(r.chave)}</td>
+        <td>${irRuaTipoTag(r.chave)}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
         <td class="mono">${irFmtPct(pct)}</td>
