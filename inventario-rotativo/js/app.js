@@ -1172,13 +1172,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 33; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v320';
+const IR_APP_VERSION = 'v323';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1839,7 +1839,12 @@ function irRenderSetores(){
   `;
 }
 function irRenderPorRuaPanel(ind){
-  const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
+  // Cada rua em duas linhas, uma embaixo da outra: Picking e Não picking (classe do
+  // local na Base Congelada). Ciclo calculado antes disso cai no resumo antigo.
+  const fonte = ind.porRuaTipo || ind.porRua || [];
+  const ordTipo = {picking:0, nao:1, sem:2};
+  const rows = fonte.filter(r=>r.chave!=='(sem rua)').map(r=>{ const [rua, tipo] = String(r.chave).split('|'); return {...r, rua, tipo:tipo||''}; })
+    .sort((a,b)=>a.rua.localeCompare(b.rua, 'pt-BR', {numeric:true}) || (ordTipo[a.tipo]??9)-(ordTipo[b.tipo]??9));
   if(!rows.length) return '';
   const meta = ind.meta;
   // Pendente aqui usa a mesma regra do módulo de Inventário: local sem NENHUMA linha
@@ -1855,17 +1860,16 @@ function irRenderPorRuaPanel(ind){
     <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por rua.</p>
     ${totalPendentes>0 ? `<div class="form-actions pend-acoes" style="margin:0 0 12px;">
         <button class="btn-link" id="irPendBtn" onclick="irExportarLocaisPendentesCsv()">📤 Baixar locais pendentes (${irFmtInt(totalPendentes)})</button>
-        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>
-        <button class="btn-link" onclick="irPendMarcarTodas(true)">Marcar todas</button>`:''}
+        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>`:''}
       </div>
       ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
     <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-grouped tbl-sticky-head">
       <thead>
-        <tr class="grupo"><th colspan="2"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
+        <tr class="grupo"><th colspan="3"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
         <tr class="cols">
           <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
-          <th>Rua</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
+          <th>Rua</th><th>Tipo</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
           <th>Contadas</th><th>Divergentes</th>
           <th>Peças</th><th>Posições</th><th>Valor</th>
         </tr>
@@ -1877,7 +1881,8 @@ function irRenderPorRuaPanel(ind){
         <td class="pend-col">${r.locaisPendentes>0
           ? `<input type="checkbox" class="pend-chk" checked value="${irEsc(r.chave)}" data-pend="${r.locaisPendentes}" onchange="irPendAtualizarBotao()">`
           : `<input type="checkbox" disabled title="Nenhum local pendente nesta rua">`}</td>
-        <td class="mono">${irEsc(r.chave)}</td>
+        <td class="mono">${irEsc(r.rua)}</td>
+        <td>${r.tipo ? `<span class="rt-tag rt-${r.tipo}">${{picking:'Picking', nao:'Não picking', sem:'Sem classe'}[r.tipo]}</span>` : ''}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
         <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
@@ -1890,7 +1895,7 @@ function irRenderPorRuaPanel(ind){
       </tr>`).join('')}</tbody>
       <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
         <td class="pend-col"></td>
-        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td>
+        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td><td></td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisDivergentes,0))}</td>
@@ -8087,7 +8092,7 @@ function irExportarLocaisPendentesCsv(rua){
   const ruas = rua ? [rua] : irPendRuasMarcadas();
   const filtro = ruas.length ? new Set(ruas) : null;
   const pendentes = irLocaisPendentesContagem()
-    .filter(l => !filtro || filtro.has(irRuaDoLocal(l)));
+    .filter(l => !filtro || filtro.has(irRuaDoLocal(l)) || filtro.has(irRuaTipoDoLocal(l)));
   if(!pendentes.length){
     // Distingue "não há pendente" de "não dá pra listar": o segundo caso tem
     // pendente na tela e some sem explicação se o aviso for o mesmo.
@@ -8106,7 +8111,7 @@ function irExportarLocaisPendentesCsv(rua){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'locais_pendentes_ciclo_'+IR.cicloAtivo.numero
-    + (ruas.length===1 ? '_'+ruas[0] : '') + '.csv';
+    + (ruas.length===1 ? '_'+String(ruas[0]).replace('|','_') : '') + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
 }
