@@ -1,7 +1,8 @@
 /* ============================================================
    ALMOXARIFADO — a tela dentro da Oficina (index.html da raiz)
-   Mostra cada prateleira (base), de quando são os dados, quem usa,
-   e cuida da pasta conectada. A lógica de guardar fica em almox-db.js.
+   Uma linha por query (compacta, no padrão das tabelas do Inventário),
+   com a origem na frente, de quando são os dados, tamanho, quem usa e a
+   situação. A lógica de guardar fica em almox-db.js.
    ============================================================ */
 (function(){
   'use strict';
@@ -9,10 +10,22 @@
   var raiz = document.getElementById('view-almox');
   if(!A || !raiz) return;
 
-  var estado = { handle: null, perm: null, lendo: null, ultima: null, iniciado: false, abertos: {} };
+  var estado = {
+    handle: null, perm: null, lendo: null, ultima: null, iniciado: false,
+    abertos: {}, filtro: 'todas', busca: '', pacs: []
+  };
 
-  var ROTULO = { 'em-dia': 'Em dia', 'atrasada': 'Atrasada', 'antiga': 'Antiga', 'vazia': 'Vazia' };
-  var RITMO = { auto: 'a cada 2 h', diario: '1x ao dia', manual: 'manual' };
+  var FONTE = {
+    snowflake:  { rotulo: 'Snowflake',      css: 'sf' },
+    fluxo:      { rotulo: 'Fluxo de dados', css: 'fd' },
+    manual:     { rotulo: 'Manual',         css: 'mn' },
+    indefinida: { rotulo: 'A definir',      css: 'nd' }
+  };
+  var ORDEM_FONTES = ['snowflake', 'fluxo', 'manual', 'indefinida'];
+  var SITUACAO = { 'em-dia': 'Em dia', 'atrasada': 'Atrasada', 'antiga': 'Antiga', 'vazia': 'Vazia' };
+  // Nome curto do app na linha (o nome completo aparece ao abrir a query).
+  var CURTO = { inventario:'Inventário', transitorios:'Transitórios', multiplos:'Múltiplos', elevadores:'Equalização', estoque:'Gestão de Estoque', estoquemultiplos:'Estoque de Múltiplos' };
+  var RITMO = { auto: 'deveria chegar a cada 2 h', diario: 'a origem só atualiza 1x ao dia, de madrugada', manual: 'chega à mão' };
 
   function esc(s){
     return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -34,11 +47,11 @@
     return 'há ' + Math.round(h / 24) + ' dias';
   }
   function tamanho(b){
-    if(b < 1024) return b + ' B';
-    if(b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+    if(b < 1048576) return Math.max(1, Math.round(b / 1024)) + ' KB';
     return (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
   }
   function milhar(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  function sem(s){ return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
 
   var toastEl = document.getElementById('toast'), toastT;
   function aviso(msg){
@@ -48,7 +61,6 @@
     clearTimeout(toastT);
     toastT = setTimeout(function(){ toastEl.classList.remove('show'); }, 2600);
   }
-
   function appsDoHub(){
     var mapa = {};
     (window.LDM_HUB_APPS || []).forEach(function(a){ mapa[a.key] = a; });
@@ -57,48 +69,57 @@
 
   /* ---------------- esqueleto ---------------- */
   raiz.innerHTML =
-    '<div class="alx-pasta" id="alxPasta"></div>' +
-    '<div class="alx-resumo" id="alxResumo"></div>' +
-    '<p class="section-label">Prateleiras</p>' +
-    '<div class="alx-grid" id="alxGrid"></div>' +
-    '<div id="alxSoltos"></div>' +
+    '<div class="alx-topo"><div class="alx-pasta" id="alxPasta"></div><div class="alx-mig" id="alxMig"></div></div>' +
+    '<div class="alx-filtros" id="alxFiltros">' +
+      '<input type="search" class="alx-busca" id="alxBusca" placeholder="Buscar query ou app…" autocomplete="off">' +
+      '<div class="alx-chips" id="alxChips"></div>' +
+    '</div>' +
+    '<div class="alx-wrap"><table class="alx-tab">' +
+      '<thead>' +
+        '<tr class="grupo"><th colspan="4">Query</th><th colspan="2">Dados de</th><th colspan="3">Arquivo</th><th colspan="2">Uso</th></tr>' +
+        '<tr class="cols"><th></th><th>Origem</th><th>Código</th><th>Nome</th><th>Data</th><th>Idade</th>' +
+        '<th class="n">Partes</th><th class="n">Linhas</th><th class="n">Tamanho</th><th>Usada por</th><th>Situação</th></tr>' +
+      '</thead><tbody id="alxCorpo"></tbody>' +
+    '</table></div>' +
+    '<p class="alx-nota" id="alxNota"></p>' +
     '<input type="file" id="alxArquivo" multiple hidden accept=".csv,.txt,.xlsx,.xlsm,.xls">';
   var elPasta = document.getElementById('alxPasta');
-  var elResumo = document.getElementById('alxResumo');
-  var elGrid = document.getElementById('alxGrid');
-  var elSoltos = document.getElementById('alxSoltos');
+  var elMig = document.getElementById('alxMig');
+  var elChips = document.getElementById('alxChips');
+  var elBusca = document.getElementById('alxBusca');
+  var elCorpo = document.getElementById('alxCorpo');
+  var elNota = document.getElementById('alxNota');
   var elArquivo = document.getElementById('alxArquivo');
 
-  var ICONE_PASTA = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  var ICONE_PASTA = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 
   /* ---------------- quadro da pasta ---------------- */
   function renderPasta(){
-    var botaoMao = '<button type="button" class="btn-secondary" data-acao="manual">Adicionar arquivo à mão</button>';
+    var botaoMao = '<button type="button" class="btn-secondary" data-acao="manual">Adicionar à mão</button>';
     var titulo, texto, botoes;
     if(estado.lendo){
-      titulo = 'Lendo a pasta…';
-      texto = esc(estado.lendo);
-      botoes = '';
+      titulo = 'Lendo a pasta…'; texto = esc(estado.lendo); botoes = '';
     } else if(!A.suportaPasta){
-      titulo = 'Pasta conectada indisponível neste navegador';
-      texto = 'Para ler a pasta sozinho, abra a Oficina no <strong>Chrome</strong> ou no <strong>Edge</strong>. Aqui dá para adicionar os arquivos à mão.';
+      titulo = 'Este navegador não conecta pastas';
+      texto = 'Para ler a pasta sozinho, abra a Oficina no <strong>Chrome</strong> ou no <strong>Edge</strong>.';
       botoes = botaoMao;
     } else if(!estado.handle){
       titulo = 'Nenhuma pasta conectada';
-      texto = 'Conecte a pasta <strong>Bases</strong> (a do SharePoint, sincronizada no computador). O Almoxarifado lê os relatórios dela e cada app pega daqui o que precisa.';
+      texto = 'Conecte a pasta <strong>Bases</strong> (a do SharePoint, sincronizada no computador).';
       botoes = '<button type="button" class="btn-primary" data-acao="conectar">Conectar pasta</button>' + botaoMao;
     } else if(estado.perm !== 'granted'){
       titulo = 'Pasta ' + esc(estado.handle.name) + ' conectada';
-      texto = 'Por segurança, o navegador pede um clique para liberar a leitura a cada vez que a Oficina é aberta.';
+      texto = 'O navegador pede um clique para liberar a leitura.';
       botoes = '<button type="button" class="btn-primary" data-acao="permitir">Permitir acesso</button>' +
                '<button type="button" class="btn-secondary" data-acao="conectar">Trocar pasta</button>';
     } else {
       var u = estado.ultima;
+      var nq = estado.pacs.filter(function(p){ return p.arquivos.length; }).length;
       titulo = 'Pasta ' + esc(estado.handle.name) + ' conectada';
       texto = u
         ? 'Lida às <strong>' + hora(u.lidoEm) + '</strong> · ' +
           (u.novos ? '<strong>' + u.novos + (u.novos === 1 ? ' novidade' : ' novidades') + '</strong>' : 'nada novo') +
-          (u.removidos && u.removidos.length ? ' · ' + u.removidos.length + ' saíram da pasta' : '')
+          ' · ' + nq + (nq === 1 ? ' query' : ' queries')
         : 'Ainda não lida.';
       botoes = '<button type="button" class="btn-primary" data-acao="ler">Buscar novidades</button>' +
                '<button type="button" class="btn-secondary" data-acao="conectar">Trocar pasta</button>' + botaoMao;
@@ -110,89 +131,124 @@
       '<div class="alx-pasta-acoes">' + botoes + '</div>';
   }
 
-  /* ---------------- prateleiras ---------------- */
-  function cartao(pac, apps){
-    var p = pac.prateleira;
-    var sit = A.situacao(pac);
-    var chips = p.apps.map(function(k){
-      var a = apps[k];
-      if(!a) return '';
-      return '<span class="alx-app" style="--c:' + esc(a.color) + '">' + esc(a.name) + '</span>';
+  /* ---------------- migração para o Snowflake ---------------- */
+  function contarFontes(){
+    var c = { snowflake: 0, fluxo: 0, manual: 0, indefinida: 0 };
+    estado.pacs.forEach(function(p){ c[p.prateleira.fonte] = (c[p.prateleira.fonte] || 0) + 1; });
+    return c;
+  }
+  function renderMigracao(){
+    var c = contarFontes();
+    var total = estado.pacs.length || 1;
+    var barras = ORDEM_FONTES.filter(function(f){ return c[f]; }).map(function(f){
+      return '<i class="' + FONTE[f].css + '" style="width:' + (c[f] / total * 100) + '%"></i>';
     }).join('');
-    var corpo;
-    if(!pac.arquivos.length){
-      corpo = '<div class="alx-vazia">Ainda vazia. Salve ' + (p.dicaNome ? esc(p.dicaNome) : 'o arquivo <strong>' + esc(p.id) + '</strong>') + ' na pasta Bases' +
-              (A.suportaPasta ? '' : ' ou adicione à mão') + '.</div>';
-    } else {
-      var partes = pac.arquivos.length > 1 ? pac.arquivos.length + ' partes' : '1 arquivo';
-      var meta = [partes];
-      if(pac.linhas != null) meta.push(milhar(pac.linhas) + ' linhas');
-      meta.push(tamanho(pac.tamanho));
-      corpo =
-        '<div class="alx-data"><strong>Dados de ' + dataHora(pac.dadosDe) + '</strong><span>' + idade(pac.dadosDe) + '</span></div>' +
-        '<div class="alx-meta">' + meta.join(' · ') + '</div>';
-    }
-    var todos = pac.arquivos.concat(pac.deFora);
-    var lista = '';
-    if(todos.length){
-      lista = '<details class="alx-arqs" data-id="' + esc(p.id) + '"' + (estado.abertos[p.id] ? ' open' : '') + '>' +
-        '<summary>Ver arquivos (' + todos.length + ')</summary><ul>' +
-        todos.map(function(a){
-          var fora = pac.deFora.indexOf(a) >= 0;
-          return '<li' + (fora ? ' class="fora" title="Versão mais antiga: não está sendo usada"' : '') + '>' +
-            '<span class="alx-arq-nome">' + esc(a.nome) + '</span>' +
-            '<span class="alx-arq-info">' + dataHora(a.modificado) + ' · ' + tamanho(a.tamanho) +
-            (a.origem === 'manual' ? ' · à mão' : '') + (fora ? ' · não usado' : '') + '</span>' +
-            '<button type="button" class="alx-arq-x" data-remover="' + esc(a.nome) + '" aria-label="Tirar ' + esc(a.nome) + ' da prateleira">&#10005;</button>' +
-            '</li>';
-        }).join('') + '</ul></details>';
-    }
-    return '<article class="alx-card alx-s-' + sit + '">' +
-      '<header><span class="alx-cod">' + esc(p.rotulo || p.id) + '</span><span class="alx-badge">' + ROTULO[sit] + '</span></header>' +
-      '<h3>' + esc(p.nome) + '</h3>' +
-      corpo +
-      '<p class="alx-origem"><span class="alx-ritmo">' + RITMO[p.ritmo] + '</span>' + esc(p.origem) + '</p>' +
-      (chips ? '<div class="alx-usada"><span>Usada por</span><div class="alx-apps">' + chips + '</div></div>' : '') +
-      lista +
-      '</article>';
+    var leg = ORDEM_FONTES.filter(function(f){ return c[f]; }).map(function(f){
+      return '<span class="' + FONTE[f].css + '">' + FONTE[f].rotulo + ' ' + c[f] + '</span>';
+    }).join('');
+    elMig.innerHTML =
+      '<h3>Migração para o Snowflake</h3>' +
+      '<div class="alx-mig-n"><b>' + c.snowflake + '</b> de ' + estado.pacs.length + ' queries já vêm do Snowflake</div>' +
+      '<div class="alx-barra">' + barras + '</div>' +
+      '<div class="alx-leg">' + leg + '</div>';
   }
 
-  function renderPrateleiras(){
-    return A.pacotes().then(function(pacs){
-      var apps = appsDoHub();
-      var cont = { 'em-dia': 0, 'atrasada': 0, 'antiga': 0, 'vazia': 0 };
-      pacs.forEach(function(p){ cont[A.situacao(p)]++; });
-      var atencao = cont.atrasada + cont.antiga;
-      elResumo.innerHTML =
-        '<span class="alx-chip alx-s-em-dia"><b>' + cont['em-dia'] + '</b> em dia</span>' +
-        '<span class="alx-chip alx-s-atrasada"><b>' + atencao + '</b> precisando de atenção</span>' +
-        '<span class="alx-chip alx-s-vazia"><b>' + cont.vazia + '</b> vazias</span>';
-      elGrid.innerHTML = pacs.map(function(p){ return cartao(p, apps); }).join('');
-    }).catch(function(e){
-      elGrid.innerHTML = '<div class="alx-vazia">Não consegui abrir o Almoxarifado neste navegador (' + esc(e && e.message || e) + ').</div>';
-    });
+  /* ---------------- filtros ---------------- */
+  function renderChips(){
+    var c = contarFontes();
+    var atrasadas = estado.pacs.filter(function(p){ var s = A.situacao(p); return s === 'atrasada' || s === 'antiga'; }).length;
+    var chips = [['todas', 'Todas', estado.pacs.length]];
+    ORDEM_FONTES.forEach(function(f){ if(c[f]) chips.push([f, FONTE[f].rotulo, c[f]]); });
+    if(atrasadas) chips.push(['atrasadas', 'Atrasadas', atrasadas]);
+    if(!chips.some(function(x){ return x[0] === estado.filtro; })) estado.filtro = 'todas';
+    elChips.innerHTML = chips.map(function(x){
+      return '<button type="button" class="alx-chip' + (x[0] === estado.filtro ? ' on' : '') + '" data-filtro="' + x[0] + '">' +
+        esc(x[1]) + ' <b>' + x[2] + '</b></button>';
+    }).join('');
+  }
+  function passa(p, apps){
+    var f = estado.filtro;
+    if(f === 'atrasadas'){ var s = A.situacao(p); if(s !== 'atrasada' && s !== 'antiga') return false; }
+    else if(f !== 'todas' && p.prateleira.fonte !== f) return false;
+    if(!estado.busca) return true;
+    var q = sem(estado.busca);
+    var texto = [p.id, p.prateleira.rotulo, p.prateleira.nome].concat(p.prateleira.apps.map(function(k){ return apps[k] ? apps[k].name : k; }))
+      .concat(p.arquivos.map(function(a){ return a.nome; })).join(' ');
+    return sem(texto).indexOf(q) >= 0;
   }
 
-  function renderSoltos(){
+  /* ---------------- tabela ---------------- */
+  function linha(p, apps){
+    var f = p.prateleira;
+    var fonte = FONTE[f.fonte] || FONTE.indefinida;
+    var sit = A.situacao(p);
+    var aberto = !!estado.abertos[p.id];
+    var tem = p.arquivos.length > 0;
+    var usa = f.apps.filter(function(k){ return apps[k]; });
+    var usaHtml = usa.length
+      ? usa.slice(0, 2).map(function(k){
+          return '<span class="alx-app" style="--c:' + esc(apps[k].color) + '" title="' + esc(apps[k].name) + '">' + esc(CURTO[k] || apps[k].name) + '</span>';
+        }).join('') + (usa.length > 2 ? '<span class="alx-mais" title="' + esc(usa.slice(2).map(function(k){ return apps[k].name; }).join(', ')) + '">+' + (usa.length - 2) + '</span>' : '')
+      : '<span class="alx-nada">nenhum app ainda</span>';
+    var html =
+      '<tr class="alx-lin' + (aberto ? ' aberta' : '') + '" data-id="' + esc(p.id) + '" title="Clique para ver os arquivos">' +
+        '<td class="alx-tc">' + (aberto ? '▾' : '▸') + '</td>' +
+        '<td><span class="alx-org ' + fonte.css + '">' + fonte.rotulo + '</span></td>' +
+        '<td class="alx-cod">' + esc(f.rotulo || p.id) + '</td>' +
+        '<td class="alx-nome">' + (f.nome ? esc(f.nome) : '<span class="alx-nova">query nova</span>') + '</td>' +
+        '<td class="mono">' + (tem ? dataHora(p.dadosDe) : '—') + '</td>' +
+        '<td class="alx-h' + (sit === 'atrasada' || sit === 'antiga' ? ' at' : '') + '">' + (tem ? idade(p.dadosDe) : '') + '</td>' +
+        '<td class="mono n">' + (tem ? p.arquivos.length : '—') + '</td>' +
+        '<td class="mono n">' + (p.linhas != null && tem ? milhar(p.linhas) : '—') + '</td>' +
+        '<td class="mono n">' + (tem ? tamanho(p.tamanho) : '—') + '</td>' +
+        '<td class="alx-usa">' + usaHtml + '</td>' +
+        '<td><span class="alx-st ' + sit + '">' + SITUACAO[sit] + '</span></td>' +
+      '</tr>';
+    if(aberto){
+      var todos = p.arquivos.concat(p.deFora);
+      var arqs = todos.length ? todos.map(function(a){
+        var fora = p.deFora.indexOf(a) >= 0;
+        return '<span class="alx-arq' + (fora ? ' fora' : '') + '"><b>' + esc(a.nome) + '</b> · ' + dataHora(a.modificado) +
+          (a.linhas != null ? ' · ' + milhar(a.linhas) + ' linhas' : '') + ' · ' + tamanho(a.tamanho) +
+          (a.origem === 'manual' ? ' · à mão' : '') + (fora ? ' · versão antiga, não usada' : '') +
+          '<button type="button" class="alx-arq-x" data-remover="' + esc(a.nome) + '" aria-label="Tirar ' + esc(a.nome) + '">&#10005;</button></span>';
+      }).join('') : '<span class="alx-arq vazio">Nenhum arquivo ainda. Salve um arquivo com <b>' + esc(f.rotulo || p.id) + '</b> no nome na pasta Bases.</span>';
+      var info = '<span class="alx-info">' + fonte.rotulo + ' · ' + RITMO[f.ritmo] +
+        (usa.length ? ' · usada por ' + usa.map(function(k){ return esc(apps[k].name); }).join(', ') : '') + '</span>';
+      html += '<tr class="alx-det"><td></td><td colspan="10">' + arqs + info + '</td></tr>';
+    }
+    return html;
+  }
+
+  function renderTabela(){
+    var apps = appsDoHub();
+    var vis = estado.pacs.filter(function(p){ return passa(p, apps); });
+    elCorpo.innerHTML = vis.length
+      ? vis.map(function(p){ return linha(p, apps); }).join('')
+      : '<tr><td colspan="11" class="alx-sem">Nenhuma query encontrada.</td></tr>';
     var ign = (estado.ultima && estado.ultima.ignorados) || [];
-    if(!ign.length || !estado.handle){ elSoltos.innerHTML = ''; return; }
-    elSoltos.innerHTML =
-      '<p class="section-label">Na pasta, mas sem prateleira</p>' +
-      '<div class="alx-soltos"><p>Estes arquivos estão na pasta, mas o nome não diz de qual relatório são. ' +
-      'Se for um relatório que os apps usam, renomeie com o código (ex.: <strong>QRY0390</strong>) ou peça uma prateleira nova.</p>' +
-      '<ul>' + ign.map(function(n){ return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></div>';
+    elNota.textContent = ign.length
+      ? 'Na pasta também há ' + ign.length + (ign.length === 1 ? ' arquivo que não é planilha e ficou de fora: ' : ' arquivos que não são planilhas e ficaram de fora: ') + ign.join(', ') + '.'
+      : '';
   }
 
   function render(){
-    renderPasta();
-    renderSoltos();
-    return renderPrateleiras();
+    return A.pacotes().then(function(pacs){
+      estado.pacs = pacs;
+      renderPasta();
+      renderMigracao();
+      renderChips();
+      renderTabela();
+    }).catch(function(e){
+      renderPasta();
+      elCorpo.innerHTML = '<tr><td colspan="11" class="alx-sem">Não consegui abrir o Almoxarifado neste navegador (' + esc(e && e.message || e) + ').</td></tr>';
+    });
   }
 
   /* ---------------- ações ---------------- */
   function ler(){
     if(!estado.handle || estado.lendo) return Promise.resolve();
-    estado.lendo = 'Procurando relatórios…';
+    estado.lendo = 'Procurando queries…';
     renderPasta();
     return A.lerPasta(estado.handle, function(feitos, total, nome){
       estado.lendo = 'Conferindo ' + feitos + ' de ' + total + ': ' + nome;
@@ -200,7 +256,7 @@
     }).then(function(res){
       estado.ultima = res;
       estado.lendo = null;
-      if(res.novos) aviso(res.novos === 1 ? '1 relatório novo guardado' : res.novos + ' relatórios novos guardados');
+      if(res.novos) aviso(res.novos === 1 ? '1 arquivo novo guardado' : res.novos + ' arquivos novos guardados');
       return render();
     }).catch(function(e){
       estado.lendo = null;
@@ -212,38 +268,43 @@
   }
 
   raiz.addEventListener('click', function(ev){
-    var b = ev.target.closest('[data-acao],[data-remover]');
-    if(!b) return;
-    if(b.dataset.remover){
+    var b = ev.target.closest('[data-acao],[data-remover],[data-filtro]');
+    if(b && b.dataset.remover){
       var nome = b.dataset.remover;
       if(!confirm('Tirar "' + nome + '" do Almoxarifado?\n\nSe ele ainda estiver na pasta, volta na próxima leitura.')) return;
       A.remover(nome).then(render);
       return;
     }
-    var acao = b.dataset.acao;
-    if(acao === 'manual'){ elArquivo.value = ''; elArquivo.click(); }
-    else if(acao === 'conectar'){
-      A.conectarPasta().then(function(h){
-        estado.handle = h; estado.perm = 'granted'; estado.ultima = null;
-        return ler();
-      }).catch(function(e){ if(!e || e.name !== 'AbortError') aviso('Não deu para conectar: ' + (e && e.message || e)); });
+    if(b && b.dataset.filtro){ estado.filtro = b.dataset.filtro; renderChips(); renderTabela(); return; }
+    if(b && b.dataset.acao){
+      var acao = b.dataset.acao;
+      if(acao === 'manual'){ elArquivo.value = ''; elArquivo.click(); }
+      else if(acao === 'conectar'){
+        A.conectarPasta().then(function(h){
+          estado.handle = h; estado.perm = 'granted'; estado.ultima = null;
+          return ler();
+        }).catch(function(e){ if(!e || e.name !== 'AbortError') aviso('Não deu para conectar: ' + (e && e.message || e)); });
+      }
+      else if(acao === 'permitir'){
+        A.permissao(estado.handle, true).then(function(st){
+          estado.perm = st;
+          if(st === 'granted') return ler();
+          aviso('O navegador não liberou a pasta.');
+          renderPasta();
+        });
+      }
+      else if(acao === 'ler') ler();
+      return;
     }
-    else if(acao === 'permitir'){
-      A.permissao(estado.handle, true).then(function(st){
-        estado.perm = st;
-        if(st === 'granted') return ler();
-        aviso('O navegador não liberou a pasta.');
-        renderPasta();
-      });
+    var tr = ev.target.closest('tr.alx-lin');
+    if(tr){
+      var id = tr.dataset.id;
+      estado.abertos[id] = !estado.abertos[id];
+      renderTabela();
     }
-    else if(acao === 'ler') ler();
   });
 
-  // Lembra quais listas de arquivos estão abertas entre um desenho e outro.
-  raiz.addEventListener('toggle', function(ev){
-    var d = ev.target;
-    if(d.classList && d.classList.contains('alx-arqs')) estado.abertos[d.dataset.id] = d.open;
-  }, true);
+  elBusca.addEventListener('input', function(){ estado.busca = elBusca.value.trim(); renderTabela(); });
 
   elArquivo.addEventListener('change', function(){
     var arqs = Array.prototype.slice.call(elArquivo.files || []);
@@ -252,14 +313,14 @@
       var msg = res.guardados.length
         ? (res.guardados.length === 1 ? '1 arquivo guardado' : res.guardados.length + ' arquivos guardados')
         : 'Nenhum arquivo guardado';
-      if(res.ignorados.length) msg += ' · sem prateleira: ' + res.ignorados.join(', ');
+      if(res.ignorados.length) msg += ' · não são planilhas: ' + res.ignorados.join(', ');
       aviso(msg);
       return render();
     }).catch(function(e){ aviso('Não deu para guardar: ' + (e && e.message || e)); });
   });
 
   // Outra aba (ou um app) mexeu no Almoxarifado → redesenha.
-  A.aoAtualizar(function(){ if(!raiz.hidden) renderPrateleiras(); });
+  A.aoAtualizar(function(){ if(!raiz.hidden && !estado.lendo) render(); });
 
   /* Chamado pela navegação da Oficina ao abrir a aba. Na primeira vez lê a pasta
      sozinho se o navegador já liberou; depois, a cada 10 min com a aba aberta. */

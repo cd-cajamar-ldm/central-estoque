@@ -26,67 +26,82 @@
   var DB_VERSAO = 1;
   var CANAL = 'ldm-almoxarifado';
 
-  /* As prateleiras. `apps` usa a mesma chave do catálogo da Oficina (index.html).
-     `ritmo` diz de quanto em quanto tempo a base deveria chegar:
-       auto   → Power Automate a cada 2 h (atrasada depois de 4 h)
+  /* O CADASTRO das queries que já conhecemos. Ele NÃO limita o que aparece:
+     qualquer query que cair na pasta vira uma linha sozinha (ver classificar).
+     O cadastro só dá nome amigável, origem, ritmo e quem usa.
+
+     `fonte`: de onde o dado vem hoje — 'snowflake' | 'fluxo' (fluxo de dados do
+              Power BI) | 'manual' (baixado/feito à mão). Ao migrar uma query para
+              o Snowflake, é só trocar aqui.
+     `ritmo`: de quanto em quanto tempo deveria chegar
+       auto   → a cada 2 h (atrasada depois de 4 h)
        diario → a origem só atualiza de madrugada (atrasada depois de 30 h)
        manual → alguém baixa e salva (antiga depois de 7 dias)
-     `codigo` reconhece o nome "oficial"; `apelido` pega o nome editado à mão
-     (mesmos padrões do Inventário Rotativo, que aprendeu isso na prática). */
-  var PRATELEIRAS = [
-    { id:'QRY0390', nome:'Estoque por endereço', ritmo:'auto',
-      origem:'Automática (Power BI → Power Automate)',
-      codigo:/QRY0*390/i, apelido:/0?390/i,
+     `apps`:  chaves do catálogo da Oficina (index.html).
+     `codigo`: o código no nome do arquivo; `apelido`: nomes editados à mão sem
+              código (os mesmos que o Inventário Rotativo já reconhece). */
+  var CADASTRO = [
+    { id:'QRY0390', nome:'Estoque por endereço', fonte:'snowflake', ritmo:'auto',
+      codigo:/QRY0*390(?!\d)/i,
       apps:['inventario','transitorios','multiplos','elevadores','estoque'] },
-    { id:'QRY0160', nome:'Tempo parado no endereço', ritmo:'diario',
-      origem:'Automática, mas a origem só atualiza de madrugada',
-      codigo:/QRY0*160/i, apelido:/0?160/i,
+    { id:'QRY0160', nome:'Tempo parado no endereço', fonte:'fluxo', ritmo:'diario',
+      codigo:/QRY0*160(?!\d)/i,
       apps:['inventario','transitorios','multiplos'] },
-    { id:'SIGEQ278', nome:'Custo dos itens', ritmo:'auto',
-      origem:'Automática (Power BI → Power Automate)',
-      codigo:/SIGEQ0*278/i, apelido:/278/i,
+    { id:'SIGEQ278', nome:'Custo dos itens', fonte:'fluxo', ritmo:'auto',
+      codigo:/SIGEQ0*278(?!\d)/i,
       apps:['inventario','transitorios','multiplos','elevadores'] },
-    { id:'ZBIQ0051', nome:'Item pai × componente (kits)', ritmo:'auto',
-      origem:'Automática (Power BI → Power Automate)',
-      codigo:/ZBIQ0*51/i, apelido:/0?051|zbiq/i,
+    { id:'ZBIQ0051', nome:'Item pai × componente (kits)', fonte:'fluxo', ritmo:'auto',
+      codigo:/ZBIQ0*51(?!\d)/i,
       apps:['inventario','transitorios','multiplos'] },
-    { id:'QRY410', nome:'Movimentações (NET)', ritmo:'manual',
-      origem:'Manual por enquanto: baixar e salvar na pasta',
-      codigo:/(QRY|SIGEQ)0*410/i, apelido:/(^|[^0-9])410([^0-9]|$)|livro\s*fiscal|\bnet\b/i,
+    { id:'QRY410', nome:'Movimentações (NET)', fonte:'snowflake', ritmo:'manual',
+      codigo:/(QRY|SIGEQ)0*410(?!\d)/i, apelido:/livro\s*fiscal|\bnet\b/i,
       apps:['inventario','transitorios'] },
-    { id:'QRY0843', nome:'Contagens do inventário', ritmo:'manual',
-      origem:'Manual: a do Power BI está incompleta',
-      codigo:/QRY0*843/i, apelido:/0?843/i,
+    { id:'QRY0843', nome:'Contagens do inventário', fonte:'manual', ritmo:'manual',
+      codigo:/QRY0*843(?!\d)/i,
       apps:['inventario'] },
-    { id:'QRY0114', nome:'Divergências de endereço', ritmo:'manual',
-      origem:'Manual por enquanto',
-      codigo:/QRY0*114/i, apelido:/0?114/i,
+    { id:'QRY0114', nome:'Divergências de endereço', fonte:'fluxo', ritmo:'auto',
+      codigo:/QRY0*114(?!\d)/i,
       apps:['estoque','transitorios'] },
-    { id:'CONGELADA', rotulo:'Base Congelada', nome:'Locais congelados do ciclo', ritmo:'manual',
-      dicaNome:'um arquivo com “congelada” no nome',
-      origem:'Manual: planilha feita à mão a cada ciclo',
+    { id:'CONGELADA', rotulo:'Base Congelada', nome:'Locais congelados do ciclo', fonte:'manual', ritmo:'manual',
       codigo:/base\s*congelada/i, apelido:/congelad|espelho/i,
       apps:['inventario'] }
   ];
   var POR_ID = {};
-  PRATELEIRAS.forEach(function(p){ POR_ID[p.id] = p; });
+  CADASTRO.forEach(function(p){ POR_ID[p.id] = p; });
 
   var LIMITE_HORAS = { auto: 4, diario: 30, manual: 24 * 7 };
   var EXTENSOES = /\.(csv|txt|xlsx|xlsm|xls)$/i;
+  var LIXO = /^~\$|^\.|^desktop\.ini$|^thumbs\.db$/i;
 
-  /* Qual prateleira um arquivo ocupa, pelo nome. Primeiro o código oficial
-     (mais seguro), depois o apelido. Nada reconhecido → null. */
+  /* Qual query um arquivo é, pelo nome:
+     1. o código de uma query do cadastro (QRY0390, SIGEQ410...);
+     2. um apelido do cadastro ("Net - Livro Fiscal" → QRY410);
+     3. qualquer código no formato LETRAS+NÚMERO → query nova, ex. "QRY180 - Recebimentos.csv" → QRY0180;
+     4. senão, o próprio nome do arquivo (sem extensão e sem "_parteN").
+     Só não vira query o que não é planilha (ver EXTENSOES) ou é arquivo de sistema. */
   function classificar(nome){
     var base = String(nome || '');
+    if(LIXO.test(base) || !EXTENSOES.test(base)) return null;
     var i;
-    for(i = 0; i < PRATELEIRAS.length; i++) if(PRATELEIRAS[i].codigo.test(base)) return PRATELEIRAS[i].id;
-    for(i = 0; i < PRATELEIRAS.length; i++) if(PRATELEIRAS[i].apelido.test(base)) return PRATELEIRAS[i].id;
-    return null;
+    for(i = 0; i < CADASTRO.length; i++) if(CADASTRO[i].codigo.test(base)) return CADASTRO[i].id;
+    for(i = 0; i < CADASTRO.length; i++) if(CADASTRO[i].apelido && CADASTRO[i].apelido.test(base)) return CADASTRO[i].id;
+    var m = /(?:^|[^A-Za-z])([A-Za-z]{2,8})[\s_-]*0*(\d{1,5})(?!\d)/.exec(base.replace(/parte\s*[_-]?\s*\d+/i, ''));
+    if(m){
+      var num = m[2]; while(num.length < 4) num = '0' + num;
+      return m[1].toUpperCase() + num;
+    }
+    var limpo = base.replace(EXTENSOES, '').replace(/[\s_-]*parte\s*[_-]?\s*\d+/i, '').trim();
+    return limpo.slice(0, 40) || null;
   }
   /* "QRY0390_parte2.csv" → 2. Sem "parte" no nome → 0 (arquivo inteiro). */
   function parteDe(nome){
     var m = /parte\s*[_-]?\s*(\d+)/i.exec(String(nome || ''));
     return m ? parseInt(m[1], 10) : 0;
+  }
+  /* A ficha de uma query: a do cadastro, ou uma ficha "nova" para a que só
+     apareceu na pasta. */
+  function ficha(id){
+    return POR_ID[id] || { id: id, nome: '', fonte: 'indefinida', ritmo: 'auto', apps: [], nova: true };
   }
 
   /* ---------------- banco (IndexedDB) ---------------- */
@@ -146,7 +161,7 @@
   function guardarArquivos(arquivos, origem){
     var aceitos = [], ignorados = [];
     Array.prototype.forEach.call(arquivos, function(f){
-      var prat = EXTENSOES.test(f.name) ? classificar(f.name) : null;
+      var prat = classificar(f.name);
       if(prat) aceitos.push({ f: f, prat: prat }); else ignorados.push(f.name);
     });
     var guardados = [], ids = [];
@@ -213,8 +228,8 @@
         if(r.done) return;
         var h = r.value;
         if(h.kind === 'file'){
-          if(EXTENSOES.test(h.name) && classificar(h.name)) naPasta.push(h);
-          else if(!/^~\$|^\.|desktop\.ini$/i.test(h.name)) ignorados.push(h.name);
+          if(classificar(h.name)) naPasta.push(h);
+          else if(!LIXO.test(h.name)) ignorados.push(h.name);
         }
         return proximo();
       });
@@ -281,7 +296,7 @@
       ? escolhidos.reduce(function(s, a){ return s + a.linhas; }, 0) : null;
     return {
       id: id,
-      prateleira: POR_ID[id],
+      prateleira: ficha(id),
       arquivos: escolhidos,
       deFora: daPrat.filter(function(a){ return !usados[a.nome]; }), // versões antigas que sobraram
       dadosDe: datas.length ? Math.min.apply(null, datas) : null,   // a parte mais antiga manda
@@ -292,7 +307,10 @@
   function pacote(id){ return listar().then(function(l){ return montarPacote(id, l); }); }
   function pacotes(){
     return listar().then(function(l){
-      return PRATELEIRAS.map(function(p){ return montarPacote(p.id, l); });
+      // As do cadastro primeiro, depois as que só apareceram na pasta.
+      var ids = CADASTRO.map(function(p){ return p.id; });
+      l.forEach(function(a){ if(ids.indexOf(a.prateleira) < 0) ids.push(a.prateleira); });
+      return ids.map(function(id){ return montarPacote(id, l); });
     });
   }
 
@@ -321,7 +339,8 @@
   function aoAtualizar(fn){ ouvintes.push(fn); }
 
   window.LDM_ALMOX = {
-    PRATELEIRAS: PRATELEIRAS,
+    CADASTRO: CADASTRO,
+    ficha: ficha,
     classificar: classificar,
     parteDe: parteDe,
     suportaPasta: suportaPasta,

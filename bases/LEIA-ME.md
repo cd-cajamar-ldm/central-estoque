@@ -14,7 +14,7 @@ Fluxos de dados (Jorran)  →  Modelo "Central de Estoque – Bases"  →  Power
 
 ## Almoxarifado da Oficina
 
-Na Oficina (menu **Almoxarifado**) fica o banco de relatórios: você conecta a pasta **Bases** uma vez, ele guarda cada relatório como chegou e mostra de quando são os dados. Cada app vai pegar dali e tratar do seu jeito. O código fica em [`../almoxarifado/`](../almoxarifado/); as prateleiras (quais relatórios, nomes aceitos e quem usa) estão no começo de `almox-db.js`.
+Na Oficina (menu **Almoxarifado**) fica o banco de queries: você conecta a pasta **Bases** uma vez e **toda query que cair nela aparece sozinha**, uma linha por query (as partes viram uma linha só), com a origem na frente (**Snowflake**, **Fluxo de dados** ou **Manual**), de quando são os dados e quais apps usam. Query nova entra como **"A definir"** até ser cadastrada. O cadastro (nome, origem, ritmo e apps) fica no começo de [`../almoxarifado/almox-db.js`](../almoxarifado/almox-db.js): **ao migrar uma query para o Snowflake, troque a origem dela lá.**
 
 ## O que tem aqui
 
