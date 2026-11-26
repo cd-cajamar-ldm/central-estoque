@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 31;
+const IR_INDICADORES_VERSION = 32;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -211,9 +211,9 @@ const ALIAS_CONGELADA = {
 const ALIAS_410 = {
   item: ['Item'], nomeItem: ['Nome'], dtMov: ['Dt.Mov.','Dt Mov','Data Mov'],
   quantidade: ['Quantidade'], sentido: ['Sentido'], vlMov: ['Vl.Mov.','Vl Mov'],
-  idDeposito: ['Id Deposito','Id Depósito'], obsWms: ['Observacao WMS','Observação WMS'],
+  idDeposito: ['Id Deposito','Id Depósito'], deposito: ['Nome Deposito','Nome Depósito'], obsWms: ['Observacao WMS','Observação WMS'],
   depto: ['Nome Depto','Nome Departamento','Departamento'],
-  // Lógica (301/302) e Id Depto — só usados pela tabela de detalhe "NET por
+  // Lógica (301/302) e Id Depto — só usados pela tabela de detalhe "Net por
   // Lógica 301/302" (visão linha a linha da própria 410). Opcionais: se a
   // planilha não trouxer essas colunas, a tabela simplesmente fica vazia.
   logica: ['Logica','Lógica'], idDepto: ['Id Depto','Id Departamento'],
@@ -222,12 +222,15 @@ const ALIAS_410 = {
      lançamentos vem com a WMS vazia e o motivo escrito só nesta outra — por exemplo
      "Saida de estoque em atendimento ao chamado #143474 - Estoque desbalanceado", que
      é baixa manual por chamado e não contagem de inventário. Lendo só a WMS, esses
-     caíam no padrão "sem legenda, considera" e entravam no NET sem ninguém perceber. */
+     caíam no padrão "sem legenda, considera" e entravam no Net sem ninguém perceber. */
   observacao: ['Observacao','Observação'],
   // Evidência do lançamento (documento, quem fez, quando) — não entra em nenhum
   // cálculo, só fica junto do item pra provar o movimento quando alguém perguntar
   // "por que esse item mudou" (ex.: "item X, doc 460816, fulano, 13/08 17:38").
-  numDoc: ['Num Doc','Num.Doc','Numero Doc'], usuario: ['Usuário','Usuario'], dataHora: ['Data/Hora','Data Hora']
+  numDoc: ['Num Doc','Num.Doc','Numero Doc'], usuario: ['Usuário','Usuario'], dataHora: ['Data/Hora','Data Hora'],
+  // Central de Ajustes: fornecedor e descrição do local, quando a planilha trouxer (opcionais).
+  fornecedor: ['Fornecedor','Nome Fornecedor','Nome Forncedor','Razao Social Fornecedor','Razão Social Fornecedor'],
+  localDesc: ['Descricao Local','Descrição Local','Desc Local','Endereco','Endereço','Local']
 };
 // Classificação de motivos (extrai o código do início de "Observacao WMS" e casa com
 // a legenda) mora em rules.js (irClassificarMotivo410) — compartilhada com a UI, e
@@ -299,7 +302,7 @@ async function recalcularIndicadores(cicloId){
     const st = {status:'convergido', rodadas:maxRodada};
     const atualTodo = statusPorLocalTodoMotivo.get(local);
     if(!atualTodo || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atualTodo.status]) statusPorLocalTodoMotivo.set(local, st);
-    if(!lista.some(c=>String(c.motivo||'').trim().toUpperCase()==='AIR')) continue;
+    if(!lista.some(c=>irEhMotivoInv(c.motivo))) continue;
     const atual = statusPorLocalAIR.get(local);
     if(!atual || STATUS_PRIORIDADE[st.status]>STATUS_PRIORIDADE[atual.status]) statusPorLocalAIR.set(local, st);
   }
@@ -399,10 +402,10 @@ function post(type, data){ self.postMessage({type, ...data}); }
    Latin-1 e os acentos viravam lixo ("EndereÃ§o"). Por isso o CSV é decodificado
    como UTF-8 antes. Planilha do Excel começa com a assinatura do zip ("PK") ou do
    formato antigo (D0 CF) — qualquer outra coisa é texto. */
-function irLerPlanilha(buf){
+function irLerPlanilha(buf, opts){
   const b = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
   const ehExcel = (b[0]===0x50 && b[1]===0x4B) || (b[0]===0xD0 && b[1]===0xCF);
-  if(ehExcel) return XLSX.read(buf, {type:'array', cellDates:true});
+  if(ehExcel) return XLSX.read(buf, {type:'array', cellDates: !(opts && opts.semCellDates)});
   let texto = new TextDecoder('utf-8').decode(buf);
   if(texto.charCodeAt(0) === 0xFEFF) texto = texto.slice(1);
   /* raw: o SheetJS adivinha data em CSV no formato americano — "03/11/2026" virava
@@ -804,7 +807,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
       || isoDateTime(parseDateVal(getVal(row, r843.dataFimContagem)))
       || isoDateTime(parseDateVal(getVal(row, r843.dataInicioContagem))) || '').slice(0,10);
     if(dRefBruto > dataMaisRecenteNoArquivo) dataMaisRecenteNoArquivo = dRefBruto;
-    // Todo motivo de ajuste entra, menos os que a legenda marca como fora do NET
+    // Todo motivo de ajuste entra, menos os que a legenda marca como fora do Net
     // (baixa de insumo, quebra, EPI, nota fiscal, pallets...). É a MESMA legenda
     // editável em Configurações que classifica a QRY410, então os dois lados do
     // app passam a concordar sobre o que é ajuste de estoque. Antes só "AIR"
@@ -978,7 +981,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   // penúltima pra virar "concluída" (senão ficava "em_contagem" pra sempre) — isso
   // criava um problema real: quando uma contagem errada era corrigida por uma
   // recontagem num Id Inventario NOVO (visita separada), essa recontagem raramente
-  // tinha 2 rodadas internas batendo, então ficava excluída da Acurácia/NET pra sempre,
+  // tinha 2 rodadas internas batendo, então ficava excluída da Acurácia/Net pra sempre,
   // e só a rodada errada original (já convergida sozinha) entrava — sobrando um saldo
   // fantasma que já tinha sido corrigido na prática (ex.: +64 sem o -64 que cancelava).
   // Pedido explícito do usuário: "desconsidere locais em aberto, somente se estiver
@@ -1003,7 +1006,7 @@ async function runPipeline({buf390, bufs843, bufsCongelada, bufs278, bufs051, ci
   const statusPorLocalAIR = new Map();
   const visitaEhAIR = new Map(); // chave -> bool
   for(const [chave, lista] of porVisitaBruto){
-    visitaEhAIR.set(chave, lista.some(c=>String(c.motivo||'').trim().toUpperCase()==='AIR'));
+    visitaEhAIR.set(chave, lista.some(c=>irEhMotivoInv(c.motivo)));
   }
   for(const [chave, st] of statusPorVisita){
     const local = localDaVisita.get(chave);
@@ -1210,7 +1213,7 @@ function irNumInventario(v){
    é o da própria rodada (Id Conferência 1 dela), então não há o risco de contar
    venda e reposição do intervalo como erro de contagem. */
 function irDivergenciasDoCiclo(divergencias){
-  const air = divergencias.filter(d=>String(d.motivo||'').trim().toUpperCase()==='AIR');
+  const air = divergencias.filter(d=>irEhMotivoInv(d.motivo));
   const ultima = new Map(); // local -> maior Nº Inventário entre as rodadas AIR
   for(const d of air){
     const n = irNumInventario(d.inventario);
@@ -1523,6 +1526,9 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   const diaFinalPorLocal = new Map(); // local -> {dia, rodada}
   for(const c of contagens){
     if(c.idConferencia<=1 || !c.dataSituacao) continue;
+    // Só as Obs escolhidas no filtro do topo: uma auditoria (ADE) no mesmo local
+    // não pode puxar o "dia final" do local para o dia dela.
+    if(!modoLegado && !irEhMotivoInv(c.motivo)) continue;
     // Mesmo norte do resto: só local da base congelada. Sem isso, "locais contados"
     // saía de um universo maior que o de peças/valor e que o de locais divergentes —
     // um mês podia mostrar local contado com zero peça e zero valor, e a Acurácia
@@ -1541,7 +1547,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   const diaFinalPorLocalAIR = new Map(); // local -> {dia, rodada}
   for(const c of contagens){
     if(c.idConferencia<2 || !c.dataSituacao) continue;
-    if(String(c.motivo||'').trim().toUpperCase()!=='AIR') continue;
+    if(!irEhMotivoInv(c.motivo)) continue;
     if(!noCiclo.has(c.local)) continue;
     const dia = c.dataSituacao.slice(0,10);
     const atual = diaFinalPorLocalAIR.get(c.local);
@@ -1706,7 +1712,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   })).sort((a,b)=>b.locais-a.locais);
 
   const indicadoresFinais = {
-    _v: IR_INDICADORES_VERSION,
+    _v: IR_INDICADORES_VERSION, obsInv: irInvObsChave(),
     locaisCongelados, locaisContadosTotal, locaisConcluidos, locaisPendentes, locaisEmContagem, locaisNaoIniciados,
     andamentoCiclo, acuraciaPecas, acuraciaLocal, acuraciaValor, meta: IR_META_ACURACIA,
     // Gestão de Inventário: quantos locais saíram da acurácia por exclusão manual,
@@ -1738,12 +1744,18 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
    QRY410 — Perdas e Ganhos no CD
    Independente do ciclo rotativo: processa por ano (extraído de Dt.Mov.), não
    depende de nenhum arquivo dos outros slots. Ver irClassificarMotivo410() em
-   rules.js pras regras de negócio (Id Depósito 21 fora, Saída = negativo, legenda
+   rules.js pras regras de negócio (Id Depósito 21 fora, só Lógica 301/302, Saída = negativo, legenda
    de motivos — editável em Configurações).
    ============================================================ */
 async function runPipeline410({buf410}){
   post('progress', {stage:'Lendo QRY410...', pct:5});
-  const wb410 = irLerPlanilha(buf410);
+  // Sem cellDates: a data vem como número serial do Excel e o parseDateVal
+  // converte pelos componentes exatos (dia/mês/ano/hora), sem passar por fuso.
+  // Com cellDates o SheetJS monta a data em hora LOCAL, e a leitura por UTC
+  // jogava todo lançamento depois das 21h do último dia pro mês seguinte (em
+  // UTC-3, 31/10 22:30 é 01/11 01:30 UTC) — foi a diferença de R$ 47,45 do AIR
+  // de outubro contra a dinâmica da 410.
+  const wb410 = irLerPlanilha(buf410, {semCellDates:true});
   const rows410 = sheetToRows(wb410, ALIAS_410, ['dtMov','sentido','vlMov']);
   if(!rows410.length) throw new Error('QRY410: planilha vazia.');
   const r410 = buildAliasResolver(Object.keys(rows410[0]), ALIAS_410);
@@ -1761,11 +1773,12 @@ async function runPipeline410({buf410}){
       porDia:new Map(), porItemDia:new Map(),
       porObs:new Map(), porObsMes:new Map(),
       // Depto (coluna "Nome Depto" da QRY410) — só conta movimento de motivo
-      // considerado pro NET, mesmo critério da quebra por Obs mês a mês.
+      // considerado pro Net, mesmo critério da quebra por Obs mês a mês.
       porDepto:new Map(), porDeptoMes:new Map(),
-      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0,
+      porItem:new Map(), totalLinhas:0, linhasExcluidasDeposito21:0, linhasExcluidasLogica:0,
+      linhasSentidoInferido:0, valorSentidoInferido:0, exemplosSentidoInferido:[],
       // Linhas cruas da própria 410, só Lógica 301/302 — alimenta a tabela de
-      // detalhe da aba NET (visão linha a linha, não agregada). Os totais de
+      // detalhe da aba Net (visão linha a linha, não agregada). Os totais de
       // Net Ano/Mês de cada linha só ficam prontos depois do laço principal
       // (porItem/porItemMes só fecham quando todas as linhas já passaram),
       // por isso aqui só guarda os dados crus e anota os dois Nets depois.
@@ -1818,6 +1831,13 @@ async function runPipeline410({buf410}){
       };
     });
   }
+  // Linhas que antes sumiam sem aviso — ficam registradas pra tela mostrar.
+  // Sem data não tem mês/ano: vai pra todos os anos do resumo.
+  const semData = {linhas:0, valor:0, exemplos:[]};
+  const exemplo410 = (row)=>({item:String(getVal(row, r410.item)||'').trim(), logica:String(getVal(row, r410.logica)||'').trim(),
+    sentido:String(getVal(row, r410.sentido)||'').trim(), vlMov:parseNumber(getVal(row, r410.vlMov)),
+    dtMov:String(getVal(row, r410.dtMov)??''), obsWms:String(getVal(row, r410.obsWms)||'').trim(),
+    numDoc:String(getVal(row, r410.numDoc)||'').trim()});
   let processadas = 0;
   for(const row of rows410){
     processadas++;
@@ -1825,17 +1845,20 @@ async function runPipeline410({buf410}){
       post('progress', {stage:'Processando linha '+processadas+' de '+rows410.length+' (QRY410)...', pct:15+Math.round(processadas/rows410.length*60)});
     }
     const dt = parseDateVal(getVal(row, r410.dtMov));
-    if(!dt) continue;
-    // getFullYear()/getMonth() (hora LOCAL) não servem aqui: o SheetJS (cellDates:true)
-    // monta esse Date usando os componentes UTC da célula (convenção dele pra evitar bug
-    // de DST) — em fuso negativo (Brasil, UTC-3) uma data sem hora tipo "01/03 00:00"
-    // vira 2026-03-01T00:00:00Z, que em hora local é 28/02 21:00. Ler com getFullYear()/
-    // getMonth() jogava os lançamentos do dia 1º pro mês anterior, subtraindo valor de
-    // março (e inflando fevereiro) — por isso as UTC, que refletem os componentes reais
-    // da célula, sem passar pela conversão de fuso.
-    const ano = dt.getUTCFullYear();
-    const mes = ano+'-'+String(dt.getUTCMonth()+1).padStart(2,'0');
-    const dia = mes+'-'+String(dt.getUTCDate()).padStart(2,'0');
+    if(!dt){
+      const lg = String(getVal(row, r410.logica)||'').trim();
+      if(!r410.logica || lg==='301' || lg==='302'){
+        semData.linhas++; semData.valor += parseNumber(getVal(row, r410.vlMov));
+        if(semData.exemplos.length<20) semData.exemplos.push(exemplo410(row));
+      }
+      continue;
+    }
+    // Componentes LOCAIS: o parseDateVal monta a data em hora local a partir dos
+    // componentes exatos da célula (serial do Excel ou texto dd/mm/aaaa), então
+    // é por eles que se lê dia/mês/ano — o mesmo que a dinâmica da 410 mostra.
+    const ano = dt.getFullYear();
+    const mes = ano+'-'+String(dt.getMonth()+1).padStart(2,'0');
+    const dia = mes+'-'+String(dt.getDate()).padStart(2,'0');
     const g = getAno(ano);
     g.totalLinhas++;
 
@@ -1843,10 +1866,28 @@ async function runPipeline410({buf410}){
     const idDeposito = parseInt(parseNumber(getVal(row, r410.idDeposito)), 10);
     if(idDeposito===21){ g.linhasExcluidasDeposito21++; continue; }
 
-    const sentido = String(getVal(row, r410.sentido)||'').trim().toLowerCase();
-    const vlAbs = Math.abs(parseNumber(getVal(row, r410.vlMov)));
+    // Net oficial = só Lógica 301 e 302 (regra explícita do usuário — é como a
+    // dinâmica da própria 410 fecha). Outras lógicas ficam de fora de tudo,
+    // inclusive da quebra por Obs. Arquivo sem a coluna Lógica não tem como
+    // filtrar: entra inteiro, como antes, e a tela avisa.
+    if(r410.logica){
+      const lg = String(getVal(row, r410.logica)||'').trim();
+      if(lg!=='301' && lg!=='302'){ g.linhasExcluidasLogica++; continue; }
+    }
+
+    // Sentido sem acento e pelo começo ("Saída", "SAIDA", "S"...). Quando não
+    // dá pra reconhecer, vale o sinal do próprio Vl.Mov. (é o que a dinâmica da
+    // 410 soma) — antes o sinal virava 0 e o lançamento sumia do Net sem aviso.
+    const sentido = String(getVal(row, r410.sentido)||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const vlBruto = parseNumber(getVal(row, r410.vlMov));
+    const vlAbs = Math.abs(vlBruto);
     const qtdAbs = Math.abs(parseNumber(getVal(row, r410.quantidade)));
-    const sinal = sentido==='saida' || sentido==='saída' ? -1 : (sentido==='entrada' ? 1 : 0);
+    let sinal = sentido.startsWith('s') ? -1 : (sentido.startsWith('e') ? 1 : 0);
+    if(!sinal && vlBruto){
+      sinal = vlBruto<0 ? -1 : 1;
+      g.linhasSentidoInferido++; g.valorSentidoInferido += sinal*vlAbs;
+      if(g.exemplosSentidoInferido.length<20) g.exemplosSentidoInferido.push({...exemplo410(row), mes});
+    }
     const valor = sinal*vlAbs;
     const qtd = sinal*qtdAbs;
 
@@ -1864,8 +1905,8 @@ async function runPipeline410({buf410}){
     if(sinal<0) go.saida += valor;
     else if(sinal>0) go.entrada += valor;
 
-    // Mesma quebra por Obs, mas por mês — alimenta a tabela "NET por Observação" da
-    // aba NET, que precisa respeitar o mês selecionado (a de cima é só do ano inteiro).
+    // Mesma quebra por Obs, mas por mês — alimenta a tabela "Net por Observação" da
+    // aba Net, que precisa respeitar o mês selecionado (a de cima é só do ano inteiro).
     if(!g.porObsMes.has(mes)) g.porObsMes.set(mes, new Map());
     const porObsDoMes = g.porObsMes.get(mes);
     if(!porObsDoMes.has(cls.id)) porObsDoMes.set(cls.id, {id:cls.id, legenda:cls.legenda, considerarNet:cls.considerarNet, saida:0, entrada:0});
@@ -1873,7 +1914,7 @@ async function runPipeline410({buf410}){
     if(sinal<0) goMes.saida += valor;
     else if(sinal>0) goMes.entrada += valor;
 
-    // Linha a linha da 410, só Lógica 301/302 — independe de Considerar NET (é
+    // Linha a linha da 410, só Lógica 301/302 — independe de Considerar Net (é
     // uma visão crua, não um agregado). Os campos Net Ano/Mês ficam de fora
     // aqui e são preenchidos depois, quando porItem/porItemMes já tiverem
     // somado todas as linhas do ano.
@@ -1884,6 +1925,11 @@ async function runPipeline410({buf410}){
         nome: String(getVal(row, r410.nomeItem)||'').trim(),
         idDepto: String(getVal(row, r410.idDepto)||'').trim(),
         depto: String(getVal(row, r410.depto)||'').trim(),
+        // Depósito (id e nome) — o painel Net do app de fechamento mostra o Net por depósito.
+        idDeposito: isNaN(idDeposito) ? '' : String(idDeposito),
+        deposito: String(getVal(row, r410.deposito)||'').trim(),
+        fornecedor: String(getVal(row, r410.fornecedor)||'').trim(),
+        localDesc: String(getVal(row, r410.localDesc)||'').trim(),
         dtMov: isoDateTime(dt),
         mes, logica: logicaVal,
         qtd, valor,
@@ -1895,10 +1941,10 @@ async function runPipeline410({buf410}){
       });
     }
 
-    if(!cls.considerarNet) continue; // resto (mês/dia, item, depto) só conta com motivos válidos pro NET
+    if(!cls.considerarNet) continue; // resto (mês/dia, item, depto) só conta com motivos válidos pro Net
 
     // Quebra por Departamento (ano e mês) — mesma regra da quebra por Obs: só
-    // motivo considerado pro NET entra aqui.
+    // motivo considerado pro Net entra aqui.
     const depto = String(getVal(row, r410.depto)||'').trim() || '(sem depto)';
     if(!g.porDepto.has(depto)) g.porDepto.set(depto, {id:depto, saida:0, entrada:0});
     const gd = g.porDepto.get(depto);
@@ -1973,6 +2019,9 @@ async function runPipeline410({buf410}){
     });
     resumos[ano] = {
       ano, totalLinhas:g.totalLinhas, linhasExcluidasDeposito21:g.linhasExcluidasDeposito21,
+      linhasExcluidasLogica:g.linhasExcluidasLogica, temColunaLogica: !!r410.logica,
+      linhasSentidoInferido:g.linhasSentidoInferido, valorSentidoInferido:g.valorSentidoInferido, exemplosSentidoInferido:g.exemplosSentidoInferido,
+      linhasSemData:semData.linhas, valorSemData:semData.valor, exemplosSemData:semData.exemplos,
       porMes, porDia, porObs, porDepto, topItensPositivos, topItensNegativos, linhasLogica,
       totalGanhos, totalPerdas, totalNet: totalGanhos+totalPerdas, totalNetAbs: Math.abs(totalGanhos+totalPerdas)
     };

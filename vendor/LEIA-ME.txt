@@ -1,0 +1,2 @@
+Bibliotecas de terceiros guardadas aqui (e não baixadas de CDN) para os apps abrirem mais rápido:
+- supabase.js / 591.supabase.js: @supabase/supabase-js 2.45.4 (licença MIT), build UMD.

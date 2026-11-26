@@ -1,0 +1,212 @@
+<title>Quadros LDM clássicos</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: barra de escolha no topo + quadro kanban sóbrio; cada estilo muda só superfície,
+   densidade e o jeito de marcar a situação. Marca LDM: laranja 021 C, azul 2747 C, branco. */
+:root{
+  --laranja:#FE5000; --laranja-esc:#C83812; --azul:#001A72;
+  --st-pendente:#6A6F94; --st-andamento:#2F6FE0; --st-concluida:#1F8A52; --st-bloqueada:#D2453A; --st-cancelada:#8C7B70;
+  --bg:#F3F4F8; --fg:#121633; --suave:#646A8C; --linha:#E1E3EE; --sup:#FFFFFF; --sup2:#F8F9FC;
+  --f:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+/* Sempre no modo claro, mesmo com o sistema em tema escuro. */
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f);font-size:14px}
+button,input{font-family:inherit}
+.topo{padding-block:20px 12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:14px}
+.marca{display:flex;gap:12px;align-items:center}
+.selo{width:38px;height:38px;border-radius:10px;background:var(--laranja);color:#fff;display:grid;place-items:center;font-weight:800;font-size:12px;letter-spacing:.04em}
+.marca h1{margin:0;font-size:20px;font-weight:800;text-wrap:balance}
+.marca p{margin:2px 0 0;color:var(--suave);font-size:13px}
+.abas{display:flex;gap:4px;flex-wrap:wrap;background:var(--sup);border:1px solid var(--linha);border-radius:12px;padding:4px;width:fit-content;max-width:100%}
+.aba{border:0;background:none;color:var(--suave);font-weight:600;font-size:13px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background .15s,color .15s}
+.aba:hover{color:var(--fg);background:var(--sup2)}
+.aba[aria-selected="true"]{background:var(--azul);color:#fff}
+:focus-visible{outline:2px solid var(--laranja);outline-offset:2px}
+.conceito{color:var(--suave);font-size:13.5px;max-width:100ch}
+.conceito strong{color:var(--fg)}
+.palco-wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:4px 32px}
+.palco{border-radius:16px;border:1px solid var(--linha);overflow:hidden}
+.barra{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--linha);background:var(--sup)}
+.barra h2{margin:0;font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
+.barra h2 i{width:10px;height:10px;border-radius:3px;background:var(--laranja);display:inline-block}
+.barra .meta{display:flex;gap:8px;align-items:center;color:var(--suave);font-size:12.5px}
+.prog{width:120px;height:6px;border-radius:99px;background:var(--linha);overflow:hidden}
+.prog span{display:block;height:100%;background:var(--st-concluida);transition:width .5s ease}
+.rolagem{overflow-x:auto}
+.quadro{display:flex;gap:14px;padding:18px;min-width:max-content;align-items:flex-start}
+.col{width:268px;display:flex;flex-direction:column;transition:background .15s,box-shadow .15s}
+.cab{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px}
+.cab .n{font-family:var(--mono);font-size:11.5px;color:var(--suave);font-weight:600;font-variant-numeric:tabular-nums}
+.cab .n.pula{animation:pula .4s ease}
+.lista{display:flex;flex-direction:column;gap:8px;min-height:40px}
+.card{background:var(--sup);border:1px solid var(--linha);border-radius:10px;padding:12px;cursor:grab;user-select:none;-webkit-user-select:none;transition:transform .15s,box-shadow .15s,border-color .15s;animation:entra .35s ease both;animation-delay:calc(var(--i)*35ms)}
+.card:hover{transform:translateY(-2px);box-shadow:0 8px 20px -12px rgba(0,26,114,.35)}
+.card.arrastando{opacity:.4}
+.card h3{margin:0;font-size:13.5px;font-weight:600;line-height:1.35;text-wrap:pretty}
+.card .meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;font-size:11.5px;color:var(--suave)}
+.card .id{font-family:var(--mono);font-size:11px;margin-left:auto}
+.card .meta{flex-wrap:wrap;row-gap:6px}
+.tag,.card .id,.mover{white-space:nowrap}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--sup2);border:1px solid var(--linha);color:var(--suave)}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--gcor)}
+.mover{border:0;background:none;color:var(--suave);font-size:11.5px;font-weight:600;cursor:pointer;padding:2px 4px;border-radius:5px}
+.mover:hover{color:var(--laranja);background:var(--sup2)}
+.cancelada h3{text-decoration:line-through;color:var(--suave)}
+.novo{margin-top:8px}
+.novo input{width:100%;border:1px dashed var(--linha);background:transparent;color:var(--fg);border-radius:8px;padding:9px 10px;font-size:13px}
+.novo input::placeholder{color:var(--suave)}
+.novo input:focus{outline:none;border:1px solid var(--laranja);background:var(--sup)}
+.col.alvo{box-shadow:0 0 0 2px var(--laranja) inset}
+.vazio{border:1px dashed var(--linha);border-radius:10px;color:var(--suave);font-size:12px;text-align:center;padding:14px}
+.card.chegou{animation:chegou .45s cubic-bezier(.3,1.5,.5,1) both}
+@keyframes entra{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes chegou{0%{transform:scale(.94);box-shadow:0 0 0 3px var(--st-concluida)}100%{transform:none;box-shadow:0 0 0 0 transparent}}
+@keyframes pula{50%{transform:scale(1.35);color:var(--laranja)}}
+
+/* 1 · Essencial — colunas cinza-claro, cartões brancos (estilo Trello) */
+.v-essencial .rolagem{background:var(--bg)}
+.v-essencial .col{background:var(--sup2);border:1px solid var(--linha);border-radius:12px;padding:12px}
+.v-essencial .cab{margin-bottom:10px}
+.v-essencial .cab::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--cor)}
+.v-essencial .cab .n{margin-left:auto;background:var(--sup);border:1px solid var(--linha);border-radius:99px;padding:1px 8px}
+
+/* 2 · Colunas tingidas — cada coluna na cor suave da situação (estilo Monday) */
+.v-tingido .rolagem{background:var(--sup)}
+.v-tingido .col{background:color-mix(in srgb,var(--cor) 9%,var(--sup));border-radius:12px;padding:0 10px 12px;overflow:hidden}
+.v-tingido .cab{background:var(--cor);color:#fff;margin:0 -10px 10px;padding:10px 12px}
+.v-tingido .cab .n{margin-left:auto;color:#fff;background:rgba(255,255,255,.22);border-radius:6px;padding:1px 7px}
+.v-tingido .card{border-color:color-mix(in srgb,var(--cor) 25%,var(--linha))}
+.v-tingido .novo input{border-color:color-mix(in srgb,var(--cor) 35%,var(--linha))}
+
+/* 3 · Faixa lateral — cartão com borda esquerda na cor da situação (estilo Jira) */
+.v-faixa .rolagem{background:var(--bg)}
+.v-faixa .col{padding:4px}
+.v-faixa .cab{text-transform:uppercase;letter-spacing:.06em;font-size:11.5px;color:var(--suave);padding:0 4px 10px;border-bottom:2px solid var(--cor);margin-bottom:10px}
+.v-faixa .cab .n{margin-left:auto}
+.v-faixa .card{border-left:4px solid var(--cor);border-radius:6px}
+
+/* 4 · Compacto — cartões de uma linha, mais tarefas na tela */
+.v-compacto .rolagem{background:var(--sup)}
+.v-compacto .col{width:250px;border-right:1px solid var(--linha);padding-right:14px}
+.v-compacto .col:last-child{border-right:0}
+.v-compacto .cab{margin-bottom:8px;font-size:12.5px}
+.v-compacto .cab::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--cor)}
+.v-compacto .cab .n{margin-left:auto}
+.v-compacto .lista{gap:4px}
+.v-compacto .card{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;background:var(--sup2)}
+.v-compacto .card h3{flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v-compacto .card .meta{margin:0}
+.v-compacto .card .tag,.v-compacto .card .id{display:none}
+.v-compacto .card::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;border:2px solid var(--cor)}
+.v-compacto .card.concluida::before,.v-compacto .card.cancelada::before{background:var(--cor)}
+
+/* 5 · Azul LDM — cabeçalho azul da marca, colunas brancas com destaque laranja */
+.v-azul .barra{background:var(--azul);border-bottom:0}
+.v-azul .barra h2,.v-azul .barra .meta{color:#fff}
+.v-azul .barra .prog{background:rgba(255,255,255,.25)}
+.v-azul .rolagem{background:linear-gradient(var(--azul) 0 56px,var(--bg) 56px)}
+.v-azul .col{background:var(--sup);border-radius:12px;padding:12px;box-shadow:0 6px 18px -12px rgba(0,26,114,.5)}
+.v-azul .cab{margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--linha)}
+.v-azul .cab .n{margin-left:auto;background:var(--cor);color:#fff;border-radius:6px;padding:1px 7px}
+.v-azul .card{background:var(--sup2)}
+.v-azul .card:hover{border-color:var(--laranja)}
+.v-azul .novo input:focus{border-color:var(--laranja)}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<header class="topo">
+  <div class="marca">
+    <div class="selo" aria-hidden="true">LDM</div>
+    <div>
+      <h1>Gerenciador de Tarefas · 5 quadros clássicos</h1>
+      <p>Mesmas tarefas e situações. Arraste os cartões, use "mover →" ou digite uma tarefa nova no fim da coluna.</p>
+    </div>
+  </div>
+  <div class="abas" role="tablist" id="abas"></div>
+  <div class="conceito" id="conceito"></div>
+</header>
+<main class="palco-wrap">
+  <div class="palco" id="palco">
+    <div class="barra"><h2><i></i>Importado do ClickUp</h2><div class="meta"><span id="resumo"></span><div class="prog"><span id="prog"></span></div></div></div>
+    <div class="rolagem"><div class="quadro" id="quadro"></div></div>
+  </div>
+</main>
+
+<script>
+const STATUS=[
+  {id:'pendente',rotulo:'Pendente',cor:'var(--st-pendente)'},
+  {id:'em_andamento',rotulo:'Em andamento',cor:'var(--st-andamento)'},
+  {id:'concluida',rotulo:'Concluída',cor:'var(--st-concluida)'},
+  {id:'bloqueada',rotulo:'Bloqueada',cor:'var(--st-bloqueada)'},
+  {id:'cancelada',rotulo:'Cancelada',cor:'var(--st-cancelada)'},
+];
+const GRUPO_COR={'Mapeamento diário':'#FE5000','Pendente':'#6A6F94','Backlog':'#C79212','Cancelado':'#8C7B70','Novo':'#2F6FE0'};
+/* As 10 tarefas reais importadas do ClickUp. */
+const TAREFAS=[
+  {id:1,t:'Criação de 3D Resumo de inventari',s:'cancelada',g:'Cancelado'},
+  {id:2,t:'Criar uma Analise de Perda/Ganho',s:'pendente',g:'Backlog'},
+  {id:3,t:'Ajuste Cadastro Compressores',s:'pendente',g:'Pendente'},
+  {id:4,t:'Report Ciclo Inventário',s:'em_andamento',g:'Mapeamento diário'},
+  {id:5,t:'Report Transitórios',s:'em_andamento',g:'Mapeamento diário'},
+  {id:6,t:'Reunião Gustavo - BASES',s:'pendente',g:'Backlog'},
+  {id:7,t:'Relatorio Grot',s:'pendente',g:'Pendente'},
+  {id:8,t:'Relatorio de nota pendente de entrada',s:'pendente',g:'Pendente'},
+  {id:9,t:'Apresentação Projetos',s:'pendente',g:'Pendente'},
+  {id:10,t:'Atualização POP',s:'pendente',g:'Backlog'},
+];
+const ESTILOS=[
+  {id:'essencial',nome:'Essencial',sub:'Colunas cinza-claro com cartões brancos e um ponto de cor na situação. O mais neutro de todos, no estilo do Trello.'},
+  {id:'tingido',nome:'Colunas tingidas',sub:'Cabeçalho cheio na cor da situação e a coluna num tom suave dela. Lê-se de longe, no estilo do Monday.'},
+  {id:'faixa',nome:'Faixa lateral',sub:'Cabeçalho discreto sublinhado e cartão com borda esquerda colorida. Limpo e técnico, no estilo do Jira.'},
+  {id:'compacto',nome:'Compacto',sub:'Uma linha por tarefa, com círculo de situação. Cabe muita coisa na tela, bom para rotina diária e TV.'},
+  {id:'azul',nome:'Azul LDM',sub:'Faixa azul da marca no topo, colunas brancas elevadas e laranja no destaque. O mais "institucional".'},
+];
+let atual='essencial', arrastado=null, chegou=null, mudouCol=null, prox=11;
+const $=s=>document.querySelector(s);
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const seguinte=s=>STATUS[(STATUS.findIndex(x=>x.id===s)+1)%STATUS.length];
+
+function card(t,i){
+  return `<div class="card ${t.s} ${chegou===t.id?'chegou':''}" draggable="true" data-id="${t.id}" style="--i:${i}">
+    <h3>${esc(t.t)}</h3>
+    <div class="meta"><span class="tag" style="--gcor:${GRUPO_COR[t.g]||'#6A6F94'}">${esc(t.g)}</span>
+      <span class="id">LDM-${t.id}</span>
+      <button class="mover" data-mover="${t.id}" title="Mover para ${seguinte(t.s).rotulo}">mover →</button></div></div>`;
+}
+function desenhar(){
+  const e=ESTILOS.find(x=>x.id===atual);
+  $('#palco').className='palco v-'+atual;
+  $('#conceito').innerHTML=`<strong>${e.nome}.</strong> ${e.sub}`;
+  $('#quadro').innerHTML=STATUS.map(st=>{
+    const itens=TAREFAS.filter(t=>t.s===st.id);
+    return `<section class="col" data-st="${st.id}" style="--cor:${st.cor}">
+      <div class="cab">${st.rotulo}<span class="n ${mudouCol===st.id?'pula':''}">${itens.length}</span></div>
+      <div class="lista">${itens.map(card).join('')||'<div class="vazio">Nenhuma tarefa</div>'}</div>
+      <div class="novo"><input id="novo-${st.id}" data-novo="${st.id}" placeholder="+ Adicionar tarefa" aria-label="Nova tarefa em ${st.rotulo}"></div>
+    </section>`}).join('');
+  const feitas=TAREFAS.filter(t=>t.s==='concluida').length, ativas=TAREFAS.filter(t=>t.s!=='cancelada').length;
+  $('#resumo').textContent=`${feitas} de ${ativas} concluídas`;
+  $('#prog').style.width=(ativas?feitas/ativas*100:0)+'%';
+  document.querySelectorAll('.aba').forEach(a=>a.setAttribute('aria-selected',a.dataset.id===atual));
+  chegou=null; mudouCol=null;
+}
+function mover(id,para){const t=TAREFAS.find(x=>x.id===id);if(!t||t.s===para)return;t.s=para;chegou=id;mudouCol=para;desenhar();}
+$('#abas').innerHTML=ESTILOS.map(e=>`<button class="aba" role="tab" data-id="${e.id}">${e.nome}</button>`).join('');
+$('#abas').addEventListener('click',ev=>{const b=ev.target.closest('.aba');if(b)location.hash=b.dataset.id});
+function lerHash(){const h=location.hash.slice(1);atual=ESTILOS.some(e=>e.id===h)?h:'essencial';desenhar();}
+addEventListener('hashchange',lerHash);
+const q=$('#quadro');
+q.addEventListener('dragstart',e=>{const c=e.target.closest('.card');if(!c)return;arrastado=+c.dataset.id;c.classList.add('arrastando');try{e.dataTransfer.setData('text/plain',c.dataset.id)}catch{}});
+q.addEventListener('dragend',()=>{arrastado=null;document.querySelectorAll('.alvo,.arrastando').forEach(x=>x.classList.remove('alvo','arrastando'))});
+q.addEventListener('dragover',e=>{const col=e.target.closest('.col');if(!col||arrastado==null)return;e.preventDefault();document.querySelectorAll('.col.alvo').forEach(x=>x!==col&&x.classList.remove('alvo'));col.classList.add('alvo')});
+q.addEventListener('drop',e=>{const col=e.target.closest('.col');if(!col||arrastado==null)return;e.preventDefault();mover(arrastado,col.dataset.st)});
+q.addEventListener('click',e=>{const b=e.target.closest('[data-mover]');if(!b)return;const t=TAREFAS.find(x=>x.id===+b.dataset.mover);mover(t.id,seguinte(t.s).id)});
+q.addEventListener('keydown',e=>{const inp=e.target.closest('[data-novo]');if(!inp||e.key!=='Enter'||!inp.value.trim())return;
+  const id=prox++;TAREFAS.push({id,t:inp.value.trim(),s:inp.dataset.novo,g:'Novo'});chegou=id;mudouCol=inp.dataset.novo;const foco=inp.id;desenhar();document.getElementById(foco)?.focus();});
+lerHash();
+</script>

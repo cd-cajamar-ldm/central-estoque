@@ -4,22 +4,34 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'inventario-rotativo-v255';
+const CACHE_VERSION = 'inventario-rotativo-v343';
 const PRECACHE_URLS = [
   './',
   './index.html',
   './manifest.json',
   './css/theme.css',
+  './css/acesso.css',
   './js/db.js',
+  './js/nuvem.js',
+  './js/acesso.js',
   './js/rules.js',
   './js/worker.js',
   './js/app.js',
+  './js/central-ajustes.js',
+  './js/prod-pessoas.js',
+  './js/filtros-topo.js',
+  './js/central-divergencias.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './brand/Logo_LDM_hor_2.png',
   './brand/Logo_LDM_vert.png',
   './brand/Logo_LDM_hor_branco.png',
-  './brand/Logo_LDM_vert_branco.png'
+  './brand/Logo_LDM_vert_branco.png',
+  './brand/Logo_LDM_icon.png',
+  './brand/dash-hero.jpg',
+  './brand/menu-corredor.jpg',
+  './brand/net-hero.jpg',
+  './brand/secao-produtividade.jpg'
 ];
 
 self.addEventListener('install', (event)=>{
@@ -41,6 +53,10 @@ self.addEventListener('fetch', (event)=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
+  /* Banco (Supabase) nunca passa pelo cache: login, permissão e dados têm de vir
+     sempre da internet. Antes, leituras do banco eram guardadas aqui e podiam
+     voltar uma resposta velha (de outra sessão) depois de uma atualização. */
+  if(/supabase\.co$/.test(url.hostname)) return;
 
   if(isSameOrigin){
     // cache:'no-cache' revalida no servidor mesmo dentro da janela de max-age. Sem

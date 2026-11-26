@@ -17,7 +17,7 @@ const IR_APP_VERSION = 'v3';
 const IR = {
   est390Meta:null, est390Locais:null, _est390Loading:false,
   transSetores:null, transNomes:null, transExpandido:null,
-  transEmail:null, transEmailAberto:false,
+  transEmail:null, transEmailAberto:false, transHistorico:null, _transSnapDia:null,
   div410Cache:null, _itemInfo:null, _itemInfoLoading:false,
   est390Ficha:null, est390File:null, est390Processing:false, est390Progress:{stage:'', pct:0},
   est160File:null, est160Processing:false, est160Progress:{stage:'', pct:0},
@@ -211,10 +211,19 @@ function irToggleTheme(){
   localStorage.setItem('ir-theme', next);
   irUpdateThemeLabel();
 }
+const IR_SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+const IR_MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 function irUpdateThemeLabel(){
   const cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
-  const label = document.getElementById('themeToggleLabel');
-  if(label) label.textContent = cur==='dark' ? 'Modo escuro' : 'Modo claro';
+  // O controle é o switch do topbar, igual ao do Inventário Rotativo — só liga
+  // a classe que desloca a bolinha. O sol/lua dentro da bolinha é o mesmo ícone
+  // do switch do Painel raiz, pra reconhecer de cara qual lado é qual.
+  const btn = document.getElementById('themeSwitchBtn');
+  if(!btn) return;
+  const escuro = cur==='dark';
+  btn.classList.toggle('on', escuro);
+  const knob = btn.querySelector('.theme-knob');
+  if(knob) knob.innerHTML = escuro ? IR_MOON : IR_SUN;
 }
 function irToggleSidebar(){
   const el = document.getElementById('sidebar');
@@ -242,6 +251,13 @@ const IR_TRANS_SETORES = ['TSF','C.E','INB','OUT','TRP','REV','IGN'];
 const IR_TRANS_SETOR_NOME = {
   'C.E':'Controle de Estoque', INB:'Inbound', OUT:'Outbound',
   TRP:'Transporte', REV:'Reversa', TSF:'Transferência', IGN:'Desconsiderado'
+};
+// Só pro boletim (barra de cor ao lado do nome do setor) — a tela usa o azul/
+// laranja de marca pra tudo, mas o boletim precisa diferenciar setor por cor
+// pra quem olha rápido na imagem achar o bloco certo.
+const IR_TRANS_SETOR_COR = {
+  'C.E':'#001A72', INB:'#2E6F9E', OUT:'#B3261E',
+  TRP:'#1F8A52', REV:'#B8860B', TSF:'#6B4EA6'
 };
 /* O setor dono do endereço vem da CLASSE LOCAL do WMS: TSF, C.E, INB, OUT, TRP e
    REV são os códigos que a operação cadastra. Endereço novo com a classe certa
@@ -409,9 +425,14 @@ function irTransFaixa(dia, hoje){
 const IR_TRANS_PRAZO_H = 48;
 function irTransDentroDoPrazo(faixa){ return faixa==='D0' || faixa==='D+1'; }
 // Peças E valor por faixa de idade de um endereço (ou de um grupo de endereços).
+// Sem a QRY0160 importada (irTransTemData()==false) ninguém tem data nenhuma —
+// jogar tudo em D+7 inventava "parado há 7 dias" pro CD inteiro. Nesse caso o
+// saldo sem data vai pra fora das faixas (semDataQtd/semDataValor), e quem
+// chama decide como mostrar "idade desconhecida" sem fingir que é a pior faixa.
 function irTransIdade(locais){
   const hoje = Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00');
-  const r = {}, v = {}; let comData = 0;
+  const temData = irTransTemData();
+  const r = {}, v = {}; let comData = 0, semDataQtd = 0, semDataValor = 0;
   for(const f of IR_TRANS_FAIXAS){ r[f] = 0; v[f] = 0; }
   for(const l of locais){
     const pd = l.porDia, pv = l.porDiaValor || {};
@@ -420,14 +441,16 @@ function irTransIdade(locais){
         const f = irTransFaixa(dia, hoje);
         r[f] += pd[dia]; v[f] += (pv[dia]||0); comData += pd[dia];
       }
-    }else{
+    }else if(temData){
       // Endereço que a QRY0160 nunca viu (só está na 390) não tem data nenhuma —
       // mesmo critério do dia vazio: cai no D+7, não some da conta.
       const f = 'D+'+IR_TRANS_FAIXA_MAX;
       r[f] += l.qtd||0; v[f] += l.valor||0;
+    }else{
+      semDataQtd += l.qtd||0; semDataValor += l.valor||0;
     }
   }
-  return {faixas:r, valores:v, comData};
+  return {faixas:r, valores:v, comData, semDataQtd, semDataValor};
 }
 /* Barrinhas de valor acumulado por idade, acima de cada tabela. A pergunta é
    "quanto dinheiro está represado em cada faixa" — e a resposta em barra se lê
@@ -538,7 +561,7 @@ function irCorTema(nome, padrao){
 function irPaletaSVG(){
   return {
     blue: irCorTema('--blue', '#001A72'),
-    orange: irCorTema('--orange', '#FA4616'),
+    orange: irCorTema('--orange', '#FE5000'),
     success: irCorTema('--success', '#1F8A52'),
     ink: irCorTema('--ink', '#1D1F2A'),
     inkSoft: irCorTema('--ink-soft', '#6B7280'),
@@ -730,7 +753,7 @@ function irRenderTransitorios(){
       <button class="btn btn-primary" onclick="irBaixarBoletimTransitorios()">✉️ Reportar por e-mail</button>
     </div>
     ${irRenderTransEmailForm()}
-    ${c.lista.filter(g=>g.setor && g.setor!=='IGN').map(g=>irTransPainelSetor(g, logs)).join('')}
+    ${irTransBoletimHtml('rp-tela')}
     ${naoClass ? `<div class="panel"><div class="ofe-head">
       <h3>Não classificado</h3>
       <span class="field-hint">${irFmtMoney(naoClass.valor)} · ${irFmtInt(naoClass.locais.length)} endereços · ${irFmtInt(naoClass.prefixos.size)} transitórios. ${
@@ -749,7 +772,7 @@ function irRenderTransitorios(){
 }
 /* Uma tabela por setor, no formato do relatório de pendência: uma linha por
    transitório, peças abertas por LOG e o valor parado no endereço. */
-function irTransPainelSetor(g, logs, estatico){
+function irTransPainelSetor(g, logs){
   const porPrefixo = new Map();
   for(const l of g.locais){
     const chave = irTransChave(l);
@@ -801,9 +824,8 @@ function irTransPainelSetor(g, logs, estatico){
       </thead>
       <tbody>${linhas.map(p=>`<tr>
         <td class="mono">${irEsc(p.x1||'(vazio)')}</td>
-        <td>${estatico ? irEsc(irTransNome(p.x1))
-          : `<input class="trans-nome" value="${irEsc(irTransNome(p.x1))}" title="Nome do transitório — dá pra editar"
-             onchange="irTransSetNome('${irEsc(p.x1)}', this.value)">`}</td>
+        <td><input class="trans-nome" value="${irEsc(irTransNome(p.x1))}" title="Nome do transitório — dá pra editar"
+             onchange="irTransSetNome('${irEsc(p.x1)}', this.value)"></td>
         ${cols.map(l=>`<td class="mono tt-c-dia ${p.cel[l]?(irTransDentroDoPrazo(l)?'trans-ok':'trans-atraso'):''}">${
           p.cel[l] ? irFmtInt(p.cel[l])+'<span class="trans-cel-val">'+irTransValorCel(p.celValor[l]||0)+'</span>' : '0'}</td>`).join('')}
         <td class="mono tt-c-num">${irFmtMoney(p.valor)}</td>
@@ -816,6 +838,81 @@ function irTransPainelSetor(g, logs, estatico){
           totCol[l]?'<span class="trans-cel-val">'+irTransValorCel(totValFaixa[l]||0)+'</span>':''}</td>`).join('')}
         <td class="mono tt-c-num"><strong>${irFmtMoney(g.valor)}</strong></td>
         <td class="mono tt-c-num"><strong>${ganhoSetor>0?irFmtMoney(ganhoSetor):'—'}</strong></td>
+      </tr></tfoot>
+    </table></div>
+  </div>`;
+}
+/* Mesma conta do painel da tela (irTransPainelSetor), mas num bloco próprio do
+   boletim — formato "E": vai direto do KPI pra tabela D0-D+7, sem gráfico, sem
+   campo editável, sem a coluna de duplicidade (é diagnóstico de tela, não de
+   relatório). Setor por setor, mais denso, cabe mais gente por rolada. */
+function irTransPainelSetorReport(g){
+  const temData = irTransTemData();
+  const porPrefixo = new Map();
+  for(const l of g.locais){
+    const chave = irTransChave(l);
+    if(!porPrefixo.has(chave)) porPrefixo.set(chave, {x1:chave, valor:0, qtd:0, locais:[]});
+    const p = porPrefixo.get(chave);
+    p.valor += l.valor; p.qtd += l.qtd; p.locais.push(l);
+  }
+  const linhas = Array.from(porPrefixo.values()).sort((a,b)=>b.valor-a.valor);
+  const cols = IR_TRANS_FAIXAS;
+  const totValFaixa = {};
+  for(const p of linhas){
+    const id = irTransIdade(p.locais);
+    p.cel = id.faixas; p.celValor = id.valores;
+    for(const f of cols) totValFaixa[f] = (totValFaixa[f]||0) + (id.valores[f]||0);
+  }
+  const totCol = {};
+  for(const p of linhas) for(const k in p.cel) totCol[k] = (totCol[k]||0) + p.cel[k];
+  let foraValor = 0;
+  for(const f of cols) if(!irTransDentroDoPrazo(f)) foraValor += totValFaixa[f]||0;
+  const foraPct = g.valor ? Math.round(foraValor/g.valor*100) : 0;
+  const nivel = foraPct>=50 ? 'alto' : (foraPct>=25 ? 'medio' : 'baixo');
+  const corSetor = IR_TRANS_SETOR_COR[g.setor] || '#001A72';
+  const kpi = (rot, val) => `<div><span class="rp-setor-kpi-lbl">${irEsc(rot)}</span><strong>${val}</strong></div>`;
+  // Sem a QRY0160 não tem idade de ninguém — a coluna "Fora do prazo" vira "—"
+  // em vez de inventar um número, e a grade de D0-D7 dá lugar a uma tabela
+  // simples (sem fingir saber a idade do saldo).
+  return `<div class="rp-setor" style="--setor-cor:${corSetor}">
+    <div class="rp-setor-head">
+      <div class="rp-setor-tit"><span class="rp-setor-bar" style="background:${corSetor}"></span>
+        <h2>${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</h2></div>
+      <div class="rp-setor-kpis">
+        ${kpi('Parado', irFmtMoney(g.valor))}
+        ${kpi('Peças', irFmtInt(g.qtd))}
+        ${kpi('Endereços', irFmtInt(g.locais.length))}
+        ${temData
+          ? `<div><span class="rp-setor-kpi-lbl">Fora do prazo</span><span class="rp-chip rp-chip-${nivel}">${foraPct}%</span></div>`
+          : `<div><span class="rp-setor-kpi-lbl">Fora do prazo</span><strong>—</strong></div>`}
+      </div>
+    </div>
+    <div class="table-wrap"><table class="rp-setor-table">
+      <thead>
+        ${temData ? `<tr><th rowspan="2">Local</th><th rowspan="2">Descrição</th>
+            <th colspan="${cols.length}">Peças paradas há — prazo de ${IR_TRANS_PRAZO_H}h</th>
+            <th rowspan="2" class="num">Valor</th></tr>
+        <tr>${cols.map(l=>`<th class="num ${irTransDentroDoPrazo(l)?'ok':'atraso'}">${irEsc(l)}</th>`).join('')}</tr>`
+          : `<tr><th>Local</th><th>Descrição</th><th class="num">Peças</th><th class="num">Valor</th></tr>`}
+      </thead>
+      <tbody>${linhas.map(p=>temData ? `<tr>
+        <td class="cod">${irEsc(p.x1||'(vazio)')}</td>
+        <td class="desc">${irEsc(irTransNome(p.x1))}</td>
+        ${cols.map(l=>`<td class="num ${p.cel[l]?(irTransDentroDoPrazo(l)?'ok':'atraso'):''}">${p.cel[l]?irFmtInt(p.cel[l]):'0'}</td>`).join('')}
+        <td class="num valor">${irFmtMoney(p.valor)}</td>
+      </tr>` : `<tr>
+        <td class="cod">${irEsc(p.x1||'(vazio)')}</td>
+        <td class="desc">${irEsc(irTransNome(p.x1))}</td>
+        <td class="num">${irFmtInt(p.qtd)}</td>
+        <td class="num valor">${irFmtMoney(p.valor)}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr>
+        ${temData ? `<td colspan="2">Total ${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</td>
+        ${cols.map(l=>`<td class="num">${totCol[l]?irFmtInt(totCol[l]):'0'}</td>`).join('')}
+        <td class="num valor">${irFmtMoney(g.valor)}</td>`
+          : `<td>Total ${irEsc(IR_TRANS_SETOR_NOME[g.setor]||g.setor)}</td><td></td>
+        <td class="num">${irFmtInt(g.qtd)}</td>
+        <td class="num valor">${irFmtMoney(g.valor)}</td>`}
       </tr></tfoot>
     </table></div>
   </div>`;
@@ -919,12 +1016,238 @@ function irRenderTransEmailForm(){
     <div class="form-actions"><button class="btn btn-secondary" onclick="irTransToggleDestinatarios()">Fechar</button></div>
   </div>`;
 }
-async function irBaixarBoletimTransitorios(){
+/* Pior idade (em dias) dentro de um grupo de endereços. Sem a QRY0160 (nenhum
+   endereço tem porDia) não tem idade nenhuma pra ranquear — devolve null, e
+   quem chama tira esse local do ranking de ofensores em vez de fingir 7d+. */
+function irTransIdadeMaxDias(locais){
+  const hoje = Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00');
+  if(!irTransTemData()) return null;
+  let max = null;
+  for(const l of locais){
+    const pd = l.porDia;
+    if(!pd || !Object.keys(pd).length){ max = IR_TRANS_FAIXA_MAX; continue; }
+    for(const dia in pd){
+      if(!pd[dia]) continue;
+      const d = Math.max(0, Math.round((hoje - Date.parse(dia+'T00:00:00')) / 86400000));
+      if(max===null || d>max) max = d;
+    }
+  }
+  return max;
+}
+/* Os transitórios mais velhos do CD inteiro, cruzando todos os setores — é o
+   que puxa mais risco de virar perda, então entra antes de qualquer tabela
+   por setor, sem precisar abrir uma por uma pra achar. */
+function irTransOfensores(setores, topN){
+  const todos = [];
+  for(const g of setores){
+    const porPrefixo = new Map();
+    for(const l of g.locais){
+      const chave = irTransChave(l);
+      if(!porPrefixo.has(chave)) porPrefixo.set(chave, {chave, valor:0, locais:[]});
+      const p = porPrefixo.get(chave);
+      p.valor += l.valor; p.locais.push(l);
+    }
+    for(const p of porPrefixo.values()){
+      todos.push({chave:p.chave, setor:g.setor, valor:p.valor, idade: irTransIdadeMaxDias(p.locais)});
+    }
+  }
+  const comIdade = todos.filter(t=>t.idade!=null);
+  comIdade.sort((a,b)=> b.idade-a.idade || b.valor-a.valor);
+  return comIdade.slice(0, topN);
+}
+function irTransRenderOfensores(ofensores){
+  if(!ofensores.length) return '';
+  return `<div class="rp-ofensores">
+    <h3>Locais ofensores</h3>
+    <div class="rp-ofensores-grid">
+      ${ofensores.map(o=>`<div class="rp-ofensor-card">
+        <div class="rp-ofensor-top">
+          <span class="rp-ofensor-cod">${irEsc(o.chave)}</span>
+          <span class="rp-ofensor-dias">${o.idade>=IR_TRANS_FAIXA_MAX?IR_TRANS_FAIXA_MAX+'d+':irFmtInt(o.idade)+'d'}</span>
+        </div>
+        <span class="rp-ofensor-setor">${irEsc(IR_TRANS_SETOR_NOME[o.setor]||o.setor)}</span>
+        <span class="rp-ofensor-valor">${irFmtMoney(o.valor)}</span>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+/* ============================================================
+   PAINEL DE INDICADORES — setores ofensores, risco de virar perda e
+   evolução do saldo parado no tempo.
+   ============================================================ */
+// Valor fora do prazo (48h) de um setor inteiro. Sem a QRY0160 não tem como
+// saber — devolve null, e quem chama trata como "sem dado" (não como zero).
+function irTransForaValor(g){
+  if(!irTransTemData()) return null;
+  const id = irTransIdade(g.locais);
+  let fora = 0;
+  for(const f of IR_TRANS_FAIXAS) if(!irTransDentroDoPrazo(f)) fora += id.valores[f]||0;
+  return fora;
+}
+/* Saldo que já passou de uma semana parado é o que de fato vira perda: ninguém
+   mais procura, e mais cedo ou mais tarde a auditoria baixa como quebra. A
+   idade aqui é a REAL (irTransIdadeMaxDias não trava em 7, ao contrário da
+   coluna D+7 da tabela), por isso dá pra separar "uma semana" de "um mês". */
+const IR_TRANS_RISCO_FAIXAS = [
+  {k:'d7', min:7, max:14, rot:'7 a 13 dias'},
+  {k:'d15', min:15, max:30, rot:'15 a 29 dias'},
+  {k:'d30', min:30, max:Infinity, rot:'30 dias ou mais'}
+];
+function irTransRiscoPerda(setores){
+  const buckets = {}; for(const f of IR_TRANS_RISCO_FAIXAS) buckets[f.k] = {qtd:0, valor:0, rot:f.rot};
+  if(!irTransTemData()) return buckets;
+  for(const g of setores){
+    const porPrefixo = new Map();
+    for(const l of g.locais){
+      const chave = irTransChave(l);
+      if(!porPrefixo.has(chave)) porPrefixo.set(chave, {valor:0, qtd:0, locais:[]});
+      const p = porPrefixo.get(chave);
+      p.valor += l.valor; p.qtd += l.qtd; p.locais.push(l);
+    }
+    for(const p of porPrefixo.values()){
+      const dias = irTransIdadeMaxDias(p.locais);
+      if(dias==null) continue;
+      const faixa = IR_TRANS_RISCO_FAIXAS.find(f=>dias>=f.min && dias<f.max);
+      if(!faixa) continue;
+      buckets[faixa.k].qtd += p.qtd; buckets[faixa.k].valor += p.valor;
+    }
+  }
+  return buckets;
+}
+/* Uma foto por dia. Só grava a primeira vez que o painel é aberto naquele dia
+   (reabrir não some nem duplica) — e dispara um re-render quando termina, pra
+   o gráfico já nascer com o ponto de hoje. */
+async function irTransSnapshotSeNecessario(c, setores){
+  const hoje = new Date().toISOString().slice(0,10);
+  if(IR._transSnapDia === hoje) return;
+  IR._transSnapDia = hoje;
+  const temData = irTransTemData();
+  let foraValor = 0;
+  if(temData) for(const g of setores){ const fv = irTransForaValor(g); if(fv!=null) foraValor += fv; }
+  await irSalvarTransSnapshot(hoje, {
+    valorTotal: c.valorTotal, pecasTotal: c.pecasTotal, nLocais: c.nLocais,
+    foraValor: temData ? foraValor : null, temData, atualizadoEm: new Date().toISOString()
+  });
+  IR.transHistorico = await irGetTransHistoricoTodos();
+  if(IR.tela==='indicadores') irRenderView();
+}
+// Linha simples de SVG — sem biblioteca de gráfico, só o essencial pra ver a
+// tendência: estoque ainda recente (poucos pontos) e meses de histórico pedem
+// a mesma leitura.
+function irTransSvgHistorico(historico, campo, cor){
+  const pontos = historico.filter(h=>h[campo]!=null);
+  if(pontos.length < 2){
+    return '<p class="field-hint">Esse gráfico se forma com o tempo — volte aqui em outro dia pra começar a ver a tendência.</p>';
+  }
+  const W = 760, H = 170, pad = 30;
+  const max = Math.max(1, ...pontos.map(h=>h[campo]));
+  const n = pontos.length;
+  const x = i => pad + (n===1 ? 0 : i*(W-pad*2)/(n-1));
+  const y = v => H-pad - (v/max)*(H-pad*2);
+  const pts = pontos.map((h,i)=>`${x(i).toFixed(1)},${y(h[campo]).toFixed(1)}`).join(' ');
+  const passo = Math.max(1, Math.ceil(n/8));
+  const dots = pontos.map((h,i)=>`<circle class="dx-ln-pt" cx="${x(i).toFixed(1)}" cy="${y(h[campo]).toFixed(1)}" r="4" fill="${cor}"><title>${irEsc(h.dia)}: ${irFmtMoney(h[campo])}</title></circle>`).join('');
+  const labels = pontos.map((h,i)=> (i===0 || i===n-1 || i%passo===0)
+    ? `<text class="dx-ln-ax" x="${x(i).toFixed(1)}" y="${H-8}" text-anchor="middle">${irEsc(h.dia.slice(5))}</text>` : '').join('');
+  return `<svg class="dx-ln" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px;">
+    <line class="dx-ln-grid" x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}"></line>
+    <polyline points="${pts}" fill="none" stroke="${cor}" stroke-width="2.5"></polyline>
+    ${dots}${labels}
+  </svg>`;
+}
+function irRenderTransIndicadores(){
+  if(!IR.est390Locais){ irCarregarEstoque390(); return irDivCarregando(); }
+  const c = irTransCalc();
+  const setores = c.lista.filter(g=>g.setor && g.setor!=='IGN');
+  const temData = irTransTemData();
+  irTransSnapshotSeNecessario(c, setores);
+  const historico = IR.transHistorico || [];
+
+  let foraValorTotal = 0;
+  const ofensores = temData ? setores.map(g=>({g, foraValor: irTransForaValor(g)||0}))
+    .sort((a,b)=>b.foraValor-a.foraValor) : [];
+  for(const o of ofensores) foraValorTotal += o.foraValor;
+  const foraPctGlobal = temData && c.valorTotal ? Math.round(foraValorTotal/c.valorTotal*100) : null;
+
+  const risco = irTransRiscoPerda(setores);
+  const riscoTotal = Object.values(risco).reduce((s,b)=>s+b.valor, 0);
+
+  const kpi = (rot, val, hint, cls) => `<article class="dx-card">
+    <div class="dx-card-top"><span class="dx-card-rot">${irEsc(rot)}</span></div>
+    <div class="dx-card-val"><span class="dx-num ${cls||''}">${val}</span></div>
+    ${hint?`<span class="dx-card-hint">${irEsc(hint)}</span>`:''}
+  </article>`;
+
+  const corSeveridade = v => v==null ? '' : (v>=50 ? 'bad' : '');
+
+  return `<div class="dx">
+    <section class="dx-hero">
+      <div class="dx-hero-in">
+        <div class="dx-marca">
+          <span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span>
+          <div class="dx-marca-txt"><b>Oficina LDM</b><span>Gestão de Transitórios · CD Cajamar</span></div>
+        </div>
+        <div class="dx-hero-row">
+          <div class="dx-hero-tit">
+            <h2>Indicadores</h2>
+            <span class="dx-tag">Setores ofensores, risco de perda e evolução do saldo parado</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <div class="dx-body">
+      <section class="dx-cards">
+        ${kpi('Parado no CD', irFmtMoney(c.valorTotal), irFmtInt(c.pecasTotal)+' peças · '+irFmtInt(c.nLocais)+' endereços')}
+        ${kpi('Fora do prazo', foraPctGlobal==null?'—':foraPctGlobal+'%', foraPctGlobal==null?'importe a QRY0160 pra calcular':irFmtMoney(foraValorTotal)+' acima de 48h', corSeveridade(foraPctGlobal))}
+        ${kpi('Risco de virar perda', temData?irFmtMoney(riscoTotal):'—', temData?'parado há 7 dias ou mais':'importe a QRY0160 pra calcular', (temData&&riscoTotal>0)?'bad':'')}
+        ${kpi('Setores', irFmtInt(setores.length), irFmtInt(c.nLocais)+' endereços transitórios no total')}
+      </section>
+
+      <div class="panel">
+        <div class="ofe-head"><h3>Setores ofensores</h3>
+          <span class="field-hint">Quem concentra mais valor fora do prazo de 48h agora</span></div>
+        ${!temData ? '<p class="field-hint">Importe a QRY0160 na aba Importação pra abrir esse ranking — a QRY0390 não traz data de movimento.</p>' : ofensores.map(o=>{
+          const pct = o.g.valor ? Math.round(o.foraValor/o.g.valor*100) : 0;
+          const cor = IR_TRANS_SETOR_COR[o.g.setor] || 'var(--blue)';
+          return `<div class="dx-rank-row">
+            <span class="dx-rank-bar" style="background:${cor}"></span>
+            <span class="dx-rank-nome">${irEsc(IR_TRANS_SETOR_NOME[o.g.setor]||o.g.setor)}</span>
+            <div class="dx-rank-track"><i style="width:${Math.max(2,pct)}%;background:${cor};"></i></div>
+            <span class="dx-rank-pct">${pct}%</span>
+            <span class="dx-rank-valor">${irFmtMoney(o.foraValor)}</span>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <div class="panel">
+        <div class="ofe-head"><h3>Risco de virar perda</h3>
+          <span class="field-hint">Saldo parado há mais de uma semana — quanto mais velho, mais perto de virar quebra</span></div>
+        ${!temData ? '<p class="field-hint">Importe a QRY0160 na aba Importação pra abrir esse indicador.</p>' : `<div class="dx-faixa">
+          ${IR_TRANS_RISCO_FAIXAS.map(f=>{ const b = risco[f.k];
+            return `<div class="dx-tile"><span class="dx-tile-rot">${irEsc(f.rot)}</span>
+              <span class="dx-tile-val ${b.valor>0?'bad':''}">${irFmtMoney(b.valor)}</span>
+              <span class="dx-tile-hint">${irFmtInt(b.qtd)} peças</span></div>`;
+          }).join('')}
+        </div>`}
+      </div>
+
+      <div class="panel">
+        <div class="ofe-head"><h3>Evolução do saldo parado</h3>
+          <span class="field-hint">Total parado (R$) a cada vez que esse painel foi aberto</span></div>
+        ${irTransSvgHistorico(historico, 'valorTotal', 'var(--blue)')}
+      </div>
+    </div>
+  </div>`;
+}
+/* Layout único do relatório: o boletim por e-mail e a tela do app usam esta mesma
+   montagem (hero com KPIs, locais ofensores, um bloco por setor). `classe` troca só
+   a largura: rp-page-wide é a folha fixa da imagem; rp-tela se adapta à janela. */
+function irTransBoletimHtml(classe){
   const c = irTransCalc();
   const m = IR.est390Meta || {};
-  const logs = irTransLogsPresentes();
   const setores = c.lista.filter(g=>g.setor && g.setor!=='IGN');
-  const html = `<div class="rp-page rp-page-wide">
+  const ofensores = irTransOfensores(setores, 4);
+  return `<div class="rp-page ${classe}">
     <div class="rp-hero">
       <div class="rp-hero-top">
         <img src="brand/Logo_LDM_hor_branco.png" alt="Loja do Mecânico" class="rp-hero-logo">
@@ -933,18 +1256,27 @@ async function irBaixarBoletimTransitorios(){
       <div class="rp-hero-badge">Pendência de Movimentação</div>
       <h1>Transitórios por setor</h1>
       <p>Loja do Mecânico · Centro de Distribuição Cajamar</p>
-      <div class="rp-hero-meta"><span>${irFmtMoney(c.valorTotal)} parados · ${irFmtInt(c.pecasTotal)} peças · ${irFmtInt(c.nLocais)} endereços</span></div>
+      <div class="rp-hero-kpis">
+        <div><span class="rp-hero-kpi-lbl">Parado</span><strong>${irFmtMoney(c.valorTotal)}</strong></div>
+        <div><span class="rp-hero-kpi-lbl">Peças</span><strong>${irFmtInt(c.pecasTotal)}</strong></div>
+        <div><span class="rp-hero-kpi-lbl">Endereços</span><strong>${irFmtInt(c.nLocais)}</strong></div>
+        <div><span class="rp-hero-kpi-lbl">Setores</span><strong>${irFmtInt(setores.length)}</strong></div>
+      </div>
     </div>
     <div class="rp-body">
+      ${classe==='rp-tela' ? '' : irTransRenderOfensores(ofensores)}
       ${/* Só os setores da legenda (TSF, C.E, INB, OUT, TRP, REV). O endereço sem
             classe não entra: "sem classe" aqui é o CD inteiro — picking, pulmão,
             armazenagem normal —, dezenas de milhares de endereços que não são
             transitório e afogariam o relatório. Ele continua visível na tela,
             que é onde se resolve o cadastro. */''}
-      ${setores.map(g=>irTransPainelSetor(g, logs, true)).join('')}
-      <p class="rp-footer">Prazo do transitório: ${IR_TRANS_PRAZO_H}h — verde está no prazo, laranja passou. D+${IR_TRANS_FAIXA_MAX} é acumulativo: sete dias ou mais.<br>"Prov. duplicidade" é o saldo de itens que fecharam o ano com ganho no NET da QRY410 — movimentar resolve, procurar não.<br>Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · Controle de Transitórios.</p>
+      ${setores.map(g=>irTransPainelSetorReport(g)).join('')}
+      <p class="rp-footer">Prazo do transitório: ${IR_TRANS_PRAZO_H}h — verde está no prazo, laranja passou. D+${IR_TRANS_FAIXA_MAX} é acumulativo: sete dias ou mais.<br>Estoque de ${irEsc(m.importadoEm ? new Date(m.importadoEm).toLocaleString('pt-BR') : '—')} · Controle de Transitórios.</p>
     </div>
-  </div>`;
+  </div>`
+}
+async function irBaixarBoletimTransitorios(){
+  const html = irTransBoletimHtml('rp-page-wide');
   irBaixarBoletimImagem(html, 'Transitorios_'+new Date().toISOString().slice(0,10)+'.png',
     Object.assign({}, irTransEmailCfg(), {corpo: irTransCorpoEmail()}));
 }
@@ -1004,6 +1336,7 @@ function irProcessarEst390(){
         IR.est390Processing = false; worker.terminate();
         irShowToast('Erro na QRY0390: '+msg.message, true); irRenderView(); _fim(false);
       } else if(msg.type==='done390'){
+        if(window.LDM_NUVEM) LDM_NUVEM.marcar();
         IR.est390Processing = false; worker.terminate();
         IR.est390Ficha = await irGetConfig('estoque390-ficha');
         IR._itemInfo = null;
@@ -1039,6 +1372,7 @@ function irProcessar160(){
         IR.est160Processing = false; worker.terminate();
         irShowToast('Erro na QRY0160: '+msg.message, true); irRenderView(); _fim(false);
       } else if(msg.type==='done160'){
+        if(window.LDM_NUVEM) LDM_NUVEM.marcar();
         IR.est160Processing = false; worker.terminate();
         IR.est390Meta = await irGetEstoqueMeta();
         IR.est390Locais = null; IR.est160File = null;
@@ -1073,6 +1407,7 @@ function irProcessar410(){
         IR.net410Processing=false; worker.terminate();
         irShowToast('Erro no processamento da QRY410: '+msg.message, true); irRenderView(); _fim(false);
       } else if(msg.type==='done410'){
+        if(window.LDM_NUVEM) LDM_NUVEM.marcar();
         IR.net410Processing = false; worker.terminate();
         for(const ano of msg.anos) await irSaveNet410(ano, msg.resumos[ano]);
         // Tudo que foi derivado da 410 antiga precisa cair aqui, senão a tela
@@ -1177,6 +1512,7 @@ function irRenderBasesAvulsas(){
    não é do ciclo, é do estoque de agora. */
 const IR_TELAS = {
   transitorios:['Gestão de Transitórios','Estoque parado fora do picking, por setor responsável.'],
+  indicadores:['Indicadores','Setores ofensores, risco de perda e evolução do saldo parado.'],
   base:['Base de transitórios','Todos os transitórios, X1 e X2 em colunas — consulta, fora do report.'],
   importacao:['Importação','QRY0390, QRY0160 e QRY410 — as bases do transitório.']
 };
@@ -1189,14 +1525,15 @@ function irRenderView(){
   }
   raiz.innerHTML = IR.tela==='importacao' ? irRenderImportacao()
     : IR.tela==='base' ? irRenderBaseTransitorios()
+    : IR.tela==='indicadores' ? irRenderTransIndicadores()
     : irRenderTransitorios();
 }
 function irRenderImportacao(){
   return irRenderBasesAvulsas();
 }
-// Três telas: o report por setor, a base pra consultar transitório a transitório e
-// a importação. O nome irSwitchTab é o mesmo do Inventário de propósito — é o que a
-// tela de transitórios chama no estado vazio.
+// Quatro telas: o report por setor, os indicadores, a base pra consultar
+// transitório a transitório e a importação. O nome irSwitchTab é o mesmo do
+// Inventário de propósito — é o que a tela de transitórios chama no estado vazio.
 function irSwitchTab(tela){
   IR.tela = IR_TELAS[tela] ? tela : 'transitorios';
   document.querySelectorAll('.nav-item[data-tab]').forEach(b=>b.classList.toggle('active', b.dataset.tab===IR.tela));
@@ -1206,6 +1543,17 @@ function irSwitchTab(tela){
   if(s2) s2.textContent = sub;
   irCloseSidebarMobile();
   irRenderView();
+}
+/* Se outra aba/janela deste sistema estiver com o banco aberto numa versão
+   antiga, abrir aqui pode ficar preso pra sempre (o IndexedDB não cancela
+   conexão alheia sozinho) — sem isto a tela ficava girando em "Carregando..."
+   sem erro nenhum e sem explicação. Com o prazo estourado, troca pra uma
+   mensagem com o que fazer. */
+function irComPrazo(promessa, ms, msg){
+  return Promise.race([
+    promessa,
+    new Promise((_, rej)=>setTimeout(()=>rej(new Error(msg)), ms))
+  ]);
 }
 async function irInit(){
   const temaSalvo = localStorage.getItem('ir-theme');
@@ -1217,11 +1565,13 @@ async function irInit(){
   const versao = document.getElementById('sidebarVersao');
   if(versao) versao.textContent = IR_APP_VERSION;
   try{
-    IR.est390Meta = await irGetEstoqueMeta();
+    IR.est390Meta = await irComPrazo(irGetEstoqueMeta(), 8000,
+      'O banco do navegador não respondeu. Feche as outras abas ou janelas do Inventário/Transitórios abertas e atualize esta página.');
     IR.transSetores = await irSeedTransSetoresIfEmpty();
     IR.transNomes = await irGetConfig('transitorio-nomes') || {};
     IR.transEmail = await irGetConfig('transitorio-email');
     IR.est390Ficha = await irGetConfig('estoque390-ficha');
+    IR.transHistorico = await irGetTransHistoricoTodos();
     IR.net410Anos = await irGetAllNet410Anos();
     if(IR.net410Anos.length){
       IR.net410AnoSel = IR.net410Anos[0];
@@ -1229,7 +1579,7 @@ async function irInit(){
     }
   }catch(e){
     console.error('Falha ao iniciar', e);
-    IR.initErro = (e && (e.name ? e.name+': '+e.message : e.message)) || String(e);
+    IR.initErro = (e && (e.name && e.name!=='Error' ? e.name+': '+e.message : e.message)) || String(e);
   }
   /* Link direto para uma tela específica (ex.: usado pela TV LDM). */
   var irHashTela = null;

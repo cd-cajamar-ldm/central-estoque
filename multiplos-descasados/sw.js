@@ -4,7 +4,7 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'multiplos-descasados-v32';
+const CACHE_VERSION = 'multiplos-descasados-v40';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const PRECACHE_URLS = [
   './css/modulo.css',
   './js/version.js',
   './js/db.js',
+  './js/nuvem.js',
   './js/rules.js',
   './js/worker.js',
   './js/app.js',
@@ -21,7 +22,8 @@ const PRECACHE_URLS = [
   './brand/Logo_LDM_hor_2.png',
   './brand/Logo_LDM_vert.png',
   './brand/Logo_LDM_hor_branco.png',
-  './brand/Logo_LDM_vert_branco.png'
+  './brand/Logo_LDM_vert_branco.png',
+  './brand/Logo_LDM_icon.png'
 ];
 
 self.addEventListener('install', (event)=>{
@@ -43,6 +45,8 @@ self.addEventListener('fetch', (event)=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
+  // Banco (Supabase) nunca passa pelo cache: login, permissão e dados vêm sempre da internet.
+  if(/supabase\.co$/.test(url.hostname)) return;
 
   if(isSameOrigin){
     // cache:'no-cache' revalida no servidor mesmo dentro da janela de max-age. Sem

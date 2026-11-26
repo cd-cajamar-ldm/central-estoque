@@ -1,0 +1,26 @@
+{
+  "name": "Coletor — RG Reversa",
+  "short_name": "Coletor RG",
+  "description": "Coletor de mão do RG Reversa — Loja do Mecânico.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#001A72",
+  "theme_color": "#001A72",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "../icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+<script defer src="vendor/tempos.js"></script>
 <!--
   LAYOUT PADRÃO "Painel Oficina LDM"
   Sidebar fixa (marca + navegação + favoritos) · topbar com busca e tema ·
@@ -15,7 +16,8 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="theme-color" content="#0B1230">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap"></noscript>
 <style>
   :root{
     --bg0:#F2F4FA;--surface:#FFFFFF;--line:#DCE1F0;
@@ -80,6 +82,19 @@
   .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
   .theme-switch.on .theme-knob{left:29px;}
 
+  /* Zoom da tela, igual ao dos apps da Oficina (Inventário Rotativo etc.):
+     flutua no canto para não empurrar o conteúdo e continua ao alcance
+     depois de rolar o painel inteiro. */
+  .zoom-ctrl{display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:100px;padding:3px;}
+  .zoom-ctrl button{width:24px;height:24px;border-radius:50%;border:none;background:var(--chip-bg);color:var(--ink);font-size:15px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .zoom-ctrl button:hover{background:var(--orange-light,rgba(254,80,0,.12));color:var(--orange);}
+  .zoom-ctrl span{font-size:11px;color:var(--ink-soft);min-width:34px;text-align:center;font-family:'SFMono-Regular',Consolas,monospace;}
+  .zoom-ctrl-float{position:fixed;right:16px;bottom:16px;z-index:70;box-shadow:0 6px 18px rgba(0,0,0,.18);}
+
+  .atualiza-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:90;display:flex;align-items:center;gap:12px;background:#0B1230;color:#fff;padding:10px 14px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.28);font-size:12.5px;}
+  .atualiza-bar[hidden]{display:none;}
+  .atualiza-bar button{background:var(--orange);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;}
+
   .view[hidden]{display:none;}
 
   .search-row{position:relative;margin:24px 0 8px;z-index:2;max-width:420px;}
@@ -111,8 +126,11 @@
   .card-title{position:relative;font-size:16px;font-weight:700;margin:0 0 5px;}
   .card-desc{position:relative;font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin:0 0 16px;flex:1;}
   .card-cta{position:relative;display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:800;color:var(--accent);padding-top:13px;border-top:1px solid var(--line);}
-  .card-cta .arrow{transition:transform .15s;}
-  .card:hover .card-cta .arrow{transform:translateX(3px);}
+  .card-lock{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:9px;transition:transform .15s,background .15s,color .15s;}
+  .card-lock svg{width:16px;height:16px;display:block;}
+  .card-lock.fechado{color:var(--ink-soft);background:var(--surface2,rgba(120,130,150,.12));}
+  .card-lock.aberto{color:#1F8A52;background:rgba(31,138,82,.12);}
+  .card:hover .card-lock.aberto{transform:translateY(-1px);}
 
   .card-kebab{position:absolute;top:18px;right:18px;z-index:3;width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;transition:all .2s;}
   .card-kebab:hover{background:var(--chip-bg-hover);color:var(--ink);}
@@ -211,7 +229,111 @@
   .tv-sim-fs-back:hover{background:rgba(255,255,255,.16);}
 
   /* CONFIGURAÇÕES */
-  .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:520px;margin-top:24px;}
+  .config-placeholder{position:relative;z-index:2;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px;color:var(--ink-soft);font-size:13.5px;max-width:720px;margin-top:24px;}
+
+  /* CONFIGURAÇÕES — gestão de acesso por app (login + admin, Supabase) */
+  .access-login-form{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  .access-login-input{flex:1;min-width:160px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg0);border:1px solid var(--line);border-radius:8px;padding:9px 12px;}
+  .access-login-msg{margin:12px 0 0;font-size:12.5px;color:#C83812;}
+
+  .access-admin{position:relative;z-index:2;margin-top:20px;max-width:1180px;display:grid;grid-template-columns:minmax(0,760px) minmax(260px,340px);gap:24px;align-items:start;}
+  .access-admin[hidden]{display:none;}
+  .access-admin-main{min-width:0;}
+  .access-admin-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  .access-busca{flex:1;min-width:200px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:9px 16px;}
+  .access-filtro-semapp{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);font-weight:600;white-space:nowrap;}
+  .access-nova-pessoa-btn{margin-bottom:12px;}
+  .access-nova-pessoa{display:flex;gap:8px;flex-wrap:wrap;background:var(--chip-bg);border-radius:14px;padding:14px;margin-bottom:14px;}
+  .access-admin-msg{font-size:12.5px;color:#C83812;margin:0 0 12px;}
+
+  .access-people-admin{display:flex;flex-direction:column;gap:10px;}
+  .access-person-admin{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
+  .access-person-admin.inativo{opacity:.55;}
+  .access-person-head{display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;padding:14px 18px;cursor:pointer;text-align:left;font-family:'Inter',sans-serif;}
+  .access-person-dot{width:8px;height:8px;border-radius:50%;background:#1F8A52;flex-shrink:0;}
+  .access-person-admin.inativo .access-person-dot{background:var(--ink-soft);}
+  .access-person-info{display:flex;flex-direction:column;min-width:0;}
+  .access-person-nome{font-weight:700;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .access-person-email2{font-size:11.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .access-admin-badge{background:rgba(254,80,0,.14);color:var(--orange);font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;flex-shrink:0;}
+  .access-count{margin-left:auto;font-size:11.5px;color:var(--ink-soft);font-weight:600;white-space:nowrap;flex-shrink:0;}
+  .access-chevron{transition:transform .2s;color:var(--ink-soft);flex-shrink:0;}
+  .access-person-admin.open .access-chevron{transform:rotate(180deg);}
+  .access-person-body{padding:4px 18px 18px;border-top:1px solid var(--line);}
+  .access-toggle{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ink);margin:14px 0 0;}
+  .access-apps-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+  .access-app-chip{display:flex;align-items:center;gap:7px;background:var(--chip-bg);border:1px solid var(--line);border-radius:14px;padding:6px 12px 6px 6px;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;}
+  .access-app-wrap{display:flex;align-items:center;gap:6px;}
+  .access-nivel{font-family:inherit;font-size:11.5px;font-weight:600;color:var(--ink);background:var(--chip-bg);border:1px solid var(--line);border-radius:10px;padding:5px 8px;cursor:pointer;}
+  #accessNovoNome{text-transform:uppercase;}
+  .access-app-chip-freq{display:block;font-size:10.5px;font-weight:500;color:var(--ink-soft);}
+  .access-app-chip.marcado{background:rgba(254,80,0,.1);border-color:rgba(254,80,0,.35);color:var(--ink);}
+  .access-app-chip-icon{width:20px;height:20px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-app-chip-icon svg{width:11px;height:11px;}
+  .access-tab{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px;table-layout:fixed;}
+  .access-tab th{text-align:left;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);padding:8px 10px;border-bottom:1px solid var(--line);}
+  .access-tab td{padding:7px 10px;border-bottom:1px solid var(--line);color:var(--ink);vertical-align:middle;}
+  .access-tab th:nth-child(1){width:38%;} .access-tab th:nth-child(2){width:24%;} .access-tab th:nth-child(3){width:16%;} .access-tab th:nth-child(4){width:22%;}
+  .access-tab .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .access-tab tr.marcado{background:rgba(254,80,0,.07);}
+  .access-tab tr.livre td{color:var(--ink-soft);}
+  .access-tab-app{display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;}
+  .access-tab-vazio{color:var(--ink-soft);}
+  .access-tab .access-nivel{width:100%;max-width:140px;}
+  @media (max-width:640px){ .access-tab{font-size:11.5px;} .access-tab th,.access-tab td{padding:6px 5px;} .access-tab th:nth-child(4),.access-tab td:nth-child(4){display:none;} }
+  .access-empty{color:var(--ink-soft);font-size:12.5px;font-style:italic;}
+  .access-btn-senha{display:inline-flex;align-items:center;gap:7px;margin:14px 0 0;background:var(--chip-bg);border:1px solid var(--line);border-radius:10px;padding:7px 13px;font:600 12px 'Inter',sans-serif;color:var(--ink);cursor:pointer;}
+  .access-btn-senha:hover{border-color:var(--orange);color:var(--orange);}
+  .senha-fundo{position:fixed;inset:0;z-index:300;background:rgba(8,12,30,.55);display:flex;align-items:center;justify-content:center;padding:16px;}
+  .senha-fundo[hidden]{display:none;}
+  .senha-caixa{width:100%;max-width:430px;background:var(--bg0);color:var(--ink);border:1px solid var(--line);border-radius:18px;padding:22px 22px 18px;box-shadow:0 30px 60px -20px rgba(0,0,0,.55);}
+  .senha-caixa h3{margin:0 0 4px;font-family:'Poppins',sans-serif;font-size:18px;font-weight:800;}
+  .senha-quem{margin:0 0 14px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;}
+  .senha-quem b{color:var(--ink);}
+  .senha-rot{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:6px;}
+  .senha-linha{display:flex;gap:8px;}
+  .senha-linha input{flex:1;min-width:0;font:600 15px 'SFMono-Regular',Consolas,monospace;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;}
+  .senha-linha input:focus{outline:none;border-color:var(--orange);}
+  .senha-caixa button{font:700 12.5px 'Inter',sans-serif;border-radius:10px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:var(--chip-bg);color:var(--ink);}
+  .senha-caixa button:hover{border-color:var(--orange);}
+  .senha-caixa button.pri{background:var(--orange);border-color:var(--orange);color:#fff;}
+  .senha-caixa button:disabled{opacity:.6;cursor:default;}
+  .senha-erro{margin:10px 0 0;padding:9px 12px;border-radius:10px;background:rgba(200,56,18,.12);color:#C83812;font-size:12.5px;line-height:1.45;}
+  .senha-acoes{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+  .senha-ok{margin:0 0 12px;font-size:13px;line-height:1.55;}
+  .senha-ok b{color:var(--ink);}
+  .senha-cod{display:block;width:100%;text-align:center;font:800 20px 'SFMono-Regular',Consolas,monospace;letter-spacing:.06em;padding:14px;border-radius:12px;background:var(--surface);border:1px dashed var(--orange);color:var(--ink);user-select:all;}
+  .senha-aviso{margin:10px 0 0;font-size:11.5px;color:var(--ink-soft);line-height:1.5;}
+
+  /* CONFIGURAÇÕES — painel lateral: resumo, apps mais usados, atividade recente */
+  .access-atividade{display:flex;flex-direction:column;gap:16px;position:sticky;top:24px;}
+  .access-atividade-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;}
+  .access-atividade-card h3{margin:0 0 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);}
+  .access-resumo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .access-resumo-tile{background:var(--chip-bg);border-radius:12px;padding:10px 12px;}
+  .access-resumo-num{display:block;font-family:'Poppins',sans-serif;font-size:19px;font-weight:700;color:var(--ink);line-height:1.2;}
+  .access-resumo-label{display:block;font-size:10.5px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
+  .access-ranking{display:flex;flex-direction:column;gap:10px;}
+  .access-ranking-row{display:flex;align-items:center;gap:9px;}
+  .access-ranking-icon{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-ranking-icon svg{width:12px;height:12px;}
+  .access-ranking-info{min-width:0;flex:1;}
+  .access-ranking-nome{display:block;font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .access-ranking-bar-wrap{background:var(--chip-bg);border-radius:999px;height:5px;margin-top:4px;overflow:hidden;}
+  .access-ranking-bar{height:100%;border-radius:999px;background:var(--accent);}
+  .access-ranking-num{font-size:11px;font-weight:700;color:var(--ink-soft);flex-shrink:0;white-space:nowrap;}
+  .access-feed{display:flex;flex-direction:column;gap:12px;}
+  .access-feed-row{display:flex;align-items:flex-start;gap:9px;}
+  .access-feed-icon{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;margin-top:1px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb, var(--accent) 45%, white));}
+  .access-feed-icon svg{width:12px;height:12px;}
+  .access-feed-texto{font-size:12px;color:var(--ink);line-height:1.4;}
+  .access-feed-texto b{font-weight:700;}
+  .access-feed-quando{display:block;font-size:10.5px;color:var(--ink-soft);margin-top:1px;}
+
+  @media(max-width:1020px){
+    .access-admin{grid-template-columns:1fr;}
+    .access-atividade{position:static;}
+  }
 
   /* MODAL DE EDIÇÃO */
   .modal-overlay{position:fixed;inset:0;background:rgba(8,10,24,.55);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px;}
@@ -242,9 +364,36 @@
     .main{padding:24px 18px 50px;}
     .field-row{grid-template-columns:1fr;}
   }
+
+  /* TELA DE ABERTURA — logo animado da LDM (mesmo GIF da assinatura de e-mail).
+     Fundo branco fixo nos dois temas: o GIF tem fundo branco próprio. */
+  .intro{position:fixed;inset:0;z-index:9999;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .45s ease;}
+  .intro img{width:min(560px,72vw);height:auto;}
+  .intro.saindo{opacity:0;pointer-events:none;}
 </style>
 </head>
 <body>
+<div class="intro" id="intro" hidden><img alt="Loja do Mecânico" src="brand/Logo_LDM_animado.gif"></div>
+<script>
+/* Uma vez por sessão do navegador (voltar de um app pro painel não repete),
+   e nunca pra quem pediu menos movimento no sistema. Clique pula. A animação
+   dura ~2,9 s (146 quadros de 20 ms). */
+(function(){
+  var intro = document.getElementById('intro');
+  var jaViu = false;
+  try { jaViu = sessionStorage.getItem('ldm-intro-vista') === '1'; sessionStorage.setItem('ldm-intro-vista','1'); } catch(e){}
+  var poucoMovimento = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(jaViu || poucoMovimento){ intro.remove(); return; }
+  intro.hidden = false;
+  var fechar = function(){
+    if(!intro.isConnected || intro.classList.contains('saindo')) return;
+    intro.classList.add('saindo');
+    setTimeout(function(){ intro.remove(); }, 500);
+  };
+  intro.addEventListener('click', fechar);
+  setTimeout(fechar, 2900);
+})();
+</script>
 <div class="shell">
 
   <aside class="sidebar">
@@ -268,7 +417,7 @@
       </button>
       <button class="sb-nav-item" type="button" data-view="tv">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        <span>TV LDM</span>
+        <span>Tv Ldm</span>
       </button>
       <button class="sb-nav-item" type="button" data-view="config">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -444,11 +593,62 @@
     </div>
 
     <section class="view" id="view-config" hidden>
-      <div class="config-placeholder">
-        <p>Em breve: controle de acessos, permissões e histórico de alterações para todos os apps da Oficina LDM.</p>
+      <div class="config-placeholder" id="accessLogin">
+        <p>Entre com sua conta de administrador para gerenciar quem acessa cada aplicativo da Oficina LDM.</p>
+        <form class="access-login-form" id="accessLoginForm">
+          <input type="email" id="accessLoginEmail" class="access-login-input" placeholder="E-mail" autocomplete="username" required>
+          <input type="password" id="accessLoginSenha" class="access-login-input" placeholder="Senha" autocomplete="current-password" required minlength="6">
+          <button type="submit" class="btn-primary">Entrar</button>
+        </form>
+        <p class="access-login-msg" id="accessLoginMsg" hidden></p>
+      </div>
+
+      <div class="config-placeholder" id="accessDenied" hidden>
+        <p id="accessDeniedTexto">Sua conta (<strong id="accessDeniedEmail"></strong>) não tem permissão de administrador pra gerenciar acessos.</p>
+        <button type="button" class="btn-secondary" id="accessLogoutBtnNegado">Sair</button>
+      </div>
+
+      <div class="access-admin" id="accessAdmin" hidden>
+        <div class="access-admin-main">
+          <div class="access-admin-head">
+            <input type="text" id="accessBusca" class="access-busca" placeholder="Buscar por nome ou e-mail...">
+            <label class="access-filtro-semapp"><input type="checkbox" id="accessFiltroSemApp"> Só sem nenhum app liberado</label>
+            <button type="button" class="btn-secondary" id="accessLogoutBtn">Sair</button>
+          </div>
+          <button type="button" class="btn-primary access-nova-pessoa-btn" id="accessNovaPessoaBtn">+ Nova pessoa</button>
+          <div class="access-nova-pessoa" id="accessNovaPessoaForm" hidden>
+            <input type="text" id="accessNovoNome" class="access-login-input" placeholder="Nome completo">
+            <input type="email" id="accessNovoEmail" class="access-login-input" placeholder="E-mail corporativo">
+            <button type="button" class="btn-primary" id="accessNovaPessoaSalvar">Cadastrar</button>
+            <button type="button" class="btn-secondary" id="accessNovaPessoaCancelar">Cancelar</button>
+          </div>
+          <p class="access-admin-msg" id="accessAdminMsg" hidden></p>
+          <div class="access-people-admin" id="accessPeopleAdmin"></div>
+        </div>
+
+        <aside class="access-atividade">
+          <div class="access-atividade-card">
+            <h3>Resumo</h3>
+            <div class="access-resumo-grid" id="accessResumoGrid"></div>
+          </div>
+          <div class="access-atividade-card">
+            <h3>Apps mais usados</h3>
+            <div class="access-ranking" id="accessRankingApps"></div>
+          </div>
+          <div class="access-atividade-card">
+            <h3>Atividade recente</h3>
+            <div class="access-feed" id="accessFeedRecente"></div>
+          </div>
+        </aside>
       </div>
     </section>
   </main>
+</div>
+
+<div class="zoom-ctrl zoom-ctrl-float" title="Zoom da tela">
+  <button type="button" id="zoomOut" aria-label="Diminuir zoom">&minus;</button>
+  <span id="zoomLabel">100%</span>
+  <button type="button" id="zoomIn" aria-label="Aumentar zoom">+</button>
 </div>
 
 <div class="modal-overlay" id="modalOverlay" hidden>
@@ -488,18 +688,47 @@
   </div>
 </div>
 
+<div class="atualiza-bar" id="atualizaBar" hidden>
+  <span>Nova versão disponível.</span>
+  <button type="button" onclick="location.reload()">Atualizar agora</button>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
+<script src="versao-hub.js?v=7"></script>
+<script src="vendor/supabase.js"></script>
 <script>
-  var APP_VERSION = '0.0.0.1';
   (function(){
     var el = document.getElementById('appVersion');
-    if(!el) return;
-    var build = window.LDM_BUILD;
-    el.textContent = (build && build.commit && build.commit !== 'local')
-      ? APP_VERSION + ' · ' + build.commit + ' · ' + build.data
-      : APP_VERSION;
+    var v = window.LDM_HUB_VERSAO;
+    if(el && v) el.textContent = 'Central v' + v.n + ' · ' + v.data;
+  })();
+
+  /* Aviso de atualização: compara o commit que esta aba carregou com o que
+     está publicado agora, lendo version.js de novo (sem cache). Detecta um
+     novo deploy sem precisar de service worker — leve o bastante pra
+     checar de tempos em tempos e sempre que a aba volta a ficar visível. */
+  (function(){
+    var commitCarregado = (window.LDM_BUILD && window.LDM_BUILD.commit) || 'local';
+    if(commitCarregado === 'local') return; // rodando fora do deploy (ex.: teste local)
+    var bar = document.getElementById('atualizaBar');
+    var avisado = false;
+    function checar(){
+      if(avisado || document.hidden) return;
+      fetch('version.js?t=' + Date.now(), { cache: 'no-store' })
+        .then(function(r){ return r.text(); })
+        .then(function(texto){
+          var m = /commit:\s*'([^']+)'/.exec(texto);
+          if(m && m[1] && m[1] !== commitCarregado){
+            avisado = true;
+            bar.hidden = false;
+          }
+        })
+        .catch(function(){ /* sem internet agora — tenta de novo depois */ });
+    }
+    setInterval(checar, 15 * 60 * 1000);
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) checar(); });
   })();
 (function(){
   var SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
@@ -520,6 +749,24 @@
     try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
   });
 })();
+(function(){
+  var MIN = 70, MAX = 150, STEP = 10;
+  var label = document.getElementById('zoomLabel');
+  function aplicar(pct){
+    pct = Math.max(MIN, Math.min(MAX, pct));
+    document.body.style.zoom = (pct / 100);
+    if(label) label.textContent = pct + '%';
+    try { localStorage.setItem('ldm-zoom', pct); } catch(e){}
+    return pct;
+  }
+  var atual = 100;
+  try { atual = parseInt(localStorage.getItem('ldm-zoom'), 10) || 100; } catch(e){}
+  atual = aplicar(atual);
+  var btnOut = document.getElementById('zoomOut');
+  var btnIn = document.getElementById('zoomIn');
+  if(btnOut) btnOut.addEventListener('click', function(){ atual = aplicar(atual - STEP); });
+  if(btnIn) btnIn.addEventListener('click', function(){ atual = aplicar(atual + STEP); });
+})();
 
 document.getElementById('brandLogo').addEventListener('click', function(){
   var el = this;
@@ -533,7 +780,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var VIEW_META = {
     painel: {title:'Painel', sub:'Dados, indicadores e operação do CD conectados em um único ambiente.'},
     gestao: {title:'Gestão de App', sub:'Gerencie nome, cor, status e vínculo de TV de cada aplicação.'},
-    tv: {title:'TV LDM', sub:'Gerencie a sequência, o tempo de exibição e o idioma de cada app na TV.'},
+    tv: {title:'Tv Ldm', sub:'Gerencie a sequência, o tempo de exibição e o idioma de cada app na TV.'},
     config: {title:'Configurações', sub:'Preferências gerais da Oficina LDM.'}
   };
   var navButtons = Array.prototype.slice.call(document.querySelectorAll('.sb-nav-item'));
@@ -553,6 +800,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       viewTitle.textContent = VIEW_META[v].title;
       viewSubtitle.textContent = VIEW_META[v].sub;
       if(v === 'gestao' && window.renderManageTable) window.renderManageTable();
+      if(v === 'config' && window.renderAccessList) window.renderAccessList();
       if(v === 'tv'){
         if(window.renderTvTable) window.renderTvTable();
         if(window.renderTvSim) window.renderTvSim();
@@ -621,6 +869,78 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       desc:'Componente de múltiplo sem par no estoque, com valor e bloqueio em 86.',
       keywords:'zbiq0051 qry0390 bloqueio 86',
       status:'Disponível', tv:''
+    },
+    {
+      key:'auditorias', href:'./auditorias/', color:'#4338CA',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14l2 2 4-4"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
+      name:'Auditorias',
+      desc:'Módulo de auditorias da Oficina LDM — em desenvolvimento.',
+      keywords:'auditorias',
+      status:'Em produção', tv:''
+    },
+    {
+      key:'net', href:'./net/', color:'#FE5000',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+      name:'NET',
+      desc:'Perdas e ganhos do estoque do CD — em desenvolvimento.',
+      keywords:'net perdas ganhos qry410',
+      status:'Em produção', tv:''
+    },
+    {
+      key:'tarefas', href:'./gerenciador-tarefas/', color:'#15803D',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="9.5" y="4" width="5" height="10" rx="1"/><rect x="16" y="4" width="5" height="13" rx="1"/></svg>',
+      name:'Gerenciador de Tarefas',
+      desc:'Quadros de tarefas da equipe, com visão kanban e tabela.',
+      keywords:'quadro tarefas kanban monday clickup',
+      status:'Disponível', tv:''
+    },
+    {
+      key:'rgreversa', href:'./rg-reversa/', color:'#0E7490',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+      name:'RG Reversa',
+      desc:'Gestão peça a peça do estoque da reversa: RGs, estoque sem RG, produtividade e tempo parado.',
+      keywords:'rg reversa devolucao logistica reversa avaria qry0100 qry0390',
+      status:'Em produção', tv:''
+    },
+    {
+      key:'manuais', href:'./manuais/', color:'#001A72',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M10 8l5 3-5 3z"/></svg>',
+      name:'Manuais',
+      desc:'Passo a passo animado sobre prints reais das telas, exportado em um único HTML.',
+      keywords:'manual tutorial passo a passo putty treinamento',
+      status:'Disponível', tv:''
+    },
+    {
+      key:'plantao', href:'./plantao-duvidas/', color:'#CA8A04',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+      name:'Plantão de Dúvidas',
+      desc:'Módulo de Plantão de Dúvidas da Oficina LDM — em desenvolvimento.',
+      keywords:'plantao duvidas suporte',
+      status:'Em produção', tv:''
+    },
+    {
+      key:'estoquemultiplos', href:'./estoque-multiplos/', color:'#65A30D',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+      name:'Estoque de Múltiplos',
+      desc:'Casados e descasados do CD: valor parado, fornecedores ofensores, gargalos e oportunidades.',
+      keywords:'estoque multiplos casados descasados elevador fornecedor zbiq0051 qry0390',
+      status:'Disponível', tv:''
+    },
+    {
+      key:'validade', href:'./validade/', color:'#BE123C',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+      name:'Controle de Validade',
+      desc:'Controle de vencimento dos itens em estoque — em desenvolvimento.',
+      keywords:'validade vencimento vencidos lote',
+      status:'Em produção', tv:''
+    },
+    {
+      key:'tarefasapp', href:'./tarefas/', color:'#A21CAF',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+      name:'Tarefas',
+      desc:'Módulo de Tarefas da Oficina LDM — em desenvolvimento.',
+      keywords:'tarefas',
+      status:'Em produção', tv:''
     }
   ];
 
@@ -672,6 +992,74 @@ document.getElementById('brandLogo').addEventListener('click', function(){
     });
   }
 
+  /* Cadeado no canto do card: fechado = sem acesso; aberto = a pessoa logada tem acesso (liberado em Configurações).
+     Sem login (ou sem permissão) fica fechado. */
+  var LOCK_FECHADO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  var LOCK_ABERTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+  var acessoApps = {};
+  function lockHTML(key){
+    var ab = !!acessoApps[key];
+    return '<span class="card-lock ' + (ab ? 'aberto' : 'fechado') + '" data-lock="' + key + '" title="' + (ab ? 'Você tem acesso' : 'Sem acesso — peça ao administrador') + '" aria-label="' + (ab ? 'Você tem acesso' : 'Sem acesso') + '">' + (ab ? LOCK_ABERTO : LOCK_FECHADO) + '</span>';
+  }
+  /* Os cadeados não podem fechar por falha passageira: quando um app da Oficina
+     está aberto em outra aba (ou recarrega depois de uma atualização), o login
+     fica ocupado por ele e a consulta aqui demora ou falha. Antes, qualquer falha
+     virava "sem acesso" em todos os cards. Agora: cada consulta tem tempo limite,
+     falha mantém o último estado conhecido (guardado no aparelho) e tenta de novo. */
+  var CADEADO_KEY = 'ldm-hub-cadeados';
+  try { acessoApps = JSON.parse(localStorage.getItem(CADEADO_KEY) || '{}') || {}; } catch(e){ acessoApps = {}; }
+  var cadeadoTentativa = 0, cadeadoTimer = null, cadeadoRodando = false;
+  function cadeadoLimite(p, seg){ return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('tempo')); }, seg*1000); })]); }
+  function pintarCadeados(){
+    Array.prototype.forEach.call(document.querySelectorAll('.card-lock'), function(el){
+      var ab = !!acessoApps[el.getAttribute('data-lock')];
+      el.className = 'card-lock ' + (ab ? 'aberto' : 'fechado');
+      el.innerHTML = ab ? LOCK_ABERTO : LOCK_FECHADO;
+      el.title = ab ? 'Você tem acesso' : 'Sem acesso — peça ao administrador';
+      el.setAttribute('aria-label', ab ? 'Você tem acesso' : 'Sem acesso');
+    });
+  }
+  function reagendarCadeados(){
+    clearTimeout(cadeadoTimer);
+    if(cadeadoTentativa >= 6) return;
+    cadeadoTimer = setTimeout(atualizarCadeados, Math.min(30, 3 * Math.pow(2, cadeadoTentativa)) * 1000);
+    cadeadoTentativa++;
+  }
+  async function atualizarCadeados(){
+    if(!sbAcessos || cadeadoRodando) return;
+    cadeadoRodando = true;
+    try {
+      var session = null;
+      try { session = (await cadeadoLimite(sbAcessos.auth.getSession(), 10)).data.session; }
+      catch(e){ reagendarCadeados(); return; } // login ocupado por outra aba: mantém e tenta de novo
+      if(!session){
+        acessoApps = {}; try { localStorage.removeItem(CADEADO_KEY); } catch(e){}
+        pintarCadeados(); return;
+      }
+      var novo = {}, falhou = false;
+      var consulta = function(){
+        return Promise.all(getAllApps().map(function(app){
+          return cadeadoLimite(sbAcessos.rpc('ldm_nivel_acesso', { p_app_key: app.key }), 12)
+            .then(function(r){ if(r && r.error){ falhou = true; return; } novo[app.key] = !!(r && r.data); })
+            .catch(function(){ falhou = true; });
+        }));
+      };
+      await consulta();
+      if(falhou){
+        // Token vencido é a falha mais comum: renova uma vez e consulta de novo.
+        try { await cadeadoLimite(sbAcessos.auth.refreshSession(), 10); } catch(e){}
+        falhou = false; novo = {};
+        await consulta();
+      }
+      if(falhou){ reagendarCadeados(); return; } // não troca o que já estava na tela
+      acessoApps = novo; cadeadoTentativa = 0;
+      try { localStorage.setItem(CADEADO_KEY, JSON.stringify(acessoApps)); } catch(e){}
+      pintarCadeados();
+    } finally { cadeadoRodando = false; }
+  }
+  // Voltou para a aba do Painel: confere de novo.
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden){ cadeadoTentativa = 0; atualizarCadeados(); } });
+
   function cardHTML(app, isFav){
     var dot = STATUS_COLOR[app.status] || STATUS_COLOR['Disponível'];
     var searchStr = esc((app.name + ' ' + app.desc + ' ' + app.keywords + ' ' + app.status).toLowerCase());
@@ -693,7 +1081,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       +   '</div>'
       +   '<h3 class="card-title">' + esc(app.name) + '</h3>'
       +   '<p class="card-desc">' + esc(app.desc) + '</p>'
-      +   '<div class="card-cta"><span>Acessar</span><span class="arrow">→</span></div>'
+      +   '<div class="card-cta"><span>Acessar</span>' + lockHTML(app.key) + '</div>'
       + '</div>';
   }
 
@@ -715,7 +1103,16 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
   function renderCards(){
     var favoritos = getFavoritos();
-    cardsGrid.innerHTML = getAllApps().map(function(a){
+    /* Favoritado sobe pro topo: ordena pelos favoritos primeiro (o mais
+       recente à frente), depois o resto na ordem do catálogo. */
+    var apps = getAllApps().slice().sort(function(a, b){
+      var ia = favoritos.indexOf(a.key), ib = favoritos.indexOf(b.key);
+      var fa = ia !== -1, fb = ib !== -1;
+      if(fa && fb) return ia - ib;
+      if(fa !== fb) return fa ? -1 : 1;
+      return 0;
+    });
+    cardsGrid.innerHTML = apps.map(function(a){
       return cardHTML(a, favoritos.indexOf(a.key) !== -1);
     }).join('');
     applySearchFilter();
@@ -785,7 +1182,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       {id:'aud-reports', label:'Auditoria: Relatórios'}
     ],
     inventario: [
-      {id:'dashboard', label:'Dashboard Executivo'},
+      {id:'dashboard', label:'Dashboard Inventário'},
       {id:'ciclo', label:'NET'},
       {id:'produtividade', label:'Produtividade'},
       {id:'setores', label:'Setores'},
@@ -1008,19 +1405,48 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       } catch(e){ /* conteúdo ainda não acessível: ignora */ }
     }
 
+    function findScrollTarget(win, doc){
+      /* Os apps embutidos usam um shell flex com overflow:hidden no próprio
+         <html>/<body> — quem realmente rola é um contêiner interno
+         (.page-scroll, convenção compartilhada entre os apps). Rolar
+         document.documentElement nesses casos não move nada, então
+         primeiro tenta essa classe conhecida e, se não achar, procura o
+         maior contêiner com overflow-y:auto/scroll na página. */
+      var known = doc.querySelector('.page-scroll');
+      if(known && known.scrollHeight - known.clientHeight > 4) return known;
+      var best = null, bestDelta = 4;
+      var all = doc.querySelectorAll('*');
+      for(var i = 0; i < all.length; i++){
+        var el = all[i];
+        var delta = el.scrollHeight - el.clientHeight;
+        if(delta <= bestDelta) continue;
+        var oy = win.getComputedStyle(el).overflowY;
+        if(oy === 'auto' || oy === 'scroll'){ best = el; bestDelta = delta; }
+      }
+      if(best) return best;
+      var de = doc.documentElement;
+      if(de.scrollHeight - win.innerHeight > 4) return de;
+      return null;
+    }
+    var scrollTarget = null;
     function getMaxScroll(){
       if(cachedMaxScroll != null) return cachedMaxScroll;
       try {
         var win = iframe.contentWindow, doc = win.document;
-        var m = doc.documentElement.scrollHeight - win.innerHeight;
-        if(m > 0){ cachedMaxScroll = m; return m; }
+        scrollTarget = findScrollTarget(win, doc);
+        if(scrollTarget){
+          var m = scrollTarget === doc.documentElement
+            ? scrollTarget.scrollHeight - win.innerHeight
+            : scrollTarget.scrollHeight - scrollTarget.clientHeight;
+          if(m > 0){ cachedMaxScroll = m; return m; }
+        }
       } catch(e){}
       return 0;
     }
     function applyScrollFraction(frac){
       var max = getMaxScroll();
-      if(max <= 0) return;
-      try { iframe.contentWindow.scrollTo(0, max * frac); } catch(e){}
+      if(max <= 0 || !scrollTarget) return;
+      try { scrollTarget.scrollTop = max * frac; } catch(e){}
     }
 
     function currentElapsed(){
@@ -1083,6 +1509,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       elapsedBeforeTick = 0;
       tickStartTs = Date.now();
       cachedMaxScroll = null;
+      scrollTarget = null;
       paused = false;
       updatePlayPauseIcon();
       setLabel((index + 1) + '/' + playlist.length + ' · ' + item.app.name);
@@ -1168,7 +1595,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       emptyMsg.hidden = true;
       if(!iframe){
         iframe = document.createElement('iframe');
-        iframe.setAttribute('title', 'Simulação da TV LDM');
+        iframe.setAttribute('title', 'Simulação da Tv Ldm');
         frameBox.appendChild(iframe);
       } else if(iframe.parentElement !== frameBox){
         frameBox.appendChild(iframe);
@@ -1362,11 +1789,9 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       var list = getFavoritos();
       var idx = list.indexOf(key);
       var nowFav;
-      if(idx === -1){ list.push(key); nowFav = true; } else { list.splice(idx, 1); nowFav = false; }
+      if(idx === -1){ list.unshift(key); nowFav = true; } else { list.splice(idx, 1); nowFav = false; }
       setFavoritos(list);
-      card.classList.toggle('is-favorite', nowFav);
-      favBtn.classList.toggle('is-active', nowFav);
-      favBtn.querySelector('.fav-label').textContent = nowFav ? 'Remover dos favoritos' : 'Favoritar';
+      renderCards();
       renderSidebarFavorites();
       closeAllMenus();
       showToast(nowFav ? 'Adicionado aos favoritos.' : 'Removido dos favoritos.');
@@ -1391,8 +1816,498 @@ document.getElementById('brandLogo').addEventListener('click', function(){
 
   document.addEventListener('click', function(){ closeAllMenus(); });
 
+  /* Gestão de acesso (Configurações) — admin de verdade, via Supabase.
+     Mesmo projeto já usado por Tarefas/Projetos ("Estoque Project"), schema
+     próprio "acessos" (ver supabase-acessos/). RLS no banco garante que só
+     quem está com papel=admin em acessos.pessoas lê/escreve a lista de
+     quem pode acessar o quê — nunca o navegador sozinho. */
+  var SUPA_URL = 'https://jfvnswafpeshyfweoadg.supabase.co';
+  var SUPA_ANON = 'sb_publishable_x1ioDmPDsDZdTgcq6SOCGw_PlJeIw_m';
+  var sbAcessos = (window.supabase && window.supabase.createClient)
+    ? window.supabase.createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: true, autoRefreshToken: true } })
+    : null;
+
+  /* E-mail sem espaço e sem caractere invisível (vem junto ao copiar do Outlook/Teams e faz o e-mail "não bater"). */
+  function accessLimpaEmail(s){ return String(s || '').replace(/[\s\u00a0\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g, '').toLowerCase(); }
+
+  function accessEmPortugues(msg){
+    var m = String(msg || '').toLowerCase();
+    if(m.indexOf('invalid login credentials') !== -1) return 'E-mail ou senha incorretos.';
+    if(m.indexOf('email not confirmed') !== -1) return 'Confirme o e-mail pelo link que o Supabase enviou e tente de novo.';
+    if(m.indexOf('rate limit') !== -1 || m.indexOf('too many') !== -1) return 'Muitas tentativas seguidas. Espere alguns minutos.';
+    return msg || 'Não consegui completar a operação.';
+  }
+
+  /* Evita a tela travar pra sempre: às vezes o navegador fica esperando outra
+     aba de um app da Oficina LDM (mesmo projeto Supabase, mesma sessão)
+     liberar o login. Depois desse tempo, desiste e explica em vez de travar
+     sem nenhuma mensagem. */
+  function comLimite(promessa, segundos){
+    return Promise.race([
+      promessa,
+      new Promise(function(_, rejeitar){
+        setTimeout(function(){
+          rejeitar(new Error('Demorou demais pra responder. Feche as outras abas de apps da Oficina LDM e tente de novo.'));
+        }, segundos * 1000);
+      })
+    ]);
+  }
+
+  var accessLoginBox = document.getElementById('accessLogin');
+  var accessDeniedBox = document.getElementById('accessDenied');
+  var accessAdminBox = document.getElementById('accessAdmin');
+  var accessLoginForm = document.getElementById('accessLoginForm');
+  var accessLoginMsg = document.getElementById('accessLoginMsg');
+  var accessAdminMsg = document.getElementById('accessAdminMsg');
+  var accessPeopleEl = document.getElementById('accessPeopleAdmin');
+  var accessBuscaEl = document.getElementById('accessBusca');
+  var accessFiltroSemAppEl = document.getElementById('accessFiltroSemApp');
+  var accessNovaPessoaBtn = document.getElementById('accessNovaPessoaBtn');
+  var accessNovaPessoaForm = document.getElementById('accessNovaPessoaForm');
+
+  var accessPessoasCache = [];
+  var accessPermissoesCache = {};
+  var accessLogCache = {};
+  var accessLogResumo = [];
+  var accessAbertas = {};
+  var accessResumoEl = document.getElementById('accessResumoGrid');
+  var accessRankingEl = document.getElementById('accessRankingApps');
+  var accessFeedEl = document.getElementById('accessFeedRecente');
+
+  function accessMostrar(estado){
+    accessLoginBox.hidden = estado !== 'login';
+    accessDeniedBox.hidden = estado !== 'negado';
+    accessAdminBox.hidden = estado !== 'admin';
+  }
+
+  function accessMsg(texto){
+    if(!texto){ accessAdminMsg.hidden = true; return; }
+    accessAdminMsg.textContent = texto;
+    accessAdminMsg.hidden = false;
+  }
+
+  async function accessCarregarTudo(){
+    var pessoas, errP, permissoes, errPerm, log, errLog;
+    try {
+      var resultados = await comLimite(Promise.all([
+        sbAcessos.schema('acessos').from('pessoas').select('*').order('nome'),
+        sbAcessos.schema('acessos').from('permissoes').select('*'),
+        sbAcessos.rpc('ldm_log_resumo')
+      ]), 12);
+      pessoas = resultados[0].data; errP = resultados[0].error;
+      permissoes = resultados[1].data; errPerm = resultados[1].error;
+      log = resultados[2].data; errLog = resultados[2].error;
+    } catch(falha){
+      accessMsg(accessEmPortugues(falha && falha.message));
+      return;
+    }
+    if(errP || errPerm){ accessMsg(accessEmPortugues((errP || errPerm).message)); return; }
+    accessPessoasCache = pessoas || [];
+    accessPermissoesCache = {};
+    (permissoes || []).forEach(function(p){
+      if(!accessPermissoesCache[p.pessoa_id]) accessPermissoesCache[p.pessoa_id] = {};
+      accessPermissoesCache[p.pessoa_id][p.app_key] = p.nivel || 'editar';
+    });
+    /* Frequência: quantos acessos e qual o mais recente, por pessoa+app —
+       já vem somado do banco (ldm_log_resumo), uma linha por par, não uma
+       por visita. Se a função ainda não existir (migração não rodada),
+       só não mostra frequência, sem travar o resto do painel. */
+    accessLogCache = {};
+    accessLogResumo = errLog ? [] : (log || []);
+    if(!errLog){
+      accessLogResumo.forEach(function(l){
+        if(!accessLogCache[l.pessoa_id]) accessLogCache[l.pessoa_id] = {};
+        accessLogCache[l.pessoa_id][l.app_key] = { total: l.total, ultimo: l.ultimo };
+      });
+    }
+    accessRenderPessoas();
+    accessRenderAtividade();
+  }
+
+  /* Painel lateral: resumo, ranking de apps mais usados e atividade
+     recente -- tudo calculado em cima do que accessCarregarTudo já buscou,
+     sem nenhuma consulta extra ao banco. */
+  function accessRenderAtividade(){
+    if(!accessResumoEl) return;
+    var apps = getAllApps();
+    var appPorChave = {};
+    apps.forEach(function(a){ appPorChave[a.key] = a; });
+    var pessoaPorId = {};
+    accessPessoasCache.forEach(function(p){ pessoaPorId[p.id] = p; });
+
+    var ativas = accessPessoasCache.filter(function(p){ return p.ativo; });
+    var semApp = ativas.filter(function(p){
+      var marcados = accessPermissoesCache[p.id] || {};
+      return Object.keys(marcados).length === 0;
+    });
+    var totalAcessos = accessLogResumo.reduce(function(soma, l){ return soma + Number(l.total || 0); }, 0);
+
+    accessResumoEl.innerHTML = [
+      { num: ativas.length, label: 'Pessoas ativas' },
+      { num: semApp.length, label: 'Sem nenhum app' },
+      { num: apps.length, label: 'Apps no catálogo' },
+      { num: totalAcessos, label: 'Acessos registrados' }
+    ].map(function(t){
+      return '<div class="access-resumo-tile"><span class="access-resumo-num">' + t.num + '</span><span class="access-resumo-label">' + t.label + '</span></div>';
+    }).join('');
+
+    /* Ranking: total de acessos por app, maior primeiro. Só entram apps com
+       pelo menos 1 acesso registrado -- sem poluir com todo o catálogo. */
+    var totalPorApp = {};
+    accessLogResumo.forEach(function(l){ totalPorApp[l.app_key] = (totalPorApp[l.app_key] || 0) + Number(l.total || 0); });
+    var ranking = Object.keys(totalPorApp)
+      .map(function(key){ return { app: appPorChave[key], total: totalPorApp[key] }; })
+      .filter(function(r){ return r.app; })
+      .sort(function(a, b){ return b.total - a.total; })
+      .slice(0, 8);
+    var maiorTotal = ranking.length ? ranking[0].total : 1;
+    accessRankingEl.innerHTML = ranking.length ? ranking.map(function(r){
+      var pct = Math.max(8, Math.round((r.total / maiorTotal) * 100));
+      return ''
+        + '<div class="access-ranking-row" style="--accent:' + r.app.color + ';">'
+        +   '<span class="access-ranking-icon">' + r.app.icon + '</span>'
+        +   '<span class="access-ranking-info"><span class="access-ranking-nome">' + esc(r.app.name) + '</span><span class="access-ranking-bar-wrap"><span class="access-ranking-bar" style="width:' + pct + '%;"></span></span></span>'
+        +   '<span class="access-ranking-num">' + r.total + '</span>'
+        + '</div>';
+    }).join('') : '<p class="access-empty">Ainda sem acessos registrados.</p>';
+
+    /* Atividade recente: uma linha por pessoa+app (a última vez, com o total
+       de acessos ao lado) -- não cada evento bruto. Quem fica entrando e
+       saindo do mesmo app várias vezes por hora (ex.: coletor recarregando)
+       não devia tomar a lista inteira com a mesma pessoa repetida. */
+    var recentes = Object.keys(accessLogCache).reduce(function(lista, pessoaId){
+      Object.keys(accessLogCache[pessoaId]).forEach(function(appKey){
+        lista.push({ pessoaId: pessoaId, appKey: appKey, freq: accessLogCache[pessoaId][appKey] });
+      });
+      return lista;
+    }, []).sort(function(a, b){
+      return a.freq.ultimo < b.freq.ultimo ? 1 : -1;
+    }).slice(0, 10);
+    accessFeedEl.innerHTML = recentes.length ? recentes.map(function(r){
+      var pessoa = pessoaPorId[r.pessoaId];
+      var app = appPorChave[r.appKey];
+      if(!pessoa || !app) return '';
+      var quando = new Date(r.freq.ultimo).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      var vezes = r.freq.total > 1 ? ' · ' + r.freq.total + ' vezes' : '';
+      return ''
+        + '<div class="access-feed-row" style="--accent:' + app.color + ';">'
+        +   '<span class="access-feed-icon">' + app.icon + '</span>'
+        +   '<span class="access-feed-texto"><b>' + esc(pessoa.nome) + '</b> acessou ' + esc(app.name) + '<span class="access-feed-quando">' + quando + vezes + '</span></span>'
+        + '</div>';
+    }).join('') : '<p class="access-empty">Ainda sem atividade registrada.</p>';
+  }
+
+  function accessRenderPessoas(){
+    var q = (accessBuscaEl.value || '').trim().toLowerCase();
+    var soSemApp = accessFiltroSemAppEl.checked;
+    var apps = getAllApps();
+    var lista = accessPessoasCache.filter(function(p){
+      if(q && p.nome.toLowerCase().indexOf(q) === -1 && p.email.toLowerCase().indexOf(q) === -1) return false;
+      var marcados = accessPermissoesCache[p.id] || {};
+      var qtd = Object.keys(marcados).length;
+      if(soSemApp && qtd > 0) return false;
+      return true;
+    });
+    accessPeopleEl.innerHTML = lista.map(function(p){
+      var marcados = accessPermissoesCache[p.id] || {};
+      var qtd = Object.keys(marcados).length;
+      var aberto = !!accessAbertas[p.id];
+      return ''
+        + '<div class="access-person-admin' + (aberto ? ' open' : '') + (p.ativo ? '' : ' inativo') + '" data-id="' + p.id + '">'
+        +   '<button type="button" class="access-person-head">'
+        +     '<span class="access-person-dot"></span>'
+        +     '<span class="access-person-info"><span class="access-person-nome">' + esc(p.nome) + '</span><span class="access-person-email2">' + esc(p.email) + '</span></span>'
+        +     (p.papel === 'admin' ? '<span class="access-admin-badge">Admin</span>' : '')
+        +     '<span class="access-count">' + (qtd ? qtd + (qtd === 1 ? ' app' : ' apps') : 'Sem acesso') + '</span>'
+        +     '<svg class="access-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+        +   '</button>'
+        +   '<div class="access-person-body"' + (aberto ? '' : ' hidden') + '>'
+        +     '<label class="access-toggle"><input type="checkbox" class="access-cb-ativo" ' + (p.ativo ? 'checked' : '') + '> Ativo</label>'
+        +     '<label class="access-toggle"><input type="checkbox" class="access-cb-admin" ' + (p.papel === 'admin' ? 'checked' : '') + '> Administrador</label>'
+        +     '<div><button type="button" class="access-btn-senha" title="Definir a senha de acesso desta pessoa">🔑 Definir senha</button></div>'
+        +     '<table class="access-tab"><thead><tr><th>Apps</th><th>Nível de acesso</th><th class="num">Nº de visitas</th><th>Último acesso</th></tr></thead><tbody>' + apps.map(function(a){
+                var marcado = !!marcados[a.key];
+                var freq = marcado && accessLogCache[p.id] ? accessLogCache[p.id][a.key] : null;
+                var nivelAtual = marcados[a.key] === 'visualizar' ? 'visualizar' : 'editar';
+                var nivelSel = marcado
+                  ? '<select class="access-nivel" data-app="' + a.key + '" data-nivel-atual="' + nivelAtual + '" title="Nível de acesso neste app"><option value="editar"' + (nivelAtual !== 'visualizar' ? ' selected' : '') + '>Pode editar</option><option value="visualizar"' + (nivelAtual === 'visualizar' ? ' selected' : '') + '>Só visualizar</option></select>'
+                  : '<span class="access-tab-vazio">—</span>';
+                var visitas = marcado ? String(freq ? freq.total : 0) : '—';
+                var ultimo = freq && freq.ultimo ? new Date(freq.ultimo).toLocaleDateString('pt-BR') : (marcado ? 'Nunca acessou' : '—');
+                return '<tr class="' + (marcado ? 'marcado' : 'livre') + '"><td><label class="access-tab-app"><input type="checkbox" class="access-cb-app" data-app="' + a.key + '" ' + (marcado ? 'checked' : '') + '><span class="access-app-chip-icon" style="--accent:' + a.color + ';">' + a.icon + '</span><span>' + esc(a.name) + '</span></label></td><td>' + nivelSel + '</td><td class="num">' + visitas + '</td><td>' + esc(ultimo) + '</td></tr>';
+              }).join('') + '</tbody></table>'
+        +   '</div>'
+        + '</div>';
+    }).join('') || '<p class="access-empty">Nenhuma pessoa encontrada.</p>';
+  }
+
+  async function accessVerificarSessao(){
+    if(!sbAcessos) return;
+    accessMsg(null);
+    var session;
+    try {
+      session = (await comLimite(sbAcessos.auth.getSession(), 8)).data.session;
+    } catch(falha){
+      document.getElementById('accessDeniedTexto').textContent = accessEmPortugues(falha && falha.message);
+      accessMostrar('negado');
+      return;
+    }
+    if(!session){ accessMostrar('login'); return; }
+    var pessoa, error;
+    var textoEl = document.getElementById('accessDeniedTexto');
+    try {
+      var resultado = await comLimite(sbAcessos.schema('acessos').from('pessoas')
+        .select('papel,ativo').eq('user_id', session.user.id).maybeSingle(), 12);
+      pessoa = resultado.data; error = resultado.error;
+    } catch(falha){
+      textoEl.textContent = accessEmPortugues(falha && falha.message);
+      accessMostrar('negado');
+      return;
+    }
+    if(error){
+      /* Erro de verdade (ex.: schema "acessos" ainda não liberado em
+         Settings → Data API → Exposed schemas) — nunca confundir com
+         "sem permissão", senão ninguém descobre o que corrigir. */
+      textoEl.textContent = 'Não consegui checar a permissão: ' + error.message;
+      accessMostrar('negado');
+      return;
+    }
+    if(!pessoa || !pessoa.ativo || pessoa.papel !== 'admin'){
+      textoEl.innerHTML = 'Sua conta (<strong>' + esc(session.user.email) + '</strong>) não tem permissão de administrador pra gerenciar acessos.';
+      accessMostrar('negado');
+      return;
+    }
+    accessMostrar('admin');
+    accessCarregarTudo();
+  }
+  window.renderAccessList = accessVerificarSessao;
+
+  if(accessLoginForm){
+    accessLoginForm.addEventListener('submit', async function(e){
+      e.preventDefault();
+      accessLoginMsg.hidden = true;
+      var botao = accessLoginForm.querySelector('button[type="submit"]');
+      var email = accessLimpaEmail(document.getElementById('accessLoginEmail').value);
+      var senha = document.getElementById('accessLoginSenha').value;
+      if(botao) botao.disabled = true;
+      try {
+        var { error } = await comLimite(sbAcessos.auth.signInWithPassword({ email: email, password: senha }), 12);
+        if(error){ accessLoginMsg.textContent = accessEmPortugues(error.message); accessLoginMsg.hidden = false; return; }
+        accessVerificarSessao();
+      } catch(falha){
+        accessLoginMsg.textContent = accessEmPortugues(falha && falha.message);
+        accessLoginMsg.hidden = false;
+      } finally {
+        if(botao) botao.disabled = false;
+      }
+    });
+  }
+  ['accessLogoutBtn', 'accessLogoutBtnNegado'].forEach(function(id){
+    var btn = document.getElementById(id);
+    if(btn) btn.addEventListener('click', function(){ sbAcessos.auth.signOut().then(accessVerificarSessao); });
+  });
+  if(accessBuscaEl) accessBuscaEl.addEventListener('input', accessRenderPessoas);
+  if(accessFiltroSemAppEl) accessFiltroSemAppEl.addEventListener('change', accessRenderPessoas);
+
+  if(accessNovaPessoaBtn){
+    accessNovaPessoaBtn.addEventListener('click', function(){
+      accessNovaPessoaForm.hidden = !accessNovaPessoaForm.hidden;
+    });
+    document.getElementById('accessNovaPessoaCancelar').addEventListener('click', function(){
+      accessNovaPessoaForm.hidden = true;
+    });
+    document.getElementById('accessNovaPessoaSalvar').addEventListener('click', async function(){
+      var nomeEl = document.getElementById('accessNovoNome');
+      var emailEl = document.getElementById('accessNovoEmail');
+      var nome = nomeEl.value.trim().toUpperCase();
+      var email = accessLimpaEmail(emailEl.value);
+      if(!nome || !email){ accessMsg('Preencha nome e e-mail.'); return; }
+      var { error } = await sbAcessos.schema('acessos').from('pessoas').insert({ nome: nome, email: email });
+      if(error){ accessMsg(accessEmPortugues(error.message)); return; }
+      nomeEl.value = ''; emailEl.value = ''; accessNovaPessoaForm.hidden = true;
+      accessMsg(null);
+      showToast('Pessoa cadastrada.');
+      accessCarregarTudo();
+    });
+  }
+
+  /* Administrador define a senha de outra pessoa: quando ela esqueceu, nunca criou ou a conta é antiga.
+     A senha vai para o banco já como hash (função ldm_admin_definir_senha, migração 013); aqui ela só existe na tela. */
+  var senhaFundo = null, senhaPessoa = null;
+  function senhaGerar(){
+    var al = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789', b = new Uint32Array(10), s = '';
+    crypto.getRandomValues(b);
+    for(var i = 0; i < b.length; i++) s += al.charAt(b[i] % al.length);
+    return s;
+  }
+  function senhaEmPortugues(msg){
+    var m = String(msg || '');
+    if(/ldm_admin_definir_senha|schema cache|does not exist|could not find the function/i.test(m)) return 'Falta rodar a migração 013_admin_definir_senha.sql no SQL Editor do Supabase.';
+    return accessEmPortugues(m);
+  }
+  function senhaFechar(){
+    if(!senhaFundo) return;
+    senhaFundo.hidden = true; senhaFundo.innerHTML = ''; senhaPessoa = null;   /* a senha não fica na tela */
+  }
+  function senhaAbrir(pessoa){
+    if(!senhaFundo){
+      senhaFundo = document.createElement('div'); senhaFundo.className = 'senha-fundo'; senhaFundo.hidden = true;
+      document.body.appendChild(senhaFundo);
+      senhaFundo.addEventListener('click', function(ev){
+        if(ev.target === senhaFundo) return senhaFechar();
+        var b = ev.target.closest('[data-s]'); if(!b) return;
+        var a = b.dataset.s;
+        if(a === 'cancelar' || a === 'fechar') return senhaFechar();
+        if(a === 'mostrar'){ var i = document.getElementById('senhaNova'); var oculto = i.type === 'password'; i.type = oculto ? 'text' : 'password'; b.textContent = oculto ? 'Ocultar' : 'Mostrar'; return; }
+        if(a === 'gerar'){ var campo = document.getElementById('senhaNova'); campo.value = senhaGerar(); campo.type = 'text'; document.querySelector('[data-s="mostrar"]').textContent = 'Ocultar'; return; }
+        if(a === 'copiar'){ var cod = document.getElementById('senhaCod').textContent; (navigator.clipboard ? navigator.clipboard.writeText(cod) : Promise.reject()).then(function(){ b.textContent = '✔ Copiada'; }, function(){ var r = document.createRange(); r.selectNodeContents(document.getElementById('senhaCod')); var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent = 'Selecionada: copie com Ctrl+C'; }); return; }
+        if(a === 'copiar-tudo'){ var cod2 = document.getElementById('senhaCod').textContent; var txt = 'E-mail: ' + senhaPessoa.email + '\nSenha: ' + cod2; (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function(){ b.textContent = '✔ Copiado'; }, function(){ b.textContent = 'Não consegui copiar'; }); return; }
+        if(a === 'salvar') return senhaSalvar();
+      });
+      senhaFundo.addEventListener('keydown', function(ev){
+        if(ev.key === 'Escape') return senhaFechar();
+        if(ev.key === 'Enter' && ev.target.id === 'senhaNova'){ ev.preventDefault(); senhaSalvar(); }
+      });
+    }
+    senhaPessoa = pessoa;
+    senhaFundo.innerHTML = '<div class="senha-caixa" role="dialog" aria-modal="true">'
+      + '<h3>Definir senha</h3>'
+      + '<p class="senha-quem"><b>' + esc(pessoa.nome) + '</b><br>' + esc(pessoa.email) + '</p>'
+      + '<div id="senhaCorpo">'
+      +   '<label class="senha-rot" for="senhaNova">Nova senha (mínimo 6 caracteres)</label>'
+      +   '<div class="senha-linha"><input type="password" id="senhaNova" autocomplete="new-password" spellcheck="false"><button type="button" data-s="mostrar">Mostrar</button><button type="button" data-s="gerar">Gerar</button></div>'
+      +   '<p class="senha-erro" id="senhaErro" hidden></p>'
+      +   '<div class="senha-acoes"><button type="button" data-s="cancelar">Cancelar</button><button type="button" class="pri" id="senhaSalvarBtn" data-s="salvar">Salvar senha</button></div>'
+      + '</div></div>';
+    senhaFundo.hidden = false;
+    document.getElementById('senhaNova').focus();
+  }
+  async function senhaSalvar(){
+    var pessoa = senhaPessoa, campo = document.getElementById('senhaNova'), erro = document.getElementById('senhaErro'), btn = document.getElementById('senhaSalvarBtn');
+    if(!pessoa || !campo) return;
+    var senha = campo.value;
+    erro.hidden = true;
+    if(senha.length < 6){ erro.textContent = 'A senha precisa de pelo menos 6 caracteres.'; erro.hidden = false; return; }
+    btn.disabled = true; btn.textContent = 'Salvando…';
+    try {
+      var r = await sbAcessos.rpc('ldm_admin_definir_senha', { p_email: pessoa.email, p_senha: senha });
+      if(!r.error && r.data === 'sem_conta'){
+        /* Ainda não existe conta: cria pelo cadastro normal, num cliente à parte (não troca o login do administrador),
+           e chama a função de novo para confirmar o e-mail e ligar a conta à pessoa. */
+        var avulso = window.supabase.createClient(SUPA_URL, SUPA_ANON, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+        var cad = await avulso.auth.signUp({ email: pessoa.email, password: senha });
+        if(cad.error && String(cad.error.message).toLowerCase().indexOf('already') === -1) throw cad.error;
+        r = await sbAcessos.rpc('ldm_admin_definir_senha', { p_email: pessoa.email, p_senha: senha });
+      }
+      if(r.error) throw r.error;
+      if(r.data !== 'ok') throw new Error('Não consegui criar a conta desta pessoa. Tente de novo.');
+      document.getElementById('senhaCorpo').innerHTML =
+          '<p class="senha-ok">✔ Senha definida. Passe para <b>' + esc(pessoa.nome) + '</b> o e-mail e a senha abaixo. Ela já pode entrar nos apps que você liberou.</p>'
+        + '<code class="senha-cod" id="senhaCod">' + esc(senha) + '</code>'
+        + '<p class="senha-aviso">O e-mail dela é <b>' + esc(pessoa.email) + '</b> — confira se ela digita igual. Esta senha só aparece agora e não fica guardada em lugar nenhum; se perder, é só definir outra.</p>'
+        + '<div class="senha-acoes"><button type="button" data-s="copiar">Copiar senha</button><button type="button" data-s="copiar-tudo">Copiar e-mail e senha</button><button type="button" class="pri" data-s="fechar">Fechar</button></div>';
+      accessCarregarTudo();
+    } catch(f){
+      erro.textContent = senhaEmPortugues(f && f.message); erro.hidden = false;
+      btn.disabled = false; btn.textContent = 'Salvar senha';
+    }
+  }
+
+  if(accessPeopleEl){
+    accessPeopleEl.addEventListener('click', async function(e){
+      var head = e.target.closest('.access-person-head');
+      if(head){
+        var id = head.closest('.access-person-admin').dataset.id;
+        accessAbertas[id] = !accessAbertas[id];
+        accessRenderPessoas();
+        return;
+      }
+      var btnSenha = e.target.closest('.access-btn-senha');
+      if(btnSenha){
+        var idSenha = btnSenha.closest('.access-person-admin').dataset.id;
+        var quem = accessPessoasCache.filter(function(x){ return String(x.id) === idSenha; })[0];
+        if(quem) senhaAbrir(quem);
+        return;
+      }
+    });
+    accessPeopleEl.addEventListener('change', async function(e){
+      var pessoaEl = e.target.closest('.access-person-admin');
+      if(!pessoaEl) return;
+      var id = pessoaEl.dataset.id;
+
+      /* Trava de segurança: o administrador não pode desativar a si mesmo nem tirar o próprio papel de admin
+         (senão perde o acesso a esta tela e só dá para recuperar direto no banco). */
+      if((e.target.classList.contains('access-cb-ativo') || e.target.classList.contains('access-cb-admin')) && !e.target.checked){
+        try{
+          var { data: { session: sessaoAtual } } = await comLimite(sbAcessos.auth.getSession(), 12);
+          var { data: alvo } = await comLimite(sbAcessos.schema('acessos').from('pessoas').select('user_id').eq('id', id).maybeSingle(), 12);
+          if(sessaoAtual && alvo && alvo.user_id === sessaoAtual.user.id){
+            e.target.checked = true;
+            accessMsg('Você não pode desativar a sua própria conta nem tirar o seu próprio acesso de administrador. Peça para outro administrador fazer isso.');
+            return;
+          }
+        }catch(erroTravado){
+          e.target.checked = !e.target.checked;
+          accessMsg(erroTravado.message);
+          return;
+        }
+      }
+
+      if(e.target.classList.contains('access-cb-ativo')){
+        try{
+          var { error } = await comLimite(sbAcessos.schema('acessos').from('pessoas').update({ ativo: e.target.checked }).eq('id', id), 12);
+          if(error){ accessMsg(accessEmPortugues(error.message)); e.target.checked = !e.target.checked; return; }
+        }catch(erroTravado){ e.target.checked = !e.target.checked; accessMsg(erroTravado.message); return; }
+        accessCarregarTudo();
+        return;
+      }
+      if(e.target.classList.contains('access-cb-admin')){
+        var novoPapel = e.target.checked ? 'admin' : 'colaborador';
+        try{
+          var { error: errPapel } = await comLimite(sbAcessos.schema('acessos').from('pessoas').update({ papel: novoPapel }).eq('id', id), 12);
+          if(errPapel){ accessMsg(accessEmPortugues(errPapel.message)); e.target.checked = !e.target.checked; return; }
+        }catch(erroTravado){ e.target.checked = !e.target.checked; accessMsg(erroTravado.message); return; }
+        accessCarregarTudo();
+        return;
+      }
+      if(e.target.classList.contains('access-nivel')){
+        var nivelAnterior = e.target.dataset.nivelAtual || 'editar';
+        try{
+          var { error: errNivel } = await comLimite(sbAcessos.schema('acessos').from('permissoes').update({ nivel: e.target.value }).eq('pessoa_id', id).eq('app_key', e.target.dataset.app), 12);
+          if(errNivel){ accessMsg(accessEmPortugues(errNivel.message)); e.target.value = nivelAnterior; return; }
+        }catch(erroTravado){ e.target.value = nivelAnterior; accessMsg(erroTravado.message); return; }
+        accessAbertas[id] = true;
+        accessCarregarTudo();
+        return;
+      }
+      if(e.target.classList.contains('access-cb-app')){
+        var appKey = e.target.dataset.app;
+        try{
+          if(e.target.checked){
+            var { error: errIns } = await comLimite(sbAcessos.schema('acessos').from('permissoes').insert({ pessoa_id: id, app_key: appKey }), 12);
+            if(errIns){ accessMsg(accessEmPortugues(errIns.message)); e.target.checked = false; return; }
+          } else {
+            var { error: errDel } = await comLimite(sbAcessos.schema('acessos').from('permissoes').delete().eq('pessoa_id', id).eq('app_key', appKey), 12);
+            if(errDel){ accessMsg(accessEmPortugues(errDel.message)); e.target.checked = true; return; }
+          }
+        }catch(erroTravado){
+          e.target.checked = !e.target.checked;
+          accessMsg(erroTravado.message);
+          return;
+        }
+        accessAbertas[id] = true;
+        accessCarregarTudo();
+        return;
+      }
+    });
+  }
+
+  /* Não chamar o Supabase de dentro do aviso de login (trava a conexão): setTimeout. */
+  if(sbAcessos) sbAcessos.auth.onAuthStateChange(function(){ setTimeout(accessVerificarSessao, 0); setTimeout(atualizarCadeados, 0); });
+
   renderCards();
   renderSidebarFavorites();
+  atualizarCadeados();
 })();
 </script>
 </body>

@@ -13,7 +13,7 @@
   display:flex; flex-direction:column; align-items:center; gap:6px;
   transition:border-color .15s, background .15s;
 }
-.aud-dropzone.has-file{ border-color:var(--accent); border-style:solid; background:rgba(250,70,22,.05); }
+.aud-dropzone.has-file{ border-color:var(--accent); border-style:solid; background:rgba(254,80,0,.05); }
 .aud-dz-icon{ font-size:26px; margin-bottom:2px; }
 .aud-dz-title{ font-family:'Oswald',sans-serif; font-size:13.5px; font-weight:600; color:var(--ink); }
 .aud-dz-desc{ font-size:11px; color:var(--ink-soft); margin-bottom:6px; }
@@ -79,34 +79,18 @@
   --aud-blue:#001A72; --aud-orange:#FE5000;
 }
 
-/* ---- tema claro institucional, isolado ao módulo de auditoria ----
-   Sobrescreve as variáveis do shell escuro só dentro de .aud-shell;
-   componentes compartilhados (panel/btn/table/stat-card) herdam e
-   viram claros automaticamente, sem afetar os outros módulos do app. */
-.aud-shell{
-  --paper:#FFFFFF; --surface:#FFFFFF; --surface2:#F4F6FA;
-  --ink:#12172B; --ink-soft:#5B6472; --line:#E2E6EE;
-  --accent:var(--aud-orange); --accent-light:rgba(254,80,0,.10);
-  --blue:var(--aud-blue); --blue2:var(--aud-blue); --blue3:#33488E;
-  background:#FFFFFF; min-height:100%; color:var(--ink);
-  margin:-20px -24px; padding:0 16px 16px;
-}
-/* "color" é propriedade herdada: sem o "color:var(--ink)" acima, filhos
-   sem color próprio (td, .mono, etc.) herdavam o valor já resolvido do
-   <body> escuro (quase branco), ficando ilegíveis sobre o fundo branco. */
+/* ---- antes, este módulo forçava um tema claro fixo (.aud-shell
+   sobrescrevia as variáveis do shell escuro); agora o app inteiro já
+   suporta claro/escuro de verdade, então as abas de Auditoria herdam o
+   mesmo tema do resto — só o layout (margem/padding) fica aqui. */
+.aud-shell{ min-height:100%; color:var(--ink); margin:-20px -24px; padding:0 16px 16px; }
 @media(max-width:760px){ .aud-shell{ margin:-14px; padding:0 10px 10px; } }
 .aud-shell .btn-primary{ background:var(--aud-blue); color:#fff; font-weight:600; }
-.aud-shell .btn-secondary{ background:#fff; border:1px solid var(--aud-blue); color:var(--aud-blue); }
-.aud-shell thead th{ background:var(--aud-blue); }
-.aud-shell table, .aud-shell .table-wrap{ border-color:var(--line); }
-.aud-shell tbody tr:hover td{ background:rgba(254,80,0,.05); }
-.aud-shell .field-hint{ color:var(--ink-soft); }
-.aud-shell form input, .aud-shell form select, .aud-shell form textarea{ background:#fff; }
 
 /* ---- header compacto ---- */
 .aud-headerbar{
   display:flex; align-items:center; gap:18px; flex-wrap:wrap;
-  background:#FFFFFF; border-bottom:1px solid var(--line);
+  background:var(--surface); border-bottom:1px solid var(--line);
   padding:10px 16px; margin:0 -16px 14px; position:sticky; top:0; z-index:5;
   box-shadow:0 1px 3px rgba(0,26,114,.06);
 }
@@ -128,7 +112,7 @@
 /* ---- KPI grid: cards modernos com destaque lateral ---- */
 .aud-kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }
 .aud-kpi{
-  background:#FFFFFF; border:1px solid var(--line); border-left:4px solid var(--aud-blue);
+  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--aud-blue);
   border-radius:10px; padding:14px 16px;
   position:relative; overflow:hidden;
   box-shadow:0 1px 2px rgba(0,26,114,.05);

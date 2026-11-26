@@ -6,6 +6,7 @@ import DetalheProjeto from '@/paginas/DetalheProjeto';
 import Cronograma from '@/paginas/Cronograma';
 import Pessoas from '@/paginas/Pessoas';
 import Guia, { guiaJaVisto } from '@/componentes/Guia';
+import ZoomCtrl from '@/componentes/ZoomCtrl';
 import type { DestinoDoGuia } from '@/componentes/Guia';
 import { Aviso, Carregando } from '@/componentes/ui';
 import { useCarteira } from '@/estado/dados';
@@ -196,6 +197,8 @@ export default function App() {
       <footer className="pb-8 text-center text-[11px] text-tinta-suave">
         Central de Estoque · Loja do Mecânico · versão {__VERSAO__}
       </footer>
+
+      <ZoomCtrl />
     </div>
     </ContextoSituacoes.Provider>
     </ContextoPermissoes.Provider>

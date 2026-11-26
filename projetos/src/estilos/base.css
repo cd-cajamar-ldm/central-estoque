@@ -25,6 +25,17 @@
   .botao-neutro { @apply botao border border-linha bg-white text-tinta hover:bg-papel; }
   .botao-perigo { @apply botao border border-vermelho/30 bg-white text-vermelho hover:bg-vermelho/5; }
 
+  /* Zoom da tela, igual ao dos outros apps da Oficina: flutua no canto
+     para não empurrar o conteúdo. */
+  .zoom-ctrl { @apply flex items-center gap-0.5 bg-white border border-linha rounded-full p-[3px] shadow-card; }
+  .zoom-ctrl button {
+    @apply flex h-6 w-6 items-center justify-center rounded-full border-none bg-papel
+           text-sm font-bold leading-none text-tinta;
+  }
+  .zoom-ctrl button:hover { @apply bg-roxo/10 text-roxo-escuro; }
+  .zoom-ctrl span { @apply min-w-[34px] text-center font-mono text-[11px] text-tinta-suave; }
+  .zoom-ctrl-float { @apply fixed bottom-4 right-4 z-[70] shadow-card; }
+
   /* Texto das paginas: a mesma folha vale no editor e na leitura, senao
      o que se escreve nao e o que se ve depois de salvar. */
   /* A tela acompanha a largura do monitor, mas a coluna de texto para

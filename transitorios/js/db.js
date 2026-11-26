@@ -3,7 +3,7 @@
    100% client-side. Nenhum servidor, nenhuma API.
    ============================================================ */
 const IR_DB_NAME = 'inventario_rotativo_v1';
-const IR_DB_VERSION = 10;
+const IR_DB_VERSION = 11;
 
 const IR_STORES = {
   ciclos: 'ciclos',
@@ -32,7 +32,11 @@ const IR_STORES = {
   // Ficha do ENDEREÇO vinda da QRY0390 (classe local, prédio, prefixos). A
   // QRY0160 não traz classe local, e é ela que diz de qual setor é o endereço —
   // então a 390 alimenta esse dicionário e a 160 consulta.
-  localInfo: 'local_info'
+  localInfo: 'local_info',
+  // Uma foto por dia dos totais de transitório (valor parado, peças, valor fora
+  // do prazo) — é o que alimenta a "Evolução no tempo" do painel de indicadores.
+  // Chave é a data (YYYY-MM-DD); abrir o painel de novo no mesmo dia sobrescreve.
+  transHistorico: 'trans_historico'
 };
 
 /* Se o banco no disco estiver numa versão MAIOR que a do código, o IndexedDB
@@ -41,13 +45,22 @@ const IR_STORES = {
    continuam lá; só a abertura falha. Aqui, nesse caso, reabrimos o banco na
    versão que ele já tem (sem informar versão): o esquema só cresce, então um
    banco mais novo tem todos os stores que este código conhece. */
+function irDbComFechoAutomatico(db){
+  // Sem isto, um upgrade de versão nesta aba trava pra sempre a abertura de
+  // QUALQUER outra aba/janela deste sistema (Inventário ou Transitórios) que já
+  // esteja com o banco aberto numa versão antiga — o IndexedDB não fecha
+  // conexão de outra aba sozinho, e o open() dela fica preso em "blocked" sem
+  // nunca resolver nem rejeitar. Fechando aqui, a aba antiga libera a nova.
+  db.onversionchange = ()=>db.close();
+  return db;
+}
 function irOpenDB(){
   return irOpenDBNaVersao(IR_DB_VERSION).catch(err=>{
     if(!err || err.name !== 'VersionError') throw err;
     console.warn('Banco mais novo que o código — abrindo na versão existente.', err);
     return new Promise((resolve, reject)=>{
       const req = indexedDB.open(IR_DB_NAME);
-      req.onsuccess = ()=>resolve(req.result);
+      req.onsuccess = ()=>resolve(irDbComFechoAutomatico(req.result));
       req.onerror = ()=>reject(req.error);
     });
   });
@@ -106,6 +119,9 @@ function irOpenDBNaVersao(versao){
       if(!db.objectStoreNames.contains(IR_STORES.localInfo)){
         db.createObjectStore(IR_STORES.localInfo, {keyPath:'local'});
       }
+      if(!db.objectStoreNames.contains(IR_STORES.transHistorico)){
+        db.createObjectStore(IR_STORES.transHistorico, {keyPath:'dia'});
+      }
       /* Índices que ninguém consulta são apagados. Todo índice é mantido a cada
          gravação: numa importação de 190 mil contagens, três índices mortos são
          570 mil atualizações de estrutura que nunca serão lidas. Só 'cicloId' é
@@ -123,8 +139,18 @@ function irOpenDBNaVersao(versao){
         for(const idx of indicesMortos[nome]) if(st.indexNames.contains(idx)) st.deleteIndex(idx);
       }
     };
-    req.onsuccess = ()=>resolve(req.result);
+    req.onsuccess = ()=>resolve(irDbComFechoAutomatico(req.result));
     req.onerror = ()=>reject(req.error);
+    // Essa aba travou aguardando outra aba (com o banco aberto numa versão
+    // antiga) fechar a conexão dela. Enquanto essa outra aba não tiver o
+    // onversionchange acima (ou seja, enquanto não recarregar com este
+    // código), a tela some em "Carregando..." sem erro nenhum — daí o aviso.
+    req.onblocked = ()=>{
+      console.warn('IndexedDB bloqueado por outra aba/janela aberta deste sistema.');
+      if(typeof irShowToast==='function'){
+        irShowToast('Outra aba do Inventário/Transitórios está aberta e trava o carregamento — feche as outras abas e atualize esta página.', true);
+      }
+    };
   });
 }
 
@@ -534,6 +560,21 @@ async function irSalvarLocalInfo(linhas){
   await new Promise((res, rej)=>{ const r = store.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
   const CHUNK = 1500;
   for(let i=0;i<linhas.length;i+=CHUNK) await irBulkPut(IR_STORES.localInfo, linhas.slice(i,i+CHUNK));
+}
+async function irSalvarTransSnapshot(dia, dados){
+  const store = await irTx(IR_STORES.transHistorico, 'readwrite');
+  return new Promise((res, rej)=>{
+    const r = store.put(Object.assign({dia}, dados));
+    r.onsuccess = ()=>res(); r.onerror = ()=>rej(r.error);
+  });
+}
+async function irGetTransHistoricoTodos(){
+  const store = await irTx(IR_STORES.transHistorico, 'readonly');
+  return new Promise((res, rej)=>{
+    const r = store.getAll();
+    r.onsuccess = ()=>res((r.result||[]).sort((a,b)=> a.dia<b.dia?-1:(a.dia>b.dia?1:0)));
+    r.onerror = ()=>rej(r.error);
+  });
 }
 async function irGetLocalInfoTodos(){
   const store = await irTx(IR_STORES.localInfo, 'readonly');

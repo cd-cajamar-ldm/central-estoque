@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TV LDM</title>
+<title>Tv Ldm</title>
 <meta name="robots" content="noindex">
 <link rel="icon" href="icons/icon-192.png">
 <!--
@@ -11,7 +11,7 @@
   o tempo todo no navegador do computador ligado na TV. Não lê nada do
   localStorage (o computador da TV não tem acesso ao localStorage de
   quem configurou) — toda a sequência, tempo, idioma e link de cada app
-  vêm do link em si (depois de #cfg=), gerado na aba "TV LDM" do painel.
+  vêm do link em si (depois de #cfg=), gerado na aba "Tv Ldm" do painel.
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
@@ -26,6 +26,11 @@
   .tv-band-clock{color:#fff;font-size:15px;font-weight:700;}
   .tv-frame{position:relative;flex:1;min-height:0;background:#fff;}
   .tv-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;}
+  /* Vinheta entre um app e outro: logo animado da LDM (~2,9 s) enquanto o
+     próximo app carrega por trás — esconde também o "piscar" da troca. */
+  .tv-intro{position:absolute;inset:0;z-index:2;background:#fff;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease;pointer-events:none;}
+  .tv-intro.on{opacity:1;}
+  .tv-intro img{width:min(760px,45vw);height:auto;}
   .tv-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:40px;color:#8891C4;background:#0B0E26;font-size:16px;line-height:1.6;}
 </style>
 </head>
@@ -36,7 +41,7 @@
     <span class="tv-band-clock" id="clock">--:-- · --/--/----</span>
   </div>
   <div class="tv-frame" id="frame">
-    <p class="tv-empty" id="empty" hidden>Nenhuma configuração encontrada neste link.<br>Gere o link na aba "TV LDM" do painel e abra-o aqui.</p>
+    <p class="tv-empty" id="empty" hidden>Nenhuma configuração encontrada neste link.<br>Gere o link na aba "Tv Ldm" do painel e abra-o aqui.</p>
   </div>
 </div>
 <script>
@@ -84,8 +89,33 @@
   }
 
   var iframe = document.createElement('iframe');
-  iframe.setAttribute('title', 'TV LDM');
+  iframe.setAttribute('title', 'Tv Ldm');
   frameBox.appendChild(iframe);
+
+  /* Vinheta: o GIF é baixado uma vez e cada exibição usa um endereço novo
+     em memória (blob) — com o mesmo endereço o navegador não reinicia a
+     animação, e ela apareceria já no meio ou parada no último quadro. */
+  var INTRO_MS = 2900;
+  var INTRO_GIF = 'brand/Logo_LDM_animado.gif';
+  var introBox = document.createElement('div');
+  introBox.className = 'tv-intro';
+  var introImg = document.createElement('img');
+  introImg.alt = 'Loja do Mecânico';
+  introBox.appendChild(introImg);
+  frameBox.appendChild(introBox);
+  var introBlob = null, introUrl = null;
+  try {
+    fetch(INTRO_GIF).then(function(r){ return r.ok ? r.blob() : null; })
+      .then(function(b){ introBlob = b; }).catch(function(){});
+  } catch(e){}
+  function showIntro(){
+    var novo = introBlob ? URL.createObjectURL(introBlob) : INTRO_GIF + '?t=' + Date.now();
+    introImg.src = novo;
+    if(introUrl && introUrl.indexOf('blob:') === 0) URL.revokeObjectURL(introUrl);
+    introUrl = novo;
+    introBox.classList.add('on');
+  }
+  function hideIntro(){ introBox.classList.remove('on'); }
 
   var SCROLL_SPEED_MULT = {slow:1.6, normal:1, fast:0.6};
   var index = 0;
@@ -103,19 +133,48 @@
       doc.head.appendChild(style);
     } catch(e){}
   }
+  function findScrollTarget(win, doc){
+    /* Os apps embutidos usam um shell flex com overflow:hidden no próprio
+       <html>/<body> — quem realmente rola é um contêiner interno
+       (.page-scroll, convenção compartilhada entre os apps). Rolar
+       document.documentElement nesses casos não move nada, então
+       primeiro tenta essa classe conhecida e, se não achar, procura o
+       maior contêiner com overflow-y:auto/scroll na página. */
+    var known = doc.querySelector('.page-scroll');
+    if(known && known.scrollHeight - known.clientHeight > 4) return known;
+    var best = null, bestDelta = 4;
+    var all = doc.querySelectorAll('*');
+    for(var i = 0; i < all.length; i++){
+      var el = all[i];
+      var delta = el.scrollHeight - el.clientHeight;
+      if(delta <= bestDelta) continue;
+      var oy = win.getComputedStyle(el).overflowY;
+      if(oy === 'auto' || oy === 'scroll'){ best = el; bestDelta = delta; }
+    }
+    if(best) return best;
+    var de = doc.documentElement;
+    if(de.scrollHeight - win.innerHeight > 4) return de;
+    return null;
+  }
+  var scrollTarget = null;
   function getMaxScroll(){
     if(cachedMaxScroll != null) return cachedMaxScroll;
     try {
       var win = iframe.contentWindow, doc = win.document;
-      var m = doc.documentElement.scrollHeight - win.innerHeight;
-      if(m > 0){ cachedMaxScroll = m; return m; }
+      scrollTarget = findScrollTarget(win, doc);
+      if(scrollTarget){
+        var m = scrollTarget === doc.documentElement
+          ? scrollTarget.scrollHeight - win.innerHeight
+          : scrollTarget.scrollHeight - scrollTarget.clientHeight;
+        if(m > 0){ cachedMaxScroll = m; return m; }
+      }
     } catch(e){}
     return 0;
   }
   function applyScrollFraction(frac){
     var max = getMaxScroll();
-    if(max <= 0) return;
-    try { iframe.contentWindow.scrollTo(0, max * frac); } catch(e){}
+    if(max <= 0 || !scrollTarget) return;
+    try { scrollTarget.scrollTop = max * frac; } catch(e){}
   }
 
   function playIndex(i){
@@ -123,11 +182,18 @@
     var item = playlist[index];
     durationMs = Math.max(5, item.duration || 20) * 1000;
     scrollMult = SCROLL_SPEED_MULT[item.scrollSpeed] || 1;
-    startTs = Date.now();
     cachedMaxScroll = null;
+    scrollTarget = null;
+    // Vinheta por cima enquanto o app carrega; o tempo do app só começa a
+    // contar depois dela, então cada app continua com o tempo configurado.
+    showIntro();
     iframe.src = item.href;
     iframe.onload = function(){ injectKioskCss(); };
-    tick();
+    setTimeout(function(){
+      hideIntro();
+      startTs = Date.now();
+      tick();
+    }, INTRO_MS);
   }
   function tick(){
     var el = Date.now() - startTs;

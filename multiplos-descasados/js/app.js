@@ -149,9 +149,19 @@ function irToggleTheme(){
   localStorage.setItem('ir-theme', atual);
   irUpdateThemeLabel();
 }
+const MD_SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+const MD_MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 function irUpdateThemeLabel(){
-  const el = document.getElementById('themeToggleLabel');
-  if(el) el.textContent = document.documentElement.getAttribute('data-theme')==='light' ? 'Modo escuro' : 'Modo claro';
+  // Antes um texto ("Modo claro"/"Modo escuro") no botão da sidebar; agora o
+  // controle é o switch do topbar, igual ao da Oficina LDM — só liga a classe
+  // que desloca a bolinha. O sol/lua dentro da bolinha é o mesmo ícone do
+  // switch do Painel raiz.
+  const btn = document.getElementById('themeSwitchBtn');
+  if(!btn) return;
+  const escuro = document.documentElement.getAttribute('data-theme')==='dark';
+  btn.classList.toggle('on', escuro);
+  const knob = btn.querySelector('.theme-knob');
+  if(knob) knob.innerHTML = escuro ? MD_MOON : MD_SUN;
 }
 /* No celular o menu é um overlay (classe mobile-open, largura 0 -> 230px); no
    computador ele encolhe pra faixa de ícones (collapsed). São classes
@@ -1274,6 +1284,7 @@ function mdAtualizarProgresso(id){
   if(st && fi){ st.textContent = p.stage; fi.style.width = p.pct+'%'; }
 }
 function mdProcessar(id){
+  if(window.LDM_SOMENTE_LEITURA){ irShowToast('Seu acesso é só de visualização.', true); return; }
   const base = MD_BASES.find(b=>b.id===id);
   const arq = mdArquivo(id);
   if(MD.proc[id] || !arq) return;
@@ -1297,6 +1308,8 @@ function mdProcessar(id){
       }
       MD.proc[id] = false; worker.terminate();
       mdSetArquivo(id, null);
+      try { await mdNuvemEnviarBase(id); }
+      catch(e){ console.error(e); irShowToast('Importou aqui, mas não consegui enviar pra nuvem: '+((e && e.message) || e), true); }
       await mdRecarregar();
       if(msg.type === 'done051'){
         irShowToast(irFmtInt(msg.pais)+' múltiplos e '+irFmtInt(msg.componentes)+' componentes na estrutura.'
@@ -1497,6 +1510,7 @@ function mdRascunhoAlterado(){
     || JSON.stringify(MD.docaX1x2Rascunho) !== JSON.stringify(MD.docaX1x2);
 }
 function mdSalvarConfiguracao(){
+  if(window.LDM_SOMENTE_LEITURA){ irShowToast('Seu acesso é só de visualização.', true); return; }
   MD_DIMENSOES.forEach(dim=>{
     MD.regras[dim.chave] = {...MD.regrasRascunho[dim.chave]};
     mdSetConfig(MD_CONFIG_KEY_POR_DIM[dim.chave], MD.regras[dim.chave]);
@@ -1733,4 +1747,30 @@ async function irInit(){
     if(mdH && MD_TELAS[mdH]) mdHashTela = mdH;
   } catch(e){}
   if(mdHashTela) irSwitchTab(mdHashTela); else irRenderView();
+  mdNuvemVigiar();
+}
+/* Enquanto o app está aberto, puxa mudanças feitas por outras pessoas. */
+async function mdNuvemChecar(primeira){
+  if(!primeira && document.hidden) return;
+  if(Object.values(MD.proc).some(Boolean) || mdRascunhoAlterado()) return;
+  try {
+    if(primeira) irShowToast('Sincronizando com a nuvem...');
+    if(await mdNuvemSincronizar()){
+      await mdRecarregar();
+      irRenderView();
+      irShowToast(primeira ? 'Dados sincronizados com a nuvem.' : 'Dados atualizados por outra pessoa.');
+    } else if(primeira){
+      irShowToast('Nuvem em dia.');
+    }
+  } catch(e){
+    console.warn('Checagem da nuvem falhou', e);
+    if(primeira) irShowToast('Não consegui sincronizar com a nuvem: '+((e && e.message) || e), true);
+  }
+}
+function mdNuvemVigiar(){
+  // A 1ª sincronização roda depois da tela já aberta (e fora do callback de
+  // login), pra um envio demorado nunca deixar o app preso em "Carregando...".
+  setTimeout(()=>mdNuvemChecar(true), 500);
+  setInterval(mdNuvemChecar, 30000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) mdNuvemChecar(); });
 }
