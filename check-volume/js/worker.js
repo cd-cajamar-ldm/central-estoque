@@ -48,6 +48,7 @@ function linhasDe(ws){
    biblioteca não consegue carregar tudo na memória e devolve "planilha vazia".
    Aqui o zip é aberto direto do arquivo, a aba é descompactada aos poucos
    (DecompressionStream) e só as colunas necessárias ficam na memória. */
+const MSG_NAO_RECONHECIDA = 'não reconheci a planilha (esperado QRY0180, QRY0390, SIGEQ230 com Id Item e EAN, ou o cadastro com URL Foto).';
 const LIMITE_XML = 150 * 1024 * 1024;
 async function lerZip(file){
   const fim = Math.max(0, file.size - 70000);
@@ -179,7 +180,7 @@ async function lerGrande(file, ent, aba, precisa, prog){
   const cab = [];
   cabIdx.forEach(([c, v]) => { cab[c] = typeof v === 'string' && v.charCodeAt(0) === 1 ? (mapaH.get(Number(v.slice(1))) || '') : v; });
   const quer = precisa(cab.map(h => norm(h)));          // Set de colunas
-  if(!quer || !quer.size) throw new Error('não reconheci a planilha (esperado QRY0180 de entregas, QRY0390 de estoque ou o cadastro com URL Foto).');
+  if(!quer || !quer.size) throw new Error(MSG_NAO_RECONHECIDA + ' Colunas encontradas: ' + cab.filter(Boolean).slice(0, 14).join(', ') + '.');
   // 2) linhas: só as colunas pedidas
   const linhas = [cab]; const usados = new Set(); let vistas = 0;
   await lerAba(file, aba, (rn, cels) => {
@@ -205,6 +206,14 @@ async function lerGrande(file, ent, aba, precisa, prog){
   return linhas;
 }
 
+/* SIGEQ230: vários EANs por item. Aceita variações do nome das colunas. */
+function achar230(cab){
+  const ehItem = h => /^(iditem|iditemfilho|coditem|codigoitem|item|idprod|codproduto|iditembseller)$/.test(h) || /^id.?item/.test(h);
+  const ehEan = h => /ean|codbarra|barras|gtin/.test(h);
+  let it = -1, ea = -1;
+  cab.forEach((h, i) => { if(!h) return; if(it < 0 && ehItem(h)) it = i; if(ea < 0 && ehEan(h)) ea = i; });
+  return it >= 0 && ea >= 0 ? [it, ea] : null;
+}
 /* Colunas que cada tipo de planilha usa (índices), a partir do cabeçalho já normalizado. */
 function colunasPrecisas(cab){
   const idx = (...ns) => { for(const n of ns){ const i = cab.indexOf(norm(n)); if(i >= 0) return i; } return -1; };
@@ -213,10 +222,12 @@ function colunasPrecisas(cab){
     [['ID_ITEM_FILHO', 'QTDE_DISP'], ['NOME_ITEM_FILHO', 'EAN', 'DESC_LOCAL', 'CLAL', 'RETRICAO', 'RESTRICAO']],
     [['Id Item', 'URL Foto'], ['Id EAN']]
   ];
+  const a230 = achar230(cab);
   for(const [obrig, extra] of tipos){
     const o = obrig.map(n => idx(n));
     if(o.every(i => i >= 0)) return new Set(o.concat(extra.map(n => idx(n)).filter(i => i >= 0)));
   }
+  if(a230) return new Set(a230);
   return null;
 }
 
@@ -288,8 +299,17 @@ self.onmessage = async (e) => {
         out.push([i, u.indexOf(BASE) === 0 ? u.slice(BASE.length) : u, cFotoEan >= 0 ? chave(L[cFotoEan]) : '']);
       }
       self.postMessage({tipo: 'ok', base: 'foto', nome, linhas: n, dados: out});
+    } else if(achar230(cab)){ // SIGEQ230 — todos os EANs de cada item
+      const [ci, ce] = achar230(cab), vistos = new Set(), out = [];
+      for(let r = 1; r < aoa.length; r++){
+        const L = aoa[r]; if(!L) continue;
+        const i = chave(L[ci]), e = chave(L[ce]); if(!i || !e) continue;
+        const k = i + '|' + e; if(vistos.has(k)) continue;
+        vistos.add(k); out.push([i, e]);
+      }
+      self.postMessage({tipo: 'ok', base: 'ean', nome, linhas: n, dados: out});
     } else {
-      throw new Error('não reconheci a planilha (esperado QRY0180 de entregas, QRY0390 de estoque ou o cadastro com URL Foto).');
+      throw new Error(MSG_NAO_RECONHECIDA + ' Colunas encontradas: ' + (aoa[0] || []).filter(Boolean).slice(0, 14).join(', ') + '.');
     }
   } catch(err){
     self.postMessage({tipo: 'erro', nome, msg: (err && err.message) || String(err)});
