@@ -6,16 +6,17 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 2; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 3; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
   entregas: ['Entregas', 'Entregas da QRY0180 importada.'],
-  importacao: ['Importação', 'QRY0180 (entregas) e QRY0390 (estoque).'],
+  importacao: ['Importação', 'QRY0180 (entregas), QRY0390 (estoque) e cadastro de fotos.'],
   configuracoes: ['Configurações', 'Regras das sugestões de outros locais.']
 };
 const CV = {
-  ent: [], itens: {}, saldo: [], meta: {}, cfg: {ignorar: ['REV', 'AVA'], restricoes: ['WN'], max: 5},
+  ent: [], itens: {}, saldo: [], meta: {}, cfg: {ignorar: ['REV', 'AVA'], restricoes: ['WN'], max: 5, picking: ['PP']},
+  fotos: new Map(),
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
   ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set()
@@ -89,17 +90,20 @@ function indexar(){
   CV.ent.forEach(r => { let a = CV.porEnt.get(r.e); if(!a) CV.porEnt.set(r.e, a = []); a.push(r); });
   CV.eanMap = new Map();
   Object.keys(CV.itens).forEach(i => (CV.itens[i].e || []).forEach(e => { const k = normEan(e); if(k && !CV.eanMap.has(k)) CV.eanMap.set(k, i); }));
+  CV.fotoMap = new Map();
+  (CV.fotoRows || []).forEach(f => { CV.fotoMap.set(f[0], f[1]); const k = normEan(f[2]); if(k && !CV.eanMap.has(k)) CV.eanMap.set(k, f[0]); });
   CV.saldoItem = new Map();
   CV.saldo.forEach(s => { let a = CV.saldoItem.get(s[0]); if(!a) CV.saldoItem.set(s[0], a = []); a.push(s); });
 }
 async function carregar(){
   try {
-    const [cfg, ent, ei, es] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo')]);
+    const [cfg, ent, ei, es, ft] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo'), nuvemLer('fotos')]);
     if(cfg && cfg.dados && cfg.dados.cfg) Object.assign(CV.cfg, cfg.dados.cfg);
     CV.ent = ent ? ent.linhas : [];
     CV.itens = {}; (ei ? ei.linhas : []).forEach(x => { CV.itens[x[0]] = {d: x[1], e: x[2]}; });
     CV.saldo = es ? es.linhas : [];
-    CV.meta = {ent: ent && ent.meta, est: es && es.meta};
+    CV.fotoRows = ft ? ft.linhas : [];
+    CV.meta = {ent: ent && ent.meta, est: es && es.meta, foto: ft && ft.meta};
     indexar();
   } catch(e){
     CV.erro = 'Não consegui ler os dados: ' + (e.message || e) + (/app_dados|relation|does not exist/i.test(String(e.message)) ? ' — a tabela app_dados ainda não foi criada no banco (migração 008).' : '');
@@ -169,16 +173,16 @@ function bipar(codigo){
   if(x){
     const antes = CV.sess.bips[x.i] || 0;
     CV.sess.bips[x.i] = antes + 1;
-    CV.sess.log.push({t: agora, i: x.i});
     const sobra = antes + 1 > x.prev;
-    CV.ult = {tipo: sobra ? 'sobra' : 'ok', txt: (sobra ? 'SOBRA · ' : '✓ ') + x.i + ' — ' + x.d + ' · ' + (antes + 1) + ' de ' + x.prev};
+    CV.sess.log.push({t: agora, i: x.i, e: cod, k: sobra ? 'sobra' : 'ok'});
+    CV.ult = {tipo: sobra ? 'sobra' : 'ok', i: x.i, ean: cod, n: antes + 1, prev: x.prev, txt: (sobra ? 'SOBRA · ' : '✓ ') + x.i + ' — ' + x.d + ' · ' + (antes + 1) + ' de ' + x.prev};
     beep(sobra ? 'erro' : 'ok');
   } else {
     const d = CV.sess.desc[cod] || (CV.sess.desc[cod] = {n: 0, nome: ''});
     const outro = CV.eanMap.get(k); d.nome = outro ? ((CV.itens[outro] && CV.itens[outro].d) || '') + ' (item ' + outro + ')' : '';
     d.n++;
-    CV.sess.log.push({t: agora, e: cod});
-    CV.ult = {tipo: 'ean', txt: 'EAN NÃO IDENTIFICADO · ' + cod + (outro ? ' — pertence a outro produto: ' + d.nome : ' — não está nesta entrega')};
+    CV.sess.log.push({t: agora, e: cod, k: 'ean'});
+    CV.ult = {tipo: 'ean', ean: cod, txt: 'EAN NÃO IDENTIFICADO · ' + cod + (outro ? ' — pertence a outro produto: ' + d.nome : ' — não está nesta entrega')};
     beep('erro');
   }
   gravarSessao(); atualizar();
@@ -208,12 +212,14 @@ function focoBip(){ const i = $('cvBip'); if(i) i.focus(); }
 function cvToggle(i){ if(CV.aberto.has(i)) CV.aberto.delete(i); else CV.aberto.add(i); atualizar(); }
 
 /* ---------- onde achar a peça faltante ---------- */
-function alternativas(x, falta){
+const ehPicking = loc => (CV.cfg.picking && CV.cfg.picking.length ? CV.cfg.picking : ['PP']).some(p => normLoc(loc).indexOf(p) === 0);
+/* Sugestões: picking primeiro (os que cobrem a falta antes), depois o resto por saldo. */
+function alternativas(x, falta, max){
   const orig = x.orig.map(normLoc);
   const ig = new Set((CV.cfg.ignorar || []).map(s => s.toUpperCase())), rs = new Set((CV.cfg.restricoes || []).map(s => s.toUpperCase()));
   const lista = (CV.saldoItem.get(x.i) || []).filter(s => !orig.includes(normLoc(s[1])) && !ig.has(String(s[3]).toUpperCase()) && (!rs.size || rs.has(String(s[4]).toUpperCase())));
-  lista.sort((a, b) => ((b[2] >= falta) - (a[2] >= falta)) || b[2] - a[2]);
-  return lista.slice(0, CV.cfg.max || 5);
+  lista.sort((a, b) => (ehPicking(b[1]) - ehPicking(a[1])) || ((b[2] >= falta) - (a[2] >= falta)) || b[2] - a[2]);
+  return lista.slice(0, max || CV.cfg.max || 5);
 }
 function saldoNaOrigem(x){
   const orig = new Set(x.orig.map(normLoc));
@@ -225,7 +231,7 @@ function blocoLocais(x){
   const so = saldoNaOrigem(x);
   return '<div class="cv-loc orig"><span class="rot">Coletado em</span>' + (x.orig.length ? x.orig.map(o => '<code>' + esc(o) + '</code>').join(' ') : '<span class="cv-vazio">origem não informada na QRY0180</span>') +
     (x.orig.length ? '<span class="sd">saldo disponível hoje na origem: <b>' + fInt(so) + '</b></span>' : '') + '</div>' +
-    (alts.length ? alts.map((s, n) => '<div class="cv-loc"><span class="rot">' + (n ? 'Alternativa' : 'Sugestão') + '</span><code>' + esc(s[1]) + '</code><span class="sd">saldo <b>' + fInt(s[2]) + '</b>' + (s[2] >= falta ? ' · cobre a falta' : ' · cobre parte') + ' · classe ' + esc(s[3] || '—') + ' · restrição ' + esc(s[4] || '—') + '</span></div>').join('')
+    (alts.length ? alts.map((s, n) => '<div class="cv-loc"><span class="rot">' + (n ? 'Alternativa' : 'Sugestão') + '</span><code>' + esc(s[1]) + '</code><span class="cv-tp ' + (ehPicking(s[1]) ? 'pk' : '') + '">' + (ehPicking(s[1]) ? 'Picking' : 'Armazenagem') + '</span><span class="sd">saldo <b>' + fInt(s[2]) + '</b>' + (s[2] >= falta ? ' · cobre a falta' : ' · cobre parte') + '</span></div>').join('')
       : '<div class="cv-loc"><span class="rot">Alternativa</span><span class="cv-vazio">' + (CV.saldo.length ? 'nenhum outro local com saldo disponível.' : 'importe a QRY0390 para ver outros locais com saldo.') + '</span></div>');
 }
 
@@ -235,48 +241,68 @@ function chipEnt(){
   const m = CV.meta.ent;
   return m && m.importadoEm ? 'QRY0180 de ' + fData(m.importadoEm.slice(0, 10)) + ' · ' + fInt(CV.porEnt.size) + ' entregas' : 'QRY0180 não importada';
 }
+const FOTO_BASE = 'https://img.lojadomecanico.com.br/IMAGENS/';
+function fotoHtml(i, cls){
+  const u = CV.fotoMap && CV.fotoMap.get(i);
+  const ph = '<span class="' + cls + ' cv-semfoto" title="Sem foto">▣</span>';
+  if(!u) return ph;
+  return '<img class="' + cls + '" loading="lazy" referrerpolicy="no-referrer" src="' + esc(/^https?:/.test(u) ? u : FOTO_BASE + u) + '" alt="" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' cv-semfoto\\\'>▣</span>\'">';
+}
+const ICON_SCAN = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8M18 8v8"/></svg>';
 function viewConferir(){
   if(CV.carregando) return '<p class="field-hint">Carregando as bases...</p>';
-  let h = '<div class="cv-entrada"><form class="cv-busca" onsubmit="event.preventDefault();abrirEntrega($(\'cvEnt\').value)"><input id="cvEnt" inputmode="numeric" autocomplete="off" placeholder="Número da entrega" value="' + esc(CV.num) + '"><button class="btn btn-orange" type="submit">Carregar</button>' +
-    (CV.sess ? '<button class="btn btn-secondary" type="button" onclick="cvNova()">Outra entrega</button>' : '') + '</form>' +
-    (CV.ult && !CV.sess ? '<div class="cv-bip-ult ean">' + esc(CV.ult.txt) + '</div>' : '') + '</div>';
-  if(!CV.sess) return h;
+  const campoEnt = '<div><span class="cv-lab">Entrega</span><input id="cvEnt" class="cv-in" inputmode="numeric" autocomplete="off" placeholder="Número da entrega" value="' + esc(CV.num) + '"></div>';
+  if(!CV.sess){
+    return '<div class="cv-entrada"><form class="cv-busca" onsubmit="event.preventDefault();abrirEntrega($(\'cvEnt\').value)"><input id="cvEnt" inputmode="numeric" autocomplete="off" placeholder="Número da entrega" value="' + esc(CV.num) + '"><button class="btn btn-orange" type="submit">Carregar</button></form>' +
+      (CV.ult ? '<div class="cv-bip-ult ean">' + esc(CV.ult.txt) + '</div>' : '') + '</div>';
+  }
   const r0 = CV.porEnt.get(CV.num)[0];
   const semEan = CV.linhas.filter(x => !x.eans.length).length;
-  h += '<div class="panel cv-gap"><div class="panel-head-row"><h3 style="margin:0">Entrega ' + esc(CV.num) + '</h3><div id="cvStatus"></div></div>' +
-    '<div class="cv-meta">' + [['Transportadora', r0.t], ['Canal', r0.ca], ['Modelo', r0.mo], ['Evento', r0.ev], ['Limite', fData(r0.li)], ['Volumes', r0.vo ? fInt(r0.vo) : '']].filter(a => a[1]).map(a => '<span>' + a[0] + ': <b>' + esc(a[1]) + '</b></span>').join('') + '</div>' +
-    (semEan ? '<div class="field-hint" style="margin-top:8px;color:var(--danger)">' + semEan + ' item(ns) sem EAN na QRY0390 — para eles, digite o código do item no campo de bipagem.</div>' : '') +
-    '<div class="cv-barra"><i id="cvProg"></i></div></div>' +
-    '<div id="cvKpis" class="cv-kpis"></div>' +
-    '<div id="cvBipBox" class="panel cv-bip"><h3>Bipagem</h3><div class="panel-sub">Bipe o EAN de cada peça. Cada leitura é contada na hora.</div>' +
-    '<form class="cv-busca" onsubmit="event.preventDefault();var i=$(\'cvBip\');bipar(i.value);i.value=\'\';i.focus()"><input id="cvBip" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Bipe o EAN aqui"><button class="btn btn-primary" type="submit">Registrar</button></form>' +
-    '<div id="cvUlt"></div>' +
-    '<div class="cv-acoes"><button class="btn btn-secondary" onclick="cvDesfazer()">↶ Desfazer última</button><button class="btn btn-orange" onclick="cvFinalizar()">Finalizar conferência</button><button class="btn btn-secondary" onclick="cvExportar()">Exportar Excel</button><button class="btn btn-danger-text" onclick="cvZerar()">Zerar</button></div></div>' +
-    '<div id="cvResultado"></div>' +
-    '<div class="cv-sec-t">Itens da entrega<span>toque numa linha para ver onde achar a peça</span></div><div id="cvTabela"></div><div id="cvDesc"></div>';
-  return h;
+  return '<div class="cv-hd"><div class="cv-hd-ic">' + ICON_SCAN + '</div><div><h1>Check Volume</h1><p>Conferência de volumes por bipagem EAN · faltas, sobras e onde achar</p></div>' +
+      '<div class="cv-chip"><div>Entrega<b>#' + esc(CV.num) + '</b></div>' + (r0.li ? '<div>Data limite<b>' + fData(r0.li) + '</b></div>' : '') + (r0.t ? '<div>Transportadora<b>' + esc(r0.t) + '</b></div>' : '') + '<span id="cvStatus"></span></div></div>' +
+    '<div class="cv-row0"><form class="cv-card cv-ent" onsubmit="event.preventDefault();var i=$(\'cvBip\');bipar(i.value);i.value=\'\';i.focus()">' +
+      '<div><span class="cv-lab">Entrega</span><input class="cv-in" id="cvEntTroca" value="' + esc(CV.num) + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();abrirEntrega(this.value)}"></div>' +
+      '<div><span class="cv-lab">Bipar EAN</span><input id="cvBip" class="cv-in cv-bipin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="7908591703801"></div>' +
+      '<button class="btn btn-primary" type="submit">Registrar</button></form><div id="cvKpis" class="cv-card cv-kp"></div></div>' +
+    (semEan ? '<div class="field-hint" style="color:var(--danger)">' + semEan + ' item(ns) sem EAN cadastrado — para eles, digite o código do item no campo de bipagem.</div>' : '') +
+    '<div class="cv-row1"><div id="cvTabela" class="cv-left"></div><div class="cv-right"><div id="cvBipado"></div><div id="cvAnd" class="cv-and"></div><div id="cvAcoes"></div></div></div>' +
+    '<div id="cvResultado"></div><div id="cvDesc"></div>';
 }
+function kpi(rot, v, cor, ic){ return '<div class="cv-k"><i style="background:' + cor + '">' + ic + '</i><div><small>' + rot + '</small><b>' + fInt(v) + '</b></div></div>'; }
 /* Atualiza só os pedaços que mudam a cada bipagem (o campo de leitura nunca perde o foco). */
 function atualizar(){
   if(CV.tab !== 'conferir' || !CV.sess || !$('cvKpis')) return renderView();
   const t = totais(), s = CV.sess;
-  const kp = (rot, v, cor) => '<div class="cv-kpi" style="--c:' + cor + '"><span>' + rot + '</span><b>' + fInt(v) + '</b></div>';
-  $('cvKpis').innerHTML = kp('Peças previstas', t.prev, '#001A72') + kp('Peças bipadas', t.bip, '#0E7490') + kp('Peças faltantes', t.falta, '#F59E0B') + kp('Peças excedentes', t.sobra, '#C83812') +
-    kp('Itens conferidos', t.ok, '#1F8A52') + kp('Itens pendentes', t.pend, '#6B7280') + kp('EAN não identificado', t.ean, '#7C3AED');
-  $('cvProg').style.width = (t.prev ? Math.min(t.bip, t.prev) / t.prev * 100 : 0) + '%';
-  const u = $('cvUlt'); u.innerHTML = CV.ult ? '<div class="cv-bip-ult ' + CV.ult.tipo + '">' + esc(CV.ult.txt) + '</div>' : '';
+  const bip = Math.min(t.bip - t.sobra, t.prev);
+  $('cvKpis').innerHTML = kpi('Total de peças', t.prev, '#001A72', '▣') + kpi('Bipadas', t.bip, '#0E7490', '✓') + kpi('Faltantes', t.falta, '#F59E0B', '!') + kpi('Sobras', t.sobra, '#7E22CE', '⇄') + (t.ean ? kpi('EAN não ident.', t.ean, '#C83812', '?') : '') +
+    '<div class="cv-pg"><div class="t">Progresso da conferência<b>' + (t.prev ? Math.round(bip / t.prev * 100) : 0) + '%</b></div><div class="cv-bar"><u style="width:' + (t.prev ? bip / t.prev * 100 : 0) + '%"></u></div><div class="t">' + t.ok + ' de ' + t.itens + ' itens conferidos · ' + t.pend + ' pendentes</div></div>';
   $('cvStatus').innerHTML = s.fin ? '<span class="cv-pill ' + (t.falta || t.sobra || t.ean ? 'cv-falta' : 'cv-ok') + '">Finalizada</span>' : '<span class="cv-pill cv-pend">Em conferência</span>';
-  // tabela
+  // item bipado
+  const u = CV.ult, xi = u && u.i ? CV.linhas.find(l => l.i === u.i) : null;
+  $('cvBipado').innerHTML = xi ? '<div class="cv-card cv-bp ' + (u.tipo === 'sobra' ? 'sobra' : '') + '"><div class="h">' + (u.tipo === 'sobra' ? '⚠ Sobra — peça a mais' : '✓ Item bipado') + '</div><div class="c">' + fotoHtml(xi.i, 'cv-foto') +
+      '<div><div class="e">EAN ' + esc(u.ean) + '</div><div class="d">' + esc(xi.d) + '</div><div style="margin:8px 0"><span class="cv-pill cv-' + (u.tipo === 'sobra' ? 'sobra' : (u.n >= u.prev ? 'ok' : 'falta')) + '">' + (u.n >= u.prev && u.tipo !== 'sobra' ? 'Conferido' : (u.tipo === 'sobra' ? 'Sobra' : 'Faltante')) + ' · ' + u.n + ' de ' + u.prev + '</span></div><div class="l">Local de origem<b>' + esc(xi.orig[0] || 'não informado') + '</b></div></div></div></div>'
+    : (u && u.tipo === 'ean' ? '<div class="cv-card cv-bp ean"><div class="h">? EAN não identificado</div><div class="c"><div><div class="e">EAN ' + esc(u.ean) + '</div><div class="d">' + esc(u.txt.replace(/^EAN NÃO IDENTIFICADO · [^ ]+ — /, '')) + '</div></div></div></div>'
+      : '<div class="cv-card cv-bp vazio"><div class="h">Item bipado</div><div class="c"><div class="d" style="color:var(--ink-soft)">' + esc(u ? u.txt : 'Aguardando a primeira leitura...') + '</div></div></div>');
+  // conferência em andamento (histórico das leituras)
+  const nome = i => { const l = CV.linhas.find(x => x.i === i); return l ? l.d : ''; };
+  const log = s.log.slice().reverse().slice(0, 80);
+  $('cvAnd').innerHTML = '<div class="cv-card cv-tb"><h3>⟳ Conferência em andamento<s>' + s.log.length + ' leituras</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>#</th><th>Hora</th><th>EAN</th><th>Descrição</th><th>Resultado</th></tr></thead><tbody>' +
+    (log.length ? log.map((l, k) => { const kk = l.k || (l.i ? 'ok' : 'ean'); return '<tr><td>' + (s.log.length - k) + '</td><td>' + new Date(l.t).toLocaleTimeString('pt-BR') + '</td><td class="cv-mono">' + esc(l.e || '') + '</td><td>' + (l.i ? esc(nome(l.i)) : '<span class="field-hint">— não está na entrega —</span>') + '</td><td><span class="cv-pill ' + (kk === 'ok' ? 'cv-ok' : kk === 'sobra' ? 'cv-sobra' : 'cv-falta') + '">' + (kk === 'ok' ? 'Conferido' : kk === 'sobra' ? 'Sobra' : 'EAN não ident.') + '</span></td></tr>'; }).join('') : '<tr><td colspan="5" class="field-hint" style="padding:14px">Nenhuma leitura ainda.</td></tr>') + '</tbody></table></div></div>';
+  const diverge = t.falta || t.sobra || t.ean;
+  $('cvAcoes').innerHTML = '<div class="cv-acoes"><button class="btn btn-secondary" onclick="cvDesfazer()">↶ Desfazer</button><button class="btn btn-secondary" onclick="cvExportar()">Exportar</button><button class="btn btn-danger-text" onclick="cvZerar()">Zerar</button></div><div class="cv-acoes2">' +
+    '<button class="btn btn-orange cv-atender" onclick="cvAtender()"' + (s.fin && diverge ? '' : ' disabled title="' + (s.fin ? 'Entrega sem divergência' : 'Finalize a conferência para habilitar') + '"') + '>⚑ Atender entrega</button>' +
+    '<button class="cv-fin" onclick="cvFinalizar()">Finalizar conferência</button></div>';
+  // tabela de itens
   const ordem = {falta: 0, sobra: 1, pend: 2, ok: 3};
   const ls = CV.linhas.slice().sort((a, b) => ordem[cvSituacao(a)] - ordem[cvSituacao(b)] || a.d.localeCompare(b.d));
-  $('cvTabela').innerHTML = '<div class="table-wrap"><table class="cv-tab"><thead><tr><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Situação</th><th></th></tr></thead><tbody>' +
+  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>toque numa linha com pendência para ver onde achar</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody>' +
     ls.map(x => {
       const b = s.bips[x.i] || 0, st = cvSituacao(x), pen = Math.max(x.prev - b, 0), ab = CV.aberto.has(x.i);
-      return '<tr class="' + (pen ? 'clicavel' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc">' + esc(x.d) + '<div class="field-hint">EAN ' + (x.eans.length ? esc(x.eans.join(' / ')) : 'não cadastrado') + '</div></td>' +
+      return '<tr class="' + (pen ? 'clicavel ' : '') + (st === 'falta' ? 'r-falta' : st === 'sobra' ? 'r-sobra' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td>' + fotoHtml(x.i, 'cv-th') + '</td><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc">' + esc(x.d) + '<div class="field-hint">EAN ' + (x.eans.length ? esc(x.eans.join(' / ')) : 'não cadastrado') + '</div></td>' +
         '<td class="n">' + fInt(x.prev) + '</td><td class="n"><b>' + fInt(b) + '</b></td><td class="n">' + fInt(pen) + (b > x.prev ? ' <span style="color:var(--danger)">(+' + fInt(b - x.prev) + ')</span>' : '') + '</td>' +
         '<td><span class="cv-pill cv-' + st + '">' + ROT[st] + '</span></td><td class="n">' + (b ? '<button class="btn-link" onclick="event.stopPropagation();cvMenos(\'' + esc(x.i) + '\')" title="Tirar uma bipagem">−1</button>' : '') + '</td></tr>' +
-        (pen && ab ? '<tr class="cv-det"><td colspan="7"><b>Faltam ' + fInt(pen) + '</b> — onde achar:' + blocoLocais(x) + '</td></tr>' : '');
-    }).join('') + '</tbody></table></div>';
+        (pen && ab ? '<tr class="cv-det"><td colspan="8"><b>Faltam ' + fInt(pen) + '</b> — onde achar:' + blocoLocais(x) + '</td></tr>' : '');
+    }).join('') + '</tbody></table></div></div>';
   const dk = Object.keys(s.desc);
   $('cvDesc').innerHTML = dk.length ? '<div class="cv-sec-t">EAN não identificado<span>códigos bipados que não são desta entrega</span></div><div class="table-wrap"><table class="cv-tab"><thead><tr><th>EAN bipado</th><th>Observação</th><th class="n">Leituras</th></tr></thead><tbody>' +
     dk.map(k => '<tr><td class="cv-mono">' + esc(k) + '</td><td>' + (s.desc[k].nome ? 'Pertence a outro produto: ' + esc(s.desc[k].nome) : 'Não cadastrado em nenhum item da QRY0390') + '</td><td class="n"><b>' + s.desc[k].n + '</b></td></tr>').join('') + '</tbody></table></div>' : '';
@@ -287,14 +313,14 @@ function resultado(t){
   const faltas = CV.linhas.filter(x => (CV.sess.bips[x.i] || 0) < x.prev);
   const sobras = CV.linhas.filter(x => (CV.sess.bips[x.i] || 0) > x.prev);
   let h = '<div class="cv-sec-t" style="margin-top:6px">Resultado da conferência</div><div class="cv-res ' + (ok ? 'ok' : 'div') + '">' +
-    (ok ? '✓ Entrega conferida sem divergência.' : '⚠ Entrega com divergência — precisa de tratativa.') +
+    (ok ? '✓ Entrega conferida sem divergência.' : '⚠ Entrega com divergência — clique em “Atender entrega” para gerar o Excel com os locais.') +
     '<small>' + t.ok + ' de ' + t.itens + ' itens sem divergência · ' + faltas.length + ' com falta · ' + sobras.length + ' com sobra · ' + fInt(t.ean) + ' leitura(s) de EAN não identificado.</small></div>';
-  if(faltas.length) h += '<div class="cv-sec-t">Faltantes — onde buscar<span>origem da coleta e outros locais com saldo</span></div>' + faltas.map(x => {
+  if(faltas.length) h += '<div class="cv-sec-t">Faltantes — onde buscar<span>origem da coleta e locais com saldo (picking primeiro)</span></div>' + faltas.map(x => {
     const f = x.prev - (CV.sess.bips[x.i] || 0);
     return '<div class="cv-falta-card"><span class="qtd">faltam ' + fInt(f) + '</span><h4>' + esc(x.i) + ' — ' + esc(x.d) + '</h4><div class="sub">Prevista ' + fInt(x.prev) + ' · bipada ' + fInt(CV.sess.bips[x.i] || 0) + '</div>' + blocoLocais(x) + '</div>';
   }).join('');
   if(sobras.length) h += '<div class="cv-sec-t">Sobras<span>peças a mais do que o previsto</span></div><div class="table-wrap"><table class="cv-tab"><tbody>' + sobras.map(x => '<tr><td class="cv-mono">' + esc(x.i) + '</td><td>' + esc(x.d) + '</td><td class="n"><b>+' + fInt(CV.sess.bips[x.i] - x.prev) + '</b></td></tr>').join('') + '</tbody></table></div>';
-  return h + '<div class="cv-acoes"><button class="btn btn-secondary" onclick="cvReabrir()">Reabrir conferência</button><button class="btn btn-orange" onclick="cvNova()">Conferir outra entrega</button></div>';
+  return h + '<div class="cv-acoes" style="margin-top:12px"><button class="btn btn-secondary" onclick="cvReabrir()">Reabrir conferência</button><button class="btn btn-secondary" onclick="cvNova()">Conferir outra entrega</button></div>';
 }
 
 function statusEnt(n){
@@ -312,26 +338,30 @@ function viewEntregas(){
     (pags > 1 ? '<div class="cv-pag"><button class="btn btn-secondary" onclick="cvPag(-1)"' + (CV.pag === 0 ? ' disabled' : '') + '>←</button><span>Página ' + (CV.pag + 1) + ' de ' + pags + '</span><button class="btn btn-secondary" onclick="cvPag(1)"' + (CV.pag >= pags - 1 ? ' disabled' : '') + '>→</button></div>' : '');
 }
 function viewImportacao(){
-  const e = CV.meta.ent, s = CV.meta.est;
+  const e = CV.meta.ent, s = CV.meta.est, f = CV.meta.foto;
   const linha = (rot, ok, txt) => '<div class="cv-st ' + (ok ? 'ok' : '') + '"><b>' + rot + '</b><span>' + txt + '</span></div>';
-  return '<div class="panel"><h3>Importar bases</h3><div class="panel-sub">Selecione os dois arquivos de uma vez (ou só o que mudou) — o app reconhece cada um pelo cabeçalho. Cada importação <b>substitui</b> a anterior e fica disponível para todos com acesso.</div>' +
-    '<label class="dropzone cv-drop" id="cvDrop"><div class="dz-icon">📥</div><div class="dz-title">Arraste ou clique para escolher</div><div class="dz-desc">QRY0180 (entregas) · QRY0390 (estoque) — .xlsx</div>' +
+  return '<div class="panel"><h3>Importar bases</h3><div class="panel-sub">Selecione os arquivos de uma vez (ou só o que mudou) — o app reconhece cada um pelo cabeçalho. Cada importação <b>substitui</b> a anterior e fica disponível para todos com acesso.</div>' +
+    '<label class="dropzone cv-drop" id="cvDrop"><div class="dz-icon">📥</div><div class="dz-title">Arraste ou clique para escolher</div><div class="dz-desc">QRY0180 (entregas) · QRY0390 (estoque) · cadastro com URL Foto — .xlsx</div>' +
     '<input type="file" id="cvArq" accept=".xlsx,.xls" multiple hidden onchange="importar(Array.from(this.files)); this.value=\'\'"></label>' +
     '<div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div></div>' +
     '<div class="panel cv-gap"><h3>Situação das bases</h3>' +
     linha('QRY0180 · entregas', !!e, e ? esc(e.arquivo) + ' · ' + fInt(e.linhas) + ' linhas · <b>' + fInt(e.entregas) + ' entregas</b> · ' + fData((e.importadoEm || '').slice(0, 10)) + (e.por ? ' por ' + esc(e.por) : '') : 'Não importada.') +
-    linha('QRY0390 · estoque', !!s, s ? esc(s.arquivo) + ' · ' + fInt(s.linhas) + ' linhas · <b>' + fInt(s.itens) + ' itens com EAN</b> · ' + fInt(s.locais) + ' saldos por local · ' + fData((s.importadoEm || '').slice(0, 10)) + (s.por ? ' por ' + esc(s.por) : '') : 'Não importada. Sem ela não há EAN para bipar nem sugestão de outros locais.') + '</div>' +
+    linha('QRY0390 · estoque', !!s, s ? esc(s.arquivo) + ' · ' + fInt(s.linhas) + ' linhas · <b>' + fInt(s.itens) + ' itens com EAN</b> · ' + fInt(s.locais) + ' saldos por local · ' + fData((s.importadoEm || '').slice(0, 10)) + (s.por ? ' por ' + esc(s.por) : '') : 'Não importada. Sem ela não há EAN para bipar nem sugestão de outros locais.') +
+    linha('Cadastro · fotos', !!f, f ? esc(f.arquivo) + ' · ' + fInt(f.linhas) + ' linhas · <b>' + fInt(f.itens) + ' itens com foto</b> · ' + fData((f.importadoEm || '').slice(0, 10)) + (f.por ? ' por ' + esc(f.por) : '') : 'Não importada (opcional). Planilha De-Para com as colunas Id Item e URL Foto; sem ela a foto não aparece.') + '</div>' +
     '<div class="panel cv-gap"><h3>Como funciona</h3><div class="cv-regras"><p><b>Entrega:</b> itens, quantidades e local de coleta vêm da QRY0180.</p><p><b>EAN:</b> o EAN de cada item vem da QRY0390 (coluna EAN).</p><p><b>Locais alternativos:</b> saldo disponível (<code>QTDE_DISP</code>) da QRY0390 em outros locais, conforme as regras de Configurações. O saldo é o da data da importação.</p></div></div>';
 }
 function viewConfig(){
   return '<div class="panel"><h3>Classes de local ignoradas nas sugestões</h3><div class="panel-sub">Coluna <code>CLAL</code> da QRY0390, separadas por vírgula. Locais dessas classes (ex.: reversa e avaria) não são sugeridos.</div><div class="filter-bar"><input type="text" id="cfgIg" value="' + esc(CV.cfg.ignorar.join(', ')) + '"></div></div>' +
     '<div class="panel cv-gap"><h3>Restrições aceitas</h3><div class="panel-sub">Coluna <code>RETRICAO</code> da QRY0390. Só saldo com essas restrições é sugerido (padrão <code>WN</code> = normal). Em branco = aceita todas.</div><div class="filter-bar"><input type="text" id="cfgRs" value="' + esc(CV.cfg.restricoes.join(', ')) + '"></div></div>' +
+    '<div class="panel cv-gap"><h3>Locais de picking (prioridade nas sugestões)</h3><div class="panel-sub">Início da descrição do local, separado por vírgula (padrão <code>PP</code>, que pega PPP 006 042 00 e PP 009 027 03). Locais de picking aparecem primeiro nas sugestões e no Excel.</div><div class="filter-bar"><input type="text" id="cfgPk" value="' + esc((CV.cfg.picking || ['PP']).join(', ')) + '"></div></div>' +
     '<div class="panel cv-gap"><h3>Quantidade de sugestões por item</h3><div class="filter-bar"><input type="number" min="1" max="20" id="cfgMax" value="' + (CV.cfg.max || 5) + '"></div></div>' +
     '<div class="cv-gap"><button class="btn btn-orange" onclick="cvSalvarCfg()">Salvar configurações</button></div>';
 }
 async function cvSalvarCfg(){
   CV.cfg.ignorar = String($('cfgIg').value).toUpperCase().split(/[,;\s]+/).filter(Boolean);
   CV.cfg.restricoes = String($('cfgRs').value).toUpperCase().split(/[,;\s]+/).filter(Boolean);
+  CV.cfg.picking = String($('cfgPk').value).toUpperCase().split(/[,;]+/).map(t => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  if(!CV.cfg.picking.length) CV.cfg.picking = ['PP'];
   CV.cfg.max = Math.min(Math.max(parseInt($('cfgMax').value, 10) || 5, 1), 20);
   try { await nuvemGravar('cfg', null, {cfg: CV.cfg}, []); toast('Configurações salvas.'); } catch(e){ toast(e.message || String(e), true); }
   renderView();
@@ -364,6 +394,11 @@ async function importar(files){
         const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, entregas: new Set(r.dados.map(x => x.e)).size};
         await nuvemGravar('ent', meta, {}, dividir(r.dados, 400000));
         CV.ent = r.dados; CV.meta.ent = meta;
+      } else if(r.base === 'foto'){
+        CV.msg = 'Gravando cadastro de fotos na nuvem...'; renderMsg();
+        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, itens: r.dados.length};
+        await nuvemGravar('fotos', meta, {}, dividir(r.dados, 400000));
+        CV.fotoRows = r.dados; CV.meta.foto = meta;
       } else {
         CV.msg = 'Gravando estoque na nuvem (pode levar alguns instantes)...'; renderMsg();
         const itens = Object.keys(r.dados.itens).map(i => [i, r.dados.itens[i].d, r.dados.itens[i].e]);
@@ -379,6 +414,50 @@ async function importar(files){
   } catch(e){
     console.error(e); toast(e.message || String(e), true);
   } finally { CV.ocupado = false; CV.msg = ''; renderView(); }
+}
+
+/* ---------- Atender entrega: Excel com o que faltou, onde foi coletado e onde pegar ---------- */
+function planilha(aoa, larg){
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = larg.map(w => ({wch: w}));
+  const ref = XLSX.utils.decode_range(ws['!ref']);
+  for(let c = ref.s.c; c <= ref.e.c; c++){
+    const cel = ws[XLSX.utils.encode_cell({r: 0, c})];
+    if(cel) cel.s = {fill: {fgColor: {rgb: '001A72'}}, font: {bold: true, color: {rgb: 'FFFFFF'}}, alignment: {vertical: 'center', wrapText: true}};
+  }
+  ws['!rows'] = [{hpt: 30}];
+  ws['!freeze'] = {xSplit: 0, ySplit: 1};
+  return ws;
+}
+function cvAtender(){
+  if(!window.XLSX) return toast('Biblioteca de Excel ainda carregando, tente de novo.', true);
+  if(!CV.sess) return;
+  const s = CV.sess, nSug = 3;
+  const faltas = CV.linhas.filter(x => (s.bips[x.i] || 0) < x.prev);
+  const sobras = CV.linhas.filter(x => (s.bips[x.i] || 0) > x.prev);
+  const tp = l => ehPicking(l) ? 'Picking' : 'Armazenagem';
+  const cab1 = ['Entrega', 'Código', 'Descrição', 'EAN', 'Prevista', 'Bipada', 'Faltam', 'Local de coleta (origem)', 'Saldo hoje na origem'];
+  for(let k = 1; k <= nSug; k++) cab1.push('Sugestão ' + k + ' · local', 'Tipo', 'Saldo');
+  cab1.push('Observação');
+  const l1 = [cab1], l2 = [['Entrega', 'Código', 'Descrição', 'Faltam', 'Prioridade', 'Local sugerido', 'Tipo', 'Saldo disponível', 'Cobre a falta?', 'Classe', 'Restrição']];
+  faltas.forEach(x => {
+    const b = s.bips[x.i] || 0, f = x.prev - b, alts = alternativas(x, f, Math.max(CV.cfg.max || 5, nSug));
+    const lin = [CV.num, x.i, x.d, x.eans.join(' / '), x.prev, b, f, x.orig.join(' / '), saldoNaOrigem(x)];
+    for(let k = 0; k < nSug; k++) lin.push(alts[k] ? alts[k][1] : '', alts[k] ? tp(alts[k][1]) : '', alts[k] ? alts[k][2] : '');
+    const temPk = alts.some(a => ehPicking(a[1]));
+    lin.push(alts.length ? (temPk ? '' : 'Sem saldo em picking — usar armazenagem e repor o picking') : 'Nenhum outro local com saldo disponível — verificar estoque/reposição');
+    l1.push(lin);
+    alts.forEach((a, k) => l2.push([CV.num, x.i, x.d, f, k + 1, a[1], tp(a[1]), a[2], a[2] >= f ? 'Sim' : 'Não, parcial', a[3], a[4]]));
+  });
+  const l3 = [['Entrega', 'Tipo', 'Código / EAN', 'Descrição', 'Quantidade', 'Observação']];
+  sobras.forEach(x => l3.push([CV.num, 'Sobra', x.i, x.d, s.bips[x.i] - x.prev, 'Peças a mais do que o previsto — devolver ao local de origem ' + (x.orig[0] || '')]));
+  Object.keys(s.desc).forEach(k => l3.push([CV.num, 'EAN não identificado', k, s.desc[k].nome || '', s.desc[k].n, s.desc[k].nome ? 'EAN de outro produto' : 'EAN sem cadastro na QRY0390']));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, planilha(l1, [12, 11, 44, 16, 9, 8, 8, 24, 12, 18, 12, 9, 18, 12, 9, 18, 12, 9, 40]), 'Atender entrega');
+  XLSX.utils.book_append_sheet(wb, planilha(l2, [12, 11, 44, 8, 10, 18, 13, 12, 14, 9, 10]), 'Locais sugeridos');
+  if(l3.length > 1) XLSX.utils.book_append_sheet(wb, planilha(l3, [12, 20, 18, 44, 11, 54]), 'Sobras e EAN');
+  XLSX.writeFile(wb, 'atender-entrega-' + CV.num + '.xlsx');
+  toast('Excel gerado: ' + faltas.length + ' item(ns) para atender.');
 }
 
 /* ---------- exportar ---------- */
