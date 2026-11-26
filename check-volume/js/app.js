@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 6; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 8; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -155,6 +155,7 @@ function abrirEntrega(n){
   }
   CV.num = n; CV.sess = lerSessao(n); CV.linhas = montarLinhas(rows); CV.ult = null; CV.aberto = new Set(); CV.tab = 'conferir';
   renderView(); setTimeout(focoBip, 0);
+  fotosDoSite(CV.linhas.map(x => x.i));
 }
 function cvSituacao(x){
   const bip = CV.sess.bips[x.i] || 0;
@@ -277,11 +278,53 @@ function chipEnt(){
   return m && m.importadoEm ? 'QRY0180 de ' + fData(m.importadoEm.slice(0, 10)) + ' · ' + fInt(CV.porEnt.size) + ' entregas' : 'QRY0180 não importada';
 }
 const FOTO_BASE = 'https://img.lojadomecanico.com.br/IMAGENS/';
-function fotoHtml(i, cls){
+const FOTO_SITE = 'https://img.lojadomecanico.com.br/256/';
+function urlFoto(i){
   const u = CV.fotoMap && CV.fotoMap.get(i);
-  const ph = '<span class="' + cls + ' cv-semfoto" title="Sem foto">▣</span>';
+  if(u) return /^https?:/.test(u) ? u : FOTO_BASE + u;
+  const f = fotoSiteGet(i);
+  return f ? FOTO_SITE + f : '';
+}
+function fotoHtml(i, cls){
+  const u = urlFoto(i);
+  const ph = '<span class="' + cls + ' cv-semfoto" data-foto="' + esc(i) + '" title="Sem foto">▣</span>';
   if(!u) return ph;
-  return '<img class="' + cls + '" loading="lazy" referrerpolicy="no-referrer" src="' + esc(/^https?:/.test(u) ? u : FOTO_BASE + u) + '" alt="" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' cv-semfoto\\\'>▣</span>\'">';
+  return '<img class="' + cls + '" data-foto="' + esc(i) + '" loading="lazy" referrerpolicy="no-referrer" src="' + esc(u) + '" alt="" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' cv-semfoto\\\'>▣</span>\'">';
+}
+/* ---------- foto pelo site da Loja do Mecânico ----------
+   Itens que não estão no cadastro De-Para: a página de busca do site (busca?q=<item>) traz o produto com
+   o mesmo código do WMS (erpId) e a lista de fotos. Cada item é consultado uma vez por aparelho (e guardado). */
+const FS_KEY = 'cv-foto-site', FS_NEG_DIAS = 3;
+let _fs = null;
+function fsCarrega(){ if(_fs) return _fs; try { _fs = JSON.parse(localStorage.getItem(FS_KEY) || '{}') || {}; } catch(e){ _fs = {}; } return _fs; }
+function fsGuarda(){ try { localStorage.setItem(FS_KEY, JSON.stringify(_fs)); } catch(e){ /* cheio: segue sem guardar */ } }
+function fotoSiteGet(i){ const e = fsCarrega()[i]; return e && e[0] ? e[0] : ''; }
+function fotoSitePendente(i){ const e = fsCarrega()[i]; return !e || (!e[0] && Date.now() - e[1] > FS_NEG_DIAS * 864e5); }
+async function buscarFotoSite(item){
+  const r = await fetch('https://www.lojadomecanico.com.br/busca?q=' + encodeURIComponent(item), {referrerPolicy: 'no-referrer'});
+  if(!r.ok) throw new Error('site ' + r.status);
+  const h = await r.text();
+  /* Só vale como "não achou" se for mesmo a página de resultados da busca; se o site pediu verificação (proteção
+     contra robôs) ou veio outra coisa, é erro: não grava como sem foto e tenta de novo mais tarde. */
+  if(!r.ok || /perfdrive|captcha/i.test(r.url) || h.indexOf('ldm_products') < 0) throw new Error('site indisponível para consulta');
+  const m = new RegExp('"erpId":' + item.replace(/\D/g, '') + ',[\\s\\S]{0,30000}?"images":\\[("[^\\]]*)\\]').exec(h);
+  if(!m) return '';
+  const f = /"([^"]+)"/.exec(m[1]);
+  return f ? f[1] : '';
+}
+let _fsFila = [], _fsRodando = 0;
+function fotosDoSite(itens){
+  itens.forEach(i => { if(!CV.fotoMap.has(i) && fotoSitePendente(i) && _fsFila.indexOf(i) < 0) _fsFila.push(i); });
+  while(_fsRodando < 2 && _fsFila.length){
+    const i = _fsFila.shift(); _fsRodando++;
+    buscarFotoSite(i).then(f => { fsCarrega()[i] = [f, Date.now()]; fsGuarda(); if(f) trocarFoto(i); })
+      .catch(() => { /* sem acesso ao site agora: tenta de novo na próxima entrega */ })
+      .finally(() => { _fsRodando--; fotosDoSite([]); });
+  }
+}
+/* Troca o ícone pela foto no lugar, sem redesenhar a tela. */
+function trocarFoto(i){
+  document.querySelectorAll('[data-foto="' + i + '"]').forEach(el => { const cls = (el.className || '').split(' ')[0]; if(cls) el.outerHTML = fotoHtml(i, cls); });
 }
 const ICON_SCAN = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8M18 8v8"/></svg>';
 function viewConferir(){
@@ -346,7 +389,7 @@ function atualizar(){
   // tabela de itens
   const ordem = {falta: 0, sobra: 1, pend: 2, ok: 3};
   const ls = CV.linhas.slice().sort((a, b) => ordem[cvSituacao(a)] - ordem[cvSituacao(b)] || a.d.localeCompare(b.d));
-  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? 'toque numa linha com pendência para ver onde achar' : 'sem fotos: importe o cadastro em Importação') + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody>' +
+  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? (n => n ? n + ' de ' + CV.linhas.length + ' itens sem foto' : 'toque numa linha com pendência para ver onde achar')(CV.linhas.filter(x => !urlFoto(x.i)).length) : 'sem fotos: importe o cadastro em Importação') + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody>' +
     ls.map(x => {
       const b = s.bips[x.i] || 0, st = cvSituacao(x), pen = Math.max(x.prev - b, 0), ab = CV.aberto.has(x.i);
       return '<tr class="' + (pen ? 'clicavel ' : '') + (st === 'falta' ? 'r-falta' : st === 'sobra' ? 'r-sobra' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td>' + fotoHtml(x.i, 'cv-th') + '</td><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc">' + esc(x.d) + '<div class="field-hint">EAN ' + (x.eans.length ? esc(x.eans.slice(0, 3).join(' / ')) + (x.eans.length > 3 ? ' +' + (x.eans.length - 3) : '') : 'não cadastrado') + '</div></td>' +
@@ -396,13 +439,21 @@ function cardBase(ic, titulo, sub, m, det){
     '<span class="btn btn-orange cv-bs-btn">' + (ok ? 'Atualizar' : 'Importar') + '</span>' +
     '<input type="file" accept=".xlsx,.xls" multiple hidden onchange="importar(Array.from(this.files)); this.value=\'\'"></label>';
 }
+/* Quantos itens das entregas importadas têm foto no cadastro. */
+function coberturaFotos(){
+  if(CV._cob && CV._cobKey === CV.ent.length + '|' + (CV.fotoMap ? CV.fotoMap.size : 0)) return CV._cob;
+  const it = new Set(CV.ent.map(r => r.i)); let c = 0;
+  it.forEach(i => { if(CV.fotoMap && CV.fotoMap.has(i)) c++; });
+  CV._cobKey = CV.ent.length + '|' + (CV.fotoMap ? CV.fotoMap.size : 0);
+  return (CV._cob = {t: it.size, c});
+}
 function viewImportacao(){
   const e = CV.meta.ent, s = CV.meta.est, f = CV.meta.foto, n = CV.meta.ean;
   return '<div class="cv-bases" id="cvDrop">' +
     cardBase('📦', 'QRY0180', 'Entregas', e, e ? fInt(e.entregas) + ' entregas · ' + fInt(e.linhas) + ' linhas' : '') +
     cardBase('🏬', 'QRY0390', 'Estoque', s, s ? fInt(s.itens) + ' itens · ' + fInt(s.locais) + ' saldos' : '') +
     cardBase('▥', 'SIGEQ230', 'EANs por item', n, n ? fInt(n.eans) + ' EANs · ' + fInt(n.itens) + ' itens' : '') +
-    cardBase('🖼', 'Cadastro', 'Fotos dos itens', f, f ? fInt(f.itens) + ' itens com foto' : '') +
+    cardBase('🖼', 'Cadastro', 'Fotos dos itens', f, f ? fInt(f.itens) + ' itens com foto' + (CV.ent.length ? ' · ' + (cb => cb.t ? Math.round(cb.c / cb.t * 100) + '% dos itens das entregas' : '')(coberturaFotos()) : '') : '') +
     '</div><div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div>' +
     (CV.erroImp ? '<div class="cv-res div">⚠ ' + esc(CV.erroImp) + '</div>' : '');
 }
