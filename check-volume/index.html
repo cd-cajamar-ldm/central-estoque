@@ -14,7 +14,7 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@700;800&display=swap"></noscript>
 <link rel="stylesheet" href="css/theme.css?v=1">
 <link rel="stylesheet" href="css/acesso.css?v=1">
-<link rel="stylesheet" href="css/checkvolume.css?v=5">
+<link rel="stylesheet" href="css/checkvolume.css?v=6">
 </head>
 <body>
 <div id="telaAcesso">
@@ -110,15 +110,12 @@
 <div id="toast" class="toast hidden"></div>
 <div id="cvTip" class="chart-tooltip hidden"></div>
 <script async src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-<script src="js/app.js?v=5"></script>
+<script src="js/app.js?v=6"></script>
 <script src="../vendor/supabase.js"></script>
 <script src="js/acesso.js?v=1"></script>
 <script>
   if('serviceWorker' in navigator){
     window.addEventListener('load', function(){
-      // Versão nova assumiu o controle: recarrega uma vez pra tela não ficar na antiga.
-      var tinha = !!navigator.serviceWorker.controller, recarregou = false;
-      navigator.serviceWorker.addEventListener('controllerchange', function(){ if(tinha && !recarregou){ recarregou = true; location.reload(); } });
       navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(function(reg){
         var c = function(){ reg.update().catch(function(){}); };
         c(); setInterval(c, 30*60*1000);
@@ -127,5 +124,6 @@
     });
   }
 </script>
+<script src="../vendor/atualizacao.js" defer></script>
 </body>
 </html>
