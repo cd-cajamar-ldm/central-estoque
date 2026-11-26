@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 1; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 2; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -237,11 +237,10 @@ function chipEnt(){
 }
 function viewConferir(){
   if(CV.carregando) return '<p class="field-hint">Carregando as bases...</p>';
-  let h = '<div class="panel"><h3>Entrega</h3><div class="panel-sub">Digite ou bipe o número da entrega. ' + esc(chipEnt()) + '.</div>' +
-    '<form class="cv-busca" onsubmit="event.preventDefault();abrirEntrega($(\'cvEnt\').value)"><input id="cvEnt" inputmode="numeric" autocomplete="off" placeholder="Número da entrega" value="' + esc(CV.num) + '"><button class="btn btn-orange" type="submit">Carregar</button>' +
+  let h = '<div class="cv-entrada"><form class="cv-busca" onsubmit="event.preventDefault();abrirEntrega($(\'cvEnt\').value)"><input id="cvEnt" inputmode="numeric" autocomplete="off" placeholder="Número da entrega" value="' + esc(CV.num) + '"><button class="btn btn-orange" type="submit">Carregar</button>' +
     (CV.sess ? '<button class="btn btn-secondary" type="button" onclick="cvNova()">Outra entrega</button>' : '') + '</form>' +
     (CV.ult && !CV.sess ? '<div class="cv-bip-ult ean">' + esc(CV.ult.txt) + '</div>' : '') + '</div>';
-  if(!CV.sess) return h + (CV.ent.length ? '' : '<div class="panel cv-gap"><div class="panel-sub">Nenhuma entrega carregada. ' + (somenteLeitura() ? 'Peça a quem edita para importar a QRY0180 e a QRY0390.' : 'Vá em <b>Importação</b> e envie a QRY0180 e a QRY0390.') + '</div></div>');
+  if(!CV.sess) return h;
   const r0 = CV.porEnt.get(CV.num)[0];
   const semEan = CV.linhas.filter(x => !x.eans.length).length;
   h += '<div class="panel cv-gap"><div class="panel-head-row"><h3 style="margin:0">Entrega ' + esc(CV.num) + '</h3><div id="cvStatus"></div></div>' +

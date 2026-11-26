@@ -69,3 +69,6 @@ html[data-theme="dark"] .cv-loc code{ color:#fff; }
 .cv-sec-t span{ font-size:12px; font-weight:500; color:var(--ink-soft); margin-left:8px; }
 .cv-pag{ display:flex; gap:12px; align-items:center; justify-content:center; margin-top:12px; font-size:13px; color:var(--ink-soft); }
 @media (max-width:860px){ .cv-busca input{ font-size:17px; } .cv-kpi b{ font-size:23px; } }
+
+.cv-entrada{ max-width:760px; margin:8vh auto 0; }
+.cv-entrada .cv-busca input{ padding:16px 18px; font-size:24px; }
