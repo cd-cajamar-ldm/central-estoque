@@ -110,9 +110,6 @@
 <script>
   if('serviceWorker' in navigator){
     window.addEventListener('load', function(){
-      // Versão nova assumiu o controle: recarrega uma vez pra tela não ficar na antiga.
-      var tinha = !!navigator.serviceWorker.controller, recarregou = false;
-      navigator.serviceWorker.addEventListener('controllerchange', function(){ if(tinha && !recarregou){ recarregou = true; location.reload(); } });
       navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(function(reg){
         var c = function(){ reg.update().catch(function(){}); };
         c(); setInterval(c, 30*60*1000);
@@ -121,5 +118,6 @@
     });
   }
 </script>
+<script src="../vendor/atualizacao.js" defer></script>
 </body>
 </html>

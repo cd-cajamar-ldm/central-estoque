@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 5; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 6; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -151,10 +151,10 @@ function abrirEntrega(n){
   if(!rows){
     CV.num = ''; CV.sess = null; CV.linhas = [];
     CV.ult = {tipo: 'ean', txt: 'Entrega ' + n + ' não encontrada na QRY0180 importada' + (CV.meta.ent && CV.meta.ent.importadoEm ? ' em ' + fData(CV.meta.ent.importadoEm.slice(0, 10)) : '') + '.'};
-    beep('erro'); renderView(); return;
+    beep('erro'); renderView(); setTimeout(() => { const e = $('cvEnt'); if(e){ e.focus(); e.select(); } }, 0); return;
   }
   CV.num = n; CV.sess = lerSessao(n); CV.linhas = montarLinhas(rows); CV.ult = null; CV.aberto = new Set(); CV.tab = 'conferir';
-  renderView();
+  renderView(); setTimeout(focoBip, 0);
 }
 function cvSituacao(x){
   const bip = CV.sess.bips[x.i] || 0;
@@ -176,7 +176,7 @@ function totais(){
 
 /* Bipagem: cruza o EAN com os itens da entrega. */
 function bipar(codigo){
-  if(!CV.sess) return;
+  if(!CV.sess){ toast('Informe a entrega primeiro.', true); const e = $('cvEnt'); if(e) e.focus(); return; }
   const cod = String(codigo || '').trim(); if(!cod) return;
   const k = normEan(cod);
   let item = k ? CV.eanMap.get(k) : null;
@@ -230,6 +230,7 @@ function cvNova(){ CV.num = ''; CV.sess = null; CV.linhas = []; CV.ult = null; r
 let _cvAuto;
 function cvAutoBip(inp){
   clearTimeout(_cvAuto);
+  if(!CV.sess) return;
   const v = inp.value.trim();
   if(v.length < 8) return;
   _cvAuto = setTimeout(() => { const x = inp.value.trim(); if(x.length >= 8){ inp.value = ''; bipar(x); } }, 150);
@@ -239,6 +240,7 @@ function cvRefoca(inp){
   setTimeout(() => {
     const a = document.activeElement;
     if(CV.tab === 'conferir' && CV.sess && inp.isConnected && (!a || a === document.body || a.tagName === 'BUTTON')) inp.focus();
+    else if(CV.tab === 'conferir' && !CV.sess && $('cvEnt') && (!a || a === document.body)) $('cvEnt').focus();
   }, 60);
 }
 function focoBip(){ const i = $('cvBip'); if(i) i.focus(); }
@@ -284,27 +286,43 @@ function fotoHtml(i, cls){
 const ICON_SCAN = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8M18 8v8"/></svg>';
 function viewConferir(){
   if(CV.carregando) return '<p class="field-hint">Carregando as bases...</p>';
-  const campoEnt = '<div><span class="cv-lab">Entrega</span><input id="cvEnt" class="cv-in" inputmode="numeric" autocomplete="off" placeholder="Número da entrega" value="' + esc(CV.num) + '"></div>';
-  if(!CV.sess){
-    return '<div class="cv-entrada"><form class="cv-busca" onsubmit="event.preventDefault();abrirEntrega($(\'cvEnt\').value)"><input id="cvEnt" inputmode="numeric" autocomplete="off" placeholder="Número da entrega" value="' + esc(CV.num) + '"><button class="btn btn-orange" type="submit">Carregar</button></form>' +
-      (CV.ult ? '<div class="cv-bip-ult ean">' + esc(CV.ult.txt) + '</div>' : '') + '</div>';
-  }
-  const r0 = CV.porEnt.get(CV.num)[0];
-  const semEan = CV.linhas.filter(x => !x.eans.length).length;
+  const sess = !!CV.sess, r0 = sess ? CV.porEnt.get(CV.num)[0] : null;
+  const semEan = sess ? CV.linhas.filter(x => !x.eans.length).length : 0;
   return '<div class="cv-hd"><div class="cv-hd-ic">' + ICON_SCAN + '</div><div><h1>Check Volume</h1><p>Conferência de volumes por bipagem EAN · faltas, sobras e onde achar</p></div>' +
-      '<div class="cv-chip"><div>Entrega<b>#' + esc(CV.num) + '</b></div>' + (r0.li ? '<div>Data limite<b>' + fData(r0.li) + '</b></div>' : '') + (r0.t ? '<div>Transportadora<b>' + esc(r0.t) + '</b></div>' : '') + '<span id="cvStatus"></span></div></div>' +
-    '<div class="cv-row0"><form class="cv-card cv-ent" onsubmit="event.preventDefault();clearTimeout(_cvAuto);var i=$(\'cvBip\');var v=i.value;i.value=\'\';bipar(v);i.focus()">' +
-      '<div><span class="cv-lab">Entrega</span><input class="cv-in" id="cvEntTroca" value="' + esc(CV.num) + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();abrirEntrega(this.value)}"></div>' +
+      (sess ? '<div class="cv-chip"><div>Entrega<b>#' + esc(CV.num) + '</b></div>' + (r0.li ? '<div>Data limite<b>' + fData(r0.li) + '</b></div>' : '') + (r0.t ? '<div>Transportadora<b>' + esc(r0.t) + '</b></div>' : '') + '<span id="cvStatus"></span></div>' : '') + '</div>' +
+    '<div class="cv-row0"><form class="cv-card cv-ent" onsubmit="event.preventDefault();cvSubmit()">' +
+      '<div><span class="cv-lab">Entrega</span><input class="cv-in" id="cvEnt" inputmode="numeric" autocomplete="off" placeholder="Entrega" value="' + esc(CV.num) + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();abrirEntrega(this.value)}"></div>' +
       '<div><span class="cv-lab">Bipar EAN</span><input id="cvBip" class="cv-in cv-bipin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="7908591703801" oninput="cvAutoBip(this)" onblur="cvRefoca(this)"></div>' +
-      '<button class="btn btn-primary" type="submit">Registrar</button></form><div id="cvKpis" class="cv-card cv-kp"></div></div>' +
+      '<button class="btn btn-primary" type="submit">' + (sess ? 'Registrar' : 'Carregar') + '</button></form><div id="cvKpis" class="cv-card cv-kp"></div></div>' +
     (semEan ? '<div class="field-hint" style="color:var(--danger)">' + semEan + ' item(ns) sem EAN cadastrado — para eles, digite o código do item no campo de bipagem.</div>' : '') +
     '<div class="cv-row1"><div id="cvTabela" class="cv-left"></div><div class="cv-right"><div id="cvBipado"></div><div id="cvAnd" class="cv-and"></div><div id="cvAcoes"></div></div></div>' +
     '<div id="cvResultado"></div><div id="cvDesc"></div>';
 }
+/* Enter no campo do EAN: com entrega carregada registra a leitura; sem entrega, carrega a entrega digitada. */
+function cvSubmit(){
+  clearTimeout(_cvAuto);
+  const b = $('cvBip'), e = $('cvEnt');
+  if(!CV.sess){
+    if(!e.value.trim() && b.value.trim()){ b.value = ''; return bipar(''); }
+    return abrirEntrega(e.value);
+  }
+  const v = b.value; b.value = ''; bipar(v); b.focus();
+}
+/* Tela de bipagem ainda sem entrega: mesma tela, zerada. */
+function pintarVazio(){
+  $('cvKpis').innerHTML = kpi('Total de peças', 0, '#001A72', '▣') + kpi('Bipadas', 0, '#0E7490', '✓') + kpi('Faltantes', 0, '#F59E0B', '!') + kpi('Sobras', 0, '#7E22CE', '⇄') +
+    '<div class="cv-pg"><div class="t">Progresso da conferência<b>0%</b></div><div class="cv-bar"><u style="width:0"></u></div><div class="t">Informe a entrega para começar</div></div>';
+  const u = CV.ult;
+  $('cvBipado').innerHTML = u && u.tipo === 'ean' ? '<div class="cv-card cv-bp ean"><div class="h">? ' + esc(u.txt) + '</div></div>' : '<div class="cv-card cv-bp vazio"><div class="h">Item bipado</div><div class="c"><div class="d" style="color:var(--ink-soft)">Digite ou bipe o número da entrega e tecle Enter.</div></div></div>';
+  $('cvAnd').innerHTML = '<div class="cv-card cv-tb"><h3>⟳ Conferência em andamento<s>0 leituras</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>#</th><th>Hora</th><th>EAN</th><th>Descrição</th><th>Resultado</th></tr></thead><tbody><tr><td colspan="5" class="field-hint" style="padding:14px">Nenhuma leitura ainda.</td></tr></tbody></table></div></div>';
+  $('cvAcoes').innerHTML = '<div class="cv-acoes2"><button class="btn btn-orange cv-atender" disabled title="Carregue uma entrega">⚑ Atender entrega</button><button class="cv-fin" disabled style="opacity:.45;cursor:not-allowed">Finalizar conferência</button></div>';
+  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + esc(chipEnt()) + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody><tr><td colspan="8" class="field-hint" style="padding:18px">Os itens da entrega aparecem aqui.</td></tr></tbody></table></div></div>';
+}
 function kpi(rot, v, cor, ic){ return '<div class="cv-k"><i style="background:' + cor + '">' + ic + '</i><div><small>' + rot + '</small><b>' + fInt(v) + '</b></div></div>'; }
 /* Atualiza só os pedaços que mudam a cada bipagem (o campo de leitura nunca perde o foco). */
 function atualizar(){
-  if(CV.tab !== 'conferir' || !CV.sess || !$('cvKpis')) return renderView();
+  if(CV.tab !== 'conferir' || !$('cvKpis')) return renderView();
+  if(!CV.sess) return pintarVazio();
   const t = totais(), s = CV.sess;
   const bip = Math.min(t.bip - t.sobra, t.prev);
   $('cvKpis').innerHTML = kpi('Total de peças', t.prev, '#001A72', '▣') + kpi('Bipadas', t.bip, '#0E7490', '✓') + kpi('Faltantes', t.falta, '#F59E0B', '!') + kpi('Sobras', t.sobra, '#7E22CE', '⇄') + (t.ean ? kpi('EAN não ident.', t.ean, '#C83812', '?') : '') +
@@ -700,7 +718,7 @@ function renderView(){
     ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('has-file'); }));
     drop.addEventListener('drop', e => importar(Array.from(e.dataTransfer.files)));
   }
-  if(CV.tab === 'conferir' && CV.sess) atualizar();
+  if(CV.tab === 'conferir' && $('cvKpis')) atualizar();
   if(sc) sc.scrollTop = y;
 }
 function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard') ctrlLer().then(l => { CV.ctrl = l; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
