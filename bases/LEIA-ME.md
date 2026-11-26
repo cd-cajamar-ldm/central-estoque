@@ -12,6 +12,10 @@ Fluxos de dados (Jorran)  →  Modelo "Central de Estoque – Bases"  →  Power
                                                                        da pasta "Receitas")
 ```
 
+## Almoxarifado da Oficina
+
+Na Oficina (menu **Almoxarifado**) fica o banco de relatórios: você conecta a pasta **Bases** uma vez, ele guarda cada relatório como chegou e mostra de quando são os dados. Cada app vai pegar dali e tratar do seu jeito. O código fica em [`../almoxarifado/`](../almoxarifado/); as prateleiras (quais relatórios, nomes aceitos e quem usa) estão no começo de `almox-db.js`.
+
 ## O que tem aqui
 
 | Arquivo | Para que serve |
