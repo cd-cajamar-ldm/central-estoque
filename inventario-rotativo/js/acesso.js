@@ -135,8 +135,53 @@ function comLimite(promessa, segundos){
       irSupa.rpc('ldm_registrar_acesso', { p_app_key: IRA_APP_KEY }).then(function(){}, function(){});
   }
 
+  /* Falha de conexão NÃO é "sem permissão". Antes, um tropeço de rede logo
+     depois de uma atualização (o app recarrega, a conexão oscila) virava
+     "Acesso negado" com um único botão — Sair —, que deslogava a pessoa e a
+     mandava para o login do zero. Agora:
+       1. tenta de novo sozinho algumas vezes;
+       2. se a última checagem OK desta pessoa foi há menos de 24 h, abre o app
+          (os dados continuam protegidos pelo banco) e segue checando;
+       3. só então mostra o aviso, com "Tentar de novo" (Sair continua lá). */
+  const IRA_OK_KEY = 'ira-acesso-ok';
+  const textoNegadoEl = document.getElementById('acessoNegadoTexto');
+  const textoNegadoOriginal = textoNegadoEl ? textoNegadoEl.innerHTML : '';
+  const tentarBtn = document.getElementById('acessoTentarDeNovo');
+  if(tentarBtn) tentarBtn.addEventListener('click', function(){ tentarBtn.disabled = true; irVerificarAcesso().finally(function(){ tentarBtn.disabled = false; }); });
+  function okRecente(uid){
+    try{ const o = JSON.parse(localStorage.getItem(IRA_OK_KEY)||'null'); return !!(o && o.uid===uid && Date.now()-o.em < 24*3600*1000); }catch(e){ return false; }
+  }
+  function marcarOk(uid){ try{ localStorage.setItem(IRA_OK_KEY, JSON.stringify({uid, em:Date.now()})); }catch(e){} }
+  const espera = ms=> new Promise(r=>setTimeout(r, ms));
+  async function checarPermissao(){
+    let ultimo = null;
+    for(const atraso of [0, 1500, 3500]){
+      if(atraso) await espera(atraso);
+      try{
+        const r = await comLimite(irSupa.rpc('ldm_pode_acessar', { p_app_key: IRA_APP_KEY }), 12);
+        if(!r.error) return {pode: !!r.data};
+        ultimo = r.error;
+        // Resposta do banco dizendo que não pode/erro de regra: não adianta repetir.
+        if(r.error.code && !/^(PGRST301|08|57)/.test(String(r.error.code))) break;
+      }catch(e){ ultimo = e; }
+    }
+    return {erro: ultimo};
+  }
+  function mostrarNegado(texto, falhaConexao){
+    telaLogin.hidden = true; telaNegado.hidden = false;
+    if(texto) textoNegadoEl.textContent = texto; else textoNegadoEl.innerHTML = textoNegadoOriginal;
+    if(tentarBtn) tentarBtn.hidden = !falhaConexao;
+    telaAcesso.classList.remove('escondida');
+  }
+
   async function irVerificarAcesso(){
-    const { data: { session } } = await irSupa.auth.getSession();
+    let session = null;
+    try{ session = (await comLimite(irSupa.auth.getSession(), 10)).data.session; }
+    catch(e){
+      if(appIniciado) return;
+      mostrarNegado('Não consegui falar com o servidor de acesso agora. ' + irAcessoEmPortugues(e && e.message), true);
+      return;
+    }
     if(!session){
       telaLogin.hidden = false; telaNegado.hidden = true;
       telaAcesso.classList.remove('escondida');
@@ -145,20 +190,20 @@ function comLimite(promessa, segundos){
     /* Enquanto a permissão é conferida na internet, os dados locais já vão sendo
        lidos (sem mostrar nada: a tela de acesso continua por cima). */
     if(!appIniciado && typeof irPreCarregar === 'function') irPreCarregar();
-    const { data: pode, error } = await irSupa.rpc('ldm_pode_acessar', { p_app_key: IRA_APP_KEY });
-    if(error){
+    const r = await checarPermissao();
+    if(r.erro){
       if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
-      telaAcesso.classList.remove('escondida');
+      if(okRecente(session.user.id)){ telaAcesso.classList.add('escondida'); iniciarApp(); return; }
+      mostrarNegado('Não consegui confirmar seu acesso agora (falha de conexão). Seu login continua salvo — clique em "Tentar de novo".', true);
       return;
     }
-    if(!pode){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      negadoEmailEl.textContent = session.user.email;
-      telaAcesso.classList.remove('escondida');
+    if(!r.pode){
+      try{ localStorage.removeItem(IRA_OK_KEY); }catch(e){}
+      mostrarNegado(null, false);
+      const emailEl = document.getElementById('acessoNegadoEmail'); if(emailEl) emailEl.textContent = session.user.email;
       return;
     }
+    marcarOk(session.user.id);
     telaAcesso.classList.add('escondida');
     iniciarApp();
   }

@@ -1,0 +1,10 @@
+// Conferência 2: a SIGEQ410 tem ~7 milhões de linhas (todos os anos e filiais).
+// Esta consulta mostra quantas são de cada filial e ano, pra decidir o recorte
+// que cabe na atualização automática.
+EVALUATE
+GROUPBY(
+    SELECTCOLUMNS('SIGEQ410', "Filial", 'SIGEQ410'[FIlial], "Ano", YEAR('SIGEQ410'[Dt.Mov.])),
+    [Filial], [Ano],
+    "Linhas", COUNTX(CURRENTGROUP(), 1)
+)
+ORDER BY [Filial], [Ano]

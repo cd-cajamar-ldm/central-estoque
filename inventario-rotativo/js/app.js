@@ -223,6 +223,7 @@ async function irCarregarEssencial(){
     IR.prioridadeConfig = prioridadeConfig; IR.prodMeta = prodMeta; IR.net410Legenda = net410Legenda;
     IR.net410Ignorados = net410Ignorados; IR.net410Padroes = net410Padroes; IR.ciclos = ciclos;
     if(typeof irCarregarProdExcluidos==='function') await irCarregarProdExcluidos();
+    try{ IR.caObsOff = new Set((await irGetConfig('net-obs-off'))||[]); }catch(e){}
     let pCiclo = null;
     if(IR.ciclos.length){
       IR.cicloAtivo = IR.ciclos.find(c=>irCicloStatus(c)==='aberto') || irCicloMaisNovo(IR.ciclos) || IR.ciclos[0];
@@ -487,8 +488,9 @@ function irRenderEmConstrucao(area){
   return `<div class="empty-state panel"><div class="eicon">🛠️</div><h3>${irEsc(area)} — em construção</h3><p>Os indicadores desta aba vão aparecer aqui.</p></div>`;
 }
 function irSwitchTab(tab){
+  if(tab==='exportar') tab = 'dashboard'; // aba Exportar retirada do menu
   IR.currentTab = tab;
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.tab===irBaseDaAba(tab)));
   irAplicarGrupos();
   const [title, sub] = IR_TAB_LABELS[tab] || [tab, ''];
   document.getElementById('tabTitle').textContent = title;
@@ -504,7 +506,7 @@ function irSwitchTab(tab){
   // no topo — mesmo lugar de sempre, só que com o filtro certo pra essa aba.
   const netTab = (tab==='ciclo');
   const filtroCiclo = document.getElementById('tbFilterCiclo');
-  if(filtroCiclo) filtroCiclo.hidden = netTab || areaExtra;
+  if(filtroCiclo) filtroCiclo.hidden = netTab || areaExtra || (tab==='divergencias' && !IR.divModoAuditoria);
   // Filtro "Inventário" (Rotativo / Reversa / Insumos): troca de área mantendo a aba.
   const filtroInv = document.getElementById('tbFilterInv');
   const baseAba = irBaseDaAba(tab);
@@ -512,7 +514,7 @@ function irSwitchTab(tab){
   const selInv = document.getElementById('invTipoSelect');
   if(selInv) selInv.value = irAreaDaAba(tab);
   const filtroProdData = document.getElementById('tbFilterProdData');
-  if(filtroProdData) filtroProdData.hidden = netTab || areaExtra;
+  if(filtroProdData) filtroProdData.hidden = netTab || areaExtra || irBaseDaAba(tab)==='divergencias';
   const filtroNetAno = document.getElementById('tbFilterNetAno');
   if(filtroNetAno) filtroNetAno.hidden = !netTab;
   const filtroNetMes = document.getElementById('tbFilterNetMes');
@@ -615,6 +617,7 @@ let _irFluidT = null;
 function irFluidAgendar(){ clearTimeout(_irFluidT); _irFluidT = setTimeout(irFluidAjustar, 60); }
 window.addEventListener('resize', irFluidAgendar);
 function irRenderView(){
+  IR._msAbertos = Array.from(document.querySelectorAll('details.ms-drop[open]')).map(d=>d.id);
   irSyncProdDatas();
   const root = document.getElementById('viewRoot');
   /* A aba de Divergencias usa a identidade do modulo Projetos (roxo e
@@ -622,7 +625,7 @@ function irRenderView(){
      as outras abas continuam com o azul e o laranja da marca. Fica antes
      de qualquer saida da funcao para valer tambem no aviso de "nenhum
      ciclo importado". */
-  if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias');
+  if(root) root.classList.toggle('tema-projetos', IR.currentTab==='divergencias' && !!IR.divModoAuditoria);
   // Transitórios não depende de ciclo importado: é um controle próprio, não uma
   // leitura da contagem.
   const SEM_CICLO = new Set(['importacao','configuracoes','exportar','gestaoInventario']);
@@ -650,6 +653,7 @@ function irRenderView(){
   irFitKpiNumbers();
   irFluidAjustar();
   if(IR.currentTab==='dashboard') irGuardarFotoDash();
+  irRenderTopMulti();
 }
 /* "Foto" do Dashboard: a última tela desenhada fica guardada no aparelho e
    aparece na hora na próxima abertura (logo depois da permissão), enquanto os
@@ -787,13 +791,13 @@ function irRenderImportacao(){
       ${resumo}
       <span class="imp-acoes">${acoes}</span>
     </div>`;
-    if(!multi) html = `<input type="file" id="ir-file-${t.key}" accept=".xlsx,.xls" style="display:none" onchange="irOnFile('${t.key}', this.files[0])">` + html;
+    if(!multi) html = `<input type="file" id="ir-file-${t.key}" accept=".xlsx,.xls,.csv" style="display:none" onchange="irOnFile('${t.key}', this.files[0])">` + html;
     if(multi && aberto){
       html += `<div class="imp-partes-lista">
         <p class="field-hint">Extração que não sai de uma vez pode ser dividida aqui — todas as partes são do mesmo ciclo. Reimportar na mesma parte substitui o arquivo.</p>
         ${slots.map((file,i)=>`<div class="dz-period-row ${file?'has-file':''}">
           <span class="dz-period-label">Parte ${i+1}</span>
-          <input type="file" id="ir-file-${t.key}-${i}" accept=".xlsx,.xls" style="display:none" onchange="irSetSlotFile('${t.key}', ${i}, this.files[0])">
+          <input type="file" id="ir-file-${t.key}-${i}" accept=".xlsx,.xls,.csv" style="display:none" onchange="irSetSlotFile('${t.key}', ${i}, this.files[0])">
           ${file
             ? `<span class="dz-file mono">${irEsc(file.name)}</span>
                <button class="btn-link" onclick="document.getElementById('ir-file-${t.key}-${i}').click()">Trocar</button>
@@ -811,7 +815,7 @@ function irRenderImportacao(){
     <details class="panel imp-manual" ${IR.pastaHandle && IR.pastaPerm==='granted' ? '' : 'open'}
         ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)">
       <summary>Importar planilhas à mão${IR.pastaHandle ? ' (sem usar a pasta conectada)' : ''}</summary>
-      <input type="file" id="ir-file-all" accept=".xlsx,.xls" multiple style="display:none" onchange="irOnPickMultiAll(this.files)">
+      <input type="file" id="ir-file-all" accept=".xlsx,.xls,.csv" multiple style="display:none" onchange="irOnPickMultiAll(this.files)">
       <div class="imp-drop" ondragover="event.preventDefault()" ondrop="irOnDropMulti(event)"
            onclick="document.getElementById('ir-file-all').click()">
         <span class="imp-drop-icone">📂</span>
@@ -1168,13 +1172,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 31; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 33; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v303';
+const IR_APP_VERSION = 'v326';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1193,7 +1197,7 @@ async function irRecalcularSeMotorAntigo(){
   const pendentes = [];
   for(const c of (IR.ciclos||[])){
     const ind = await irGetIndicadores(c.id);
-    if(ind && ind._v !== IR_INDICADORES_VERSION) pendentes.push(c);
+    if(ind && (ind._v !== IR_INDICADORES_VERSION || (ind.obsInv||'AIR') !== irInvObsChave())) pendentes.push(c);
   }
   if(!pendentes.length) return;
   const ativoId = (IR.cicloAtivo||{}).id;
@@ -1355,7 +1359,6 @@ function irRenderProdutividadeAba(){
     <section class="dx-secao dx-secao-aba">
       <div class="dx-secao-h"><span class="dx-secao-traco"></span><h2>Produtividade</h2></div>
       <div class="dx-secao-corpo">
-        ${irRenderAssertividadePanel()}
         ${irRenderDashProdSecao()}
       </div>
     </section>
@@ -1836,12 +1839,26 @@ function irRenderSetores(){
   `;
 }
 function irRenderPorRuaPanel(ind){
-  const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
+  // Cada rua em duas linhas, uma embaixo da outra: Picking e Não picking (classe do
+  // local na Base Congelada). Ciclo calculado antes disso cai no resumo antigo.
+  const fonte = ind.porRuaTipo || ind.porRua || [];
+  const ordTipo = {picking:0, nao:1, sem:2};
+  const rows = fonte.filter(r=>r.chave!=='(sem rua)').map(r=>{ const [rua, tipo] = String(r.chave).split('|'); return {...r, rua, tipo:tipo||''}; })
+    .map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
+  // Ordenação por clique no título (padrão: rua A→Z, Picking antes de Não picking).
+  const o = (IR.tabOrdem||{}).resumoRua;
+  const porRua = (a,b)=> a.rua.localeCompare(b.rua, 'pt-BR', {numeric:true}) || (ordTipo[a.tipo]??9)-(ordTipo[b.tipo]??9);
+  rows.sort((a,b)=>{
+    if(!o) return porRua(a,b);
+    if(o.col==='rua') return o.dir*-1*porRua(a,b);
+    if(o.col==='tipo') return o.dir*-1*((ordTipo[a.tipo]??9)-(ordTipo[b.tipo]??9)) || porRua(a,b);
+    return o.dir*((a[o.col]||0)-(b[o.col]||0)) || porRua(a,b);
+  });
   if(!rows.length) return '';
   const meta = ind.meta;
   // Pendente aqui usa a mesma regra do módulo de Inventário: local sem NENHUMA linha
   // Liquidada na 843 ainda, cruzado pela rua (X1) da base congelada.
-  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
+  const rowsComPendentes = rows;
   const totalPendentes = rowsComPendentes.reduce((s,r)=>s+r.locaisPendentes,0);
   // A exportação lista os locais um a um, e pra isso precisa da base congelada em
   // memória. O número da coluna não precisa — e é por isso que ele não some mais.
@@ -1852,19 +1869,18 @@ function irRenderPorRuaPanel(ind){
     <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por rua.</p>
     ${totalPendentes>0 ? `<div class="form-actions pend-acoes" style="margin:0 0 12px;">
         <button class="btn-link" id="irPendBtn" onclick="irExportarLocaisPendentesCsv()">📤 Baixar locais pendentes (${irFmtInt(totalPendentes)})</button>
-        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>
-        <button class="btn-link" onclick="irPendMarcarTodas(true)">Marcar todas</button>`:''}
+        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>`:''}
       </div>
       ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
     <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-grouped tbl-sticky-head">
       <thead>
-        <tr class="grupo"><th colspan="2"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
+        <tr class="grupo"><th colspan="3" class="grupo-cor">Região</th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
         <tr class="cols">
           <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
-          <th>Rua</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
-          <th>Contadas</th><th>Divergentes</th>
-          <th>Peças</th><th>Posições</th><th>Valor</th>
+          ${irThOrd('resumoRua','rua','Rua')}${irThOrd('resumoRua','tipo','Tipo')}${irThOrd('resumoRua','locaisOrcados','Orçados')}${irThOrd('resumoRua','locaisContados','Contados')}${irThOrd('resumoRua','locaisDivergentes','Divergentes')}${irThOrd('resumoRua','locaisPendentes','Pendentes')}
+          ${irThOrd('resumoRua','pecasContadas','Contadas')}${irThOrd('resumoRua','pecasDivergentes','Divergentes')}
+          ${irThOrd('resumoRua','acuraciaPecas','Peças')}${irThOrd('resumoRua','acuraciaPosicoes','Posições')}${irThOrd('resumoRua','acuraciaValor','Valor')}
         </tr>
       </thead>
       <tbody>${rowsComPendentes.map(r=>`<tr>
@@ -1874,7 +1890,8 @@ function irRenderPorRuaPanel(ind){
         <td class="pend-col">${r.locaisPendentes>0
           ? `<input type="checkbox" class="pend-chk" checked value="${irEsc(r.chave)}" data-pend="${r.locaisPendentes}" onchange="irPendAtualizarBotao()">`
           : `<input type="checkbox" disabled title="Nenhum local pendente nesta rua">`}</td>
-        <td class="mono">${irEsc(r.chave)}</td>
+        <td class="mono">${irEsc(r.rua)}</td>
+        <td>${r.tipo ? {picking:'Picking', nao:'Não picking', sem:'Sem classe'}[r.tipo] : ''}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
         <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
@@ -1887,7 +1904,7 @@ function irRenderPorRuaPanel(ind){
       </tr>`).join('')}</tbody>
       <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
         <td class="pend-col"></td>
-        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td>
+        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td><td></td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisDivergentes,0))}</td>
@@ -2598,10 +2615,13 @@ function irRenderDivergentesPorDiaPanel(ind){
 function irItensPorDiaMapa(){
   const cid = (IR.cicloAtivo||{}).id;
   if(!cid || IR._cicloPesadoId !== cid) return null;
-  if(IR._itensDiaCache && IR._itensDiaCache.cid===cid && IR._itensDiaCache.n===IR.divergencias.length) return IR._itensDiaCache.mapa;
+  const obsK = irInvObsChave();
+  if(IR._itensDiaCache && IR._itensDiaCache.cid===cid && IR._itensDiaCache.n===IR.divergencias.length && IR._itensDiaCache.obsK===obsK) return IR._itensDiaCache.mapa;
+  const ca = IR.cicloAtivo, legado = !!(ca && irEhCicloLegadoAIR(ca.numero, ca.dataAbertura));
   const diaFinal = new Map(); // local -> {dia, rodada}
   for(const c of IR.contagens||[]){
     if(!(c.idConferencia>1) || !c.dataSituacao) continue;
+    if(!legado && !irEhMotivoInv(c.motivo)) continue; // só as Obs do filtro do topo
     const at = diaFinal.get(c.local);
     if(!at || c.idConferencia>at.rodada) diaFinal.set(c.local, {dia:String(c.dataSituacao).slice(0,10), rodada:c.idConferencia});
   }
@@ -2614,7 +2634,7 @@ function irItensPorDiaMapa(){
     if(d.diferenca!==0) g.itens++;
     mapa.set(f.dia, g);
   }
-  IR._itensDiaCache = {cid, n:(IR.divergencias||[]).length, mapa};
+  IR._itensDiaCache = {cid, n:(IR.divergencias||[]).length, obsK, mapa};
   return mapa;
 }
 function irRenderItensDivPorDia(rows, chart){
@@ -2755,7 +2775,7 @@ function irCalcItemSaldo(divergencias){
   const map = new Map();
   for(const d of irSoLocaisConcluidos(divergencias)){
     if(d.diferenca===0) continue;
-    if(soAIR && String(d.motivo||'').trim().toUpperCase()!=='AIR') continue;
+    if(soAIR && !irEhMotivoInv(d.motivo)) continue;
     let g = map.get(d.item);
     if(!g){ g = {item:d.item, descricao:d.itemNome, saldoQtd:0, saldoValor:0, absQtd:0, absValor:0, locais:new Set()}; map.set(d.item, g); }
     g.saldoQtd += d.diferenca;
@@ -3307,6 +3327,7 @@ function irRemoveFile410(){ IR.net410File = null; irRenderView(); }
 async function irSetNet410Ano(ano){
   ano = parseInt(ano, 10);
   IR.net410AnoSel = ano;
+  if(IR.caS){ IR.caS.meses = null; IR.caS.dias = []; }
   IR.net410Data = await irGetNet410(ano);
   irSetNet410MesDefault();
   irRenderNetTopFiltro();
@@ -3476,7 +3497,7 @@ function irRenderBasesAvulsas(){
         <div class="av-nome"><strong>${irEsc(b.titulo)}</strong><span>${irEsc(b.sub)}</span></div>
       </div>
       <div class="av-estado">${irEsc(irAvulsaEstado(b.id))}</div>
-      <input type="file" id="${b.input}" accept=".xlsx,.xls" style="display:none" onchange="${b.onFile}(this.files[0])">
+      <input type="file" id="${b.input}" accept=".xlsx,.xls,.csv" style="display:none" onchange="${b.onFile}(this.files[0])">
       ${rodando ? `
         <div class="progress-wrap av-prog">
           <div class="progress-stage" id="${b.idStage}">${irEsc(prog.stage)}</div>
@@ -3511,18 +3532,62 @@ function irRenderBasesAvulsas(){
 const IR_PASTA_SUPORTA = typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
 /* Cada base e como reconhecê-la pelo nome do arquivo. Os padrões do bloco do
    ciclo são os mesmos do IR_FILE_TYPES de propósito — um só lugar pra errar. */
+/* A ordem da lista é a de PROCESSAMENTO (390 -> 160 -> 410, ver irPastaAtualizar).
+   A de RECONHECIMENTO pelo nome é outra: o "160" é o padrão mais solto de todos e
+   apareceria por acaso no nome de uma 843 ou congelada ("... 160 locais"), então
+   ele só é testado depois de todos os outros. */
 const IR_PASTA_BASES = [
   {id:'390', label:'QRY0390', desc:'Estoque por endereço', pattern:IR_PAT.p390, auto:true},
+  {id:'160', label:'QRY0160', desc:'Tempo parado no endereço', pattern:IR_PAT.p160, auto:true},
   {id:'410', label:'QRY410',  desc:'Perdas e ganhos',      pattern:IR_PAT.p410, auto:true},
   {id:'843', label:'QRY0843', desc:'Ajustes do ciclo',     pattern:IR_PAT.p843, slot:'f843'},
   {id:'cong',label:'Base Congelada', desc:'Locais do ciclo', pattern:IR_PAT.pCong, slot:'fCong'},
   {id:'278', label:'SIGEQ278', desc:'Custo médio',         pattern:IR_PAT.p278, slot:'f278'},
   {id:'051', label:'ZBIQ0051', desc:'Item pai × componente', pattern:IR_PAT.p051, slot:'f051'}
 ];
+const IR_PASTA_ORDEM_RECONHECER = ['390','410','843','cong','278','051','160'];
+// .csv entra porque é o formato da atualização automática (Power BI -> Power Automate).
 function irPastaBaseDe(nome){
-  if(!/\.xlsx?$/i.test(nome)) return null;
-  const b = IR_PASTA_BASES.find(x=>x.pattern.test(nome));
-  return b ? b.id : null;
+  if(!/\.(xlsx?|csv)$/i.test(nome)) return null;
+  const id = IR_PASTA_ORDEM_RECONHECER.find(id=>IR_PASTA_BASES.find(x=>x.id===id).pattern.test(nome));
+  return id || null;
+}
+/* Base grande em partes. A consulta automática ao Power BI traz no máximo cerca de
+   1 milhão de células por vez, e a QRY0390 passa disso — ela chega como
+   "QRY0390_parte1.csv", "QRY0390_parte2.csv"... na mesma pasta. Aqui as partes
+   viram um arquivo só antes de ir pro worker, que continua lendo uma planilha. */
+const IR_PARTE_RE = /[\s_\-]*parte[\s_\-]*(\d+)(?=\.[^.]+$)/i;
+function irPastaRaizParte(nome){ return nome.replace(IR_PARTE_RE, '').toLowerCase(); }
+function irPastaPartesDe(baseId){
+  const arq = (IR.pastaArquivos||{})[baseId];
+  if(!arq || !IR_PARTE_RE.test(arq.file.name)) return null;
+  const raiz = irPastaRaizParte(arq.file.name);
+  const partes = ((IR.pastaTodos||{})[baseId]||[])
+    .filter(x=>x.pasta===arq.pasta && IR_PARTE_RE.test(x.file.name) && irPastaRaizParte(x.file.name)===raiz)
+    .map(x=>x.file)
+    .sort((a,b)=>parseInt(a.name.match(IR_PARTE_RE)[1],10) - parseInt(b.name.match(IR_PARTE_RE)[1],10));
+  return partes.length > 1 ? partes : null;
+}
+/* Junta as partes num CSV só: cabeçalho da primeira, só as linhas de dados das
+   demais. Partes com cabeçalho diferente não são a mesma consulta — juntar daria
+   colunas trocadas sem ninguém perceber, então para com erro. */
+async function irPastaJuntarPartes(partes){
+  if(!partes.every(f=>/\.csv$/i.test(f.name))) throw new Error('as partes precisam ser todas .csv');
+  let cabecalho = null;
+  const blocos = [];
+  for(const f of partes){
+    let t = await f.text();
+    if(t.charCodeAt(0) === 0xFEFF) t = t.slice(1);
+    const fim = t.indexOf('\n');
+    const cab = (fim < 0 ? t : t.slice(0, fim)).replace(/\r$/, '');
+    const corpo = fim < 0 ? '' : t.slice(fim + 1).replace(/\s+$/, '');
+    if(cabecalho === null) cabecalho = cab;
+    else if(cab !== cabecalho) throw new Error(f.name+' tem colunas diferentes da primeira parte');
+    if(corpo) blocos.push(corpo);
+  }
+  const nome = partes[0].name.replace(IR_PARTE_RE, '');
+  const maisNova = Math.max(...partes.map(f=>f.lastModified));
+  return new File([cabecalho + '\n' + blocos.join('\n') + '\n'], nome, {type:'text/csv', lastModified:maisNova});
 }
 /* Autorização da pasta. O handle sobrevive a fechar o navegador, mas a
    permissão pode voltar pra "prompt" — e reconceder exige clique do usuário,
@@ -3663,7 +3728,8 @@ function irPastaNovo(baseId){
   const a = (IR.pastaArquivos||{})[baseId];
   if(!a) return false;
   const u = (IR.pastaUltimo||{})[baseId];
-  return !u || u.modificadoEm !== a.file.lastModified || u.nome !== a.file.name;
+  return !u || u.modificadoEm !== a.file.lastModified || u.nome !== a.file.name
+    || (u.partes||1) !== ((irPastaPartesDe(baseId)||[]).length || 1);
 }
 function irPastaPendentes(){
   return IR_PASTA_BASES.filter(b=>irPastaNovo(b.id));
@@ -3672,7 +3738,8 @@ async function irPastaMarcar(baseId){
   const a = (IR.pastaArquivos||{})[baseId];
   if(!a) return;
   IR.pastaUltimo = Object.assign({}, IR.pastaUltimo||{}, {
-    [baseId]: {nome:a.file.name, modificadoEm:a.file.lastModified, importadoEm:new Date().toISOString()}
+    [baseId]: {nome:a.file.name, modificadoEm:a.file.lastModified, importadoEm:new Date().toISOString(),
+               partes:(irPastaPartesDe(baseId)||[]).length || 1}
   });
   await irSetConfig('pasta-ultimo', IR.pastaUltimo);
 }
@@ -3699,10 +3766,16 @@ async function irPastaAtualizar(forcar){
       if(!forcar && !irPastaNovo(base.id)) continue;
       if(!IR.pastaArquivos[base.id]) continue;
       const arq = IR.pastaArquivos[base.id];
+      let arquivo = arq.file;
+      const partes = irPastaPartesDe(base.id);
+      if(partes){
+        try{ arquivo = await irPastaJuntarPartes(partes); }
+        catch(err){ irShowToast('Erro ao juntar as partes da '+base.label+': '+err.message, true); break; }
+      }
       let ok = false;
-      if(base.id === '390'){ IR.est390File = arq.file; ok = await irProcessarEst390(); }
-      else if(base.id === '160'){ IR.est160File = arq.file; ok = await irProcessar160(); }
-      else if(base.id === '410'){ IR.net410File = arq.file; ok = await irProcessar410(); }
+      if(base.id === '390'){ IR.est390File = arquivo; ok = await irProcessarEst390(); }
+      else if(base.id === '160'){ IR.est160File = arquivo; ok = await irProcessar160(); }
+      else if(base.id === '410'){ IR.net410File = arquivo; ok = await irProcessar410(); }
       if(ok){ await irPastaMarcar(base.id); feitas.push(base.label); }
       else break; // uma base que falhou derruba as seguintes, que dependem dela
     }
@@ -3721,6 +3794,16 @@ async function irPastaAtualizar(forcar){
   } finally {
     IR.pastaProcessando = false; irRenderView();
   }
+}
+/* "Dados de 03/11 15:12": a hora do arquivo MAIS ANTIGO entre as bases automáticas
+   encontradas. É o que responde "está fresquinho?" — se uma das três parou de
+   chegar, é ela que puxa a hora pra trás e denuncia o atraso. */
+function irPastaDadosDe(){
+  const datas = IR_PASTA_BASES.filter(b=>b.auto && (IR.pastaArquivos||{})[b.id])
+    .map(b=>IR.pastaArquivos[b.id].file.lastModified);
+  if(!datas.length) return '';
+  const d = new Date(Math.min(...datas));
+  return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 }
 function irPastaQuando(baseId){
   const a = (IR.pastaArquivos||{})[baseId];
@@ -3756,7 +3839,8 @@ function irRenderPastaPanel(){
       <td><strong>${irEsc(b.label)}</strong><span class="pasta-desc">${irEsc(b.desc)}</span></td>
       <td class="mono">${arq
         ? irEsc(arq.file.name) + '<span class="pasta-caminho">' + irEsc(arq.pasta)
-          + (arq.copias > 1 ? ` <em class="pasta-copias">+${arq.copias-1} em outra pasta</em>` : '') + '</span>'
+          + (irPastaPartesDe(b.id) ? ` <em class="pasta-copias">${irPastaPartesDe(b.id).length} partes, juntadas na importação</em>`
+             : arq.copias > 1 ? ` <em class="pasta-copias">+${arq.copias-1} em outra pasta</em>` : '') + '</span>'
         : '<span class="pasta-falta">não encontrado</span>'}</td>
       <td class="mono">${arq ? irEsc(irPastaQuando(b.id)) : '—'}</td>
       <td>${!arq ? '—' : novo
@@ -3771,7 +3855,7 @@ function irRenderPastaPanel(){
       <span class="pc-ic">📁</span>
       <span class="pc-tx">
         <strong class="mono">${irEsc(IR.pastaHandle.name)}</strong>
-        <span>${IR.pastaVarridoEm ? 'Lida às '+irEsc(new Date(IR.pastaVarridoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})) : 'Ainda não lida'}${
+        <span>${irPastaDadosDe() ? 'Dados de '+irEsc(irPastaDadosDe())+' · ' : ''}${IR.pastaVarridoEm ? 'Lida às '+irEsc(new Date(IR.pastaVarridoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})) : 'Ainda não lida'}${
           pendCiclos ? ' · '+pendCiclos+' ciclo(s) novo(s)' : ''}${
           pend.length ? ' · '+pend.length+' base(s) fora do ciclo pra atualizar' : ''}</span>
       </span>
@@ -3785,7 +3869,7 @@ function irRenderPastaPanel(){
     ${IR.pastaErro ? `<p class="pasta-erro">${irEsc(IR.pastaErro)}</p>` : ''}
     ${irRenderPastaCiclos()}
     <details class="pc-det">
-      <summary>Bases fora do ciclo (QRY0390, QRY410)</summary>
+      <summary>Bases fora do ciclo (QRY0390, QRY0160, QRY410)</summary>
       <div class="table-wrap"><table class="pasta-table">
         <thead><tr><th>Base</th><th>Arquivo na pasta</th><th>Modificado em</th><th>Situação</th></tr></thead>
         <tbody>${IR_PASTA_BASES.map(linha).join('')}</tbody>
@@ -3873,7 +3957,18 @@ function irPastaEscolherBase(baseId, g, pastasCompartilhadas, pastasDeOutros){
     const janela = cand.filter(a=>a.file.lastModified >= inicio - 30*dia);
     return janela.length ? [maisNovo(janela)] : [];
   }
-  return [maisNovo(cand)];
+  return irPastaComPartes(maisNovo(cand), lista);
+}
+/* A SIGEQ278 automática chega em partes (SIGEQ278_parte1.csv...). Escolher só "a
+   mais nova" pegaria uma parte e deixaria o preço de dois terços dos itens de
+   fora. Quando o escolhido é uma parte, vão junto as irmãs da mesma pasta — o
+   worker já lê várias planilhas da mesma base e junta as linhas. */
+function irPastaComPartes(escolhido, lista){
+  if(!IR_PARTE_RE.test(escolhido.file.name)) return [escolhido];
+  const raiz = irPastaRaizParte(escolhido.file.name);
+  return lista.filter(a=>a.pasta===escolhido.pasta && IR_PARTE_RE.test(a.file.name)
+      && irPastaRaizParte(a.file.name)===raiz)
+    .sort((a,b)=>parseInt(a.file.name.match(IR_PARTE_RE)[1],10) - parseInt(b.file.name.match(IR_PARTE_RE)[1],10));
 }
 // Monta IR.pastaCiclos a partir da varredura. Não processa nada.
 async function irPastaMapearCiclos(){
@@ -4577,7 +4672,7 @@ function irProdLinhaVale(c){
 function irProdContagensBase(applyDate){
   const {de, ate, incluirAbertura} = IR.prodFilters;
   return IR.contagens.filter(c=>{
-    if(String(c.motivo||'').trim().toUpperCase()!=='AIR') return false;
+    if(!irEhMotivoInv(c.motivo)) return false;
     if(!irProdLinhaVale(c)) return false;
     if((incluirAbertura ? c.idConferencia<1 : c.idConferencia<=1) || !c.usuario || !c.dataInicioContagem) return false;
     if(typeof irProdUsuarioConta==='function' && !irProdUsuarioConta(c.usuario, irDiaDaContagem(c))) return false;
@@ -4611,32 +4706,52 @@ const IR_HORA_FIM = 21;    // último bloco de hora do expediente (21:00–22:00
      pela regra de sempre — rodada 1 é o sistema, a última é o físico). Visita
      recontada por duas pessoas conta pras duas, igual ao resto da aba, que
      mede esforço de quem participou e não deduplicação. */
+/* Retrabalho = contagem que ERROU: a pessoa contou uma rodada que não foi a
+   final do local e o que ela contou ficou diferente do resultado final
+   (algum item com quantidade diferente, a mais ou a menos). Se a recontagem
+   confirmou o número dela, ela acertou — o erro foi de quem veio antes ou do
+   sistema — e não conta contra ela. Local ainda em recontagem (rodada final
+   não liquidada) fica de fora até fechar. */
 function irProdTaxasPorUsuario(contagens){
-  // Rodada máxima de cada visita e quem contou cada rodada — vem da base inteira
-  // (IR.contagens), não do recorte filtrado, senão um filtro por período cortaria
-  // a recontagem que aconteceu no dia seguinte e zeraria a taxa.
-  const rodadaMaxima = new Map();   // visita -> maior idConferencia
+  // Quantidade por item em cada rodada de cada visita, da base inteira
+  // (a recontagem pode ter acontecido fora do período filtrado).
+  const rodadas = new Map(); // visita -> Map(rodada -> {itens:Map(item->qt), liq:bool})
   for(const c of (IR.contagens||[])){
+    if(!(c.idConferencia>=2)) continue;
     const v = c.local+'|'+c.inventario;
-    if(!rodadaMaxima.has(v) || c.idConferencia > rodadaMaxima.get(v)) rodadaMaxima.set(v, c.idConferencia);
+    let rv = rodadas.get(v); if(!rv){ rv = new Map(); rodadas.set(v, rv); }
+    let r = rv.get(c.idConferencia); if(!r){ r = {itens:new Map(), liq:true}; rv.set(c.idConferencia, r); }
+    if(c.liquidada===false) r.liq = false;
+    if(c.item) r.itens.set(c.item, (r.itens.get(c.item)||0) + (c.qtFis||0));
   }
+  const iguais = (a, b)=>{
+    const ks = new Set([...a.keys(), ...b.keys()]);
+    for(const k of ks) if(Math.abs((a.get(k)||0) - (b.get(k)||0)) > 1e-9) return false;
+    return true;
+  };
   const visitasDivergentes = new Set();
   for(const d of (IR.divergencias||[])) if(d.diferenca) visitasDivergentes.add(d.local+'|'+d.inventario);
-  // Por usuário: visitas distintas e, dentro delas, a rodada mais alta que ele contou.
+  // Por usuário: rodadas que ele contou em cada visita.
   const porUsuario = new Map();
   for(const c of contagens){
-    if(!c.usuario) continue;
+    if(!c.usuario || !(c.idConferencia>=2)) continue;
     const v = c.local+'|'+c.inventario;
     let u = porUsuario.get(c.usuario);
     if(!u){ u = new Map(); porUsuario.set(c.usuario, u); }
-    if(!u.has(v) || c.idConferencia < u.get(v)) u.set(v, c.idConferencia);
+    if(!u.has(v)) u.set(v, new Set());
+    u.get(v).add(c.idConferencia);
   }
   const out = new Map();
   for(const [usuario, visitas] of porUsuario){
     let recontadas = 0, divergentes = 0;
-    for(const [v, primeiraRodada] of visitas){
-      if((rodadaMaxima.get(v)||primeiraRodada) > primeiraRodada) recontadas++;
+    for(const [v, suas] of visitas){
       if(visitasDivergentes.has(v)) divergentes++;
+      const rv = rodadas.get(v); if(!rv) continue;
+      const final = Math.max(...rv.keys());
+      const rf = rv.get(final);
+      if(!rf.liq) continue; // ainda em recontagem
+      const errou = Array.from(suas).some(r=> r<final && rv.has(r) && !iguais(rv.get(r).itens, rf.itens));
+      if(errou) recontadas++;
     }
     out.set(usuario, {visitas: visitas.size, recontadas, divergentes});
   }
@@ -6482,7 +6597,7 @@ function irDivMotivoConta(d){
 // (ADE, AIC...) é inventário de outro programa, não deste ciclo — por isso as duas
 // coisas não podem ficar misturadas na mesma tabela/cartão/auditoria.
 function irDivEhAIR(d){
-  return String(d.motivo||'').trim().toUpperCase()==='AIR';
+  return irEhMotivoInv(d.motivo);
 }
 function irDivTipoBate(d){
   const t = IR.divTipo||'inventario';
@@ -7473,6 +7588,12 @@ async function irAudToggleVirtuais(){
 }
 function irDivFecharAuditoria(){ IR.divAuditoria = null; irRenderView(); }
 function irRenderDivergencias(){
+  // Visão principal: Central de Divergências (formato da aba Net). A tela antiga
+  // (filtros por ciclo, seleção e folha de auditoria) abre pelo botão "Auditoria".
+  if(!IR.divModoAuditoria) return irRenderCentralDivergencias();
+  return `<div class="cd-voltar"><button type="button" class="btn btn-secondary" onclick="irCdAuditoria(false)">← Central de Divergências</button></div>` + irRenderDivergenciasAuditoria();
+}
+function irRenderDivergenciasAuditoria(){
   if(!IR.divergencias.length) return irEmptyState('Sem divergências carregadas', 'Processe o ciclo na Importação.', "irSwitchTab('importacao')", 'Ir para Importação');
   if(!irDivEscopoPronto()){
     // Uma carga por vez: o placeholder rerenderiza, e sem a trava ele dispararia
@@ -7543,7 +7664,7 @@ function irLocaisContadosSet(){
      pendente pro ciclo, e sem esse recorte a lista de pendentes contradizia a
      coluna da tabela, que já sai do recorte AIR. */
   IR._contadosSet = new Set((IR.contagens||[])
-    .filter(c=>c.idConferencia>=2 && c.liquidada!==false && String(c.motivo||'').trim().toUpperCase()==='AIR')
+    .filter(c=>c.idConferencia>=2 && c.liquidada!==false && irEhMotivoInv(c.motivo))
     .map(c=>c.local));
   IR._contadosSetCiclo = cicloId;
   IR._contadosSetN = (IR.contagens||[]).length;
@@ -7831,7 +7952,7 @@ function irResolverLocalDigitado(txt){
 function irDetalheExclusao(e){
   const local = String(e.local).trim();
   const inv = irNumInventario(e.inventario);
-  const linhas = (IR.divergencias||[]).filter(d=>String(d.local).trim()===local && String(d.motivo||'').trim().toUpperCase()==='AIR');
+  const linhas = (IR.divergencias||[]).filter(d=>String(d.local).trim()===local && irEhMotivoInv(d.motivo));
   // Quem contou as rodadas físicas (2ª em diante) desse inventário nesse local;
   // a rodada 1 é o sistema. A última rodada é a que valeu como física.
   const rodadasPorUsuario = new Map();
@@ -7936,69 +8057,64 @@ function irRenderGestaoInventario(){
     }
   }
   const rankUsuarios = Array.from(porUsuario.values()).sort((a,b)=>b.pecas-a.pecas || b.locais-a.locais);
-  const kpis = irKpiBlock('orange', '🚫', 'Divergência desconsiderada — ciclo ativo',
-    irKpiTile('📍', irFmtInt(aplicadas.length), 'Locais desconsiderados', '', `${irFmtInt(lista.length)} cadastrado(s) no total`)
-    + irKpiTile('📦', irFmtInt(tot.pecas), 'Peças divergentes desconsideradas', '', `${irFmtInt(tot.itens)} item(ns) divergente(s)`)
-    + irKpiTile('💰', irFmtMoneyCompact(tot.valor), 'Valor divergente desconsiderado', '', irFmtMoneyInt(tot.valor))
-    + irKpiTile('👤', irFmtInt(rankUsuarios.length), 'Usuários envolvidos', '', 'contaram alguma rodada física')
-    + (impacto ? irKpiTile('📉', irFmtPct(impacto.sem), 'Acurácia Peças sem a gestão', '', 'se as contagens erradas valessem')
-      + irKpiTile('🎯', irFmtPct(impacto.com), 'Acurácia Peças com a gestão', '', `impacto ${(impacto.pp>=0?'+':'')+irFmtNum(impacto.pp,2)} p.p.`) : ''));
-  return `
-  <div class="panel">
-    <h3>Desconsiderar contagem da acurácia</h3>
-    <p class="panel-sub">Informe o Nº do inventário e o local com contagem errada. Só aquele inventário daquele local sai da acurácia (peças, local e valor, inclusive nas quebras por rua, setor e mês) — os demais locais do mesmo inventário continuam contando. Andamento e locais concluídos não mudam: o local foi trabalhado, só o resultado da contagem não vale.</p>
-    <div class="gi-form">
+  const kc = (rot, val, sub, cor, cls)=>`<div class="ca-kpi ${cls||''}"><span>${rot}</span><b style="color:${cor}">${val}</b><small>${sub||''}</small></div>`;
+  const kpis = `<div class="ca-kpis gi-kpis">
+    ${kc('Locais desconsiderados', irFmtInt(aplicadas.length), irFmtInt(lista.length)+' cadastrado(s) no total', '#FE5000', 'destaque')}
+    ${kc('Peças divergentes', irFmtInt(tot.pecas), irFmtInt(tot.itens)+' item(ns) divergente(s)', '#001A72')}
+    ${kc('Valor divergente', irFmtMoneyInt(tot.valor), 'desconsiderado no ciclo ativo', '#001A72')}
+    ${kc('Usuários envolvidos', irFmtInt(rankUsuarios.length), 'contaram alguma rodada física', '#001A72')}
+    ${impacto ? kc('Acurácia peças sem a gestão', irFmtPct(impacto.sem), 'se as contagens erradas valessem', '#FE5000')
+      + kc('Acurácia peças com a gestão', irFmtPct(impacto.com), `impacto ${(impacto.pp>=0?'+':'')+irFmtNum(impacto.pp,2)} p.p.`, '#1E8E4E') : ''}
+  </div>`;
+  const pnl = (t, corpo, dir)=>`<div class="panel ca-panel"><div class="dx-panel-h"><h3>${t}</h3>${dir?`<div class="cmp-legend">${dir}</div>`:''}</div>${corpo}</div>`;
+  const cab = `<section class="dx-hero ca-hero gi-hero"><div class="dx-hero-in">
+      <div class="dx-marca"><span class="brand-logo dx-logo" aria-hidden="true"><img src="brand/Logo_LDM_icon.png" alt=""></span><div class="dx-marca-txt"><b>Oficina LDM</b><span>Inventário · CD Cajamar</span></div></div>
+      <div class="dx-hero-row"><div class="dx-hero-tit"><h2>Gestão de Inventário</h2><span class="dx-tag">Contagens desconsideradas da acurácia</span></div></div>
+    </div></section>`;
+  const form = pnl('Desconsiderar contagem da acurácia', `<div class="gi-form gi-form-ca">
       <div><label>Nº Inventário</label><input type="text" id="ir-gi-inv" placeholder="ex.: 485919"></div>
       <div><label>Local (código ou endereço)</label><input type="text" id="ir-gi-local" placeholder="ex.: 708184 ou PP 003 090 05"></div>
-      <div><label>Justificativa</label><input type="text" id="ir-gi-just" placeholder="ex.: contagem lançada no endereço errado, confirmada em recontagem"></div>
-    </div>
-    <div class="form-actions"><button class="btn btn-primary" ${ocupado?'disabled':''} onclick="irAdicionarExclusao()">${ocupado?'Recalculando...':'Desconsiderar da acurácia'}</button></div>
-  </div>
-  <div class="kpi-blocks" style="margin-bottom:14px;">${kpis}</div>
-  <div class="panel">
-    <h3>Locais desconsiderados (${irFmtInt(lista.length)})</h3>
-    <p class="panel-sub">${ind && ind.locaisDesconsiderados!=null ? `No ciclo ativo, ${irFmtInt(ind.locaisDesconsiderados)} local(is) estão fora da acurácia. ` : ''}Só tem efeito o inventário que FECHOU o local (a última rodada AIR dele) — rodada intermediária já não entra na conta. Ciclos 1 e 2 de 2026 têm o número publicado travado e não mudam. Usuários = quem contou cada rodada física (2ª em diante) daquele inventário; "final" é a rodada que valeu como contagem física.</p>
-    ${lista.length ? `<div class="table-wrap gi-excl-wrap"><table class="gi-excl">
-      <thead><tr><th>Nº Inv.</th><th>Local</th><th class="gi-excl-txt">Endereço</th><th class="gi-excl-txt">Usuário</th><th>Rodada</th><th class="num">Peças div.</th><th class="num">Valor div.</th><th class="gi-excl-just">Justificativa</th><th>Cadastro</th><th></th></tr></thead>
+      <div><label>Justificativa</label><input type="text" id="ir-gi-just" placeholder="ex.: contagem lançada no endereço errado"></div>
+      <div class="gi-form-bt"><button class="btn btn-primary" ${ocupado?'disabled':''} onclick="irAdicionarExclusao()">${ocupado?'Recalculando...':'Desconsiderar'}</button></div>
+    </div>`);
+  const tabLocais = lista.length ? `<div class="ca-tab"><table class="gi-ca">
+      <thead><tr><th>Nº Inv.</th><th>Local</th><th>Endereço</th><th>Usuário</th><th>Rodada</th><th class="num">Peças div.</th><th class="num">Valor div.</th><th>Justificativa</th><th>Cadastro</th><th></th></tr></thead>
       <tbody>${lista.map(e=>{
         const d = dets.get(e.id);
-        // Uma linha por usuário: mesmo inventário+local, desconsiderado do
-        // mesmo jeito — só separa quem errou. Peças/valor são do local.
-        // Sem coluna de situação: exclusão sem efeito no ciclo ativo mostra
-        // "—" em peças/valor, com o motivo ao passar o mouse.
         const porUsuario = d.usuarios.length ? d.usuarios : [null];
         const semEfeito = d.aplicada ? '' : ` title="${irEsc(d.situacao.txt)}"`;
         const dtCad = e.criadoEm ? new Date(e.criadoEm) : null;
         const cad = dtCad ? dtCad.toLocaleDateString('pt-BR')+' '+dtCad.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) : '—';
         return porUsuario.map(u=>`<tr>
-          <td class="mono">${irEsc(e.inventario)}</td>
+          <td><span class="ca-cod">${irEsc(e.inventario)}</span></td>
           <td class="mono">${irEsc(e.local)}</td>
-          <td class="gi-excl-txt">${irEsc(irDescLocal(e.local)||'—')}</td>
-          <td class="gi-excl-txt">${u ? (u.final?'<strong>':'')+irEsc(irProdNome(u.usuario))+(u.final?'</strong>':'') : '—'}</td>
+          <td title="${irEsc(irDescLocal(e.local)||'')}">${irEsc(irDescLocal(e.local)||'—')}</td>
+          <td>${u ? (u.final?'<b>':'')+irEsc(irProdNome(u.usuario))+(u.final?'</b>':'') : '—'}</td>
           <td>${u ? u.rodadas.map(r=>r+'ª').join(', ')+(u.final?' · final':'') : '—'}</td>
-          <td class="mono num"${semEfeito}>${d.aplicada ? irFmtInt(d.pecas) : '—'}</td>
-          <td class="mono num"${semEfeito}>${d.aplicada ? irFmtMoney(d.valor) : '—'}</td>
-          <td class="gi-excl-just">${irEsc(e.justificativa)}</td>
+          <td class="num"${semEfeito}><b style="color:#FE5000">${d.aplicada ? irFmtInt(d.pecas) : '—'}</b></td>
+          <td class="num"${semEfeito}><b style="color:#FE5000">${d.aplicada ? irFmtMoney(d.valor) : '—'}</b></td>
+          <td class="gi-just" title="${irEsc(e.justificativa)}">${irEsc(e.justificativa)}</td>
           <td>${irEsc(cad)}</td>
-          <td class="num"><button class="btn-link" style="color:var(--danger);" title="Remove o inventário ${irEsc(e.inventario)} + local ${irEsc(e.local)} (todas as linhas dele)" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
+          <td class="num"><button class="btn-link gi-rem" title="Remover inventário ${irEsc(e.inventario)} + local ${irEsc(e.local)}" ${ocupado?'disabled':''} onclick="irRemoverExclusao('${irEsc(e.id)}')">Remover</button></td>
         </tr>`).join('');
       }).join('')}</tbody>
-    </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>'}
-  </div>
-  ${rankUsuarios.length ? `<div class="panel">
-    <h3>Desconsiderados por usuário (ciclo ativo)</h3>
-    <p class="panel-sub">Local contado por mais de uma pessoa conta pra cada uma delas. "Na rodada final" = locais em que a contagem que valeu foi a dele.</p>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Usuário</th><th>Locais</th><th>Na rodada final</th><th>Peças div. desconsideradas</th><th>Valor div. desconsiderado</th></tr></thead>
+    </table></div>` : '<p class="field-hint">Nenhum local desconsiderado.</p>';
+  const tabUsr = rankUsuarios.length ? pnl('Desconsiderados por usuário', `<div class="ca-tab"><table>
+      <thead><tr><th>Usuário</th><th class="num">Locais</th><th class="num">Na rodada final</th><th class="num">Peças div.</th><th class="num">Valor div.</th></tr></thead>
       <tbody>${rankUsuarios.map(g=>`<tr>
-        <td><strong>${irEsc(irProdNome(g.usuario))}</strong></td>
-        <td class="mono">${irFmtInt(g.locais)}</td>
-        <td class="mono">${irFmtInt(g.finais)}</td>
-        <td class="mono">${irFmtInt(g.pecas)}</td>
-        <td class="mono">${irFmtMoney(g.valor)}</td>
+        <td><b>${irEsc(irProdNome(g.usuario))}</b></td>
+        <td class="num">${irFmtInt(g.locais)}</td>
+        <td class="num">${irFmtInt(g.finais)}</td>
+        <td class="num"><b style="color:#FE5000">${irFmtInt(g.pecas)}</b></td>
+        <td class="num"><b style="color:#FE5000">${irFmtMoney(g.valor)}</b></td>
       </tr>`).join('')}</tbody>
-    </table></div>
-  </div>` : ''}`;
+    </table></div>`) : '';
+  return `${cab}<div class="dx-body ca-wrap">
+    ${kpis}
+    ${form}
+    ${pnl('Locais desconsiderados', tabLocais, `<span class="ca-dim-n">${irFmtInt(lista.length)}</span>`)}
+    ${tabUsr}
+  </div>`;
 }
 /* ============================================================
    ABA EXPORTAR (Sistema) — exportação completa + referência de regras e
@@ -8059,7 +8175,7 @@ function irExportarLocaisPendentesCsv(rua){
   const ruas = rua ? [rua] : irPendRuasMarcadas();
   const filtro = ruas.length ? new Set(ruas) : null;
   const pendentes = irLocaisPendentesContagem()
-    .filter(l => !filtro || filtro.has(irRuaDoLocal(l)));
+    .filter(l => !filtro || filtro.has(irRuaDoLocal(l)) || filtro.has(irRuaTipoDoLocal(l)));
   if(!pendentes.length){
     // Distingue "não há pendente" de "não dá pra listar": o segundo caso tem
     // pendente na tela e some sem explicação se o aviso for o mesmo.
@@ -8078,7 +8194,7 @@ function irExportarLocaisPendentesCsv(rua){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'locais_pendentes_ciclo_'+IR.cicloAtivo.numero
-    + (ruas.length===1 ? '_'+ruas[0] : '') + '.csv';
+    + (ruas.length===1 ? '_'+String(ruas[0]).replace('|','_') : '') + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -8218,7 +8334,7 @@ function irComposicaoDivergencia(){
      painel decomporia um total diferente do que está no dashboard — que é
      exatamente o tipo de contradição que ele existe pra resolver. O que ficou de
      fora vira número no rodapé, pra continuar visível. */
-  const air = concluidas.filter(d=>String(d.motivo||'').trim().toUpperCase()==='AIR');
+  const air = concluidas.filter(d=>irEhMotivoInv(d.motivo));
   const ultima = new Map();
   for(const d of air){
     const n = irNumInventario(d.inventario);
@@ -8227,7 +8343,7 @@ function irComposicaoDivergencia(){
   const divs = air.filter(d=>irNumInventario(d.inventario) === ultima.get(d.local));
   if(!divs.length) return null;
   const absD = d => Math.abs(d.diferenca||0);
-  const foraMotivo = concluidas.filter(d=>String(d.motivo||'').trim().toUpperCase()!=='AIR')
+  const foraMotivo = concluidas.filter(d=>!irEhMotivoInv(d.motivo))
     .reduce((s,d)=>s+absD(d),0);
   const foraRodada = air.filter(d=>irNumInventario(d.inventario) !== ultima.get(d.local))
     .reduce((s,d)=>s+absD(d),0);
@@ -8621,9 +8737,19 @@ function irDashProdDados(){
   IR._dpCache = {k:chave, r};
   return r;
 }
+/* Período do filtro do topo, em letra pequena no canto de cada quadro. */
+function irDpPeriodoTxt(){
+  const {de, ate} = IR.prodFilters||{};
+  const f = x=> x.slice(8,10)+'/'+x.slice(5,7);
+  const sem = x=> ['dom','seg','ter','qua','qui','sex','sáb'][new Date(x+'T12:00:00').getDay()];
+  if(de && ate) return de===ate ? f(de)+' · '+sem(de) : f(de)+' – '+f(ate);
+  if(de) return 'desde '+f(de);
+  if(ate) return 'até '+f(ate);
+  return 'ciclo inteiro';
+}
 function irDpPainel(titulo, leg, corpo, extra){
   return `<div class="panel dp-panel"${extra||''}>
-    <div class="dx-panel-h"><h3>${titulo}</h3>${leg?`<div class="cmp-legend">${leg}</div>`:''}</div>
+    <div class="dx-panel-h"><h3>${titulo}</h3><div class="dp-h-dir">${leg?`<div class="cmp-legend">${leg}</div>`:''}<span class="dp-per">${irDpPeriodoTxt()}</span></div></div>
     ${corpo}
   </div>`;
 }
@@ -8633,34 +8759,36 @@ function irDpKpi(rot, val, sub, cls){
 function irDpLeg(cor, txt, linha){
   return `<span>${linha?`<span class="dx-meta-leg" style="border-color:${cor}"></span>`:`<span class="cmp-dot" style="background:${cor};"></span>`}${txt}</span>`;
 }
-const IR_DP_MIN_HH = 4; // horas-homem mínimas para entrar nos rankings de ritmo
+const IR_DP_MIN_HH = 0; // sem trava: todo mundo que contou aparece
+const IR_DP_POUCO_H = 2; // menos que isso: fica no fim da lista, em cinza, "pouco tempo"
 
 /* PX1 — locais por hora-homem, por colaborador */
 function irDpRanking(d){
-  const lista = d.a.colaboradores.filter(c=>c.horasHomem>=IR_DP_MIN_HH).sort((x,y)=>y.locaisHora-x.locaisHora);
+  const todos = d.a.colaboradores.filter(c=>c.horasHomem>IR_DP_MIN_HH).sort((x,y)=>y.locaisHora-x.locaisHora);
+  const lista = todos.filter(c=>c.horasHomem>=IR_DP_POUCO_H).concat(todos.filter(c=>c.horasHomem<IR_DP_POUCO_H));
   if(!lista.length) return irDpPainel('Produtividade por colaborador','', '<p class="field-hint">Sem horas de contagem suficientes no período escolhido.</p>');
   const metaV = d.meta.valor||0;
   const mx = Math.max(metaV*1.15, ...lista.map(c=>c.locaisHora));
-  const lin = (c,i)=>`<div class="dp-rk" title="${irEsc(c.usuario)}: ${irFmtInt(c.locais)} locais em ${irFmtInt(c.horasHomem)} h">
-      <span class="as-pos">${i+1}</span><span class="as-nome">${irEsc(irProdNome(c.usuario))}</span>
-      <div class="dp-rk-bar"><i class="${c.locaisHora>=metaV?'ok':''}" style="width:${(c.locaisHora/mx*100).toFixed(1)}%"></i>${metaV?`<em style="left:${(metaV/mx*100).toFixed(1)}%"></em>`:''}</div>
+  const lin = (c,i)=>{ const pouco = c.horasHomem<IR_DP_POUCO_H; return `<div class="dp-rk${pouco?' pouco':''}" title="${irEsc(c.usuario)}: ${irFmtInt(c.locais)} locais em ${irFmtNum(c.horasHomem,1)} h${pouco?' — pouco tempo contando, fora do ranking':''}">
+      <span class="as-pos">${pouco?'–':i+1}</span><span class="as-nome">${irEsc(irProdNome(c.usuario))}${pouco?' <em class="dp-pouco" title="Menos de 2 h contando: fora do ranking">&lt; 2 h</em>':''}</span>
+      <div class="dp-rk-bar"><i class="${!pouco && c.locaisHora>=metaV?'ok':''}" style="width:${(c.locaisHora/mx*100).toFixed(1)}%"></i>${metaV?`<em style="left:${(metaV/mx*100).toFixed(1)}%"></em>`:''}</div>
       <span class="as-qt">${irFmtNum(c.locaisHora,1)} <small>locais/h</small></span>
-      <span class="as-qt">${irFmtInt(c.horasHomem)} <small>h</small></span>
-    </div>`;
+      <span class="as-qt">${c.horasHomem<IR_DP_POUCO_H ? irFmtNum(c.horasHomem,1) : irFmtInt(c.horasHomem)} <small>h</small></span>
+    </div>`; };
   const m = lista[0];
   return irDpPainel('Produtividade por colaborador',
     irDpLeg('var(--dx-local,#001A72)','acima da meta')+irDpLeg('#9AA3BF','abaixo')+irDpLeg('var(--orange)', (d.meta.origem==='cadastrada'?'meta ':'média ')+irFmtNum(metaV,1)+'/h', true),
     `<div class="as-topo">
       ${irDpKpi('Média da equipe', irFmtNum(d.a.locaisHora,1)+' <small>locais/h</small>', d.meta.origem==='cadastrada'?'meta '+irFmtNum(metaV,1)+' locais/h':'sem meta cadastrada')}
       ${irDpKpi('Mais rápido', irEsc(irProdNome(m.usuario)), irFmtNum(m.locaisHora,1)+' locais/h · '+irFmtInt(m.horasHomem)+' h contando')}
-      ${irDpKpi('Horas contando no ciclo', irFmtInt(d.a.horasHomem)+' h', irFmtInt(d.a.colaboradores.length)+' colaboradores')}
+      ${irDpKpi('Horas contando no período', irFmtInt(d.a.horasHomem)+' h', irFmtInt(d.a.colaboradores.length)+' colaboradores')}
     </div>
     <div class="as-lista">${lista.map(lin).join('')}</div>`);
 }
 
 /* PX2 — velocidade × assertividade (bolhas) */
 function irDpDispersao(d){
-  const pts = d.a.colaboradores.filter(c=>c.horasHomem>=IR_DP_MIN_HH && d.assertPor.has(c.usuario) && d.assertPor.get(c.usuario).contagens>=IR_ASSERT_MIN)
+  const pts = d.a.colaboradores.filter(c=>c.horasHomem>IR_DP_MIN_HH && d.assertPor.has(c.usuario))
     .map(c=>({n:irProdNome(c.usuario), v:c.locaisHora, a:d.assertPor.get(c.usuario).pct, h:c.horasHomem}));
   if(!pts.length) return irDpPainel('Velocidade × assertividade','', '<p class="field-hint">Sem colaboradores com horas suficientes no período escolhido.</p>');
   const metaV = d.meta.valor||0, metaA = IR_META_ACURACIA;
@@ -8723,7 +8851,7 @@ function irDpDispersao(d){
 function irDpCalor(d){
   const horas = []; for(let h=IR_HORA_INICIO; h<=IR_HORA_FIM; h++) horas.push(h);
   const dows = [1,2,3,4,5,6,0].filter(w=>d.diasPorDow.get(w));
-  if(!dows.length) return irDpPainel('Em que horário a equipe conta','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
+  if(!dows.length) return irDpPainel('Pico','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
   const val = (w,h)=> (d.calor.get(w+'|'+h)||{size:0}).size / (d.diasPorDow.get(w)||1);
   let mx = 0; const porHora = horas.map(h=>dows.reduce((s,w)=>s+val(w,h),0));
   dows.forEach(w=>horas.forEach(h=>{ mx = Math.max(mx, val(w,h)); }));
@@ -8732,86 +8860,161 @@ function irDpCalor(d){
   const melhorDow = porDow.slice().sort((p,q)=>q.t-p.t)[0];
   const ativas = horas.filter((h,i)=>porHora[i]>0);
   const fraca = ativas.length ? ativas.reduce((b,h)=> porHora[horas.indexOf(h)] < porHora[horas.indexOf(b)] ? h : b, ativas[0]) : null;
-  const cel = (w,h)=>{ const v = val(w,h); if(!v) return '<div class="dp-hm-c"></div>';
-    const t = v/(mx||1);
-    return `<div class="dp-hm-c" style="background:rgba(254,80,0,${(0.1+t*0.9).toFixed(2)});color:${t>0.55?'#fff':'var(--ink)'}" title="${IR_DP_SEM[w].toUpperCase()} ${String(h).padStart(2,'0')}h: ${irFmtNum(v,0)} locais (média por dia)">${irFmtNum(v,0)}</div>`; };
-  return irDpPainel('Em que horário a equipe conta', '<span>locais contados por hora · média por dia</span>',
+  const CORES = ['#FE5000','#001A72','#3A5BD9','#1E8E4E','#C8361B','#E8A33D','#8A6FD1'];
+  const cor = i=> CORES[i % CORES.length];
+  const um = dows.length===1;
+  const svg = W=>{
+    const H = 260, pl = 40, pr = 14, pt = 24, pb = 28;
+    const hi = (mx||1)*1.18;
+    const x = i=> pl + (W-pl-pr) * (horas.length>1 ? i/(horas.length-1) : .5);
+    const y = v=> pt + (1 - v/hi) * (H-pt-pb);
+    let g = `<svg width="${W}" height="${H}" style="display:block">`;
+    for(let k=0;k<=4;k++){ const v = hi*k/4; g += `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line)" stroke-opacity=".7"/><text x="${pl-6}" y="${y(v)+4}" font-size="10" text-anchor="end" style="fill:var(--ink-soft)">${irFmtNum(v,0)}</text>`; }
+    const iPico = horas.indexOf(pico);
+    g += `<line x1="${x(iPico)}" x2="${x(iPico)}" y1="${pt-6}" y2="${H-pb}" stroke="#FE5000" stroke-dasharray="4 4" stroke-opacity=".55"/>`;
+    horas.forEach((h,i)=>{ g += `<text x="${x(i)}" y="${H-8}" font-size="10.5" font-weight="${h===pico?800:500}" text-anchor="middle" style="fill:${h===pico?'var(--ink)':'var(--ink-soft)'}">${String(h).padStart(2,'0')}h</text>`; });
+    dows.forEach((w,di)=>{
+      const c = cor(di);
+      const pts = horas.map((h,i)=>[x(i), y(val(w,h)), val(w,h), h]);
+      const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+      if(um) g += `<path d="${d} L${pts[pts.length-1][0].toFixed(1)},${y(0)} L${pts[0][0].toFixed(1)},${y(0)} Z" fill="${c}" fill-opacity=".08"/>`;
+      g += `<path d="${d}" fill="none" stroke="${c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+      pts.forEach(p=>{
+        g += `<g><title>${IR_DP_SEM[w].toUpperCase()} ${String(p[3]).padStart(2,'0')}h: ${irFmtNum(p[2],0)} locais (média por dia)</title><circle cx="${p[0]}" cy="${p[1]}" r="${p[3]===pico&&um?5:3.5}" style="fill:var(--surface)" stroke="${c}" stroke-width="2"/></g>`;
+        if(um && p[2]>0) g += `<text x="${p[0]}" y="${p[1]-9}" font-size="10.5" font-weight="800" text-anchor="middle" fill="${p[3]===pico?'#FE5000':'var(--ink)'}">${irFmtNum(p[2],0)}</text>`;
+      });
+    });
+    return g + '</svg>';
+  };
+  const leg = (um ? '' : dows.map((w,i)=>irDpLeg(cor(i), IR_DP_SEM[w].toUpperCase(), true)).join('')) + '<span>locais por hora · média por dia</span>';
+  return irDpPainel('Pico', leg,
     `<div class="as-topo">
       ${irDpKpi('Horário de pico', String(pico).padStart(2,'0')+'h', irFmtNum(Math.max(...porHora)/dows.length,0)+' locais em média por dia')}
       ${irDpKpi('Dia da semana mais forte', IR_DP_SEM[melhorDow.w].toUpperCase(), irFmtNum(melhorDow.t,0)+' locais em média')}
       ${fraca!=null?irDpKpi('Horário mais fraco', String(fraca).padStart(2,'0')+'h', 'entre as horas com contagem'):''}
     </div>
-    <div class="dp-hm" style="grid-template-columns:44px repeat(${horas.length}, minmax(0,1fr))">
-      <div></div>${horas.map(h=>`<div class="dp-hm-h">${String(h).padStart(2,'0')}h</div>`).join('')}
-      ${dows.map(w=>`<div class="dp-hm-d${w===0||w===6?' fds':''}">${IR_DP_SEM[w].toUpperCase()}</div>${horas.map(h=>cel(w,h)).join('')}`).join('')}
-    </div>`);
+    ${irFluid('dpPico', svg, 260)}`);
 }
 
 /* PX4 — linha do tempo do último dia com contagem */
+/* Filtro "Equipe" (Turno do dia e Hora a hora): quem aparece. Vale enquanto a
+   página está aberta e fica guardado no aparelho. */
+IR.dpEquipeOff = IR.dpEquipeOff || (()=>{ try{ return new Set(JSON.parse(localStorage.getItem('ir-dp-equipe-off')||'[]')); }catch(e){ return new Set(); } })();
+function irDpEquipeSalvar(){ try{ localStorage.setItem('ir-dp-equipe-off', JSON.stringify(Array.from(IR.dpEquipeOff))); }catch(e){} }
+function irDpEquipeToggle(u, on){
+  if(u==='*'){ if(on) IR.dpEquipeOff = new Set(); else IR.dpEquipeOff = new Set(IR._dpEquipeTodos||[]); }
+  else if(on) IR.dpEquipeOff.delete(u); else IR.dpEquipeOff.add(u);
+  irDpEquipeSalvar(); irRenderView();
+}
+function irDpEquipeFiltro(usuarios){
+  IR._dpEquipeTodos = usuarios.slice();
+  const ops = usuarios.slice().sort((a,b)=>irProdNome(a).localeCompare(irProdNome(b))).map(u=>({v:u, t:irProdNome(u), c:'', on:!IR.dpEquipeOff.has(u)}));
+  const n = ops.filter(o=>o.on).length;
+  return `<div class="dp-eqf">${irMsDrop('msDpEquipe', 'Equipe', ops, 'irDpEquipeToggle', {resumo: n===ops.length ? 'Todos' : n+' de '+ops.length})}</div>`;
+}
+const irDpHHMM = m=>{ const t = new Date(m*60000); return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'); };
 function irDpTurno(d){
   const dia = d.dias[d.dias.length-1];
-  if(!dia) return irDpPainel('Turno','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
-  const linhas = [];
-  let hIni = 24, hFim = 0;
+  if(!dia) return irDpPainel('Tempo de Ociosidade','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
+  const todas = [];
   for(const [k, su] of d.sessoes){
     const [u, dd] = k.split('|');
     if(dd!==dia) continue;
     const iv = Array.from(su.values()).sort((p,q)=>p[0]-q[0]);
     const m = [];
     for(const s of iv){ const ult = m[m.length-1]; if(ult && s[0] <= ult[1]+2) ult[1] = Math.max(ult[1], s[1]); else m.push([s[0], s[1]]); }
+    if(!m.length) continue;
     const contando = m.reduce((t,s)=>t+(s[1]-s[0]),0);
     const turno = m[m.length-1][1]-m[0][0];
-    const base0 = irDpMin(dia+'T00:00:00');
-    hIni = Math.min(hIni, Math.floor((m[0][0]-base0)/60)); hFim = Math.max(hFim, Math.ceil((m[m.length-1][1]-base0)/60));
-    linhas.push({u, m, contando, turno, base0});
+    todas.push({u, m, contando, turno, locais:iv.length, base0:irDpMin(dia+'T00:00:00')});
   }
-  if(!linhas.length) return irDpPainel('Turno','', '<p class="field-hint">Sem horários de início e fim no último dia.</p>');
+  if(!todas.length) return irDpPainel('Tempo de Ociosidade','', '<p class="field-hint">Sem horários de início e fim no último dia.</p>');
+  const filtro = irDpEquipeFiltro(todas.map(l=>l.u));
+  const linhas = todas.filter(l=>!IR.dpEquipeOff.has(l.u)).sort((p,q)=>q.contando-p.contando);
+  let hIni = 24, hFim = 0;
+  linhas.forEach(l=>{ hIni = Math.min(hIni, Math.floor((l.m[0][0]-l.base0)/60)); hFim = Math.max(hFim, Math.ceil((l.m[l.m.length-1][1]-l.base0)/60)); });
+  if(!linhas.length){ hIni = 8; hFim = 18; }
   hFim = Math.max(hFim, hIni+1);
-  linhas.sort((p,q)=>q.contando-p.contando);
   const xp = (min,b0)=> ((min-b0)/60 - hIni)/(hFim-hIni)*100;
-  const passo = (hFim-hIni)>8 ? 2 : 1;
-  const horas = []; for(let h=hIni; h<=hFim; h+=passo) horas.push(h);
+  const horas = []; for(let h=hIni; h<=hFim; h++) horas.push(h);
+  const grade = horas.map(h=>`<b style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('')
+    + horas.slice(0,-1).map(h=>`<b class="meia" style="left:${((h+0.5-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('')
+    // linhas de 10 em 10 minutos (as de :30 já estão acima)
+    + horas.slice(0,-1).flatMap(h=>[10,20,40,50].map(mi=>`<b class="min" style="left:${((h+mi/60-hIni)/(hFim-hIni)*100).toFixed(3)}%"></b>`)).join('');
   const lin = l=>{ const parado = l.turno>0 ? 1-l.contando/l.turno : 0;
     return `<div class="dp-tl">
       <span class="as-nome">${irEsc(irProdNome(l.u))}</span>
-      <div class="dp-tl-trilho">${l.m.map(s=>`<i style="left:${xp(s[0],l.base0).toFixed(2)}%;width:${Math.max(0.3, xp(s[1],l.base0)-xp(s[0],l.base0)).toFixed(2)}%" title="${new Date(s[0]*60000).toTimeString().slice(0,5)}–${new Date(s[1]*60000).toTimeString().slice(0,5)}"></i>`).join('')}</div>
-      <span class="as-qt">${irFmtNum(l.contando/60,1)} h</span>
+      <div class="dp-tl-trilho">${grade}${l.m.map(s=>`<i style="left:${xp(s[0],l.base0).toFixed(3)}%;width:${Math.max(0.15, xp(s[1],l.base0)-xp(s[0],l.base0)).toFixed(3)}%" title="${irDpHHMM(s[0])}–${irDpHHMM(s[1])} · ${irFmtInt(Math.max(1,Math.round(s[1]-s[0])))} min"></i>`).join('')}</div>
+      <span class="as-qt">${irDpHHMM(l.m[0][0])}</span>
+      <span class="as-qt">${irDpHHMM(l.m[l.m.length-1][1])}</span>
+      <span class="as-qt">${Math.floor(l.contando/60)}h${String(Math.round(l.contando%60)).padStart(2,'0')}</span>
       <span class="as-pct ${parado>0.25?'bad':''}">${irFmtPct(parado)}</span>
     </div>`; };
-  return irDpPainel('Turno do dia', irDpLeg('var(--dx-local,#001A72)','contando')+irDpLeg('var(--surface2)','intervalo entre contagens'),
-    `<div class="dp-tl dp-tl-eixo"><span></span><div class="dp-tl-horas">${horas.map(h=>`<span style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%">${String(h).padStart(2,'0')}h</span>`).join('')}</div><span class="as-qt"><small>contando</small></span><span class="as-qt"><small>parado</small></span></div>
-     <div class="as-lista">${linhas.map(lin).join('')}</div>`);
+  return irDpPainel('Tempo de Ociosidade', filtro + irDpLeg('var(--dx-local,#001A72)','contando')+irDpLeg('var(--surface2)','sem local aberto'),
+    `<div class="dp-tl dp-tl-eixo"><span></span><div class="dp-tl-horas">${horas.map(h=>`<span style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%">${String(h).padStart(2,'0')}h</span>`).join('')}</div><span class="as-qt"><small>início</small></span><span class="as-qt"><small>fim</small></span><span class="as-qt"><small>contando</small></span><span class="as-qt"><small>parado</small></span></div>
+     <div class="as-lista dp-tl-lista">${linhas.map(lin).join('') || '<p class="field-hint">Ninguém marcado no filtro Equipe.</p>'}</div>`);
 }
 
-/* PX5 — ritmo dos últimos 7 dias por colaborador */
-function irDpRitmo(d){
-  const dias = d.diasTend.slice(-7);
-  const metaV = d.meta.valor||0;
-  const top = d.a.colaboradores.filter(c=>c.horasHomem>=IR_DP_MIN_HH)
-    .map(c=>({c, serie:dias.map(dd=>{ const ud = d.porUD.get(c.usuario+'|'+dd); return ud&&ud.blocos.size ? ud.locais.size/ud.blocos.size : null; })}))
-    .filter(x=>x.serie.some(v=>v!=null))
-    .sort((p,q)=>q.c.locais-p.c.locais).slice(0,8);
-  if(!top.length) return irDpPainel('Ritmo dos últimos 7 dias','', '<p class="field-hint">Sem contagens nos últimos dias.</p>');
-  const vMax = Math.max(metaV*1.3, ...top.flatMap(x=>x.serie.filter(v=>v!=null)));
-  const card = x=>{
-    const w = 240, h = 64, vals = x.serie;
-    const px = i=> 6 + i*(w-12)/Math.max(1, vals.length-1);
-    const py = v=> h-6 - v/vMax*(h-12);
-    const pts = vals.map((v,i)=>v==null?null:[px(i),py(v)]).filter(Boolean);
-    const val = vals.filter(v=>v!=null);
-    const ult = val[val.length-1], tend = val.length>1 ? Math.round(ult-val[0]) : 0;
-    const svg = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="dp-sp">
-      ${metaV?`<line x1="0" x2="${w}" y1="${py(metaV)}" y2="${py(metaV)}" stroke="var(--orange)" stroke-dasharray="4 3" stroke-opacity=".8" vector-effect="non-scaling-stroke"/>`:''}
-      <polyline points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}" fill="none" stroke="var(--dx-local,#001A72)" stroke-width="2.4" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-    </svg>`;
-    return `<div class="dp-rt" title="${dias.map((dd,i)=>irDpDiaRot(dd)+': '+(vals[i]==null?'—':irFmtNum(vals[i],1))).join(' · ')}">
-      <div class="dp-rt-h"><span class="as-nome">${irEsc(irProdNome(x.c.usuario))}</span><b class="${tend>=0?'good':'bad'}">${tend>=0?'+':''}${irFmtNum(tend,0)}/h</b></div>
-      <div class="dp-rt-v">${irFmtNum(ult,0)} <small>locais/h no último dia</small></div>${svg}
-    </div>`;
-  };
-  return irDpPainel('Ritmo dos últimos 7 dias', irDpLeg('var(--dx-local,#001A72)','locais por hora')+(metaV?irDpLeg('var(--orange)',(d.meta.origem==='cadastrada'?'meta ':'média ')+irFmtNum(metaV,1)+'/h',true):''),
-    `<div class="dp-rt-grid">${top.map(card).join('')}</div>`);
+/* Produtividade hora a hora: colaboradores nas linhas, horas nas colunas; em cada
+   quadro, locais, peças ou valor contados naquela hora (filtro discreto no
+   cabeçalho). Mesmo filtro Equipe do Turno. Valor = peças × preço do item no ciclo. */
+IR.dpHHMet = IR.dpHHMet || 'locais';
+function irDpHHSetMet(m){ IR.dpHHMet = m; irRenderView(); }
+function irDpPrecoItens(){
+  const n = (IR.divergencias||[]).length;
+  if(IR._dpPreco && IR._dpPreco.n===n && IR._dpPreco.c===(IR.cicloAtivo||{}).id) return IR._dpPreco.m;
+  const m = new Map();
+  for(const d of (IR.divergencias||[])){
+    const p = d.precoUnitario || (d.qtdeSistema ? (d.vlSistema||0)/d.qtdeSistema : 0);
+    if(p && !m.has(d.item)) m.set(d.item, p);
+  }
+  IR._dpPreco = {n, c:(IR.cicloAtivo||{}).id, m};
+  return m;
 }
+function irDpHoraHora(d){
+  const horas = []; for(let h=IR_HORA_INICIO; h<=IR_HORA_FIM; h++) horas.push(h);
+  const met = IR.dpHHMet;
+  const preco = met==='valor' ? irDpPrecoItens() : null;
+  const por = new Map(); // usuario -> Map(hora -> {loc:Set, pc, vl})
+  for(const c of d.base){
+    const ref = c.dataFimContagem || c.dataInicioContagem; if(!ref || !c.usuario) continue;
+    const h = parseInt(ref.slice(11,13),10); if(!(h>=IR_HORA_INICIO && h<=IR_HORA_FIM)) continue;
+    let mu = por.get(c.usuario); if(!mu){ mu = new Map(); por.set(c.usuario, mu); }
+    let g = mu.get(h); if(!g){ g = {loc:new Set(), pc:0, vl:0}; mu.set(h, g); }
+    g.loc.add(c.local+'|'+ref.slice(0,10)+'|'+c.idConferencia);
+    g.pc += (c.qtFis||0);
+    if(preco) g.vl += (c.qtFis||0) * (preco.get(c.item)||0);
+  }
+  if(!por.size) return irDpPainel('Produtividade hora a hora','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
+  const filtro = irDpEquipeFiltro(Array.from(por.keys()));
+  const val = g=> !g ? 0 : (met==='locais' ? g.loc.size : (met==='pecas' ? g.pc : g.vl));
+  const fmt = v=> !v ? '' : (met==='valor' ? irFmtMoneyCompact(v) : irFmtInt(v));
+  const usuarios = Array.from(por.keys()).filter(u=>!IR.dpEquipeOff.has(u))
+    .map(u=>({u, t:horas.reduce((s,h)=>s+val(por.get(u).get(h)),0)})).sort((a,b)=>b.t-a.t);
+  const cols = horas.filter(h=>usuarios.some(x=>val(por.get(x.u).get(h))>0));
+  const hs = cols.length ? cols : horas;
+  const totH = hs.map(h=>usuarios.reduce((s,x)=>s+val(por.get(x.u).get(h)),0));
+  const totalG = totH.reduce((a,b)=>a+b,0);
+  const mx = Math.max(1, ...usuarios.flatMap(x=>hs.map(h=>val(por.get(x.u).get(h)))));
+  const iPico = totH.indexOf(Math.max(...totH));
+  const cel = v=>{ if(!v) return '<td class="dp-hh-c"></td>'; const t = v/mx;
+    return `<td class="dp-hh-c" style="background:rgba(254,80,0,${(0.08+t*0.85).toFixed(2)});color:${t>0.55?'#fff':'var(--ink)'}">${fmt(v)}</td>`; };
+  const rot = {locais:'Locais', pecas:'Peças', valor:'Valor'};
+  const seg = ['locais','pecas','valor'].map(m=>`<button type="button" class="${met===m?'on':''}" onclick="irDpHHSetMet('${m}')">${rot[m]}</button>`).join('');
+  const tab = `<div class="dp-hh-wrap"><table class="dp-hh">
+    <thead><tr><th></th>${hs.map((h,i)=>`<th class="${i===iPico?'pico':''}">${String(h).padStart(2,'0')}h</th>`).join('')}<th class="tot">Total</th></tr></thead>
+    <tbody>${usuarios.map(x=>`<tr><th>${irEsc(irProdNome(x.u))}</th>${hs.map(h=>cel(val(por.get(x.u).get(h)))).join('')}<td class="tot">${fmt(x.t)||'0'}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><th>Equipe</th>${totH.map((v,i)=>`<td class="${i===iPico?'pico':''}">${fmt(v)}</td>`).join('')}<td class="tot">${fmt(totalG)||'0'}</td></tr></tfoot>
+  </table></div>`;
+  return irDpPainel('Produtividade hora a hora', filtro + `<div class="dp-hh-met">${seg}</div>`,
+    `<div class="as-topo">
+      ${irDpKpi('Hora de pico', hs[iPico]!=null ? String(hs[iPico]).padStart(2,'0')+'h' : '—', (fmt(totH[iPico])||'0')+' '+rot[met].toLowerCase())}
+      ${irDpKpi('Média por hora', fmt(cols.length ? totalG/cols.length : 0) || '0', 'entre as '+cols.length+' horas com contagem')}
+      ${irDpKpi(rot[met]+' no período', fmt(totalG) || '0', usuarios.length+' colaborador(es)')}
+    </div>
+    ${tab}`);
+}
+
 
 /* PX6 — equipe do dia × produção por pessoa */
 function irDpEquipe(d){
@@ -8843,21 +9046,24 @@ function irDpEquipe(d){
 /* PX7 — retrabalho: recontagens que a contagem de cada um gerou */
 function irDpRetrabalho(d){
   const tx = irProdTaxasPorUsuario(d.base);
-  const lista = Array.from(tx.entries()).map(([u,t])=>({u, ...t, taxa:t.visitas?t.recontadas/t.visitas:0})).filter(x=>x.visitas>=IR_ASSERT_MIN).sort((p,q)=>q.taxa-p.taxa);
-  if(!lista.length) return irDpPainel('Retrabalho: recontagens causadas','', '<p class="field-hint">Sem contagens suficientes no período escolhido.</p>');
+  const horas = new Map(d.a.colaboradores.map(c=>[c.usuario, c.horasHomem]));
+  const pouco = u=> (horas.get(u)||0) < IR_DP_POUCO_H;
+  const lista = Array.from(tx.entries()).map(([u,t])=>({u, ...t, taxa:t.visitas?t.recontadas/t.visitas:0})).filter(x=>x.visitas>0)
+    .sort((p,q)=> (pouco(p.u)-pouco(q.u)) || q.taxa-p.taxa);
+  if(!lista.length) return irDpPainel('Retrabalho: contagens erradas','', '<p class="field-hint">Sem contagens suficientes no período escolhido.</p>');
   const tRec = lista.reduce((s,x)=>s+x.recontadas,0), tVis = lista.reduce((s,x)=>s+x.visitas,0);
   const minLocal = d.a.minPorLocal||0;
   const mx = Math.max(...lista.map(x=>x.taxa), 0.0001);
   const cls = t=> t>0.10?'bad':(t>0.05?'warn':'good');
-  const lin = x=>`<div class="dp-rk dp-rt-lin" title="${irEsc(x.u)}: ${irFmtInt(x.recontadas)} de ${irFmtInt(x.visitas)} locais precisaram de nova contagem">
-      <span class="as-nome">${irEsc(irProdNome(x.u))}</span>
+  const lin = x=>`<div class="dp-rk dp-rt-lin${pouco(x.u)?' pouco':''}" title="${irEsc(x.u)}: ${irFmtInt(x.recontadas)} de ${irFmtInt(x.visitas)} locais contados ficaram diferentes do resultado final">
+      <span class="as-nome">${irEsc(irProdNome(x.u))}${pouco(x.u)?' <em class="dp-pouco" title="Menos de 2 h contando: fora do ranking">&lt; 2 h</em>':''}</span>
       <div class="dp-rk-bar"><i class="${cls(x.taxa)}" style="width:${(x.taxa/mx*100).toFixed(1)}%"></i></div>
-      <span class="as-qt">${irFmtInt(x.recontadas)} <small>recontagens</small></span>
+      <span class="as-qt">${irFmtInt(x.recontadas)} <small>erros</small></span>
       <span class="as-pct ${cls(x.taxa)}">${irFmtPct(x.taxa)}</span>
     </div>`;
-  return irDpPainel('Retrabalho: recontagens causadas', irDpLeg('var(--success)','até 5%')+irDpLeg('#E8A33D','5–10%')+irDpLeg('var(--danger)','acima de 10%'),
+  return irDpPainel('Retrabalho: contagens erradas', irDpLeg('var(--success)','até 5%')+irDpLeg('#E8A33D','5–10%')+irDpLeg('var(--danger)','acima de 10%'),
     `<div class="as-topo">
-      ${irDpKpi('Recontagens geradas', irFmtInt(tRec), 'locais que precisaram de nova contagem', 'bad')}
+      ${irDpKpi('Contagens erradas', irFmtInt(tRec), 'locais em que a contagem ficou diferente do final', 'bad')}
       ${irDpKpi('Tempo perdido estimado', irFmtNum(tRec*minLocal/60,1)+' h', '≈ '+irFmtNum(minLocal,1)+' min por local')}
       ${irDpKpi('Taxa da equipe', irFmtPct(tVis?tRec/tVis:0), 'dos locais contados')}
     </div>
@@ -8895,11 +9101,12 @@ function irRenderDashProdSecao(){
   const d = irDashProdDados();
   if(!d) return `<div id="dxProd" class="dp-wrap"><div class="panel"><p class="field-hint">Carregando as contagens do ciclo...</p></div></div>`;
   return `<div id="dxProd" class="dp-wrap">
+    ${irDpHoraHora(d)}
+    ${irRenderAssertividadePanel()}
     <div class="dp-grid">${irDpRanking(d)}${irDpRetrabalho(d)}</div>
     ${irDpDispersao(d)}
     ${irDpCalor(d)}
-    <div class="dp-grid">${irDpTurno(d)}${irDpPlacar(d)}</div>
-    ${irDpRitmo(d)}
-    ${irDpEquipe(d)}
+    ${irDpTurno(d)}
+    <div class="dp-grid">${irDpPlacar(d)}${irDpEquipe(d)}</div>
   </div>`;
 }

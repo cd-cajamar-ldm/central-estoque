@@ -36,7 +36,7 @@ var TABS = {
 };
 
 var S = {
-  rgs:[], est:null, mult:null, hist:[], mov:[], tab:'painel', D:null, ocupado:'', user:'', stamps:{}, nuvem:{ estado:'', msg:'' },
+  rgs:[], est:null, mult:null, preco:null, hist:[], mov:[], tab:'painel', D:null, ocupado:'', user:'', stamps:{}, nuvem:{ estado:'', msg:'' },
   movs:null, movsBusy:false, movsErro:'',
   mistos:null, mistosBusy:false, mistosErro:'', mistosAuto:false, fMisQ:'', fMisFx:-1,
   pPer:30, colMov:null, colBusy:false, colErro:'',
@@ -129,6 +129,7 @@ function leArquivo(file){
           var aoa=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null,blankrows:false});
           for(var i=0;i<Math.min(aoa.length,12);i++){
             var h=(aoa[i]||[]).map(norm);
+            if(h.indexOf('preco de custo')>=0 && h.indexOf('item')>=0 && h.indexOf('nome item')>=0){ achou={tipo:'preco',h:h,linhas:aoa.slice(i+1)}; return true; }
             if(h.indexOf('data movimento')>=0 && h.indexOf('classe destino')>=0 && h.indexOf('rg')>=0){ achou={tipo:'mov',h:h,linhas:aoa.slice(i+1)}; return true; }
             if(h.indexOf('numero rg')>=0){ achou={tipo:'rg',h:h,linhas:aoa.slice(i+1)}; return true; }
             if(h.indexOf('item componente')>=0 && h.indexOf('item vol multiplo')>=0){ achou={tipo:'mult',h:h,linhas:aoa.slice(i+1)}; return true; }
@@ -136,7 +137,7 @@ function leArquivo(file){
           }
           return false;
         });
-        if(!achou) return rej(new Error('"'+file.name+'" não parece ser a QRY0100, a QRY0110, a QRY0390 nem a ZBIQ0051.'));
+        if(!achou) return rej(new Error('"'+file.name+'" não parece ser a QRY0100, a QRY0110, a QRY0390, a SIGEQ278 nem a ZBIQ0051.'));
         res(achou);
       } catch(e){ rej(new Error('Não consegui abrir "'+file.name+'".')); }
     };
@@ -203,18 +204,26 @@ function montaEstoque(a, nome){
   });
   return { rows:Array.from(m.values()), locais:Array.from(todos.values()), classes:classes, arquivo:nome, em:Date.now(), linhasArquivo:a.linhas.length, linhasReversa:linhasRev, unidades:un };
 }
+/* SIGEQ278: preço de custo por item. Guardamos só os itens com custo maior que zero (o resto vale R$ 0). */
+function montaPreco(a, nome){
+  var iI=a.h.indexOf('item'), iC=a.h.indexOf('preco de custo');
+  var rows=[], total=0;
+  a.linhas.forEach(function(l){ var it=cod(l[iI]); if(!it) return; total++; var c=num(l[iC]); if(c>0) rows.push([it, Math.round(c*1e5)/1e5]); });
+  return { rows:rows, itens:total, arquivo:nome, em:Date.now() };
+}
 function montaMult(a, nome){
-  var iC=a.h.indexOf('item componente'), iP=a.h.indexOf('item vol multiplo'), iQ=a.h.indexOf('qtde');
+  var iC=a.h.indexOf('item componente'), iP=a.h.indexOf('item vol multiplo'), iQ=a.h.indexOf('qtde'), iF=a.h.indexOf('in interface');
   var rows=[];
-  a.linhas.forEach(function(l){ var c=cod(l[iC]), p=cod(l[iP]); if(c && p) rows.push([c,p,iQ>=0?num(l[iQ]):1]); });
-  return { rows:rows, arquivo:nome, em:Date.now() };
+  /* 4ª posição: in_interface (S = este componente carrega o valor do kit; N = vale zero) */
+  a.linhas.forEach(function(l){ var c=cod(l[iC]), p=cod(l[iP]); if(c && p) rows.push([c,p,iQ>=0?num(l[iQ]):1, iF>=0 ? String(l[iF]||'').trim().toUpperCase() : '']); });
+  return { rows:rows, arquivo:nome, em:Date.now(), semFlag:iF<0 };
 }
 
 /* ---------- dados da última importação no servidor ---------- */
-var GRUPOS=['rgs','est','mult','hist','mov'];
-function valorLocal(g){ return g==='rgs' ? S.rgs : g==='est' ? S.est : g==='mult' ? S.mult : g==='mov' ? S.mov : S.hist; }
+var GRUPOS=['rgs','est','mult','hist','mov','preco'];
+function valorLocal(g){ return g==='rgs' ? S.rgs : g==='est' ? S.est : g==='mult' ? S.mult : g==='mov' ? S.mov : g==='preco' ? S.preco : S.hist; }
 function temLocal(g){ var v=valorLocal(g); return (g==='rgs'||g==='hist'||g==='mov') ? v.length>0 : !!v; }
-function poeLocal(g,v){ if(g==='rgs') S.rgs=v||[]; else if(g==='est') S.est=v; else if(g==='mult') S.mult=v; else if(g==='mov') S.mov=v||[]; else S.hist=v||[]; }
+function poeLocal(g,v){ if(g==='rgs') S.rgs=v||[]; else if(g==='est') S.est=v; else if(g==='mult') S.mult=v; else if(g==='mov') S.mov=v||[]; else if(g==='preco') S.preco=v; else S.hist=v||[]; }
 /* Acesso "só visualizar": consulta e coletor, mas não importa nem apaga dados. */
 function leitura(){ return !!window.LDM_SOMENTE_LEITURA; }
 function empurra(g){
@@ -290,6 +299,14 @@ function importar(files){
         msgs.push(int(S.mov.length-ant)+' movimentações novas'); mudados.add('mov');
         return dbSet('mov', S.mov);
       }
+      if(a.tipo==='preco'){
+        var pc=montaPreco(a, f.name);
+        if(!pc.rows.length) throw new Error('"'+f.name+'" não tem itens com preço de custo.');
+        S.preco=pc;
+        gravaLog({em:Date.now(), tipo:'SIGEQ278 · Preço de custo', arquivo:f.name, resumo:int(pc.itens)+' itens no arquivo · '+int(pc.rows.length)+' com preço de custo'});
+        msgs.push('preços de custo ('+int(pc.rows.length)+' itens)'); mudados.add('preco');
+        return dbSet('preco', S.preco);
+      }
       if(a.tipo==='mult'){
         var mu=montaMult(a, f.name);
         if(!mu.rows.length) throw new Error('"'+f.name+'" não tem componentes de múltiplos.');
@@ -334,6 +351,22 @@ function importar(files){
 }
 
 /* ---------- cruzamento RG x estoque ---------- */
+/* devolve uma função item → { v: preço unitário, sem: true se ficou sem preço } ou null se a SIGEQ278 não foi importada */
+function mkValor(){
+  if(!S.preco || !S.preco.rows || !S.preco.rows.length) return null;
+  var P=new Map(S.preco.rows), MC=new Map();
+  if(S.mult && !S.mult.semFlag) S.mult.rows.forEach(function(r){ if(r[3]) MC.set(r[0],{ pai:r[1], f:r[3] }); });
+  return function(item){
+    var m=MC.get(item);
+    if(m){
+      if(m.f==='N') return { v:0, sem:false };            /* componente N: zero de propósito */
+      var vp=P.get(m.pai); if(vp>0) return { v:vp, sem:false };   /* componente S: preço do item pai */
+      var vc=P.get(item)||0; return { v:vc, sem:vc<=0 };          /* pai sem preço: preço do próprio componente */
+    }
+    var c=P.get(item)||0; return { v:c, sem:c<=0 };
+  };
+}
+function precoRg(r){ return (S.D && S.D.vu) ? S.D.vu(r.item) : r.preco; }
 function aberto(r){ var s=norm(r.sit); return !s || s==='aberto'; }
 function deriva(){
   var D={ itemDesc:new Map(), localDesc:new Map(), locCod:new Map(), locNome:new Map(), cov:[], tot:{saldo:0, comRg:0, semRg:0, rgSemSaldo:0}, abertos:[], porClasse:new Map(), rgMap:new Map(),
@@ -371,14 +404,30 @@ function deriva(){
     D.cov.push(c);
   });
   D.itens=itemMap;
+  /* Valoração: valor = quantidade × preço de custo unitário (SIGEQ278), com a regra dos kits da ZBIQ0051 */
+  D.vu=null; D.vo=null; D.vt={ total:0, com:0, sem:0 }; D.semPreco=new Map();
+  var fv=mkValor();
+  if(fv){
+    var vcache=new Map();
+    D.vo=function(item){ var o=vcache.get(item); if(!o){ o=fv(item); vcache.set(item,o); } return o; };
+    D.vu=function(item){ return D.vo(item).v; };
+    var addSem=function(item,desc,classe,un,rgs){ var sp=D.semPreco.get(item); if(!sp){ sp={ item:item, desc:desc||'', classe:classe||'', un:0, rgs:0 }; D.semPreco.set(item,sp); } sp.un+=un; sp.rgs+=rgs; if(!sp.desc && desc) sp.desc=desc; };
+    D.cov.forEach(function(c){
+      var o=D.vo(c.item); c.vu=o.v; c.valor=c.saldo*o.v; c.valorCom=c.comRg*o.v; c.valorSem=c.semRg*o.v;
+      D.vt.total+=c.valor; D.vt.com+=c.valorCom; D.vt.sem+=c.valorSem;
+      if(o.sem && c.saldo>0) addSem(c.item,c.desc,c.classe,c.saldo,0);
+    });
+    D.abertos.forEach(function(r){ if(D.vo(r.item).sem) addSem(r.item,D.itemDesc.get(r.item),r.classe,0,1); });
+  }
+  var pr=function(r){ return D.vu ? D.vu(r.item) : r.preco; };
   var mi=new Set(); D.cov.forEach(function(c){ if(c.mult) mi.add(c.item); }); D.mult.itens=mi.size;
   /* Situação de cada local — meta: 100% dos locais só com RG.
        rg = toda unidade do local tem RG · misto = RG e peça sem RG juntas · sem = nenhuma tem RG */
   var ml=new Map();
   D.cov.forEach(function(c){
-    var l=ml.get(c.local); if(!l){ l={local:c.local, localDesc:c.localDesc, classe:c.classe, saldo:0, rgs:0, comRg:0, semRg:0, itens:0, itensMistos:0, somaDias:0}; ml.set(c.local,l); }
+    var l=ml.get(c.local); if(!l){ l={local:c.local, localDesc:c.localDesc, classe:c.classe, saldo:0, rgs:0, comRg:0, semRg:0, itens:0, itensMistos:0, somaDias:0, valorSem:0}; ml.set(c.local,l); }
     if(c.dias!=null) l.somaDias+=c.dias*c.saldo;
-    l.saldo+=c.saldo; l.rgs+=c.rgs; l.comRg+=Math.min(c.saldo,c.rgs); l.semRg+=c.semRg; l.itens++;
+    l.saldo+=c.saldo; l.rgs+=c.rgs; l.comRg+=Math.min(c.saldo,c.rgs); l.semRg+=c.semRg; l.itens++; l.valorSem+=c.valorSem||0;
     if(c.rgs && c.semRg) l.itensMistos++;
   });
   D.locais=Array.from(ml.values());
@@ -424,15 +473,15 @@ function deriva(){
   var ops=new Map();
   D.rgs.forEach(function(r){
     var o=ops.get(r.oper); if(!o){ o={oper:r.oper, n:0, valor:0, dias:new Set()}; ops.set(r.oper,o); }
-    o.n++; o.valor+=r.preco; if(r.dt) o.dias.add(r.dt);
+    o.n++; o.valor+=pr(r); if(r.dt) o.dias.add(r.dt);
   });
   D.ops=Array.from(ops.values()).sort(function(a,b){ return b.n-a.n; });
   var pessoasDia=0; D.ops.forEach(function(o){ o.nd=o.dias.size||1; o.media=o.n/o.nd; pessoasDia+=o.nd; });
   D.porPessoa = pessoasDia ? D.rgs.filter(function(r){ return r.dt; }).length/pessoasDia : 0;
   var mc=new Map();
-  D.abertos.forEach(function(r){ var k=r.classif||'Sem classificação', o=mc.get(k); if(!o){ o={nome:k, n:0, valor:0}; mc.set(k,o); } o.n++; o.valor+=r.preco; });
+  D.abertos.forEach(function(r){ var k=r.classif||'Sem classificação', o=mc.get(k); if(!o){ o={nome:k, n:0, valor:0}; mc.set(k,o); } o.n++; o.valor+=pr(r); });
   D.classif=Array.from(mc.values()).sort(function(a,b){ return b.n-a.n; });
-  D.valor=D.abertos.reduce(function(s,r){ return s+r.preco; },0);
+  D.valor=D.abertos.reduce(function(s,r){ return s+pr(r); },0);
   D.semClassif=D.abertos.filter(function(r){ return !r.classif; }).length;
   S.D=D;
 }
@@ -553,11 +602,11 @@ function tile(t1,t2,t3,cls,tip){ return '<div class="rv-tile"'+(tip?tipA(tip):''
 function tip(){ return tipA(Array.prototype.slice.call(arguments).filter(Boolean).join('\n')); }
 /* Anéis concêntricos: unidades, locais e linhas item × local. */
 function aneis(lista){
-  var h='<svg class="rgx-aneis" viewBox="0 0 220 220" role="img">', r0=96;
+  var h='<svg class="rgx-aneis" viewBox="0 0 220 220" role="img">', r0=98;
   lista.forEach(function(a,i){
-    var r=r0-i*24, c=2*Math.PI*r, p=Math.max(0,Math.min(1,a.p)), vis=p>0?Math.max(p,0.012):0;
-    h+='<circle cx="110" cy="110" r="'+r+'" fill="none" stroke="var(--surface2)" stroke-width="15"/>'+
-       '<circle class="rgx-arco" cx="110" cy="110" r="'+r+'" fill="none" stroke="'+a.cor+'" stroke-width="15" stroke-linecap="round" transform="rotate(-90 110 110)" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+c.toFixed(1)+'" data-off="'+(c*(1-vis)).toFixed(1)+'"'+tip(a.rot, int(a.a)+' de '+int(a.b), pct(a.a,a.b))+'/>';
+    var r=r0-i*25, c=2*Math.PI*r, p=Math.max(0,Math.min(1,a.p)), vis=p>0?Math.max(p,0.012):0;
+    h+='<circle cx="110" cy="110" r="'+r+'" fill="none" stroke="var(--surface2)" stroke-width="19"/>'+
+       '<circle class="rgx-arco" cx="110" cy="110" r="'+r+'" fill="none" stroke="'+a.cor+'" stroke-width="19" stroke-linecap="round" transform="rotate(-90 110 110)" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+c.toFixed(1)+'" data-off="'+(c*(1-vis)).toFixed(1)+'"'+tip(a.rot, int(a.a)+' de '+int(a.b), pct(a.a,a.b))+'/>';
   });
   h+='<text x="110" y="106" text-anchor="middle" class="rgx-aneis-n">'+pct(lista[0].a,lista[0].b)+'</text><text x="110" y="126" text-anchor="middle" class="rgx-aneis-l">COBERTURA</text></svg>';
   return h;
@@ -751,12 +800,17 @@ function vPainel(){
     cartao('RGs gerados', int(D.ritmo)+'/dia','neutro', n(D.rgs.length,'int'), dlt, '', int(D.abertos.length)+' abertos · '+int(D.ops.length)+' operadores')+
     cartao('Falta identificar', pct(T.semRg,T.saldo), T.semRg?'nok':'ok', n(T.semRg,'int',T.semRg?'bad':''), '', '', int(T.linhas-T.linhasOk)+' linhas item × local')+
     cartao('Conclusão prevista', '<span id="cdRitmo">'+int(ritmo)+'/dia</span>','neutro', '<span class="dx-num" id="cdData">'+(prev?dataBR(prev.t):'—')+'</span>', '', '', '<span id="cdPrazo">'+(prev?prazoTxt(prev.du):'sem ritmo')+'</span>');
-  var faixa='<div class="rv-faixa">'+
+  var avisoKit=(S.preco && (!S.mult || S.mult.semFlag)) ? '<div class="rv-aviso" style="margin-bottom:12px"><strong>Kits:</strong> importe a ZBIQ0051 (com a coluna in_interface) para aplicar a regra dos kits no valor.</div>' : '';
+  var faixa=avisoKit+'<div class="rv-faixa">'+
     tile('Locais 100% RG', int(L.rg), pct(L.rg,L.total)+' de '+int(L.total), L.rg===L.total?'good':'blue')+
     tile('Locais mistos', int(L.misto), int(L.unMisto)+' un sem RG', L.misto?'bad':'good')+
     tile('Locais sem RG', int(L.sem), pct(L.sem,L.total), '')+
     tile('Tempo em misto', MT.lista.length?int(MT.media)+' d':'—', MT.lista.length?'média · mais antigo '+int(MT.maior.dias)+' d':'nenhum misto', MT.lista.length?(MT.maior.dias>90?'bad':''):'good', MT.lista.length?'Locais mistos há '+int(MT.media)+' dias em média\nTRI e PIC ficam de fora':'')+
-    tile('Valor identificado', reaisC(D.valor), reais(D.valor), '')+
+    (D.vu ? tile('Valor da reversa', reaisC(D.vt.total), reais(D.vt.total), '', 'Quantidade × preço de custo (SIGEQ278)')+
+      tile('Valor com RG', reaisC(D.vt.com), pct(D.vt.com,D.vt.total)+' do valor', 'good')+
+      tile('Valor sem RG', reaisC(D.vt.sem), 'falta identificar', D.vt.sem?'bad':'good')+
+      '<button type="button" class="rv-tile rv-tile-btn" data-act="sempreco-xlsx"'+tip('Itens sem preço','Valem R$ 0. Clique para baixar a lista.')+'><div class="t1">Itens sem preço</div><div class="t2'+(D.semPreco.size?' bad':' good')+'">'+int(D.semPreco.size)+'</div><div class="t3">valem R$ 0 · baixar lista</div></button>'
+     : tile('Valor identificado', reaisC(D.valor), reais(D.valor), '', 'Soma do PRECO da QRY0100. Importe a SIGEQ278 para valorar a reversa inteira.'))+
     tile('Sem classificação', int(D.semClassif), pct(D.semClassif,D.abertos.length), D.semClassif?'bad':'good')+
     tile('RG sem saldo', int(T.rgSemSaldo), 'divergência', T.rgSemSaldo?'bad':'good')+
     tile('Média por pessoa', int(D.porPessoa), 'RGs por dia', '')+
@@ -834,6 +888,7 @@ function relatorioHtml(){
     '<header><small>Loja do Mecânico · CD Cajamar</small><h1>RG Reversa · Implantação de RG</h1><p>Base do estoque de '+base+' · relatório gerado em '+dataHoraBR(agora)+'</p></header>'+
     '<div class="g">'+
       '<div class="k"><span>Cobertura de RG</span><b>'+pct(T.comRg,T.saldo)+'</b><i>'+int(T.comRg)+' de '+int(T.saldo)+' unidades · meta 100%</i>'+barra(cob,'#FE5000')+'</div>'+
+      (D.vu ? kpi('Valor da reversa', reaisC(D.vt.total), pct(D.vt.com,D.vt.total)+' já com RG · '+reaisC(D.vt.sem)+' sem RG') : '')+
       kpi('Falta identificar', int(T.semRg), pct(T.semRg,T.saldo)+' do estoque da reversa', T.semRg?'#C83812':'#1F8A52')+
       kpi('RGs gerados', int(D.rgs.length), int(D.abertos.length)+' abertos · '+int(D.ops.length)+' operadores')+
       kpi('Conclusão prevista', prev?dataBR(prev.t):'—', prev?prazoTxt(prev.du)+' no ritmo de '+int(ritmo)+'/dia':'sem ritmo calculado')+
@@ -921,6 +976,13 @@ var COLS_COV=[
   {k:'p',rot:'Cobertura',val:function(r){ return r.saldo?r.comRg/r.saldo:0; },fmt:barraCob},
   {k:'dias',rot:'Idade',num:1,fmt:function(r){ return tagDias(r.dias); }}
 ];
+function colsCov(){
+  if(!S.D.vu) return COLS_COV;
+  return COLS_COV.concat([
+    {k:'vu',rot:'Custo un.',num:1,fmt:function(r){ return reais(r.vu||0); }},
+    {k:'valorSem',rot:'Valor sem RG',num:1,fmt:function(r){ return reais(r.valorSem||0); }}
+  ]);
+}
 function vEstoque(){
   if(!S.est) return semDados('QRY0390');
   var D=S.D, lista=covFiltrada();
@@ -936,7 +998,7 @@ function vEstoque(){
       '<select data-f="cobLocal">'+opt('','Todos os locais',S.cobLocal)+locais.map(function(l){ return opt(l.local,l.localDesc+' · '+int(l.semRg),S.cobLocal); }).join('')+'</select>'+
       '<button class="btn btn-primary" data-act="exporta-cov">Exportar Excel</button></div>'+
     '<div class="rgx-resumo"><span><b>'+int(lista.length)+'</b> linhas</span><span><b>'+int(lista.reduce(function(s,c){ return s+c.saldo; },0))+'</b> un em saldo</span><span><b>'+int(lista.reduce(function(s,c){ return s+c.semRg; },0))+'</b> sem RG</span></div>'+
-    tabela('cov',COLS_COV,lista)+'</div>';
+    tabela('cov',colsCov(),lista)+'</div>';
 }
 
 function rgsFiltrados(){
@@ -956,7 +1018,7 @@ var COLS_RG=[
   {k:'classif',rot:'Classificação',fmt:function(r){ return tagClassif(r.classif); }},
   {k:'local',rot:'Local',val:function(r){ return descLocal(r.local); },fmt:function(r){ return esc(descLocal(r.local)); }},
   {k:'oper',rot:'Operador',fmt:function(r){ return esc(operNome(r.oper)); }},
-  {k:'preco',rot:'Preço',num:1,fmt:function(r){ return reais(r.preco); }}
+  {k:'preco',rot:'Preço',num:1,fmt:function(r){ return reais(precoRg(r)); }}
 ];
 function vRgs(){
   if(!S.rgs.length) return semDados('QRY0100');
@@ -966,7 +1028,7 @@ function vRgs(){
     '<div class="filter-bar"><input type="text" id="fQ" placeholder="RG, item, EAN, descrição, local ou operador" value="'+esc(S.q)+'">'+
       '<select data-f="fOper">'+opt('','Todos os operadores',S.fOper)+D.ops.map(function(o){ return opt(o.oper,operNome(o.oper)+' · '+int(o.n),S.fOper); }).join('')+'</select>'+
       '<button class="btn btn-primary" data-act="exporta-rgs">Exportar Excel</button></div>'+
-    '<div class="rgx-resumo"><span><b>'+int(lista.length)+'</b> RGs</span><span><b>'+reais(lista.reduce(function(s,r){ return s+r.preco; },0))+'</b></span></div>'+
+    '<div class="rgx-resumo"><span><b>'+int(lista.length)+'</b> RGs</span><span><b>'+reais(lista.reduce(function(s,r){ return s+precoRg(r); },0))+'</b></span></div>'+
     tabela('rgs',COLS_RG,lista,{rg:1})+'</div>';
 }
 
@@ -1025,13 +1087,13 @@ function mistoLista(){
     var x=abertos.get(l.local), d, o;
     if(x){ d=Math.max(0,Math.floor((agora-Date.parse(x.desde))/864e5)); o=x.origem; }
     else { d=l.estDias; o=l.estExata?'medido':'estimado'; }
-    return d==null ? null : { local:l.local, desc:l.localDesc||l.local, dias:d, origem:o, semRg:l.semRg, rgs:l.rgs };
+    return d==null ? null : { local:l.local, desc:l.localDesc||l.local, dias:d, origem:o, semRg:l.semRg, rgs:l.rgs, valorSem:l.valorSem||0 };
   }).filter(Boolean);
 }
 function resumoMisto(){
-  var L=mistoLista(), f=MISTO_FX.map(function(){ return 0; }), soma=0, maior=null, est=false;
-  L.forEach(function(r){ f[fxMis(r.dias)]++; soma+=r.dias; if(!maior || r.dias>maior.dias) maior=r; if(r.origem==='estimado') est=true; });
-  return { lista:L, faixas:f, media:L.length?soma/L.length:0, maior:maior, est:est };
+  var L=mistoLista(), f=MISTO_FX.map(function(){ return 0; }), soma=0, maior=null, est=false, vsem=0;
+  L.forEach(function(r){ vsem+=r.valorSem||0; f[fxMis(r.dias)]++; soma+=r.dias; if(!maior || r.dias>maior.dias) maior=r; if(r.origem==='estimado') est=true; });
+  return { lista:L, faixas:f, media:L.length?soma/L.length:0, maior:maior, est:est, vsem:vsem };
 }
 function misFiltrados(M){
   var q=norm(S.fMisQ), fx=S.fMisFx;
@@ -1061,7 +1123,7 @@ function listaMisto(M){
 /* painel da direita: quantos locais estavam mistos a cada importação (meta: zero) */
 function evolucaoMisto(M){
   var pts=S.hist.filter(function(h){ return (h.mi!=null?h.mi:h.misto)!=null; }).slice(-40).map(function(h){ var v=h.mi!=null?h.mi:h.misto; return { l:dm(h.d), y:v, t:dataBR(h.d)+'\n'+int(v)+' locais mistos' }; });
-  var kp='<div class="rgx-mk"><span>hoje<b>'+int(M.lista.length)+'</b></span><span>média<b>'+(M.lista.length?int(M.media)+' d':'—')+'</b></span><span>mais antigo<b>'+(M.maior?int(M.maior.dias)+' d':'—')+'</b></span><span>+ de 90 d<b style="color:#C83812">'+int(M.faixas[3])+'</b></span></div>';
+  var kp='<div class="rgx-mk"><span>hoje<b>'+int(M.lista.length)+'</b></span><span>média<b>'+(M.lista.length?int(M.media)+' d':'—')+'</b></span><span>mais antigo<b>'+(M.maior?int(M.maior.dias)+' d':'—')+'</b></span><span>+ de 90 d<b style="color:#C83812">'+int(M.faixas[3])+'</b></span>'+(S.D.vu?'<span>sem RG nos mistos<b>'+reaisC(M.vsem)+'</b></span>':'')+'</div>';
   var graf=pts.length>1 ? lineChart(pts) : '<div class="rv-empty" style="padding:30px 10px">A linha da evolução aparece a partir da segunda importação.</div>';
   return graf+kp;
 }
@@ -1082,8 +1144,8 @@ function produtividade(){
   /* por pessoa e por dia */
   var ops=new Map(), diasM=new Map(), horas=new Array(24).fill(0);
   M.forEach(function(m){
-    var o=ops.get(m.op); if(!o){ o={ op:m.op, n:0, dias:new Map(), ativo:0 }; ops.set(m.op,o); }
-    o.n++;
+    var o=ops.get(m.op); if(!o){ o={ op:m.op, n:0, valor:0, dias:new Map(), ativo:0 }; ops.set(m.op,o); }
+    o.n++; if(S.D.vu) o.valor+=S.D.vu(m.item);
     var d=soDia(m.t), od=o.dias.get(d); if(!od){ od={ n:0, ts:[] }; o.dias.set(d,od); } od.n++; od.ts.push(m.t);
     var dd=diasM.get(d); if(!dd){ dd={ d:d, n:0, por:new Map() }; diasM.set(d,dd); } dd.n++; dd.por.set(m.op,(dd.por.get(m.op)||0)+1);
     horas[new Date(m.t).getHours()]++;
@@ -1100,6 +1162,7 @@ function produtividade(){
     o.nd=o.dias.size; o.media=o.n/o.nd; o.porHora=o.n/(o.ativo/36e5);
   });
   R.ops=Array.from(ops.values()).sort(function(a,b){ return b.n-a.n; });
+  R.valor=R.ops.reduce(function(t,o){ return t+o.valor; },0);
   R.diasL=Array.from(diasM.values()).sort(function(a,b){ return a.d-b.d; });
   R.nDias=R.diasL.length; R.media=R.nDias ? R.n/R.nDias : 0;
   var at=R.ops.reduce(function(t,o){ return t+o.ativo; },0); R.porHora=at ? R.n/(at/36e5) : 0;
@@ -1184,6 +1247,8 @@ function vProd(){
     tile('RGs por hora', int(R.porHora), 'só horas bipando', '')+
     tile('Na fila da triagem', int(R.fila), R.filaMax!=null?'mais antigo '+int(R.filaMax)+' d':'sem fila', R.fila?'blue':'good')+
     tile('Até armazenar', R.leadMed!=null?int(R.leadMed)+' d':'—', 'mediana desde a criação do RG', '')+
+    (S.D.vu ? tile('Valor movimentado', reaisC(R.valor), 'custo dos RGs movidos', '')+
+    '' : '')+
     tile('Retrabalho', pct(R.fora.length,R.n), int(R.fora.length)+' mov. fora da triagem', R.fora.length?'bad':'good')+
     '</div>';
   var rank=tabela('pRank',[
@@ -1193,7 +1258,7 @@ function vProd(){
     {k:'media',rot:'Média/dia',num:true,fmt:function(r){ return int(r.media); }},
     {k:'porHora',rot:'RGs/hora',num:true,fmt:function(r){ return int(r.porHora); }},
     {k:'melhor',rot:'Melhor dia',num:true,fmt:function(r){ return int(r.melhor)+(r.melhorD?' · '+dm(r.melhorD):''); }}
-  ],R.ops);
+  ].concat(S.D.vu?[{k:'valor',rot:'Valor movimentado',num:true,fmt:function(r){ return reaisC(r.valor); }}]:[]),R.ops);
   var filaTxt=['até 1 d','2–3 d','4–7 d','+ de 7 d'], filaCor=['#1F8A52','#E0A100','#FE5000','#C83812'];
   var filaMax=Math.max.apply(null,R.filaIdade)||1;
   var fila='<div class="rgx-fl">'+R.filaIdade.map(function(v,i){ return '<div class="rgx-fl-c"'+tip(filaTxt[i],int(v)+' RGs esperando')+'><b>'+int(v)+'</b><div class="rgx-fl-b"><i style="height:'+(v/filaMax*100).toFixed(1)+'%;background:'+filaCor[i]+'"></i></div><span>'+filaTxt[i]+'</span></div>'; }).join('')+'</div>'+
@@ -1257,7 +1322,7 @@ function abreFicha(rg){
     c('Classificação',tagClassif(r.classif))+c('Situação',esc(r.sit))+
     c('Local atual',esc(descLocal(r.local)))+c('Classe do local',esc(classeNome(r.classe)))+
     c('Criado em',dataBR(r.dt))+c('Operador',esc(operNome(r.oper)))+
-    c('EAN',esc(r.ean))+c('Preço',reais(r.preco))+
+    c('EAN',esc(r.ean))+c('Preço',reais(precoRg(r)))+
     c('Tipo de geração',esc(r.tipo))+c('Impressões',int(r.imp))+
     c('Entrega',esc(r.entrega))+c('NR',esc(r.nr))+
     (cov?c('Saldo do item no local',int(cov.saldo))+c('RGs do item no local',int(cov.rgs)):'')+
@@ -1276,11 +1341,11 @@ function exporta(nome, cab, linhas){
   var d=new Date();
   XLSX.writeFile(wb, nome+'_'+d.getFullYear()+d2(d.getMonth()+1)+d2(d.getDate())+'.xlsx');
 }
-var CAB_COV=['Item','Descrição','EAN','Classe Local','Local','Descrição Local','Saldo','RGs','Sem RG','RG sem saldo','Data Situação','Dias no local','Restrição'];
-function linhasCov(l){ return l.map(function(c){ return [c.item,c.desc,c.ean,c.classe,c.local,c.localDesc,c.saldo,c.rgs,c.semRg,c.rgSemSaldo,c.t?dataBR(c.t):'',c.dias,Object.keys(c.x||{}).join(' ')]; }); }
+var CAB_COV=['Item','Descrição','EAN','Classe Local','Local','Descrição Local','Saldo','RGs','Sem RG','RG sem saldo','Data Situação','Dias no local','Restrição','Custo unitário','Valor','Valor sem RG'];
+function linhasCov(l){ return l.map(function(c){ return [c.item,c.desc,c.ean,c.classe,c.local,c.localDesc,c.saldo,c.rgs,c.semRg,c.rgSemSaldo,c.t?dataBR(c.t):'',c.dias,Object.keys(c.x||{}).join(' '),c.vu==null?'':c.vu,c.valor==null?'':c.valor,c.valorSem==null?'':c.valorSem]; }); }
 function exportaRgs(){
   exporta('RG_Reversa_RGs',['RG','Criado em','Item','Descrição','EAN','Classificação','Classe Local','Local','Descrição Local','Operador','Preço','Situação'],
-    rgsFiltrados().map(function(r){ return [r.rg,dataBR(r.dt),r.item,descItem(r),r.ean,r.classif,r.classe,r.local,descLocal(r.local),r.oper,r.preco,r.sit]; }));
+    rgsFiltrados().map(function(r){ return [r.rg,dataBR(r.dt),r.item,descItem(r),r.ean,r.classif,r.classe,r.local,descLocal(r.local),r.oper,precoRg(r),r.sit]; }));
 }
 
 
@@ -1367,6 +1432,7 @@ function vImportacao(){
   var stEst = S.est ? '<span class="tag tag-good">Carregado</span> '+int(S.est.unidades)+' unidades · '+dataHoraBR(S.est.em) : '<span class="tag tag-muted">Ainda não importado</span>';
   var movDias=S.mov.map(function(m){ return m.t; });
   var stMov = S.mov.length ? '<span class="tag tag-good">Carregado</span> '+int(S.mov.length)+' movimentações'+(movDias.length?' · de '+dataBR(Math.min.apply(null,movDias))+' a '+dataBR(Math.max.apply(null,movDias)):'') : '<span class="tag tag-muted">Ainda não importado</span>';
+  var stPreco = S.preco ? '<span class="tag tag-good">Carregado</span> '+int(S.preco.rows.length)+' itens com custo · '+dataHoraBR(S.preco.em) : '<span class="tag tag-muted">Ainda não importado</span>';
   var stMu = S.mult ? '<span class="tag tag-good">Carregado</span> '+int(S.mult.rows.length)+' ligações · '+dataHoraBR(S.mult.em) : '<span class="tag tag-muted">Ainda não importado</span>';
   var h='';
   if(S.ocupado) h+='<div class="rv-aviso" style="margin-bottom:14px"><strong>Aguarde.</strong> '+esc(S.ocupado)+'</div>';
@@ -1374,6 +1440,7 @@ function vImportacao(){
     : '<div class="rv-hint" style="margin-bottom:12px">☁ A última importação fica guardada no servidor'+(S.stamps.est?' · estoque de <b>'+dataHoraBR(S.stamps.est)+'</b>':'')+(S.stamps.rgs?' · RGs de <b>'+dataHoraBR(S.stamps.rgs)+'</b>':'')+' — ao abrir o app, ela volta sozinha.</div>';
   h+='<div class="rv-imp">'+
     '<div class="dropzone'+(S.rgs.length?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🏷️</div><div class="dz-title">QRY0100 · RG - Produtividade</div><div class="dz-desc">Lista de RGs gerados. Cada importação <strong>soma</strong> os RGs novos e atualiza os existentes.</div><div class="rv-st">'+stRg+'</div></div>'+
+    '<div class="dropzone'+(S.preco?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">💲</div><div class="dz-title">SIGEQ278 · Preço de custo</div><div class="dz-desc">Valor de cada item (usado também na regra dos kits da ZBIQ0051). <strong>Substitui</strong> a anterior. '+stPreco+'</div></div>'+
     '<div class="dropzone'+(S.mov.length?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🔀</div><div class="dz-title">QRY0110 · RG - Movimentos</div><div class="dz-desc">Cada RG movido de um local para outro. Cada importação <strong>soma</strong> as novas movimentações. '+stMov+'</div></div>'+
     '<div class="dropzone'+(S.est?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">📦</div><div class="dz-title">QRY0390 · Estoque por Local</div><div class="dz-desc">Foto do saldo. <strong>Substitui</strong> a anterior. Guarda só as classes '+CLASSES_REVERSA.join(' e ')+'.</div><div class="rv-st">'+stEst+'</div></div>'+
     '<div class="dropzone'+(S.mult?' has-file':'')+'" data-act="escolher" data-drop="1" tabindex="0"><div class="dz-icon">🧩</div><div class="dz-title">ZBIQ0051 · Item x Múltiplo</div><div class="dz-desc">Liga item pai a componentes. <strong>Substitui</strong> a anterior. Alimenta o indicador de múltiplos.</div><div class="rv-st">'+stMu+'</div></div>'+
@@ -1381,7 +1448,7 @@ function vImportacao(){
   h+='<div class="panel" style="margin-top:14px"><h3>Como importar</h3><div class="panel-sub">Clique num quadro ou arraste os arquivos para cá. Pode soltar os três de uma vez — o app reconhece cada relatório sozinho. Os dados ficam salvos neste navegador.</div>'+
     '<ol style="margin:0 0 4px 18px;line-height:1.9"><li>Bseller: exporte a <strong>QRY0100</strong> (período desde a última importação), a <strong>QRY0390</strong> (CD inteiro) e a <strong>ZBIQ0051</strong>.</li><li>Solte os arquivos aqui.</li><li>A cada importação da QRY0390 o app guarda uma foto da cobertura — é ela que forma o gráfico de evolução.</li></ol></div>';
   var log=lsGet(LOG_KEY);
-  h+='<div class="panel" style="margin-top:14px"><div class="panel-head-row"><h3>Histórico de importações</h3><div><button class="btn-danger-text" data-act="limpa" data-k="rgs">Apagar RGs</button> <button class="btn-danger-text" data-act="limpa" data-k="est">Apagar estoque</button> <button class="btn-danger-text" data-act="limpa" data-k="mult">Apagar múltiplos</button> <button class="btn-danger-text" data-act="limpa" data-k="mov">Apagar movimentos</button> <button class="btn-danger-text" data-act="limpa" data-k="hist">Apagar evolução</button></div></div>';
+  h+='<div class="panel" style="margin-top:14px"><div class="panel-head-row"><h3>Histórico de importações</h3><div><button class="btn-danger-text" data-act="limpa" data-k="rgs">Apagar RGs</button> <button class="btn-danger-text" data-act="limpa" data-k="est">Apagar estoque</button> <button class="btn-danger-text" data-act="limpa" data-k="mult">Apagar múltiplos</button> <button class="btn-danger-text" data-act="limpa" data-k="mov">Apagar movimentos</button> <button class="btn-danger-text" data-act="limpa" data-k="preco">Apagar preços</button> <button class="btn-danger-text" data-act="limpa" data-k="hist">Apagar evolução</button></div></div>';
   if(!log.length) h+='<p class="field-hint">Nenhuma importação registrada neste navegador.</p>';
   else h+='<div class="table-wrap"><table><thead><tr><th>Quando</th><th>Relatório</th><th>Arquivo</th><th>Resultado</th></tr></thead><tbody>'+log.map(function(l){ return '<tr><td>'+dataHoraBR(l.em)+'</td><td>'+esc(l.tipo)+'</td><td>'+esc(l.arquivo)+'</td><td>'+esc(l.resumo)+'</td></tr>'; }).join('')+'</tbody></table></div>';
   return h+'</div>';
@@ -1471,14 +1538,19 @@ function acao(el, ev){
     var CC=confereColetor(produtividade()); if(!CC.pend.length) return toast('Nada para exportar.', true);
     return exporta('RG_Reversa_Bipados_sem_QRY0110',['RG','Destino bipado','Operador','Bipado em','Parado (horas)'],CC.pend.map(function(r){ return [r.rg,r.dest,operNome(r.op),dataHoraBR(r.ts),Math.round(r.h)]; }));
   }
+  if(a==='sempreco-xlsx'){
+    var sp=Array.from(S.D.semPreco.values()).sort(function(x,y){ return (y.un+y.rgs)-(x.un+x.rgs); });
+    if(!sp.length) return toast('Todos os itens têm preço.', true);
+    return exporta('RG_Reversa_Itens_sem_preco',['Item','Descrição','Classe','Unidades em estoque','RGs abertos'],sp.map(function(x){ return [x.item,x.desc,x.classe,x.un,x.rgs]; }));
+  }
   if(a==='exporta-rgs') return exportaRgs();
   if(a==='exporta-cov') return exporta('RG_Reversa_Estoque_x_RG', CAB_COV, linhasCov(covFiltrada()));
   if(a==='escolher'){ if(leitura()) return toast('Seu acesso não permite importar relatórios.', true); $('fileInput').click(); return; }
   if(a==='limpa'){
     if(leitura()) return toast('Seu acesso não permite apagar dados.', true);
     var k=el.dataset.k;
-    if(!confirm('Apagar '+({rgs:'os RGs',est:'o estoque',mult:'os múltiplos',mov:'as movimentações',hist:'o histórico de evolução'}[k])+' deste navegador?')) return;
-    if(k==='rgs') S.rgs=[]; if(k==='est') S.est=null; if(k==='mult') S.mult=null; if(k==='hist') S.hist=[]; if(k==='mov') S.mov=[];
+    if(!confirm('Apagar '+({rgs:'os RGs',est:'o estoque',mult:'os múltiplos',mov:'as movimentações',preco:'os preços',hist:'o histórico de evolução'}[k])+' deste navegador?')) return;
+    if(k==='rgs') S.rgs=[]; if(k==='est') S.est=null; if(k==='mult') S.mult=null; if(k==='hist') S.hist=[]; if(k==='mov') S.mov=[]; if(k==='preco') S.preco=null;
     return dbDel(k).then(function(){ S.anima=true; deriva(); render(); });
   }
   if(a==='mv-load'){ S.movs=null; return carregaMovs(); }
@@ -1559,13 +1631,14 @@ window.rgIniciar=function(){
   try { window.rgSupa.auth.getSession().then(function(r){ var u=r.data && r.data.session && r.data.session.user; S.user=u&&u.email ? u.email.split('@')[0] : ''; }); } catch(e){}
   /* pede ao navegador para não apagar os dados do site por falta de espaço */
   try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
-  Promise.all([dbGet('rgs'), dbGet('est'), dbGet('mult'), dbGet('hist'), dbGet('stamps'), dbGet('mov')]).then(function(r){
+  Promise.all([dbGet('rgs'), dbGet('est'), dbGet('mult'), dbGet('hist'), dbGet('stamps'), dbGet('mov'), dbGet('preco')]).then(function(r){
     S.rgs=Array.isArray(r[0]) ? r[0] : [];
     S.est=r[1] && r[1].rows ? r[1] : null;
     S.mult=r[2] && r[2].rows ? r[2] : null;
     S.hist=Array.isArray(r[3]) ? r[3] : [];
     S.stamps=r[4] && typeof r[4]==='object' ? r[4] : {};
     S.mov=Array.isArray(r[5]) ? r[5] : [];
+    S.preco=r[6] && r[6].rows ? r[6] : null;
   }).catch(function(){ toast('Não consegui abrir os dados salvos neste navegador.', true); }).then(function(){
     deriva();
     S.nuvem={ estado:'sync', msg:'Carregando os dados da última importação…' }; render();

@@ -154,27 +154,64 @@ function comLimite(promessa, segundos){
       mdSupa.rpc('ldm_registrar_acesso', { p_app_key: MD_APP_KEY }).then(function(){}, function(){});
   }
 
+
+  /* Falha de conexão NÃO é "sem permissão". Antes, um tropeço de rede logo depois
+     de uma atualização virava "Acesso negado" com um único botão — Sair —, que
+     deslogava a pessoa. Agora: tenta de novo sozinho; se a última checagem OK da
+     mesma pessoa foi há menos de 24 h, abre o app (o banco continua protegendo os
+     dados) e segue conferindo; só então mostra o aviso com "Tentar de novo". */
+  const LDM_OK_KEY = 'ldm-acesso-ok-' + MD_APP_KEY;
+  const ldmTextoNegadoEl = document.getElementById('acessoNegadoTexto');
+  const ldmTextoNegadoOriginal = ldmTextoNegadoEl ? ldmTextoNegadoEl.innerHTML : '';
+  const ldmTentarBtn = document.getElementById('acessoTentarDeNovo');
+  if(ldmTentarBtn) ldmTentarBtn.addEventListener('click', function(){ ldmTentarBtn.disabled = true; Promise.resolve(mdVerificarAcesso()).finally(function(){ ldmTentarBtn.disabled = false; }); });
+  function ldmOkRecente(uid){ try{ const o = JSON.parse(localStorage.getItem(LDM_OK_KEY)||'null'); return !!(o && o.uid===uid && Date.now()-o.em < 24*3600*1000); }catch(e){ return false; } }
+  function ldmMarcarOk(uid){ try{ localStorage.setItem(LDM_OK_KEY, JSON.stringify({uid:uid, em:Date.now()})); }catch(e){} }
+  async function ldmChecarPermissao(){
+    let ultimo = null;
+    for(const atraso of [0, 1500, 3500]){
+      if(atraso) await new Promise(function(r){ setTimeout(r, atraso); });
+      try{
+        const r = await comLimite(mdSupa.rpc('ldm_pode_acessar', { p_app_key: MD_APP_KEY }), 12);
+        if(!r.error) return {pode: !!r.data};
+        ultimo = r.error;
+      }catch(e){ ultimo = e; }
+    }
+    return {erro: ultimo};
+  }
+  function ldmMostrarFalha(){
+    telaLogin.hidden = true; telaNegado.hidden = false;
+    if(ldmTextoNegadoEl) ldmTextoNegadoEl.textContent = 'Não consegui confirmar seu acesso agora (falha de conexão). Seu login continua salvo — clique em "Tentar de novo".';
+    if(ldmTentarBtn) ldmTentarBtn.hidden = false;
+    telaAcesso.classList.remove('escondida');
+  }
+
   async function mdVerificarAcesso(){
-    const { data: { session } } = await mdSupa.auth.getSession();
+    let session = null;
+    try{ session = (await comLimite(mdSupa.auth.getSession(), 10)).data.session; }
+    catch(e){ if(appIniciado) return; ldmMostrarFalha(); return; }
     if(!session){
       telaLogin.hidden = false; telaNegado.hidden = true;
       telaAcesso.classList.remove('escondida');
       return;
     }
-    const { data: pode, error } = await mdSupa.rpc('ldm_pode_acessar', { p_app_key: MD_APP_KEY });
-    if(error){
+    const r = await ldmChecarPermissao();
+    if(r.erro){
       if(appIniciado) return;   /* checagem periódica sem conexão: não derruba quem já está usando */
+      if(ldmOkRecente(session.user.id)){ telaAcesso.classList.add('escondida'); iniciarApp(); return; }
+      ldmMostrarFalha();
+      return;
+    }
+    if(!r.pode){
+      try{ localStorage.removeItem(LDM_OK_KEY); }catch(e){}
       telaLogin.hidden = true; telaNegado.hidden = false;
-      document.getElementById('acessoNegadoTexto').textContent = 'Não consegui checar a permissão: ' + error.message;
+      if(ldmTextoNegadoEl) ldmTextoNegadoEl.innerHTML = ldmTextoNegadoOriginal;
+      if(ldmTentarBtn) ldmTentarBtn.hidden = true;
+      const emailEl = document.getElementById('acessoNegadoEmail'); if(emailEl) emailEl.textContent = session.user.email;
       telaAcesso.classList.remove('escondida');
       return;
     }
-    if(!pode){
-      telaLogin.hidden = true; telaNegado.hidden = false;
-      negadoEmailEl.textContent = session.user.email;
-      telaAcesso.classList.remove('escondida');
-      return;
-    }
+    ldmMarcarOk(session.user.id);
     telaAcesso.classList.add('escondida');
     iniciarApp();
   }

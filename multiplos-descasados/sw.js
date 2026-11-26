@@ -4,7 +4,7 @@
    network-first para os arquivos do app (nunca esconde updates),
    cache só como fallback offline.
    ============================================================ */
-const CACHE_VERSION = 'multiplos-descasados-v39';
+const CACHE_VERSION = 'multiplos-descasados-v40';
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -45,6 +45,8 @@ self.addEventListener('fetch', (event)=>{
   if(req.method !== 'GET') return;
   const url = new URL(req.url);
   const isSameOrigin = url.origin === self.location.origin;
+  // Banco (Supabase) nunca passa pelo cache: login, permissão e dados vêm sempre da internet.
+  if(/supabase\.co$/.test(url.hostname)) return;
 
   if(isSameOrigin){
     // cache:'no-cache' revalida no servidor mesmo dentro da janela de max-age. Sem
