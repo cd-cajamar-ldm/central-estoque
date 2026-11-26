@@ -10,7 +10,7 @@ importScripts('./db.js');
 
 // Incrementar sempre que um campo novo for adicionado aos indicadores — a UI usa isso
 // pra avisar quando os dados salvos são de antes do ciclo ser reprocessado.
-const IR_INDICADORES_VERSION = 32;
+const IR_INDICADORES_VERSION = 33;
 
 /* A RUA de um endereço é X1 + X2, não X1 sozinho.
 
@@ -1511,6 +1511,8 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
   }
   // AIR entra na quebra por Rua normalmente, como qualquer outro local (sem exclusão).
   const porRua = agruparPor(irRuaDoLocal, '(sem rua)');
+  // Mesma rua separada em Picking / Não picking pela classe do local (Resumo por Rua).
+  const porRuaTipo = agruparPor(irRuaTipoDoLocal, '(sem rua)');
   // Setor é só o X1, sem o X2 — uma rua inteira (X1+X2) é fina demais pra "qual
   // setor tá pior": o X1 agrupa várias ruas, e é nele que dá pra comparar rápido
   // antes de abrir a tabela por rua pra achar a rua específica dentro do setor.
@@ -1732,7 +1734,7 @@ function calcularIndicadores({congelados: congeladosTodos, contagens, divergenci
     // aparecer igual a "Contadas", que é duas métricas diferentes viradas uma.
     pecasSaldoLogico: totalSaldoLogico,
     qtdRecontagens, tempoMedioContagemMin, diasRestantes, eficiencia,
-    rankingProdutividade, porRua, porSetor, porLog, contadosPorDia, porDiaRua, divergentesPorDia, porMes,
+    rankingProdutividade, porRua, porRuaTipo, porSetor, porLog, contadosPorDia, porDiaRua, divergentesPorDia, porMes,
     topItensPositivos, topItensNegativos, topItensPositivosValor, topItensNegativosValor
   };
   // Ciclo 1 e 2 de 2026: número literal de quando o ciclo fechou, por cima do

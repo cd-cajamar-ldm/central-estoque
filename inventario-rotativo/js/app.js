@@ -1172,13 +1172,13 @@ function irKpiBlock(theme, icon, title, tilesHtml){
     <span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
   </div>`;
 }
-const IR_INDICADORES_VERSION = 32; // mantido em sincronia com worker.js
+const IR_INDICADORES_VERSION = 33; // mantido em sincronia com worker.js
 /* Versão do app, em sincronia com o CACHE_VERSION do sw.js. Ela vai na URL do
    Worker porque o navegador guarda js/worker.js no cache HTTP por conta própria:
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v320';
+const IR_APP_VERSION = 'v326';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1839,12 +1839,26 @@ function irRenderSetores(){
   `;
 }
 function irRenderPorRuaPanel(ind){
-  const rows = (ind.porRua||[]).filter(r=>r.chave!=='(sem rua)').slice().sort((a,b)=>a.chave.localeCompare(b.chave));
+  // Cada rua em duas linhas, uma embaixo da outra: Picking e Não picking (classe do
+  // local na Base Congelada). Ciclo calculado antes disso cai no resumo antigo.
+  const fonte = ind.porRuaTipo || ind.porRua || [];
+  const ordTipo = {picking:0, nao:1, sem:2};
+  const rows = fonte.filter(r=>r.chave!=='(sem rua)').map(r=>{ const [rua, tipo] = String(r.chave).split('|'); return {...r, rua, tipo:tipo||''}; })
+    .map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
+  // Ordenação por clique no título (padrão: rua A→Z, Picking antes de Não picking).
+  const o = (IR.tabOrdem||{}).resumoRua;
+  const porRua = (a,b)=> a.rua.localeCompare(b.rua, 'pt-BR', {numeric:true}) || (ordTipo[a.tipo]??9)-(ordTipo[b.tipo]??9);
+  rows.sort((a,b)=>{
+    if(!o) return porRua(a,b);
+    if(o.col==='rua') return o.dir*-1*porRua(a,b);
+    if(o.col==='tipo') return o.dir*-1*((ordTipo[a.tipo]??9)-(ordTipo[b.tipo]??9)) || porRua(a,b);
+    return o.dir*((a[o.col]||0)-(b[o.col]||0)) || porRua(a,b);
+  });
   if(!rows.length) return '';
   const meta = ind.meta;
   // Pendente aqui usa a mesma regra do módulo de Inventário: local sem NENHUMA linha
   // Liquidada na 843 ainda, cruzado pela rua (X1) da base congelada.
-  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
+  const rowsComPendentes = rows;
   const totalPendentes = rowsComPendentes.reduce((s,r)=>s+r.locaisPendentes,0);
   // A exportação lista os locais um a um, e pra isso precisa da base congelada em
   // memória. O número da coluna não precisa — e é por isso que ele não some mais.
@@ -1855,19 +1869,18 @@ function irRenderPorRuaPanel(ind){
     <p class="panel-sub">Locais orçados x contados (coluna X1 da base congelada), peças e acurácias por rua.</p>
     ${totalPendentes>0 ? `<div class="form-actions pend-acoes" style="margin:0 0 12px;">
         <button class="btn-link" id="irPendBtn" onclick="irExportarLocaisPendentesCsv()">📤 Baixar locais pendentes (${irFmtInt(totalPendentes)})</button>
-        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>
-        <button class="btn-link" onclick="irPendMarcarTodas(true)">Marcar todas</button>`:''}
+        ${comPendente.length>1?`<button class="btn-link" onclick="irPendMarcarTodas(false)">Limpar seleção</button>`:''}
       </div>
       ${podeExportar?'':`<p class="field-hint" style="margin:-4px 0 12px;">A lista endereço a endereço precisa da base congelada deste ciclo, que não está salva — reprocesse o ciclo na Importação para liberar o download.</p>`}`
     :''}
     <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-grouped tbl-sticky-head">
       <thead>
-        <tr class="grupo"><th colspan="2"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
+        <tr class="grupo"><th colspan="3" class="grupo-cor">Região</th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
         <tr class="cols">
           <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
-          <th>Rua</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
-          <th>Contadas</th><th>Divergentes</th>
-          <th>Peças</th><th>Posições</th><th>Valor</th>
+          ${irThOrd('resumoRua','rua','Rua')}${irThOrd('resumoRua','tipo','Tipo')}${irThOrd('resumoRua','locaisOrcados','Orçados')}${irThOrd('resumoRua','locaisContados','Contados')}${irThOrd('resumoRua','locaisDivergentes','Divergentes')}${irThOrd('resumoRua','locaisPendentes','Pendentes')}
+          ${irThOrd('resumoRua','pecasContadas','Contadas')}${irThOrd('resumoRua','pecasDivergentes','Divergentes')}
+          ${irThOrd('resumoRua','acuraciaPecas','Peças')}${irThOrd('resumoRua','acuraciaPosicoes','Posições')}${irThOrd('resumoRua','acuraciaValor','Valor')}
         </tr>
       </thead>
       <tbody>${rowsComPendentes.map(r=>`<tr>
@@ -1877,7 +1890,8 @@ function irRenderPorRuaPanel(ind){
         <td class="pend-col">${r.locaisPendentes>0
           ? `<input type="checkbox" class="pend-chk" checked value="${irEsc(r.chave)}" data-pend="${r.locaisPendentes}" onchange="irPendAtualizarBotao()">`
           : `<input type="checkbox" disabled title="Nenhum local pendente nesta rua">`}</td>
-        <td class="mono">${irEsc(r.chave)}</td>
+        <td class="mono">${irEsc(r.rua)}</td>
+        <td>${r.tipo ? {picking:'Picking', nao:'Não picking', sem:'Sem classe'}[r.tipo] : ''}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
         <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
@@ -1890,7 +1904,7 @@ function irRenderPorRuaPanel(ind){
       </tr>`).join('')}</tbody>
       <tfoot><tr style="font-weight:700;border-top:2px solid var(--line);">
         <td class="pend-col"></td>
-        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td>
+        <td class="mono">${(ind.porRua||[]).some(r=>r.chave==='(sem rua)' && ((r.pecasContadas||0)>0 || (r.pecasDivergentes||0)>0)) ? 'TOTAL DAS RUAS LISTADAS' : 'TOTAL'}</td><td></td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisOrcados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisContados,0))}</td>
         <td class="mono">${irFmtInt(rowsComPendentes.reduce((s,r)=>s+r.locaisDivergentes,0))}</td>
@@ -8161,7 +8175,7 @@ function irExportarLocaisPendentesCsv(rua){
   const ruas = rua ? [rua] : irPendRuasMarcadas();
   const filtro = ruas.length ? new Set(ruas) : null;
   const pendentes = irLocaisPendentesContagem()
-    .filter(l => !filtro || filtro.has(irRuaDoLocal(l)));
+    .filter(l => !filtro || filtro.has(irRuaDoLocal(l)) || filtro.has(irRuaTipoDoLocal(l)));
   if(!pendentes.length){
     // Distingue "não há pendente" de "não dá pra listar": o segundo caso tem
     // pendente na tela e some sem explicação se o aviso for o mesmo.
@@ -8180,7 +8194,7 @@ function irExportarLocaisPendentesCsv(rua){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'locais_pendentes_ciclo_'+IR.cicloAtivo.numero
-    + (ruas.length===1 ? '_'+ruas[0] : '') + '.csv';
+    + (ruas.length===1 ? '_'+String(ruas[0]).replace('|','_') : '') + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -8901,7 +8915,7 @@ function irDpEquipeFiltro(usuarios){
 const irDpHHMM = m=>{ const t = new Date(m*60000); return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'); };
 function irDpTurno(d){
   const dia = d.dias[d.dias.length-1];
-  if(!dia) return irDpPainel('Turno do dia','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
+  if(!dia) return irDpPainel('Tempo de Ociosidade','', '<p class="field-hint">Sem contagens no período escolhido.</p>');
   const todas = [];
   for(const [k, su] of d.sessoes){
     const [u, dd] = k.split('|');
@@ -8914,7 +8928,7 @@ function irDpTurno(d){
     const turno = m[m.length-1][1]-m[0][0];
     todas.push({u, m, contando, turno, locais:iv.length, base0:irDpMin(dia+'T00:00:00')});
   }
-  if(!todas.length) return irDpPainel('Turno do dia','', '<p class="field-hint">Sem horários de início e fim no último dia.</p>');
+  if(!todas.length) return irDpPainel('Tempo de Ociosidade','', '<p class="field-hint">Sem horários de início e fim no último dia.</p>');
   const filtro = irDpEquipeFiltro(todas.map(l=>l.u));
   const linhas = todas.filter(l=>!IR.dpEquipeOff.has(l.u)).sort((p,q)=>q.contando-p.contando);
   let hIni = 24, hFim = 0;
@@ -8924,7 +8938,9 @@ function irDpTurno(d){
   const xp = (min,b0)=> ((min-b0)/60 - hIni)/(hFim-hIni)*100;
   const horas = []; for(let h=hIni; h<=hFim; h++) horas.push(h);
   const grade = horas.map(h=>`<b style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('')
-    + horas.slice(0,-1).map(h=>`<b class="meia" style="left:${((h+0.5-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('');
+    + horas.slice(0,-1).map(h=>`<b class="meia" style="left:${((h+0.5-hIni)/(hFim-hIni)*100).toFixed(2)}%"></b>`).join('')
+    // linhas de 10 em 10 minutos (as de :30 já estão acima)
+    + horas.slice(0,-1).flatMap(h=>[10,20,40,50].map(mi=>`<b class="min" style="left:${((h+mi/60-hIni)/(hFim-hIni)*100).toFixed(3)}%"></b>`)).join('');
   const lin = l=>{ const parado = l.turno>0 ? 1-l.contando/l.turno : 0;
     return `<div class="dp-tl">
       <span class="as-nome">${irEsc(irProdNome(l.u))}</span>
@@ -8934,7 +8950,7 @@ function irDpTurno(d){
       <span class="as-qt">${Math.floor(l.contando/60)}h${String(Math.round(l.contando%60)).padStart(2,'0')}</span>
       <span class="as-pct ${parado>0.25?'bad':''}">${irFmtPct(parado)}</span>
     </div>`; };
-  return irDpPainel('Turno do dia', filtro + irDpLeg('var(--dx-local,#001A72)','contando')+irDpLeg('var(--surface2)','sem local aberto'),
+  return irDpPainel('Tempo de Ociosidade', filtro + irDpLeg('var(--dx-local,#001A72)','contando')+irDpLeg('var(--surface2)','sem local aberto'),
     `<div class="dp-tl dp-tl-eixo"><span></span><div class="dp-tl-horas">${horas.map(h=>`<span style="left:${((h-hIni)/(hFim-hIni)*100).toFixed(2)}%">${String(h).padStart(2,'0')}h</span>`).join('')}</div><span class="as-qt"><small>início</small></span><span class="as-qt"><small>fim</small></span><span class="as-qt"><small>contando</small></span><span class="as-qt"><small>parado</small></span></div>
      <div class="as-lista dp-tl-lista">${linhas.map(lin).join('') || '<p class="field-hint">Ninguém marcado no filtro Equipe.</p>'}</div>`);
 }

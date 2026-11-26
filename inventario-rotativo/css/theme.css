@@ -2383,3 +2383,13 @@ th.th-ord:hover{ filter:brightness(1.12); }
 .chart-tooltip.ca-tip.fixo .ct-rol{ max-height:min(420px, 60vh); overflow:auto; scrollbar-width:thin; }
 .chart-tooltip.ca-tip tr.clic{ cursor:pointer; }
 .chart-tooltip.ca-tip tr.clic:hover td{ background:rgba(254,80,0,.08); }
+.dp-tl-trilho b{ background:rgba(0,26,114,.14) !important; }
+.dp-tl-trilho b.meia{ background:rgba(0,26,114,.08) !important; }
+.dp-tl-trilho b.min{ background:rgba(0,26,114,.045) !important; }
+
+/* Resumo por Rua: Picking × Não picking */
+.rt-tag{ display:inline-block; font-size:10.5px; font-weight:700; border-radius:999px; padding:1px 8px; white-space:nowrap; }
+.rt-picking{ background:rgba(254,80,0,.12); color:#C24000; }
+.rt-nao{ background:rgba(0,26,114,.10); color:#001A72; }
+.rt-sem{ background:rgba(120,130,150,.14); color:var(--ink-soft); }
+table.table-grouped thead tr.grupo th.grupo-cor:first-child{ background:var(--orange); }
