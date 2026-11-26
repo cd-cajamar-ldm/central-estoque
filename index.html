@@ -82,6 +82,15 @@
   .topbar p{margin:5px 0 0;color:var(--ink-soft);font-size:13.5px;max-width:480px;}
   .topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;}
   .cd-badge{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;}
+  .layout-wrap{position:relative;}
+  .layout-btn{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;flex-shrink:0;}
+  .layout-btn:hover,.layout-btn.on{color:var(--orange);border-color:var(--orange);}
+  .layout-panel{position:absolute;top:44px;right:0;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:230px;box-shadow:0 18px 34px -14px var(--shadow-col);}
+  .layout-panel[hidden]{display:none;}
+  .layout-panel h4{margin:0 0 12px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);}
+  .layout-field label{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:6px;}
+  .layout-field label span:last-child{color:var(--ink-soft);font-weight:700;font-variant-numeric:tabular-nums;}
+  .layout-field input[type=range]{width:100%;accent-color:var(--orange);}
   .theme-switch{position:relative;width:54px;height:28px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
   .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
   .theme-switch.on .theme-knob{left:29px;}
@@ -504,7 +513,18 @@
         <p id="viewSubtitle">Dados, indicadores e operação do CD conectados em um único ambiente.</p>
       </div>
       <div class="topbar-actions">
-        <span class="cd-badge">CD CAJAMAR</span>
+        <div class="layout-wrap">
+          <button class="layout-btn" id="layoutBtn" type="button" aria-label="Ajustes de layout" title="Layout">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          </button>
+          <div class="layout-panel" id="layoutPanel" hidden>
+            <h4>Layout</h4>
+            <div class="layout-field">
+              <label for="veuRange"><span>Escuridão do véu</span><span id="veuValor">80%</span></label>
+              <input type="range" id="veuRange" min="40" max="95" step="1" value="80">
+            </div>
+          </div>
+        </div>
         <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro">
           <span class="theme-knob" id="themeKnob"></span>
         </button>
@@ -709,7 +729,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=11"></script>
+<script src="versao-hub.js?v=12"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
@@ -760,6 +780,35 @@
     dark = !dark;
     apply(dark);
     try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
+  });
+})();
+(function(){
+  var btn = document.getElementById('layoutBtn');
+  var panel = document.getElementById('layoutPanel');
+  var range = document.getElementById('veuRange');
+  var valor = document.getElementById('veuValor');
+  var veil = document.querySelector('.sidebar-veil');
+  if(!btn || !panel || !range || !veil) return;
+  function aplicarVeu(pct){
+    var v = Math.max(0, Math.min(1, pct / 100));
+    veil.style.background = 'linear-gradient(180deg, rgba(6,10,40,' + Math.min(1, v * 0.92).toFixed(2) + '), rgba(6,10,40,' + Math.min(1, v + 0.1).toFixed(2) + '))';
+    valor.textContent = pct + '%';
+  }
+  var inicial = 80;
+  try { inicial = parseInt(localStorage.getItem('ldm-veu'), 10) || 80; } catch(e){}
+  range.value = inicial;
+  aplicarVeu(inicial);
+  range.addEventListener('input', function(){
+    aplicarVeu(Number(range.value));
+    try { localStorage.setItem('ldm-veu', range.value); } catch(e){}
+  });
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    panel.hidden = !panel.hidden;
+    btn.classList.toggle('on', !panel.hidden);
+  });
+  document.addEventListener('click', function(e){
+    if(!panel.hidden && !panel.contains(e.target) && e.target !== btn) { panel.hidden = true; btn.classList.remove('on'); }
   });
 })();
 (function(){
