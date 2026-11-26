@@ -270,3 +270,30 @@ function irSetInvObs(lista){
 function irInvObsLista(){ return Array.from(IR_INV_OBS_SEL).sort(); }
 function irInvObsChave(){ return irInvObsLista().join(','); }
 function irEhMotivoInv(m){ return IR_INV_OBS_SEL.has(String(m||'').trim().toUpperCase()); }
+
+/* ============================================================
+   PICKING × NÃO PICKING (Resumo por Rua). Classes marcadas pelo usuário em
+   26/11/2026. A classe vem da coluna "Classe Local" da Base Congelada (código,
+   "código - descrição" ou só a descrição). Usado no worker (agrupa a rua em
+   duas linhas) e na tela.
+   ============================================================ */
+const IR_CLASSES_PICKING = {PPBA1:'PORTA PALLET BAIXO 1', PPPC:'PORTA PALLET PICKING CURVA C', MZN:'MEZANINO', MZN2:'MEZANINO', MZKT:'MZN MARKETPLACE', BLO:'BLOCADO', DRV:'DRIVE IN', GLP:'GALPAO 4 EXTRA PESADO', RMOV:'LOG 1 - GALPAO NOVO', COF:'COFRE', ESC:'ESCADAS', MAC:'MACACO HIDRAULICO'};
+const IR_CLASSES_NAO_PICKING = {PPAL1:'PORTA PALLET ALTO 1', MZN01:'MEZANINO 01', GLP23:'GALPAO 2 E 3', UMA:'UNIDADE MINIMA DE ARMAZENAGEM', SUPRI:'SUPRIMENTOS', SUPR2:'SUPRIMENTOS', REV:'LOGISTICA REVERSA', AVA:'AVARIA', INB:'INBOUND', OUT:'OUTBOUND', DENT:'DOCA DE ENTRADA', DSAI:'DOCA DE SAIDA', CARGA:'CARGA - GAIOLA', CROSS:'CROSSDOCKING', 'C.E':'CONTROLE DE ESTOQUE', PALET:'PALLETS', ATI:'ASSISTENCIA TECNICA', TSF:'TRANSFERENCIA', CAN:'CANCELAMENTO', PAR:'DEVOLUCAO PARCIAL', DEV:'DEVOLUCAO MERCADORIA', TRANS:'TRANSPORTE', TRP:'TRANSPORTE ADM'};
+function irNormClasse(v){ return String(v||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim(); }
+function irClasseEhPicking(classe){
+  const s = irNormClasse(classe); if(!s) return null;
+  const cod = s.split(/[\s·-]+/)[0];
+  if(IR_CLASSES_PICKING[cod]!==undefined) return true;
+  if(IR_CLASSES_NAO_PICKING[cod]!==undefined) return false;
+  const desc = s.replace(/^[A-Z0-9.]+\s*[-·]\s*/, '');
+  if(Object.values(IR_CLASSES_PICKING).includes(desc)) return true;
+  if(Object.values(IR_CLASSES_NAO_PICKING).includes(desc)) return false;
+  return null;
+}
+/* "rua|picking", "rua|nao" ou "rua|sem" (classe não reconhecida); '' sem rua. */
+function irRuaTipoDoLocal(l){
+  const rua = [String((l && l.x1) || '').trim(), String((l && l.x2) || '').trim()].filter(Boolean).join(' ');
+  if(!rua) return '';
+  const t = irClasseEhPicking(l.classeLocal);
+  return rua + '|' + (t===true ? 'picking' : (t===false ? 'nao' : 'sem'));
+}
