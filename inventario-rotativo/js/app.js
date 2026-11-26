@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 33; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v324';
+const IR_APP_VERSION = 'v325';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1875,7 +1875,7 @@ function irRenderPorRuaPanel(ind){
     :''}
     <div class="table-wrap"><div class="table-scroll" style="max-height:520px;"><table class="table-grouped tbl-sticky-head">
       <thead>
-        <tr class="grupo"><th colspan="3"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
+        <tr class="grupo"><th colspan="3" class="grupo-cor">Região</th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
         <tr class="cols">
           <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
           ${irThOrd('resumoRua','rua','Rua')}${irThOrd('resumoRua','tipo','Tipo')}${irThOrd('resumoRua','locaisOrcados','Orçados')}${irThOrd('resumoRua','locaisContados','Contados')}${irThOrd('resumoRua','locaisDivergentes','Divergentes')}${irThOrd('resumoRua','locaisPendentes','Pendentes')}
