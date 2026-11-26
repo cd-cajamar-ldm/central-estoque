@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 6; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 7; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -346,7 +346,7 @@ function atualizar(){
   // tabela de itens
   const ordem = {falta: 0, sobra: 1, pend: 2, ok: 3};
   const ls = CV.linhas.slice().sort((a, b) => ordem[cvSituacao(a)] - ordem[cvSituacao(b)] || a.d.localeCompare(b.d));
-  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? 'toque numa linha com pendência para ver onde achar' : 'sem fotos: importe o cadastro em Importação') + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody>' +
+  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? (n => n ? n + ' de ' + CV.linhas.length + ' itens sem foto no cadastro' : 'toque numa linha com pendência para ver onde achar')(CV.linhas.filter(x => !CV.fotoMap.has(x.i)).length) : 'sem fotos: importe o cadastro em Importação') + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody>' +
     ls.map(x => {
       const b = s.bips[x.i] || 0, st = cvSituacao(x), pen = Math.max(x.prev - b, 0), ab = CV.aberto.has(x.i);
       return '<tr class="' + (pen ? 'clicavel ' : '') + (st === 'falta' ? 'r-falta' : st === 'sobra' ? 'r-sobra' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td>' + fotoHtml(x.i, 'cv-th') + '</td><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc">' + esc(x.d) + '<div class="field-hint">EAN ' + (x.eans.length ? esc(x.eans.slice(0, 3).join(' / ')) + (x.eans.length > 3 ? ' +' + (x.eans.length - 3) : '') : 'não cadastrado') + '</div></td>' +
@@ -396,13 +396,21 @@ function cardBase(ic, titulo, sub, m, det){
     '<span class="btn btn-orange cv-bs-btn">' + (ok ? 'Atualizar' : 'Importar') + '</span>' +
     '<input type="file" accept=".xlsx,.xls" multiple hidden onchange="importar(Array.from(this.files)); this.value=\'\'"></label>';
 }
+/* Quantos itens das entregas importadas têm foto no cadastro. */
+function coberturaFotos(){
+  if(CV._cob && CV._cobKey === CV.ent.length + '|' + (CV.fotoMap ? CV.fotoMap.size : 0)) return CV._cob;
+  const it = new Set(CV.ent.map(r => r.i)); let c = 0;
+  it.forEach(i => { if(CV.fotoMap && CV.fotoMap.has(i)) c++; });
+  CV._cobKey = CV.ent.length + '|' + (CV.fotoMap ? CV.fotoMap.size : 0);
+  return (CV._cob = {t: it.size, c});
+}
 function viewImportacao(){
   const e = CV.meta.ent, s = CV.meta.est, f = CV.meta.foto, n = CV.meta.ean;
   return '<div class="cv-bases" id="cvDrop">' +
     cardBase('📦', 'QRY0180', 'Entregas', e, e ? fInt(e.entregas) + ' entregas · ' + fInt(e.linhas) + ' linhas' : '') +
     cardBase('🏬', 'QRY0390', 'Estoque', s, s ? fInt(s.itens) + ' itens · ' + fInt(s.locais) + ' saldos' : '') +
     cardBase('▥', 'SIGEQ230', 'EANs por item', n, n ? fInt(n.eans) + ' EANs · ' + fInt(n.itens) + ' itens' : '') +
-    cardBase('🖼', 'Cadastro', 'Fotos dos itens', f, f ? fInt(f.itens) + ' itens com foto' : '') +
+    cardBase('🖼', 'Cadastro', 'Fotos dos itens', f, f ? fInt(f.itens) + ' itens com foto' + (CV.ent.length ? ' · ' + (cb => cb.t ? Math.round(cb.c / cb.t * 100) + '% dos itens das entregas' : '')(coberturaFotos()) : '') : '') +
     '</div><div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div>' +
     (CV.erroImp ? '<div class="cv-res div">⚠ ' + esc(CV.erroImp) + '</div>' : '');
 }
