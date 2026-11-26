@@ -1178,7 +1178,7 @@ const IR_INDICADORES_VERSION = 33; // mantido em sincronia com worker.js
    depois de um deploy, a página já vinha nova e o Worker continuava sendo o
    antigo, então o ciclo era reprocessado com o motor velho e o número não mudava.
    Com a versão na query, cada deploy é uma URL nova e o cache não alcança. */
-const IR_APP_VERSION = 'v323';
+const IR_APP_VERSION = 'v324';
 function irNovoWorker(){ return new Worker('js/worker.js?v=' + IR_APP_VERSION); }
 /* Ciclo calculado por um motor antigo é recalculado sozinho, com os dados que já
    estão no navegador.
@@ -1844,12 +1844,21 @@ function irRenderPorRuaPanel(ind){
   const fonte = ind.porRuaTipo || ind.porRua || [];
   const ordTipo = {picking:0, nao:1, sem:2};
   const rows = fonte.filter(r=>r.chave!=='(sem rua)').map(r=>{ const [rua, tipo] = String(r.chave).split('|'); return {...r, rua, tipo:tipo||''}; })
-    .sort((a,b)=>a.rua.localeCompare(b.rua, 'pt-BR', {numeric:true}) || (ordTipo[a.tipo]??9)-(ordTipo[b.tipo]??9));
+    .map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
+  // Ordenação por clique no título (padrão: rua A→Z, Picking antes de Não picking).
+  const o = (IR.tabOrdem||{}).resumoRua;
+  const porRua = (a,b)=> a.rua.localeCompare(b.rua, 'pt-BR', {numeric:true}) || (ordTipo[a.tipo]??9)-(ordTipo[b.tipo]??9);
+  rows.sort((a,b)=>{
+    if(!o) return porRua(a,b);
+    if(o.col==='rua') return o.dir*-1*porRua(a,b);
+    if(o.col==='tipo') return o.dir*-1*((ordTipo[a.tipo]??9)-(ordTipo[b.tipo]??9)) || porRua(a,b);
+    return o.dir*((a[o.col]||0)-(b[o.col]||0)) || porRua(a,b);
+  });
   if(!rows.length) return '';
   const meta = ind.meta;
   // Pendente aqui usa a mesma regra do módulo de Inventário: local sem NENHUMA linha
   // Liquidada na 843 ainda, cruzado pela rua (X1) da base congelada.
-  const rowsComPendentes = rows.map(r=>({...r, locaisPendentes: irPendentesDaLinha(r)}));
+  const rowsComPendentes = rows;
   const totalPendentes = rowsComPendentes.reduce((s,r)=>s+r.locaisPendentes,0);
   // A exportação lista os locais um a um, e pra isso precisa da base congelada em
   // memória. O número da coluna não precisa — e é por isso que ele não some mais.
@@ -1869,9 +1878,9 @@ function irRenderPorRuaPanel(ind){
         <tr class="grupo"><th colspan="3"></th><th colspan="4">Locais</th><th colspan="2">Peças</th><th colspan="3">Acurácias</th></tr>
         <tr class="cols">
           <th class="pend-col">${totalPendentes>0?'<input type="checkbox" checked onchange="irPendMarcarTodas(this.checked)" title="Marcar/desmarcar todas">':''}</th>
-          <th>Rua</th><th>Tipo</th><th>Orçados</th><th>Contados</th><th>Divergentes</th><th>Pendentes</th>
-          <th>Contadas</th><th>Divergentes</th>
-          <th>Peças</th><th>Posições</th><th>Valor</th>
+          ${irThOrd('resumoRua','rua','Rua')}${irThOrd('resumoRua','tipo','Tipo')}${irThOrd('resumoRua','locaisOrcados','Orçados')}${irThOrd('resumoRua','locaisContados','Contados')}${irThOrd('resumoRua','locaisDivergentes','Divergentes')}${irThOrd('resumoRua','locaisPendentes','Pendentes')}
+          ${irThOrd('resumoRua','pecasContadas','Contadas')}${irThOrd('resumoRua','pecasDivergentes','Divergentes')}
+          ${irThOrd('resumoRua','acuraciaPecas','Peças')}${irThOrd('resumoRua','acuraciaPosicoes','Posições')}${irThOrd('resumoRua','acuraciaValor','Valor')}
         </tr>
       </thead>
       <tbody>${rowsComPendentes.map(r=>`<tr>
@@ -1882,7 +1891,7 @@ function irRenderPorRuaPanel(ind){
           ? `<input type="checkbox" class="pend-chk" checked value="${irEsc(r.chave)}" data-pend="${r.locaisPendentes}" onchange="irPendAtualizarBotao()">`
           : `<input type="checkbox" disabled title="Nenhum local pendente nesta rua">`}</td>
         <td class="mono">${irEsc(r.rua)}</td>
-        <td>${r.tipo ? `<span class="rt-tag rt-${r.tipo}">${{picking:'Picking', nao:'Não picking', sem:'Sem classe'}[r.tipo]}</span>` : ''}</td>
+        <td>${r.tipo ? {picking:'Picking', nao:'Não picking', sem:'Sem classe'}[r.tipo] : ''}</td>
         <td class="mono">${irFmtInt(r.locaisOrcados)}</td>
         <td class="mono">${irFmtInt(r.locaisContados)}</td>
         <td class="mono">${irFmtInt(r.locaisDivergentes)}</td>
