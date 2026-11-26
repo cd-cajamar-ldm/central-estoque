@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 8; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 9; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -38,16 +38,35 @@ function toast(msg, erro){
 }
 const normEan = s => String(s || '').trim().replace(/\D/g, '').replace(/^0+/, '');
 const normLoc = s => String(s || '').replace(/\s+/g, ' ').trim().toUpperCase();
-let _audio;
+/* Som da bipagem: bip agudo e curto para leitura certa; dois tons graves para erro (sobra / EAN não identificado). */
+let _audio, _som = true;
+try { _som = localStorage.getItem('cv-som') !== '0'; } catch(e){}
+function audioCtx(){
+  _audio = _audio || new (window.AudioContext || window.webkitAudioContext)();
+  if(_audio.state === 'suspended') _audio.resume();
+  return _audio;
+}
+function tom(freq, ini, dur, tipo, vol){
+  const a = audioCtx(), t0 = a.currentTime + ini, o = a.createOscillator(), g = a.createGain();
+  o.type = tipo; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g); g.connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.03);
+}
 function beep(tipo){
+  if(!_som) return;
   try {
-    _audio = _audio || new (window.AudioContext || window.webkitAudioContext)();
-    const o = _audio.createOscillator(), g = _audio.createGain();
-    o.connect(g); g.connect(_audio.destination);
-    o.type = tipo === 'ok' ? 'sine' : 'square'; o.frequency.value = tipo === 'ok' ? 880 : 220;
-    g.gain.value = .08; o.start(); o.stop(_audio.currentTime + (tipo === 'ok' ? .08 : .28));
+    if(tipo === 'ok') tom(1800, 0, 0.13, 'square', 0.3);
+    else { tom(420, 0, 0.17, 'square', 0.35); tom(300, 0.21, 0.3, 'square', 0.35); }
   } catch(e){}
 }
+function cvSom(){
+  _som = !_som;
+  try { localStorage.setItem('cv-som', _som ? '1' : '0'); } catch(e){}
+  const b = $('cvSomBtn'); if(b) b.textContent = _som ? '🔊 Som' : '🔇 Mudo';
+  if(_som) beep('ok');
+  const i = $('cvBip'); if(i) i.focus();
+}
+const btnSom = () => '<button class="btn btn-secondary" id="cvSomBtn" onclick="cvSom()" title="Ligar/desligar o som da bipagem">' + (_som ? '🔊 Som' : '🔇 Mudo') + '</button>';
 
 /* ---------- nuvem (Supabase: public.app_dados) ---------- */
 async function nuvemLer(chave){
@@ -358,7 +377,7 @@ function pintarVazio(){
   const u = CV.ult;
   $('cvBipado').innerHTML = u && u.tipo === 'ean' ? '<div class="cv-card cv-bp ean"><div class="h">? ' + esc(u.txt) + '</div></div>' : '<div class="cv-card cv-bp vazio"><div class="h">Item bipado</div><div class="c"><div class="d" style="color:var(--ink-soft)">Digite ou bipe o número da entrega e tecle Enter.</div></div></div>';
   $('cvAnd').innerHTML = '<div class="cv-card cv-tb"><h3>⟳ Conferência em andamento<s>0 leituras</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>#</th><th>Hora</th><th>EAN</th><th>Descrição</th><th>Resultado</th></tr></thead><tbody><tr><td colspan="5" class="field-hint" style="padding:14px">Nenhuma leitura ainda.</td></tr></tbody></table></div></div>';
-  $('cvAcoes').innerHTML = '<div class="cv-acoes2"><button class="btn btn-orange cv-atender" disabled title="Carregue uma entrega">⚑ Atender entrega</button><button class="cv-fin" disabled style="opacity:.45;cursor:not-allowed">Finalizar conferência</button></div>';
+  $('cvAcoes').innerHTML = '<div class="cv-acoes">' + btnSom() + '</div><div class="cv-acoes2"><button class="btn btn-orange cv-atender" disabled title="Carregue uma entrega">⚑ Atender entrega</button><button class="cv-fin" disabled style="opacity:.45;cursor:not-allowed">Finalizar conferência</button></div>';
   $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + esc(chipEnt()) + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody><tr><td colspan="8" class="field-hint" style="padding:18px">Os itens da entrega aparecem aqui.</td></tr></tbody></table></div></div>';
 }
 function kpi(rot, v, cor, ic){ return '<div class="cv-k"><i style="background:' + cor + '">' + ic + '</i><div><small>' + rot + '</small><b>' + fInt(v) + '</b></div></div>'; }
@@ -383,7 +402,7 @@ function atualizar(){
   $('cvAnd').innerHTML = '<div class="cv-card cv-tb"><h3>⟳ Conferência em andamento<s>' + s.log.length + ' leituras</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>#</th><th>Hora</th><th>EAN</th><th>Descrição</th><th>Resultado</th></tr></thead><tbody>' +
     (log.length ? log.map((l, k) => { const kk = l.k || (l.i ? 'ok' : 'ean'); return '<tr><td>' + (s.log.length - k) + '</td><td>' + new Date(l.t).toLocaleTimeString('pt-BR') + '</td><td class="cv-mono">' + esc(l.e || '') + '</td><td>' + (l.i ? esc(nome(l.i)) : '<span class="field-hint">— não está na entrega —</span>') + '</td><td><span class="cv-pill ' + (kk === 'ok' ? 'cv-ok' : kk === 'sobra' ? 'cv-sobra' : 'cv-falta') + '">' + (kk === 'ok' ? 'Conferido' : kk === 'sobra' ? 'Sobra' : 'EAN não ident.') + '</span></td></tr>'; }).join('') : '<tr><td colspan="5" class="field-hint" style="padding:14px">Nenhuma leitura ainda.</td></tr>') + '</tbody></table></div></div>';
   const diverge = t.falta || t.sobra || t.ean;
-  $('cvAcoes').innerHTML = '<div class="cv-acoes"><button class="btn btn-secondary" onclick="cvDesfazer()">↶ Desfazer</button><button class="btn btn-secondary" onclick="cvExportar()">Exportar</button><button class="btn btn-danger-text" onclick="cvZerar()">Zerar</button></div><div class="cv-acoes2">' +
+  $('cvAcoes').innerHTML = '<div class="cv-acoes"><button class="btn btn-secondary" onclick="cvDesfazer()">↶ Desfazer</button><button class="btn btn-secondary" onclick="cvExportar()">Exportar</button>' + btnSom() + '<button class="btn btn-danger-text" onclick="cvZerar()">Zerar</button></div><div class="cv-acoes2">' +
     '<button class="btn btn-orange cv-atender" onclick="cvAtender()"' + (s.fin && diverge ? '' : ' disabled title="' + (s.fin ? 'Entrega sem divergência' : 'Finalize a conferência para habilitar') + '"') + '>⚑ Atender entrega</button>' +
     '<button class="cv-fin" onclick="cvFinalizar()">Finalizar conferência</button></div>';
   // tabela de itens
@@ -798,6 +817,7 @@ window.cvAplicarNivel = () => renderView();
 /* ---------- início (chamado por acesso.js depois do login) ---------- */
 async function cvInit(){
   cvInitTema();
+  ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { try { audioCtx(); } catch(e){} }, {once: true}));
   try { cvSupa.auth.getSession().then(r => { CV.email = (r.data.session && r.data.session.user.email) || ''; }); } catch(e){}
   const v = $('sidebarVersao'); if(v) v.textContent = 'Check Volume · v' + CV_VERSAO;
   renderView();
