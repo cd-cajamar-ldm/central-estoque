@@ -1,0 +1,13 @@
+// ZBIQ0051 — Item pai × componente (kits)
+// Salvar como: ZBIQ0051.csv
+// Conferido em 03/11/2026: 3.475 linhas — cabe numa consulta só.
+EVALUATE
+SELECTCOLUMNS(
+    'ZBIQ0051',
+    "item vol multiplo", COALESCE('ZBIQ0051'[item vol multiplo], ""),
+    "item componente", COALESCE('ZBIQ0051'[item componente], ""),
+    "qtde", COALESCE('ZBIQ0051'[qtde], ""),
+    "in interface", COALESCE('ZBIQ0051'[in interface], ""),
+    "Usuario", COALESCE('ZBIQ0051'[Usuario], ""),
+    "datahora", FORMAT('ZBIQ0051'[datahora], "yyyy-mm-dd hh:nn:ss")
+)

@@ -38,7 +38,11 @@
   .shell{display:flex;min-height:100vh;width:100%;}
 
   /* SIDEBAR — azul-marinho fixo, não acompanha o tema (âncora visual da marca) */
-  .sidebar{width:252px;flex-shrink:0;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
+  .sidebar{width:252px;flex-shrink:0;position:relative;overflow:hidden;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
+  .sidebar-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
+  .sidebar-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(6,10,40,.86),rgba(6,10,40,.93));}
+  .sidebar > .brand,.sidebar > .sb-nav,.sidebar > .sb-favs,.sidebar > .sb-foot{position:relative;z-index:2;}
+  @media(prefers-reduced-motion:reduce){.sidebar-bg{display:none;}}
   .brand{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
   .brand-logo{position:relative;width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;overflow:hidden;border:none;box-shadow:0 10px 22px -6px rgba(254,80,0,.6),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s;padding:0;}
   .brand-logo:hover{transform:translateY(-2px) scale(1.045);}
@@ -371,6 +375,7 @@
   .intro img{width:min(560px,72vw);height:auto;}
   .intro.saindo{opacity:0;pointer-events:none;}
 </style>
+<link rel="stylesheet" href="almoxarifado/almox.css?v=9">
 </head>
 <body>
 <div class="intro" id="intro" hidden><img alt="Loja do Mecânico" src="brand/Logo_LDM_animado.gif"></div>
@@ -397,6 +402,8 @@
 <div class="shell">
 
   <aside class="sidebar">
+    <video class="sidebar-bg" autoplay muted loop playsinline aria-hidden="true" src="brand/sidebar-fundo.mp4"></video>
+    <div class="sidebar-veil"></div>
     <div class="brand">
       <button class="brand-logo" id="brandLogo" type="button" aria-label="Oficina LDM">
         <img src="brand/Logo_LDM_icon.png" alt="">
@@ -414,6 +421,10 @@
       <button class="sb-nav-item" type="button" data-view="gestao">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>
         <span>Gestão de App</span>
+      </button>
+      <button class="sb-nav-item" type="button" data-view="almox">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V4"/><path d="M21 21V4"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="16" x2="21" y2="16"/><rect x="6" y="5" width="4" height="5" rx=".5"/><rect x="12" y="6.5" width="5" height="3.5" rx=".5"/><rect x="7" y="12" width="6" height="4" rx=".5"/></svg>
+        <span>Almoxarifado</span>
       </button>
       <button class="sb-nav-item" type="button" data-view="tv">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -518,6 +529,8 @@
         <tbody id="manageTableBody"></tbody>
       </table>
     </section>
+
+    <section class="view" id="view-almox" hidden></section>
 
     <section class="view" id="view-tv" hidden>
       <table class="manage-table">
@@ -696,7 +709,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=8"></script>
+<script src="versao-hub.js?v=11"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
@@ -780,6 +793,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var VIEW_META = {
     painel: {title:'Painel', sub:'Dados, indicadores e operação do CD conectados em um único ambiente.'},
     gestao: {title:'Gestão de App', sub:'Gerencie nome, cor, status e vínculo de TV de cada aplicação.'},
+    almox: {title:'Almoxarifado', sub:'Os relatórios que alimentam os apps: cada base guardada uma vez, cada app retira do seu jeito.'},
     tv: {title:'Tv Ldm', sub:'Gerencie a sequência, o tempo de exibição e o idioma de cada app na TV.'},
     config: {title:'Configurações', sub:'Preferências gerais da Oficina LDM.'}
   };
@@ -787,6 +801,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   var views = {
     painel: document.getElementById('view-painel'),
     gestao: document.getElementById('view-gestao'),
+    almox: document.getElementById('view-almox'),
     tv: document.getElementById('view-tv'),
     config: document.getElementById('view-config')
   };
@@ -801,6 +816,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       viewSubtitle.textContent = VIEW_META[v].sub;
       if(v === 'gestao' && window.renderManageTable) window.renderManageTable();
       if(v === 'config' && window.renderAccessList) window.renderAccessList();
+      if(v === 'almox' && window.renderAlmoxarifado) window.renderAlmoxarifado();
       if(v === 'tv'){
         if(window.renderTvTable) window.renderTvTable();
         if(window.renderTvSim) window.renderTvSim();
@@ -951,6 +967,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       status:'Em produção', tv:''
     }
   ];
+  window.LDM_HUB_APPS = APPS; // o Almoxarifado mostra quem usa cada base
 
   function esc(s){
     return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -2318,5 +2335,7 @@ document.getElementById('brandLogo').addEventListener('click', function(){
   atualizarCadeados();
 })();
 </script>
+<script src="almoxarifado/almox-db.js?v=9"></script>
+<script src="almoxarifado/almox-tela.js?v=9"></script>
 </body>
 </html>

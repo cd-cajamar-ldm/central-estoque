@@ -1,0 +1,67 @@
+# Mapa das bases
+
+- **Fluxos de dados** (só leitura, do Jorran): workspace **Operação CD Cajamar**.
+- **Modelo da Central** (o nosso): **Central de Estoque – Bases**, no workspace **Controle de Estoque**.
+- **Receitas** em [`receitas/`](receitas/) (copiar para a pasta `Central de Estoque/Receitas` do SharePoint). Em preparo, ainda não copiar: [`receitas-em-preparo/`](receitas-em-preparo/).
+- **Saída**: pasta `Central de Estoque/Bases` do SharePoint.
+
+## Tabelas do modelo "Central de Estoque – Bases" (conferido em 03/11/2026)
+
+Todas vêm dos fluxos de dados do workspace **Operação CD Cajamar**.
+
+| Tabela | Linhas | Apps que usam | Receita |
+|---|---|---|---|
+| QRY0390 | 98.527 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização, Auditoria | ✅ Pronta (3 partes) |
+| QRY0160 | 147.606 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta (5 partes) |
+| QRY0843 | 11.645 | Inventário Rotativo | 🔴 **Não serve:** a do fluxo está incompleta (ver abaixo). Continua manual |
+| SIGEQ278 | 238.253 | Inventário Rotativo, Transitórios, Múltiplos Descasados, Equalização | ✅ Pronta (3 partes) |
+| ZBIQ0051 | 3.475 | Inventário Rotativo, Transitórios, Múltiplos Descasados | ✅ Pronta |
+| SIGEQ410 | 2.657.098 (já com filtro de ano) | Inventário Rotativo, Transitórios | 🔴 Grande demais: falta decidir o recorte |
+| QRY0114 | 166.633 | Auditoria | ⏳ Depois (o app Auditoria ainda não lê pasta) |
+| QRY0845 | 617.269 | Auditoria | 🔴 Grande demais: falta decidir o recorte |
+| QRY0139 | 764.787 | A definir | 🔴 Grande demais: falta decidir o recorte |
+| QRY0840 | 1.962.356 | A definir | 🔴 Grande demais: falta decidir o recorte |
+
+**QRY0843 do fluxo × manual (comparação de 01/10 a 03/11/2026):** a manual tem 93.592 linhas, 39.923 locais e 2.088.872 peças; a do fluxo tem 1.442 linhas, 860 locais e 75.971 peças. Os inventários são quase os mesmos (940 de 942) e toda linha do fluxo existe na manual, mas o fluxo guarda só 1 ou 2 linhas por inventário, em vez de todos os itens e locais contados. Com ela o app calcularia acurácia e produtividade com ~2% dos dados. A receita fica em `receitas-em-preparo/` até o fluxo trazer a 843 completa.
+
+**Limite do caminho Power Automate:** cada receita traz no máximo 100 mil linhas, ~1 milhão de células e ~15 MB. Até umas 300 mil linhas, dividir em partes resolve. Acima disso, a base precisa de um **recorte** (só um período, só uma filial, só um status) antes de virar receita.
+
+A **Base Congelada** continua manual (planilha feita à mão).
+
+## Inventário Rotativo
+
+| Relatório | Para que serve no app | De onde vem | Atualização da origem | Como chega no app | Arquivo(s) na pasta |
+|---|---|---|---|---|---|
+| **QRY0390** | Estoque por endereço | Fluxo de dados **"180, 163, 390, 193 ETR"**, tabela `QRY0390` | De hora em hora | 🟢 Automático | `QRY0390_parte1.csv`, `QRY0390_parte2.csv`, `QRY0390_parte3.csv` |
+| **QRY0160** | Tempo parado no endereço (pendência de movimentação) | Fluxo de dados **"410, 160, 150"**, tabela `QRY0160` | 1x de madrugada, sem próxima agendada | 🟢 Automático | `QRY0160_parte1.csv` … `QRY0160_parte5.csv` |
+| **QRY410** | Perdas e ganhos (NET) | Fluxo de dados **"410, 160, 150"**, tabela `SIGEQ410` | 1x de madrugada, sem próxima agendada | ⚠️ Em análise (7 milhões de linhas) | Manual por enquanto |
+| **QRY0843** | Contagens do ciclo | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
+| **SIGEQ278** | Custo dos itens | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
+| **ZBIQ0051** | Item pai × componente (kits) | Não está em fluxo de dados | — | 🟡 Manual | Como hoje |
+| **Base Congelada** | Locais do ciclo | Planilha feita à mão | — | 🟡 Manual | Como hoje |
+
+### Por que alguns relatórios chegam em partes
+
+O Power BI entrega no máximo cerca de **1 milhão de células por consulta** (linhas × colunas) e 100 mil linhas. Contagem de 03/11/2026: QRY0390 com 98.527 linhas e 13 colunas (~1,3 milhão de células) e QRY0160 com 147.606 linhas. Por isso as duas são pedidas em **3 partes**, separadas pelo código do item. O app reconhece os arquivos `_parte1`, `_parte2`… da mesma pasta e **junta sozinho** antes de importar.
+
+### Por que a QRY410 ainda não é automática
+
+No fluxo de dados ela se chama `SIGEQ410` e tem **7.093.783 linhas** (todos os anos e filiais). Isso é grande demais para o Power Automate, que entrega no máximo 100 mil linhas por consulta. A consulta [`CONTAGEM_SIGEQ410.dax`](conferencias/CONTAGEM_SIGEQ410.dax) mostra quantas linhas são de cada filial e ano, para decidir o recorte. As receitas `SIGEQ410_parte*.dax` ficam em [`receitas-em-preparo/`](receitas-em-preparo/) até essa decisão.
+
+Colunas da SIGEQ410 que o app usa (as outras podem ser removidas no Power Query): Item, Nome, Dt.Mov., Quantidade, Sentido, Vl.Mov., Id Deposito, Observacao WMS, Observacao, Nome Depto, Logica, Id Depto, Num Doc, Usuário, Data/Hora.
+
+### Como a QRY410 deve chegar quando for automática
+
+O app guarda a NET **por ano**. Ao importar uma QRY410 só com o ano atual, os anos anteriores que já estão no app continuam lá. O arquivo precisa trazer o **ano inteiro**, não só o mês, porque o ano que vier no arquivo substitui o que está salvo.
+
+### Por que a QRY0160 e a QRY410 podem chegar "de ontem"
+
+O fluxo "410, 160, 150" atualiza só de madrugada. Mesmo com o despertador rodando várias vezes ao dia, essas duas só mudam uma vez por dia. Isso depende do dono do fluxo, não da Central.
+
+### Outros fluxos do workspace (para apps futuros)
+
+| Fluxo de dados | Tabelas vistas | Atualização |
+|---|---|---|
+| 180, 163, 150 – Att Constante | 180, 163, 150 | De hora em hora |
+| 180, 163, 390, 193 ETR | Dataatt, QRY0180, QRY0163, QRY0390, QRY0193, QRY0166, QRY0043, QRY1001 e outras (lista não vista até o fim) | De hora em hora |
+| 410, 160, 150 | 410, 160, 150 | 1x de madrugada |

@@ -1,0 +1,25 @@
+// QRY0390 — Estoque por endereço — PARTE 1 de 3
+// Salvar como: QRY0390_parte1.csv
+// Conferido em 03/11/2026: 98.527 linhas. Com 13 colunas passa do limite de
+// ~1 milhão de células por consulta, então vai em 3 partes, separadas pelo resto
+// da divisão do código do item por 3. O app junta as partes sozinho.
+// Item que não for número cai na parte 1 (IFERROR), pra nenhum ficar de fora.
+// COALESCE(..., ""): sem ele, célula vazia some da resposta e a coluna pode sumir do CSV.
+// ULTIMA_ATUALIZACAO vem da coluna "QRY0390" do fluxo de dados (data da carga).
+EVALUATE
+SELECTCOLUMNS(
+    FILTER('QRY0390', MOD(IFERROR(VALUE('QRY0390'[Item]), 0), 3) = 0),
+    "Item", COALESCE('QRY0390'[Item], ""),
+    "Descrição", COALESCE('QRY0390'[Descrição], ""),
+    "Cod Terceiro", COALESCE('QRY0390'[Cod Terceiro], ""),
+    "Local", COALESCE('QRY0390'[Local], ""),
+    "Situação", COALESCE('QRY0390'[Situação], ""),
+    "Quantidade", COALESCE('QRY0390'[Quantidade], ""),
+    "Classe Sku", COALESCE('QRY0390'[Classe Sku], ""),
+    "Classe Local", COALESCE('QRY0390'[Classe Local], ""),
+    "EAN", COALESCE('QRY0390'[EAN], ""),
+    "X1", COALESCE('QRY0390'[X1], ""),
+    "X2", COALESCE('QRY0390'[X2], ""),
+    "Predio", COALESCE('QRY0390'[Predio], ""),
+    "ULTIMA_ATUALIZACAO", FORMAT('QRY0390'[QRY0390], "yyyy-mm-dd hh:nn:ss")
+)
