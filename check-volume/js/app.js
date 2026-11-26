@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 3; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 4; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -68,6 +68,7 @@ async function nuvemGravar(chave, meta, cabExtra, partes){
   for(let i = 0; i < partes.length; i++){
     const { error } = await tab.insert({app: CV_APP, chave, versao, parte: i + 1, dados: partes[i]});
     if(error) throw error;
+    if(CV.ocupado){ CV.msg = 'Gravando ' + chave + ' na nuvem: parte ' + (i + 1) + ' de ' + partes.length + '...'; renderMsg(); }
   }
   const { error: e2 } = await tab.insert({app: CV_APP, chave, versao, parte: 0, dados: Object.assign({}, cabExtra, partes.length ? {partes: partes.length} : {}), meta: meta || null});
   if(e2) throw e2;
@@ -84,6 +85,12 @@ function dividir(linhas, limite){
   return partes;
 }
 
+/* Entregas guardadas em formato compacto (fmt 2): linhas [entrega,item,qtd,origem], cabeçalho por
+   entrega e descrição por item — a QRY0180 completa passa de 40 MB. */
+function montarEnt(linhas, cabs, descs){
+  const cab = new Map(cabs.map(x => [x[0], x])), ds = new Map(descs);
+  return linhas.map(r => { const c = cab.get(r[0]) || []; return {e: r[0], i: r[1], q: r[2], o: r[3], d: ds.get(r[1]) || '', t: c[1] || '', ev: c[2] || '', li: c[3] || '', ca: c[4] || '', vo: c[5] || 0, mo: c[6] || ''}; });
+}
 /* ---------- índices ---------- */
 function indexar(){
   CV.porEnt = new Map();
@@ -97,9 +104,9 @@ function indexar(){
 }
 async function carregar(){
   try {
-    const [cfg, ent, ei, es, ft] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo'), nuvemLer('fotos')]);
+    const [cfg, ent, ei, es, ft, ec, ed] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo'), nuvemLer('fotos'), nuvemLer('ent_cab'), nuvemLer('ent_desc')]);
     if(cfg && cfg.dados && cfg.dados.cfg) Object.assign(CV.cfg, cfg.dados.cfg);
-    CV.ent = ent ? ent.linhas : [];
+    CV.ent = !ent ? [] : (ent.dados && ent.dados.fmt === 2 ? montarEnt(ent.linhas, ec ? ec.linhas : [], ed ? ed.linhas : []) : ent.linhas);
     CV.itens = {}; (ei ? ei.linhas : []).forEach(x => { CV.itens[x[0]] = {d: x[1], e: x[2]}; });
     CV.saldo = es ? es.linhas : [];
     CV.fotoRows = ft ? ft.linhas : [];
@@ -208,6 +215,22 @@ function cvZerar(){
   CV.sess = lerSessao(CV.num); CV.ult = null; renderView(); setTimeout(focoBip, 0);
 }
 function cvNova(){ CV.num = ''; CV.sess = null; CV.linhas = []; CV.ult = null; renderView(); setTimeout(() => { const i = $('cvEnt'); if(i) i.focus(); }, 0); }
+/* Leitor de código de barras: ele digita o EAN e (na maioria) manda Enter. Se não mandar,
+   a leitura é registrada sozinha quando a digitação para (leitor digita tudo em milissegundos). */
+let _cvAuto;
+function cvAutoBip(inp){
+  clearTimeout(_cvAuto);
+  const v = inp.value.trim();
+  if(v.length < 8) return;
+  _cvAuto = setTimeout(() => { const x = inp.value.trim(); if(x.length >= 8){ inp.value = ''; bipar(x); } }, 150);
+}
+/* O campo do EAN volta a ter o foco sozinho, para o leitor sempre cair nele. */
+function cvRefoca(inp){
+  setTimeout(() => {
+    const a = document.activeElement;
+    if(CV.tab === 'conferir' && CV.sess && inp.isConnected && (!a || a === document.body || a.tagName === 'BUTTON')) inp.focus();
+  }, 60);
+}
 function focoBip(){ const i = $('cvBip'); if(i) i.focus(); }
 function cvToggle(i){ if(CV.aberto.has(i)) CV.aberto.delete(i); else CV.aberto.add(i); atualizar(); }
 
@@ -260,9 +283,9 @@ function viewConferir(){
   const semEan = CV.linhas.filter(x => !x.eans.length).length;
   return '<div class="cv-hd"><div class="cv-hd-ic">' + ICON_SCAN + '</div><div><h1>Check Volume</h1><p>Conferência de volumes por bipagem EAN · faltas, sobras e onde achar</p></div>' +
       '<div class="cv-chip"><div>Entrega<b>#' + esc(CV.num) + '</b></div>' + (r0.li ? '<div>Data limite<b>' + fData(r0.li) + '</b></div>' : '') + (r0.t ? '<div>Transportadora<b>' + esc(r0.t) + '</b></div>' : '') + '<span id="cvStatus"></span></div></div>' +
-    '<div class="cv-row0"><form class="cv-card cv-ent" onsubmit="event.preventDefault();var i=$(\'cvBip\');bipar(i.value);i.value=\'\';i.focus()">' +
+    '<div class="cv-row0"><form class="cv-card cv-ent" onsubmit="event.preventDefault();clearTimeout(_cvAuto);var i=$(\'cvBip\');var v=i.value;i.value=\'\';bipar(v);i.focus()">' +
       '<div><span class="cv-lab">Entrega</span><input class="cv-in" id="cvEntTroca" value="' + esc(CV.num) + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();abrirEntrega(this.value)}"></div>' +
-      '<div><span class="cv-lab">Bipar EAN</span><input id="cvBip" class="cv-in cv-bipin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="7908591703801"></div>' +
+      '<div><span class="cv-lab">Bipar EAN</span><input id="cvBip" class="cv-in cv-bipin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="7908591703801" oninput="cvAutoBip(this)" onblur="cvRefoca(this)"></div>' +
       '<button class="btn btn-primary" type="submit">Registrar</button></form><div id="cvKpis" class="cv-card cv-kp"></div></div>' +
     (semEan ? '<div class="field-hint" style="color:var(--danger)">' + semEan + ' item(ns) sem EAN cadastrado — para eles, digite o código do item no campo de bipagem.</div>' : '') +
     '<div class="cv-row1"><div id="cvTabela" class="cv-left"></div><div class="cv-right"><div id="cvBipado"></div><div id="cvAnd" class="cv-and"></div><div id="cvAcoes"></div></div></div>' +
@@ -343,9 +366,9 @@ function viewImportacao(){
   return '<div class="panel"><h3>Importar bases</h3><div class="panel-sub">Selecione os arquivos de uma vez (ou só o que mudou) — o app reconhece cada um pelo cabeçalho. Cada importação <b>substitui</b> a anterior e fica disponível para todos com acesso.</div>' +
     '<label class="dropzone cv-drop" id="cvDrop"><div class="dz-icon">📥</div><div class="dz-title">Arraste ou clique para escolher</div><div class="dz-desc">QRY0180 (entregas) · QRY0390 (estoque) · cadastro com URL Foto — .xlsx</div>' +
     '<input type="file" id="cvArq" accept=".xlsx,.xls" multiple hidden onchange="importar(Array.from(this.files)); this.value=\'\'"></label>' +
-    '<div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div></div>' +
+    '<div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div>' + (CV.erroImp ? '<div class="cv-res div" style="margin-top:10px">⚠ ' + esc(CV.erroImp) + '</div>' : '') + '</div>' +
     '<div class="panel cv-gap"><h3>Situação das bases</h3>' +
-    linha('QRY0180 · entregas', !!e, e ? esc(e.arquivo) + ' · ' + fInt(e.linhas) + ' linhas · <b>' + fInt(e.entregas) + ' entregas</b> · ' + fData((e.importadoEm || '').slice(0, 10)) + (e.por ? ' por ' + esc(e.por) : '') : 'Não importada.') +
+    linha('QRY0180 · entregas', !!e, e ? esc(e.arquivo) + ' · ' + fInt(e.linhas) + ' linhas · <b>' + fInt(e.entregas) + ' entregas</b>' + (e.itens ? ' · ' + fInt(e.itens) + ' itens' : '') + ' · ' + fData((e.importadoEm || '').slice(0, 10)) + (e.por ? ' por ' + esc(e.por) : '') : 'Não importada.') +
     linha('QRY0390 · estoque', !!s, s ? esc(s.arquivo) + ' · ' + fInt(s.linhas) + ' linhas · <b>' + fInt(s.itens) + ' itens com EAN</b> · ' + fInt(s.locais) + ' saldos por local · ' + fData((s.importadoEm || '').slice(0, 10)) + (s.por ? ' por ' + esc(s.por) : '') : 'Não importada. Sem ela não há EAN para bipar nem sugestão de outros locais.') +
     linha('Cadastro · fotos', !!f, f ? esc(f.arquivo) + ' · ' + fInt(f.linhas) + ' linhas · <b>' + fInt(f.itens) + ' itens com foto</b> · ' + fData((f.importadoEm || '').slice(0, 10)) + (f.por ? ' por ' + esc(f.por) : '') : 'Não importada (opcional). Planilha De-Para com as colunas Id Item e URL Foto; sem ela a foto não aparece.') + '</div>' +
     '<div class="panel cv-gap"><h3>Como funciona</h3><div class="cv-regras"><p><b>Entrega:</b> itens, quantidades e local de coleta vêm da QRY0180.</p><p><b>EAN:</b> o EAN de cada item vem da QRY0390 (coluna EAN).</p><p><b>Locais alternativos:</b> saldo disponível (<code>QTDE_DISP</code>) da QRY0390 em outros locais, conforme as regras de Configurações. O saldo é o da data da importação.</p></div></div>';
@@ -377,23 +400,25 @@ function lerArquivo(file){
       w.terminate();
       if(m.tipo === 'erro') no(new Error(m.nome + ': ' + m.msg)); else ok(m);
     };
-    w.onerror = e => { w.terminate(); no(new Error(file.name + ': ' + (e.message || 'falha ao ler'))); };
-    file.arrayBuffer().then(buf => w.postMessage({nome: file.name, buf}, [buf]), no);
+    w.onerror = e => { w.terminate(); no(new Error(file.name + ': ' + (e.message || 'falha ao ler o arquivo (pouca memória no navegador?). Feche outras abas e tente de novo.'))); };
+    try { w.postMessage({nome: file.name, file}); } catch(err){ w.terminate(); no(new Error(file.name + ': não consegui abrir o arquivo. Se ele está no OneDrive com “Sincronização pendente”, espere o ícone ficar verde ou copie para a Área de Trabalho.')); }
   });
 }
 async function importar(files){
   if(somenteLeitura()) return toast('Seu acesso é só de visualização.', true);
   if(CV.ocupado || !files.length) return;
-  CV.ocupado = true; CV.msg = 'Iniciando...'; renderView();
+  CV.ocupado = true; CV.msg = 'Iniciando...'; CV.erroImp = ''; renderView();
   try {
     const sessao = (await cvSupa.auth.getSession()).data.session, por = sessao ? sessao.user.email : '';
     for(const f of files){
       const r = await lerArquivo(f);
       if(r.base === '180'){
         CV.msg = 'Gravando entregas na nuvem...'; renderMsg();
-        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, entregas: new Set(r.dados.map(x => x.e)).size};
-        await nuvemGravar('ent', meta, {}, dividir(r.dados, 400000));
-        CV.ent = r.dados; CV.meta.ent = meta;
+        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, entregas: r.dados.cabs.length, itens: r.dados.descs.length};
+        await nuvemGravar('ent_desc', null, {}, dividir(r.dados.descs, 400000));
+        await nuvemGravar('ent_cab', null, {}, dividir(r.dados.cabs, 400000));
+        await nuvemGravar('ent', meta, {fmt: 2}, dividir(r.dados.linhas, 400000));
+        CV.ent = montarEnt(r.dados.linhas, r.dados.cabs, r.dados.descs); CV.meta.ent = meta;
       } else if(r.base === 'foto'){
         CV.msg = 'Gravando cadastro de fotos na nuvem...'; renderMsg();
         const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, itens: r.dados.length};
@@ -412,7 +437,7 @@ async function importar(files){
     if(CV.num && CV.porEnt.get(CV.num)) CV.linhas = montarLinhas(CV.porEnt.get(CV.num));
     toast('Importação concluída.');
   } catch(e){
-    console.error(e); toast(e.message || String(e), true);
+    console.error(e); CV.erroImp = (e && e.message) || String(e); toast('Importação não concluída — veja o aviso em vermelho.', true);
   } finally { CV.ocupado = false; CV.msg = ''; renderView(); }
 }
 
