@@ -65,8 +65,8 @@
     { id:'SIGEQ230', nome:'Cadastro de itens', fonte:'fluxo', ritmo:'diario',
       codigo:/SIGEQ0*230(?!\d)/i,
       apps:['checkvolume'] },
-    { id:'FOTOS', rotulo:'Fotos', nome:'Fotos dos itens (link)', fonte:'manual', ritmo:'manual',
-      codigo:/(^|[^a-z])fotos?([^a-z]|$)/i,
+    { id:'FOTOS', rotulo:'Imagens', nome:'Fotos dos itens (link)', fonte:'manual', ritmo:'manual',
+      codigo:/(^|[^a-z])(fotos?([^a-z]|$)|imagens)/i,
       apps:['checkvolume'] },
     { id:'QRY0114', nome:'Divergências de endereço', fonte:'fluxo', ritmo:'auto',
       codigo:/QRY0*114(?!\d)/i,
@@ -114,7 +114,7 @@
     var n = String(nome || '').replace(EXTENSOES, '');
     if(/(^|[\s_-])snow(flake)?$/i.test(n)) return 'snowflake';
     if(/(^|[\s_-])fluxo$/i.test(n)) return 'fluxo';
-    if(/(^|[\s_-])manual$/i.test(n)) return 'manual';
+    if(/(^|[\s_-])(manual|null)$/i.test(n)) return 'manual';
     return null;
   }
   function ficha(id){
