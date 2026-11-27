@@ -193,3 +193,6 @@ html[data-theme="dark"] .cv-loc code{ color:#fff; }
 .cv-compact .cv-cut{ max-width:105px; }
 .cv-compact td:nth-child(4).cv-cut{ max-width:170px; }
 .cv-compact th, .cv-compact td{ padding-left:8px; padding-right:8px; }
+
+.cv-chk{ display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; color:var(--ink); cursor:pointer; }
+.cv-chk input{ width:auto; }
