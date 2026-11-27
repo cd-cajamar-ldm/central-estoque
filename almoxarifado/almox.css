@@ -121,3 +121,8 @@ body.theme-dark .alx-hr.add{background:var(--alx-laranja);color:#fff;}
 .alx-sujo{color:var(--alx-at-tx);}
 .alx-erro{color:var(--alx-at-tx);}
 .alx-usa{max-width:200px;overflow:hidden;text-overflow:ellipsis;}
+.alx-st.atualizando{background:rgba(0,26,114,.1);color:var(--alx-azul);}
+.alx-st.atualizando::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--alx-laranja);margin-right:5px;vertical-align:0;animation:alxPulsa 1s ease-in-out infinite;}
+body.theme-dark .alx-st.atualizando{background:rgba(142,162,255,.16);color:#C7D2FF;}
+@keyframes alxPulsa{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.3;transform:scale(.6);}}
+@media (prefers-reduced-motion:reduce){.alx-st.atualizando::before{animation:none;}}
