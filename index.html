@@ -735,7 +735,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=17"></script>
+<script src="versao-hub.js?v=18"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
@@ -796,7 +796,9 @@
   if(!btn || !panel || !range || !veil) return;
   function aplicarVeu(pct){
     var v = Math.max(0, Math.min(1, pct / 100));
-    veil.style.background = 'linear-gradient(180deg, rgba(6,10,40,' + Math.min(1, v * 0.92).toFixed(2) + '), rgba(6,10,40,' + Math.min(1, v + 0.1).toFixed(2) + '))';
+    /* Nunca deixa a opacidade chegar a 100% — senão o vídeo some de vez
+       (fica "em branco"), mesmo com o controle no máximo. */
+    veil.style.background = 'linear-gradient(180deg, rgba(6,10,40,' + Math.min(.88, v * 0.92).toFixed(2) + '), rgba(6,10,40,' + Math.min(.93, v + 0.1).toFixed(2) + '))';
     valor.textContent = pct + '%';
   }
   var inicial = 80;
