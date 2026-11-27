@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 18; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 19; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -27,7 +27,7 @@ const CV = {
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
   ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set(),
-  etqMap: new Map(), hf: {r: '', busca: '', de: '', ate: ''}, hpag: 0, finalizando: false, ctrl: [], conf: [], trat: [], gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
+  and: [], abrindo: false, etqMap: new Map(), hf: {r: '', busca: '', de: '', ate: ''}, hpag: 0, finalizando: false, ctrl: [], conf: [], trat: [], gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
 };
 
 /* ---------- utilitários ---------- */
@@ -149,6 +149,7 @@ async function carregar(){
     CV.ctrl = await ctrlLer('ctrl').catch(() => []);
     CV.conf = await ctrlLer('conf').catch(() => []);
     CV.trat = await ctrlLer('trat').catch(() => []);
+    CV.and = await ctrlLer('and').catch(() => []);
   } catch(e){
     CV.erro = 'Não consegui ler os dados: ' + (e.message || e) + (/app_dados|relation|does not exist/i.test(String(e.message)) ? ' — a tabela app_dados ainda não foi criada no banco (migração 008).' : '');
   }
@@ -158,9 +159,9 @@ async function carregar(){
 const sessKey = n => 'cv-sessao-' + n;
 function lerSessao(n){
   try { const o = JSON.parse(localStorage.getItem(sessKey(n)) || 'null'); if(o) return o; } catch(e){}
-  return {bips: {}, desc: {}, log: [], fin: false, ini: Date.now()};
+  return {bips: {}, desc: {}, log: [], fin: false, ini: Date.now(), upd: 0};
 }
-function gravarSessao(){ try { localStorage.setItem(sessKey(CV.num), JSON.stringify(CV.sess)); } catch(e){} }
+function gravarSessao(){ if(CV.sess) CV.sess.upd = Date.now(); try { localStorage.setItem(sessKey(CV.num), JSON.stringify(CV.sess)); } catch(e){} lockAgenda(); }
 
 /* Junta as linhas da entrega por item (um item pode vir em mais de uma linha). */
 function montarLinhas(rows){
@@ -183,8 +184,47 @@ function entDaChave(dig){
   if(dig.length >= 29 && dig.length < 44) return CV.etqUlt.get(dig.slice(-9)) || '';   /* garantia: pelo pré-volume */
   return '';
 }
+/* ---------- Entrega em andamento na nuvem (trava) ----------
+   Quem abre uma entrega "reserva" ela (chave 'and'); outra pessoa que tentar abrir é avisada. A reserva vence sozinha
+   após LOCK_MIN minutos sem leitura. O andamento (contagem por item) também vai para a nuvem, então dá para continuar
+   em outro aparelho ou assumir uma entrega parada. */
+const LOCK_MIN = 30;
+const nomeDe = e => String(e || '').split('@')[0];
+const minDesde = iso => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+async function lockLer(ent){ try { return await ctrlLerUm('and', ent); } catch(e){ return undefined; } }   /* undefined = sem rede: segue sem trava */
+function lockResumo(ent, sess, rows){
+  return {id: ent, por: CV.email, upd: new Date().toISOString(), ini: new Date(sess.ini || Date.now()).toISOString(), bips: sess.bips, desc: sess.desc,
+    leituras: (sess.log || []).length, bip: Object.keys(sess.bips || {}).reduce((a, i) => a + sess.bips[i], 0), itens: new Set(rows.map(r => r.i)).size,
+    pecas: rows.reduce((a, r) => a + r.q, 0), t: rows[0] ? rows[0].t : '', meca: mecaEntrega(rows)};
+}
+async function lockGravaDe(ent, sess, rows){ try { await ctrlSalvar(lockResumo(ent, sess, rows), 'and'); } catch(e){} }
+async function lockLibera(ent){ try { await ctrlExcluir(ent, 'and'); } catch(e){} }
+let _lockT = null;
+function lockAgenda(){                                       /* no máximo uma gravação a cada 3 s enquanto bipa */
+  if(_lockT || somenteLeitura() || !CV.sess || CV.sess.fin) return;
+  _lockT = setTimeout(lockGrava, 3000);
+}
+async function lockGrava(){
+  _lockT = null;
+  if(!CV.sess || CV.sess.fin || somenteLeitura() || CV.finalizando) return;
+  const ent = CV.num, rows = CV.porEnt.get(ent) || [];
+  try {
+    const lk = await lockLer(ent);
+    if(lk && lk.por && lk.por !== CV.email && minDesde(lk.upd) < LOCK_MIN){
+      if(!CV._avisouTrava){ CV._avisouTrava = true; toast('Atenção: ' + nomeDe(lk.por) + ' assumiu esta entrega. Suas leituras não estão sendo salvas na nuvem.', true); }
+      return;
+    }
+    await ctrlSalvar(lockResumo(ent, CV.sess, rows), 'and');
+  } catch(e){}
+}
+function lockBloqueada(ent, lk){
+  CV.num = ''; CV.sess = null; CV.linhas = [];
+  CV.ult = {tipo: 'ean', txt: 'A entrega ' + ent + ' está sendo conferida por ' + nomeDe(lk.por) + ' (última leitura há ' + minDesde(lk.upd) + ' min). Peça para ela finalizar, ou use "Liberar" em Conferências feitas se ela abandonou.'};
+  beep('erro'); renderView(); setTimeout(() => { const e = $('cvEnt'); if(e){ e.focus(); e.select(); } }, 0);
+}
 /* Aceita o número da entrega, a chave picking (etiqueta de picking) ou a chave da nota — as chaves viram a entrega. */
-function abrirEntrega(n){
+async function abrirEntrega(n){
+  if(CV.abrindo) return;
   const bruto = String(n || '').trim(), dig = bruto.replace(/\D/g, '');
   if(!dig) return toast('Informe a entrega ou bipe a chave picking.', true);
   let ent = dig, viaChave = false;
@@ -195,10 +235,33 @@ function abrirEntrega(n){
     CV.ult = {tipo: 'ean', txt: (dig.length >= 20 ? 'Chave ' + dig.slice(0, 12) + '… não encontrada' : 'Entrega ' + dig + ' não encontrada') + ' na QRY0180 importada' + (CV.meta.ent && CV.meta.ent.importadoEm ? ' em ' + fData(CV.meta.ent.importadoEm.slice(0, 10)) : '') + '.' + (dig.length >= 20 && !CV.etqMap.size ? ' Importe a QRY0180 de novo para ler as chaves.' : '')};
     beep('erro'); renderView(); setTimeout(() => { const e = $('cvEnt'); if(e){ e.focus(); e.select(); } }, 0); return;
   }
-  CV.num = ent; CV.sess = lerSessao(ent); CV.linhas = montarLinhas(rows); CV.ult = null; CV.aberto = new Set(); CV.tab = 'conferir';
-  renderView(); setTimeout(focoBip, 0);
-  if(viaChave) toast('Chave picking → entrega ' + ent + '.');
-  fotosDoSite(CV.linhas.map(x => x.i));
+  CV.abrindo = true;
+  try {
+    const sess = lerSessao(ent);
+    if(!somenteLeitura()){
+      const lk = await lockLer(ent);
+      if(lk && lk.por && lk.por !== CV.email && minDesde(lk.upd) < LOCK_MIN) return lockBloqueada(ent, lk);
+      /* Há andamento na nuvem mais novo que o deste aparelho (outro aparelho ou entrega parada de outra pessoa): continua dele. */
+      if(lk && lk.bips && (!sess.upd || new Date(lk.upd).getTime() > sess.upd)){
+        sess.bips = lk.bips; sess.desc = lk.desc || {}; sess.fin = false; sess.upd = new Date(lk.upd).getTime();
+        if(lk.por !== CV.email) toast('Você assumiu a conferência de ' + nomeDe(lk.por) + ' (parada há ' + minDesde(lk.upd) + ' min).');
+      }
+      if(lk !== undefined){
+        await lockGravaDe(ent, sess, rows);                    /* reserva a entrega */
+        /* Duas pessoas abrindo ao mesmo tempo: confere de novo um instante depois (já com as duas gravações feitas). Quem perdeu a disputa é avisado e sai. */
+        setTimeout(async () => {
+          if(CV.num !== ent) return;
+          const lk2 = await lockLer(ent);
+          if(lk2 && lk2.por && lk2.por !== CV.email) lockBloqueada(ent, lk2);
+        }, 900);
+      }
+    }
+    CV._avisouTrava = false;
+    CV.num = ent; CV.sess = sess; CV.linhas = montarLinhas(rows); CV.ult = null; CV.aberto = new Set(); CV.tab = 'conferir';
+    renderView(); setTimeout(focoBip, 0);
+    if(viaChave) toast('Chave picking → entrega ' + ent + '.');
+    fotosDoSite(CV.linhas.map(x => x.i));
+  } finally { CV.abrindo = false; }
 }
 function cvSituacao(x){
   const bip = CV.sess.bips[x.i] || 0;
@@ -263,6 +326,10 @@ function cvMenos(i){
 async function cvFinalizar(){
   if(!CV.sess || CV.finalizando) return;
   const t = totais(), num = CV.num;
+  if(!somenteLeitura()){
+    const lk = await lockLer(num);
+    if(lk && lk.por && lk.por !== CV.email && minDesde(lk.upd) < LOCK_MIN && !confirm(nomeDe(lk.por) + ' assumiu a conferência da entrega ' + num + '.\n\nFinalizar mesmo assim vai sobrescrever o registro dela. Continuar?')) return;
+  }
   const partes = [t.falta ? 'falta ' + t.falta : '', t.sobra ? 'sobra ' + t.sobra : '', t.ean ? t.ean + ' EAN não identificado' : ''].filter(Boolean).join(' · ');
   /* Com divergência: oferece o Excel de Atender entrega antes de zerar (depois dá para gerar pela Gestão de divergências). */
   if(partes && window.XLSX && confirm('Entrega ' + num + ' com divergência (' + partes + ').\n\nGerar o Excel de Atender entrega antes de zerar a tela?')) cvAtender();
@@ -271,6 +338,7 @@ async function cvFinalizar(){
   try {
     await confRegistrar();
     await ctrlDaConferencia();
+    await lockLibera(num);
   } catch(e){
     CV.finalizando = false; renderView();
     return toast('Não consegui salvar a conferência (nada foi zerado, tente Finalizar de novo): ' + ((e && e.message) || e), true);
@@ -283,6 +351,7 @@ function cvReabrir(){ if(!CV.sess) return; CV.sess.fin = false; gravarSessao(); 
 function cvZerar(){
   if(!CV.sess || !confirm('Zerar toda a bipagem da entrega ' + CV.num + '?')) return;
   try { localStorage.removeItem(sessKey(CV.num)); } catch(e){}
+  lockLibera(CV.num);
   CV.sess = lerSessao(CV.num); CV.ult = null; renderView(); setTimeout(focoBip, 0);
 }
 function cvNova(){ CV.num = ''; CV.sess = null; CV.linhas = []; CV.ult = null; renderView(); setTimeout(() => { const i = $('cvEnt'); if(i) i.focus(); }, 0); }
@@ -595,15 +664,39 @@ async function ctrlSalvar(reg, chave){
   if(somenteLeitura()) throw new Error('Seu acesso é só de visualização.');
   await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', chave).eq('versao', reg.id).eq('parte', 0);
   const { error } = await cvSupa.from(CV_TAB).insert({app: CV_APP, chave, versao: reg.id, parte: 0, dados: reg});
-  if(error) throw error;
-  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
+  if(error){ const e = new Error(error.message || 'erro ao gravar'); e.code = error.code; e.conflito = error.code === '23505' || /duplicate|unique/i.test(error.message || ''); throw e; }
+  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
   if(i >= 0) lista[i] = reg; else lista.push(reg);
 }
-async function ctrlExcluir(id){
+async function ctrlExcluir(id, chave){
+  chave = chave || 'ctrl';
   if(somenteLeitura()) throw new Error('Seu acesso é só de visualização.');
-  const { error } = await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', 'ctrl').eq('versao', id).eq('parte', 0);
+  const { error } = await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', chave).eq('versao', id).eq('parte', 0);
   if(error) throw error;
-  CV.ctrl = CV.ctrl.filter(c => c.id !== id);
+  if(chave === 'and') CV.and = CV.and.filter(c => c.id !== id); else CV.ctrl = CV.ctrl.filter(c => c.id !== id);
+}
+/* Lê um registro direto da nuvem (a cópia da tela pode estar velha se outra pessoa mexeu). */
+async function ctrlLerUm(chave, id){
+  const { data, error } = await cvSupa.from(CV_TAB).select('dados').eq('app', CV_APP).eq('chave', chave).eq('versao', id).eq('parte', 0).limit(1);
+  if(error) throw error;
+  return (data && data[0] && data[0].dados) || null;
+}
+/* Altera só os campos pedidos sobre a versão MAIS RECENTE da nuvem: não apaga o que outra pessoa mudou nesse meio tempo. */
+async function ctrlAtualiza(chave, id, campos){
+  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : CV.ctrl;
+  const conteudo = Object.keys(campos).filter(k => k !== 'upd' && k !== 'por' && k !== 'ent');   /* horário e autor da gravação sempre diferem entre duas pessoas */
+  for(let t = 0; t < 4; t++){
+    let ult = null;
+    try { ult = await ctrlLerUm(chave, id); } catch(e){ /* sem rede para ler: usa a cópia da tela */ }
+    ult = ult || lista.find(c => c.id === id) || {};
+    try { await ctrlSalvar(Object.assign({}, ult, campos, {id}), chave); }
+    catch(e){ if(e.conflito && t < 3) continue; throw e; }   /* outra pessoa gravou agora: lê a versão dela e soma */
+    /* Confere um instante depois: se duas pessoas gravaram quase juntas, a última pode ter apagado a outra — regrava somando as duas. */
+    await new Promise(r => setTimeout(r, 500));
+    let conf = null;
+    try { conf = await ctrlLerUm(chave, id); } catch(e){ return; }
+    if(!conf || conteudo.every(k => JSON.stringify(conf[k]) === JSON.stringify(campos[k]))) return;
+  }
 }
 /* Cada conferência finalizada vira um registro (chave 'conf', um por entrega): é a base da taxa de acerto,
    do tempo de conferência e da comparação entre mecas e conferentes no Dashboard. */
@@ -701,19 +794,19 @@ async function cvCSalvarNovo(){
 }
 async function cvCTipo(id, tipo){
   const c = achaCtrl(id); if(!c || c.tipo === tipo) return;
-  try { await ctrlSalvar(Object.assign({}, c, {tipo})); } catch(e){ toast((e && e.message) || String(e), true); }
+  try { await ctrlAtualiza('ctrl', id, {tipo}); } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
 }
 async function cvCAtender(id){
   const c = achaCtrl(id); if(!c) return;
   const at = c.st !== 'atendida';
-  try { await ctrlSalvar(Object.assign({}, c, {st: at ? 'atendida' : 'aberta', at: at ? new Date().toISOString() : '', atpor: at ? CV.email : ''})); } catch(e){ toast((e && e.message) || String(e), true); }
+  try { await ctrlAtualiza('ctrl', id, {st: at ? 'atendida' : 'aberta', at: at ? new Date().toISOString() : '', atpor: at ? CV.email : ''}); } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
 }
 async function cvCObs(id){
   const c = achaCtrl(id); if(!c) return;
   const v = prompt('Observação:', c.obs || ''); if(v === null) return;
-  try { await ctrlSalvar(Object.assign({}, c, {obs: v.trim()})); } catch(e){ toast((e && e.message) || String(e), true); }
+  try { await ctrlAtualiza('ctrl', id, {obs: v.trim()}); } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
 }
 async function cvCExcluir(id){
@@ -782,8 +875,7 @@ let _cvGB; function cvGBusca(v){ CV.gf.busca = v; clearTimeout(_cvGB); _cvGB = s
 function cvGAbre(e){ if(CV.gaberta.has(e)) CV.gaberta.delete(e); else CV.gaberta.add(e); renderView(); }
 /* Grava a tratativa da entrega (um registro por entrega, chave 'trat'). */
 async function gSalvar(ent, campos){
-  const antes = CV.trat.find(t => t.id === ent) || {};
-  await ctrlSalvar(Object.assign({}, antes, campos, {id: ent, ent, upd: new Date().toISOString(), por: CV.email}), 'trat');
+  await ctrlAtualiza('trat', ent, Object.assign({}, campos, {ent, upd: new Date().toISOString(), por: CV.email}));
 }
 async function cvGSet(ent, campo, valor){
   const g = entregasDiv().find(x => x.ent === ent); if(!g) return;
@@ -792,7 +884,7 @@ async function cvGSet(ent, campo, valor){
     await gSalvar(ent, campo === 'st' && valor === 'Resolvida' ? {st: valor, resolvida: new Date().toISOString()} : {[campo]: valor});
     /* Resolver a entrega atende todas as ocorrências dela; reabrir devolve para aberta. */
     if(campo === 'st' && (valor === 'Resolvida') !== eraResolvida){
-      for(const c of g.ocs) await ctrlSalvar(Object.assign({}, c, {st: valor === 'Resolvida' ? 'atendida' : 'aberta', at: valor === 'Resolvida' ? new Date().toISOString() : '', atpor: valor === 'Resolvida' ? CV.email : ''}));
+      for(const c of g.ocs) await ctrlAtualiza('ctrl', c.id, {st: valor === 'Resolvida' ? 'atendida' : 'aberta', at: valor === 'Resolvida' ? new Date().toISOString() : '', atpor: valor === 'Resolvida' ? CV.email : ''});
     }
   } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
@@ -814,29 +906,34 @@ function cvGExportar(){
 /* ---------- Registro de conferências: toda entrega bipada, com ou sem divergência ---------- */
 /* Conferências ainda não finalizadas ficam no aparelho (localStorage): entram na lista como "Em andamento". */
 function sessoesAbertas(){
-  const out = [];
+  const out = CV.and.map(a => ({id: a.id, ts: a.upd, por: a.por, ent: a.id, t: a.t || '', meca: a.meca || '', itens: a.itens || 0, pecas: a.pecas || 0, bip: a.bip || 0, andamento: true, leituras: a.leituras || 0, nuvem: true, parada: minDesde(a.upd)}));
+  const naNuvem = new Set(CV.and.map(a => a.id));
   try {
     for(let i = 0; i < localStorage.length; i++){
       const k = localStorage.key(i); if(!k || k.indexOf('cv-sessao-') !== 0) continue;
       const ent = k.slice(10), o = JSON.parse(localStorage.getItem(k) || 'null');
-      if(!o || o.fin || !o.log || !o.log.length) continue;
+      if(!o || o.fin || !o.log || !o.log.length || naNuvem.has(ent)) continue;
       const rows = CV.porEnt.get(ent) || [], ts = o.log[o.log.length - 1].t;
       out.push({id: ent, ts: new Date(ts).toISOString(), por: CV.email, ent, t: rows[0] ? rows[0].t : '', meca: mecaEntrega(rows), itens: new Set(rows.map(r => r.i)).size,
-        pecas: rows.reduce((a, r) => a + r.q, 0), bip: Object.keys(o.bips || {}).reduce((a, i) => a + o.bips[i], 0), andamento: true, leituras: o.log.length});
+        pecas: rows.reduce((a, r) => a + r.q, 0), bip: Object.keys(o.bips || {}).reduce((a, i) => a + o.bips[i], 0), andamento: true, leituras: o.log.length, parada: minDesde(new Date(ts).toISOString())});
     }
   } catch(e){}
   return out;
 }
+async function cvLiberar(ent){
+  if(!confirm('Liberar a entrega ' + ent + '? Use só se a conferência foi abandonada: quem estava conferindo perde a reserva.')) return;
+  try { await ctrlExcluir(ent, 'and'); toast('Entrega ' + ent + ' liberada.'); } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
 function hLista(){
   const f = CV.hf, q = f.busca.trim().toLowerCase();
-  const ids = new Set(CV.conf.map(c => c.id));
-  const todas = CV.conf.concat(sessoesAbertas().filter(c => !ids.has(c.id)));
+  const todas = CV.conf.concat(sessoesAbertas());
   return todas.filter(c => (!f.r || (f.r === 'and' ? c.andamento : f.r === 'div' ? (!c.andamento && c.div) : (!c.andamento && !c.div))) && (!f.de || c.ts.slice(0, 10) >= f.de) && (!f.ate || c.ts.slice(0, 10) <= f.ate) &&
     (!q || [c.ent, c.t, c.por, mecaNome(ehMeca(c.meca) ? c.meca : mecaEntrega(CV.porEnt.get(c.ent)))].join(' ').toLowerCase().indexOf(q) >= 0)).sort((a, b) => b.ts.localeCompare(a.ts));
 }
 function viewHistorico(){
   if(CV.carregando) return '<p class="field-hint">Carregando...</p>';
-  const POR = 100, lista = hLista(), tudo = CV.conf.length + sessoesAbertas().filter(c => !CV.conf.some(x => x.id === c.id)).length;
+  const POR = 100, lista = hLista(), tudo = CV.conf.length + sessoesAbertas().length;
   const pags = Math.max(1, Math.ceil(lista.length / POR)); if(CV.hpag >= pags) CV.hpag = pags - 1;
   const nDiv = CV.conf.filter(c => c.div).length, nAnd = tudo - CV.conf.length;
   const chip = (v, t) => '<button class="chip' + (CV.hf.r === v ? ' active' : '') + '" onclick="cvHF(\'r\',\'' + v + '\')">' + t + '</button>';
@@ -848,9 +945,9 @@ function viewHistorico(){
     '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Data / hora</th><th>Entrega</th><th>Conferente</th><th>Meca</th><th>Transportadora</th><th class="n">Itens</th><th class="n">Previstas</th><th class="n">Bipadas</th><th class="n">Falta</th><th class="n">Sobra</th><th class="n">EAN n/id</th><th>Resultado</th><th class="n">Tempo</th><th></th></tr></thead><tbody>' +
     (lista.length ? lista.slice(CV.hpag * POR, CV.hpag * POR + POR).map(c => '<tr><td>' + dtBR(c.ts) + '</td><td class="cv-mono"><b>' + esc(c.ent) + '</b></td><td class="cv-cut">' + esc((c.por || '').split('@')[0]) + '</td><td class="cv-cut">' + esc(mecaNome(ehMeca(c.meca) ? c.meca : mecaEntrega(CV.porEnt.get(c.ent)))) + '</td><td class="cv-cut">' + esc(c.t || '') + '</td>' +
       '<td class="n">' + fInt(c.itens) + '</td><td class="n">' + fInt(c.pecas) + '</td><td class="n"><b>' + fInt(c.bip) + '</b></td>' +
-      (c.andamento ? '<td class="n">—</td><td class="n">—</td><td class="n">—</td><td><span class="cv-pill cv-pend">Em andamento</span></td><td class="n">—</td>' :
+      (c.andamento ? '<td class="n">—</td><td class="n">—</td><td class="n">—</td><td><span class="cv-pill cv-pend">Em andamento</span></td><td class="n" title="última leitura">há ' + fMin(c.parada * 60) + '</td>' :
       '<td class="n">' + (c.falta ? '<b style="color:#B45309">' + fInt(c.falta) + '</b>' : '0') + '</td><td class="n">' + (c.sobra ? '<b style="color:#7E22CE">' + fInt(c.sobra) + '</b>' : '0') + '</td><td class="n">' + (c.ean ? '<b style="color:var(--danger)">' + fInt(c.ean) + '</b>' : '0') + '</td><td><span class="cv-pill ' + (c.div ? 'cv-falta' : 'cv-ok') + '">' + (c.div ? 'Com divergência' : 'Sem divergência') + '</span></td><td class="n">' + (c.dur > 0 ? fMin(c.dur) : '—') + '</td>') +
-      '<td class="n"><button class="btn-link" onclick="abrirEntrega(\'' + sq(c.ent) + '\')">Abrir</button></td></tr>').join('')
+      '<td class="n" style="white-space:nowrap"><button class="btn-link" onclick="abrirEntrega(\'' + sq(c.ent) + '\')">Abrir</button>' + (c.nuvem && !somenteLeitura() ? ' <button class="btn-danger-text" onclick="cvLiberar(\'' + sq(c.ent) + '\')">Liberar</button>' : '') + '</td></tr>').join('')
       : '<tr><td colspan="14" class="field-hint" style="padding:16px">Nenhuma conferência registrada. Cada entrega fica aqui ao clicar em Finalizar conferência.</td></tr>') + '</tbody></table></div>' +
     '<div class="field-hint" style="margin-top:8px">' + fInt(lista.length) + ' conferência(s) · ' + fInt(pecas) + ' peças bipadas</div>' +
     (pags > 1 ? '<div class="cv-pag"><button class="btn btn-secondary" onclick="cvHPag(-1)"' + (CV.hpag === 0 ? ' disabled' : '') + '>←</button><span>Página ' + (CV.hpag + 1) + ' de ' + pags + '</span><button class="btn btn-secondary" onclick="cvHPag(1)"' + (CV.hpag >= pags - 1 ? ' disabled' : '') + '>→</button></div>' : '');
@@ -1116,7 +1213,7 @@ function renderView(){
   if(CV.tab === 'conferir' && $('cvKpis')) atualizar();
   if(sc) sc.scrollTop = y;
 }
-function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard' || t === 'gestao' || t === 'historico') Promise.all([ctrlLer('ctrl'), ctrlLer('conf'), ctrlLer('trat')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; CV.trat = r[2]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
+function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard' || t === 'gestao' || t === 'historico') Promise.all([ctrlLer('ctrl'), ctrlLer('conf'), ctrlLer('trat'), ctrlLer('and')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; CV.trat = r[2]; CV.and = r[3]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
 function cvPag(n){ CV.pag += n; renderView(); }
 let _cvBT; function cvBuscaEnt(v){ CV.busca = v; CV.pag = 0; clearTimeout(_cvBT); _cvBT = setTimeout(() => { renderView(); const i = $('cvBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
 function cvToggleSidebar(){ const el = $('sidebar'); if(matchMedia('(max-width:860px)').matches) el.classList.toggle('mobile-open'); else el.classList.toggle('collapsed'); }
