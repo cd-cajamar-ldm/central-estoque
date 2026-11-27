@@ -130,6 +130,10 @@ try {
   Excel { $excel.Visible = [bool]$Visivel }
   Excel { $excel.DisplayAlerts = $false }
   Excel { $excel.AskToUpdateLinks = $false }
+  # Arquivo que a pessoa abrir com dois cliques NÃO pode cair neste Excel escondido
+  # (ele seria fechado junto no fim, sem salvar). Desligado de novo antes de sair,
+  # porque essa opção fica gravada no Excel do computador.
+  Excel { $excel.IgnoreRemoteRequests = $true }
 
   # Cada arquivo é atualizado numa CÓPIA no computador (pasta temporária) e só
   # depois volta para a pasta Bases. Abrir direto o arquivo sincronizado faz o
@@ -218,6 +222,8 @@ try {
   $falhas++
 } finally {
   if ($excel) {
+    try { Excel { $excel.IgnoreRemoteRequests = $false } } catch {}
+    # Só fecha se não sobrou nenhuma planilha que não seja nossa aberta nele.
     try { Excel { $excel.Quit() } } catch {}
     [void][Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
   }
