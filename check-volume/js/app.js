@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 14; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 15; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -26,7 +26,7 @@ const CV = {
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
   ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set(),
-  ctrl: [], conf: [], trat: [], gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
+  etqMap: new Map(), ctrl: [], conf: [], trat: [], gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
 };
 
 /* ---------- utilitários ---------- */
@@ -132,13 +132,14 @@ function indexar(){
 }
 async function carregar(){
   try {
-    const [cfg, ent, ei, es, ft, ec, ed, en2] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo'), nuvemLer('fotos'), nuvemLer('ent_cab'), nuvemLer('ent_desc'), nuvemLer('eans')]);
+    const [cfg, ent, ei, es, ft, ec, ed, en2, etq] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo'), nuvemLer('fotos'), nuvemLer('ent_cab'), nuvemLer('ent_desc'), nuvemLer('eans'), nuvemLer('ent_etq')]);
     if(cfg && cfg.dados && cfg.dados.cfg) Object.assign(CV.cfg, cfg.dados.cfg);
     CV.ent = !ent ? [] : (ent.dados && ent.dados.fmt === 2 ? montarEnt(ent.linhas, ec ? ec.linhas : [], ed ? ed.linhas : []) : ent.linhas);
     CV.itens = {}; (ei ? ei.linhas : []).forEach(x => { CV.itens[x[0]] = {d: x[1], e: x[2]}; });
     CV.saldo = es ? es.linhas : [];
     CV.fotoRows = ft ? ft.linhas : [];
     CV.eanRows = en2 ? en2.linhas : [];
+    CV.etqMap = new Map(etq ? etq.linhas : []);
     CV.meta = {ent: ent && ent.meta, est: es && es.meta, foto: ft && ft.meta, ean: en2 && en2.meta};
     indexar();
     CV.ctrl = await ctrlLer('ctrl').catch(() => []);
@@ -169,17 +170,21 @@ function montarLinhas(rows){
   });
   return Array.from(m.values());
 }
+/* Aceita o número da entrega, a chave picking (etiqueta de picking) ou a chave da nota — as chaves viram a entrega. */
 function abrirEntrega(n){
-  n = String(n || '').trim().replace(/\D/g, '');
-  if(!n) return toast('Informe o número da entrega.', true);
-  const rows = CV.porEnt.get(n);
+  const bruto = String(n || '').trim(), dig = bruto.replace(/\D/g, '');
+  if(!dig) return toast('Informe a entrega ou bipe a chave picking.', true);
+  let ent = dig, viaChave = false;
+  if(!CV.porEnt.has(ent) && CV.etqMap.has(dig)){ ent = CV.etqMap.get(dig); viaChave = true; }
+  const rows = CV.porEnt.get(ent);
   if(!rows){
     CV.num = ''; CV.sess = null; CV.linhas = [];
-    CV.ult = {tipo: 'ean', txt: 'Entrega ' + n + ' não encontrada na QRY0180 importada' + (CV.meta.ent && CV.meta.ent.importadoEm ? ' em ' + fData(CV.meta.ent.importadoEm.slice(0, 10)) : '') + '.'};
+    CV.ult = {tipo: 'ean', txt: (dig.length >= 20 ? 'Chave ' + dig.slice(0, 12) + '… não encontrada' : 'Entrega ' + dig + ' não encontrada') + ' na QRY0180 importada' + (CV.meta.ent && CV.meta.ent.importadoEm ? ' em ' + fData(CV.meta.ent.importadoEm.slice(0, 10)) : '') + '.' + (dig.length >= 20 && !CV.etqMap.size ? ' Importe a QRY0180 de novo para ler as chaves.' : '')};
     beep('erro'); renderView(); setTimeout(() => { const e = $('cvEnt'); if(e){ e.focus(); e.select(); } }, 0); return;
   }
-  CV.num = n; CV.sess = lerSessao(n); CV.linhas = montarLinhas(rows); CV.ult = null; CV.aberto = new Set(); CV.tab = 'conferir';
+  CV.num = ent; CV.sess = lerSessao(ent); CV.linhas = montarLinhas(rows); CV.ult = null; CV.aberto = new Set(); CV.tab = 'conferir';
   renderView(); setTimeout(focoBip, 0);
+  if(viaChave) toast('Chave picking → entrega ' + ent + '.');
   fotosDoSite(CV.linhas.map(x => x.i));
 }
 function cvSituacao(x){
@@ -205,6 +210,7 @@ function bipar(codigo){
   if(!CV.sess){ toast('Informe a entrega primeiro.', true); const e = $('cvEnt'); if(e) e.focus(); return; }
   const cod = String(codigo || '').trim(); if(!cod) return;
   const k = normEan(cod);
+  if(k.length >= 20 && CV.etqMap.has(k)){ abrirEntrega(k); return; }   /* bipou a chave picking de outra entrega: troca de entrega */
   let item = k ? CV.eanMap.get(k) : null;
   let x = item ? CV.linhas.find(l => l.i === item) : null;
   if(!x) x = CV.linhas.find(l => l.i === cod || l.eans.some(e => normEan(e) === k && k)) || null; // digitou o código do item / EAN que só a 390 conhece
@@ -257,9 +263,18 @@ function cvNova(){ CV.num = ''; CV.sess = null; CV.linhas = []; CV.ult = null; r
 let _cvAuto;
 const TAM_EAN = [8, 12, 13, 14];
 let _cvT0 = 0;
+/* Campo da entrega: o leitor lê a chave picking inteira (29 dígitos) em milissegundos; mesmo sem Enter, abre a entrega. */
+let _cvAE, _cvTE = 0;
+function cvAutoEnt(inp){
+  clearTimeout(_cvAE);
+  if(inp.value.length === 1) _cvTE = Date.now();
+  const n = inp.value.trim().length;
+  if(n < 20 || (Date.now() - _cvTE) / n > 40) return;
+  _cvAE = setTimeout(() => abrirEntrega(inp.value), 80);
+}
 function cvAutoBip(inp){
   clearTimeout(_cvAuto);
-  if(!CV.sess) return;
+  if(!CV.sess){ if(inp.value.length === 1) _cvT0 = Date.now(); const n = inp.value.trim().length; if(n >= 20 && (Date.now() - _cvT0) / n <= 40) _cvAuto = setTimeout(() => { const v = inp.value; inp.value = ''; abrirEntrega(v); }, 80); return; }
   if(inp.value.length === 1) _cvT0 = Date.now();           /* começou a digitar */
   const n = inp.value.trim().length;
   if(TAM_EAN.indexOf(n) < 0) return;
@@ -378,7 +393,7 @@ function viewConferir(){
   return '<div class="cv-hd"><div class="cv-hd-ic">' + ICON_SCAN + '</div><div><h1>Check Volume</h1><p>Conferência de volumes por bipagem EAN · faltas, sobras e onde achar</p></div>' +
       (sess ? '<div class="cv-chip"><div>Entrega<b>#' + esc(CV.num) + '</b></div>' + (r0.li ? '<div>Data limite<b>' + fData(r0.li) + '</b></div>' : '') + (r0.t ? '<div>Transportadora<b>' + esc(r0.t) + '</b></div>' : '') + '<span id="cvStatus"></span></div>' : '') + '</div>' +
     '<div class="cv-row0"><form class="cv-card cv-ent" onsubmit="event.preventDefault();cvSubmit()">' +
-      '<div><span class="cv-lab">Entrega</span><input class="cv-in" id="cvEnt" inputmode="numeric" autocomplete="off" placeholder="Entrega" value="' + esc(CV.num) + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();abrirEntrega(this.value)}"></div>' +
+      '<div><span class="cv-lab">Entrega</span><input class="cv-in" id="cvEnt" inputmode="numeric" autocomplete="off" placeholder="Entrega ou chave picking" value="' + esc(CV.num) + '" oninput="cvAutoEnt(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();abrirEntrega(this.value)}"></div>' +
       '<div><span class="cv-lab">Bipar EAN</span><input id="cvBip" class="cv-in cv-bipin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="7908591703801" oninput="cvAutoBip(this)" onblur="cvRefoca(this)"></div>' +
       '<button class="btn btn-primary" type="submit">' + (sess ? 'Registrar' : 'Carregar') + '</button></form><div id="cvKpis" class="cv-card cv-kp"></div></div>' +
     (semEan ? '<div class="field-hint" style="color:var(--danger)">' + semEan + ' item(ns) sem EAN cadastrado — para eles, digite o código do item no campo de bipagem.</div>' : '') +
@@ -390,8 +405,8 @@ function cvSubmit(){
   clearTimeout(_cvAuto);
   const b = $('cvBip'), e = $('cvEnt');
   if(!CV.sess){
-    if(!e.value.trim() && b.value.trim()){ b.value = ''; return bipar(''); }
-    return abrirEntrega(e.value);
+    const v = e.value.trim() || b.value.trim(); b.value = '';
+    return abrirEntrega(v);
   }
   const v = b.value; b.value = ''; bipar(v); b.focus();
 }
@@ -869,6 +884,8 @@ async function importar(files){
         const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, entregas: r.dados.cabs.length, itens: r.dados.descs.length};
         await nuvemGravar('ent_desc', null, {}, dividir(r.dados.descs, 400000));
         await nuvemGravar('ent_cab', null, {}, dividir(r.dados.cabs, 400000));
+        await nuvemGravar('ent_etq', null, {}, dividir(r.dados.chaves, 400000));
+        CV.etqMap = new Map(r.dados.chaves);
         await nuvemGravar('ent', meta, {fmt: 2}, dividir(r.dados.linhas, 400000));
         CV.ent = montarEnt(r.dados.linhas, r.dados.cabs, r.dados.descs); CV.meta.ent = meta;
       } else if(r.base === 'ean'){
