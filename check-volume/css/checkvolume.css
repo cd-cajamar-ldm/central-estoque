@@ -207,3 +207,8 @@ html[data-theme="dark"] .cv-loc code{ color:#fff; }
 .cv-itens th, .cv-itens td{ padding-left:6px; padding-right:6px; }
 .cv-itens .cv-desc{ max-width:165px; }
 .cv-itens .cv-eancol{ letter-spacing:-.2px; }
+
+/* Texto copiável (clicar e arrastar / duplo clique) */
+.cv-tab td, .cv-bp .c, .cv-falta-card, .cv-hd, .cv-chip, .cv-kp{ user-select:text; -webkit-user-select:text; }
+.cv-tab tr.clicavel td{ cursor:pointer; }
+.cv-tab tr.clicavel td:hover{ cursor:pointer; }
