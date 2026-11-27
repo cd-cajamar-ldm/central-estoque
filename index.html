@@ -40,7 +40,7 @@
   /* SIDEBAR — azul-marinho fixo, não acompanha o tema (âncora visual da marca) */
   .sidebar{width:252px;flex-shrink:0;position:relative;overflow:hidden;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
   .sidebar-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
-  .sidebar-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(6,10,40,.86),rgba(6,10,40,.93));}
+  .sidebar-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(6,10,40,.5),rgba(6,10,40,.86) 55%,rgba(6,10,40,.96));}
   .sidebar > .brand,.sidebar > .sb-nav,.sidebar > .sb-favs,.sidebar > .sb-foot{position:relative;z-index:2;}
   @media(prefers-reduced-motion:reduce){.sidebar-bg{display:none;}}
   .brand{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
@@ -735,7 +735,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=14"></script>
+<script src="versao-hub.js?v=18"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
@@ -796,7 +796,9 @@
   if(!btn || !panel || !range || !veil) return;
   function aplicarVeu(pct){
     var v = Math.max(0, Math.min(1, pct / 100));
-    veil.style.background = 'linear-gradient(180deg, rgba(6,10,40,' + Math.min(1, v * 0.92).toFixed(2) + '), rgba(6,10,40,' + Math.min(1, v + 0.1).toFixed(2) + '))';
+    /* Nunca deixa a opacidade chegar a 100% — senão o vídeo some de vez
+       (fica "em branco"), mesmo com o controle no máximo. */
+    veil.style.background = 'linear-gradient(180deg, rgba(6,10,40,' + Math.min(.88, v * 0.92).toFixed(2) + '), rgba(6,10,40,' + Math.min(.93, v + 0.1).toFixed(2) + '))';
     valor.textContent = pct + '%';
   }
   var inicial = 80;
