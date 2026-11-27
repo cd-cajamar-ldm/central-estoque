@@ -320,3 +320,17 @@ body.atd-aberto{ overflow:hidden; }
 }
 .atd-nav{ display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface); border-bottom:1px solid var(--line); } .atd-nav > div{ flex:1; text-align:center; font-size:14px; } .atd-nav button{ min-width:44px; min-height:44px; border-radius:10px; border:1px solid var(--line); background:var(--surface2); color:var(--ink); font-size:22px; cursor:pointer; } .atd-nav .atd-tg{ font-size:12px; font-weight:700; padding:0 10px; min-width:0; }
 .atd-fim{ text-align:center; background:var(--surface); border:1px solid var(--line); border-left:6px solid #1F8A52; border-radius:12px; padding:28px 16px; } .atd-fim b{ font-size:20px; color:#1F8A52; } .atd-fim p{ color:var(--ink-soft); font-size:14px; }
+
+/* ---- Atender entrega: cores da marca LDM (laranja #FE5000 / azul #001A72) ---- */
+.atd-top{ background:#001A72; color:#fff; border-bottom:4px solid #FE5000; } .atd-top small{ color:#C9D2F0; }
+.atd-x{ background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.3); color:#fff; }
+.atd-prog{ background:rgba(0,26,114,.15); } .atd-prog u{ background:#FE5000; }
+.atd-card{ border-left-color:#FE5000; } .atd-card.ok{ border-left-color:#001A72; opacity:.85; } .atd-card.nao{ border-left-color:#6B7280; }
+.atd-st{ background:rgba(254,80,0,.12); color:#FE5000; } .atd-st.ok{ background:rgba(0,26,114,.10); color:var(--dxb); } .atd-st.nao{ background:var(--surface2); color:var(--ink-soft); }
+.atd-b.ok{ background:#FE5000; border-color:#FE5000; color:#fff; } .atd-b.no{ color:var(--dxb); border-color:var(--dxb); }
+.atd-loc.ok{ background:rgba(0,26,114,.07); } .atd-loc.no{ background:var(--surface2); }
+.atd-nl{ color:var(--dxb); } .atd-nl.on{ background:var(--surface2); }
+.atd-nav button{ background:#001A72; border-color:#001A72; color:#fff; } .atd-nav .atd-tg{ background:var(--surface2); border-color:var(--line); color:var(--ink); }
+.atd-fim{ border-left-color:#FE5000; } .atd-fim b{ color:var(--dxb); }
+.atd-foot .btn-orange{ background:#FE5000; border-color:#FE5000; color:#fff; }
+:root[data-theme="dark"] .atd-top{ background:#0B1536; }
