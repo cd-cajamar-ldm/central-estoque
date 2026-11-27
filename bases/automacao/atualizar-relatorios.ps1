@@ -15,7 +15,10 @@
 param(
   # Sem -Pasta: usa a pasta de cima (o script mora em Bases\_automacao).
   [string]$Pasta = (Split-Path -Parent $PSScriptRoot),
-  [int]$MinutosMaximoPorArquivo = 20
+  [int]$MinutosMaximoPorArquivo = 20,
+  # -Visivel: mostra o Excel trabalhando (usado no "ATUALIZAR AGORA", para ver se
+  # alguma janelinha do Excel está esperando resposta).
+  [switch]$Visivel
 )
 $Pasta = (Resolve-Path $Pasta).Path
 
@@ -27,6 +30,23 @@ function Anotar([string]$texto) {
   $linha = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss') + '  ' + $texto
   Add-Content -Path $log -Value $linha -Encoding UTF8
   Write-Host $linha
+}
+
+# O Excel às vezes responde "ocupado" (chamada rejeitada) enquanto abre um arquivo
+# ou carrega algo. Em vez de desistir, espera meio segundo e tenta de novo (até 2 min).
+function Excel([scriptblock]$acao) {
+  $tentativas = 0
+  while ($true) {
+    try { return (& $acao) }
+    catch {
+      $ex = $_.Exception
+      while ($ex.InnerException) { $ex = $ex.InnerException }
+      $ocupado = ($ex.HResult -eq -2147418111) -or ($ex.HResult -eq -2147417846)  # 0x80010001 / 0x8001010A
+      if (-not $ocupado -or $tentativas -ge 240) { throw }
+      $tentativas++
+      Start-Sleep -Milliseconds 500
+    }
+  }
 }
 
 # Uma rodada por vez: se a anterior ainda estiver rodando, esta desiste.
@@ -43,37 +63,38 @@ try {
 
   Anotar ("Início da rodada: " + $arquivos.Count + " arquivo(s).")
   $excel = New-Object -ComObject Excel.Application
-  $excel.Visible = $false
-  $excel.DisplayAlerts = $false
-  $excel.AskToUpdateLinks = $false
+  Start-Sleep -Seconds 3
+  Excel { $excel.Visible = [bool]$Visivel }
+  Excel { $excel.DisplayAlerts = $false }
+  Excel { $excel.AskToUpdateLinks = $false }
 
   foreach ($arq in $arquivos) {
     $inicio = Get-Date
     $livro = $null
     try {
-      $livro = $excel.Workbooks.Open($arq.FullName, 0, $false)
-      if ($livro.ReadOnly) { throw 'arquivo aberto por outra pessoa/programa (somente leitura)' }
+      $livro = Excel { $excel.Workbooks.Open($arq.FullName, 0, $false) }
+      if (Excel { $livro.ReadOnly }) { throw 'arquivo aberto por outra pessoa/programa (somente leitura)' }
 
       # Atualização em segundo plano desligada: assim o "Atualizar tudo" só
       # devolve quando terminou de verdade, e o arquivo é salvo já com os dados novos.
-      foreach ($c in $livro.Connections) {
-        try { $c.OLEDBConnection.BackgroundQuery = $false } catch {}
-        try { $c.ODBCConnection.BackgroundQuery = $false } catch {}
+      foreach ($c in (Excel { @($livro.Connections) })) {
+        try { Excel { $c.OLEDBConnection.BackgroundQuery = $false } } catch {}
+        try { Excel { $c.ODBCConnection.BackgroundQuery = $false } } catch {}
       }
-      $livro.RefreshAll()
-      $excel.CalculateUntilAsyncQueriesDone()
+      Excel { $livro.RefreshAll() }
+      Excel { $excel.CalculateUntilAsyncQueriesDone() }
 
       if (((Get-Date) - $inicio).TotalMinutes -gt $MinutosMaximoPorArquivo) {
         Anotar ("AVISO " + $arq.Name + ": demorou mais de " + $MinutosMaximoPorArquivo + " min.")
       }
-      $livro.Save()
+      Excel { $livro.Save() }
       $ok++
       Anotar ("OK    " + $arq.Name + " (" + [int]((Get-Date) - $inicio).TotalSeconds + " s)")
     } catch {
       $falhas++
       Anotar ("ERRO  " + $arq.Name + ": " + $_.Exception.Message)
     } finally {
-      if ($livro) { try { $livro.Close($false) } catch {}; [void][Runtime.InteropServices.Marshal]::ReleaseComObject($livro) }
+      if ($livro) { try { Excel { $livro.Close($false) } } catch {}; [void][Runtime.InteropServices.Marshal]::ReleaseComObject($livro) }
     }
   }
 
@@ -87,7 +108,7 @@ try {
   $falhas++
 } finally {
   if ($excel) {
-    try { $excel.Quit() } catch {}
+    try { Excel { $excel.Quit() } } catch {}
     [void][Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
   }
   [GC]::Collect(); [GC]::WaitForPendingFinalizers()
