@@ -196,3 +196,14 @@ html[data-theme="dark"] .cv-loc code{ color:#fff; }
 
 .cv-chk{ display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; color:var(--ink); cursor:pointer; }
 .cv-chk input{ width:auto; }
+
+/* Tabela de itens da entrega: uma linha por item */
+.cv-itens td{ padding:3px 8px; }
+.cv-itens .cv-th{ width:26px; height:26px; font-size:12px; border-radius:5px; }
+.cv-itens .cv-desc{ max-width:230px; overflow:hidden; text-overflow:ellipsis; }
+.cv-itens .cv-eancol{ font-size:11px; color:var(--ink-soft); font-weight:400; }
+.cv-itens .btn-link{ padding:0 4px; }
+
+.cv-itens th, .cv-itens td{ padding-left:6px; padding-right:6px; }
+.cv-itens .cv-desc{ max-width:165px; }
+.cv-itens .cv-eancol{ letter-spacing:-.2px; }
