@@ -38,13 +38,17 @@
   .shell{display:flex;min-height:100vh;width:100%;}
 
   /* SIDEBAR — azul-marinho fixo, não acompanha o tema (âncora visual da marca) */
-  .sidebar{width:252px;flex-shrink:0;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
+  .sidebar{width:252px;flex-shrink:0;position:relative;overflow:hidden;background:#0B1230;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;padding:28px 24px;color:#C7CCEA;}
+  .sidebar-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
+  .sidebar-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(6,10,40,.86),rgba(6,10,40,.93));}
+  .sidebar > .brand,.sidebar > .sb-nav,.sidebar > .sb-favs,.sidebar > .sb-foot{position:relative;z-index:2;}
+  @media(prefers-reduced-motion:reduce){.sidebar-bg{display:none;}}
   .brand{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
   .brand-logo{position:relative;width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#FF8A4C,var(--orange) 55%,#C83812);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;overflow:hidden;border:none;box-shadow:0 10px 22px -6px rgba(254,80,0,.6),inset 0 1px 0 rgba(255,255,255,.35);transition:transform .25s;padding:0;}
   .brand-logo:hover{transform:translateY(-2px) scale(1.045);}
   .brand-logo::before{content:'';position:absolute;top:-50%;left:-70%;width:55%;height:220%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:rotate(18deg);animation:shine 5s ease-in-out infinite;}
   @keyframes shine{0%{left:-70%;}38%{left:150%;}100%{left:150%;}}
-  .brand-logo img{position:relative;z-index:1;width:70%;height:70%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));pointer-events:none;}
+  .brand-logo img{position:relative;z-index:1;width:92%;height:92%;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));pointer-events:none;}
   .brand-logo:hover img{animation:wiggle 1s ease-in-out infinite;}
   @keyframes wiggle{0%,100%{transform:rotate(0deg);}25%{transform:rotate(-9deg);}75%{transform:rotate(9deg);}}
   .brand-logo.spin img{animation:spin360 .6s cubic-bezier(.34,1.56,.64,1);}
@@ -73,14 +77,28 @@
   .wheel-mark{position:absolute;left:50%;top:50%;width:620px;height:620px;transform:translate(-50%,-50%);opacity:.08;pointer-events:none;z-index:0;color:var(--ink);animation:wheelspin 20s linear infinite;}
   @keyframes wheelspin{to{transform:translate(-50%,-50%) rotate(360deg);}}
 
-  .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;z-index:2;}
+  .topbar{position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;z-index:15;}
   .topbar h1{font-family:'Poppins',sans-serif;font-size:26px;font-weight:800;margin:0;}
   .topbar p{margin:5px 0 0;color:var(--ink-soft);font-size:13.5px;max-width:480px;}
   .topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;}
   .cd-badge{background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);font-size:11px;font-weight:700;letter-spacing:.04em;padding:7px 14px;border-radius:100px;}
-  .theme-switch{position:relative;width:54px;height:28px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);cursor:pointer;flex-shrink:0;padding:0;}
-  .theme-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;transition:left .3s cubic-bezier(.2,.8,.2,1);box-shadow:0 3px 8px -2px rgba(254,80,0,.6);}
-  .theme-switch.on .theme-knob{left:29px;}
+  .layout-wrap{position:relative;}
+  .layout-btn{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:999px;background:var(--chip-bg);border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;flex-shrink:0;}
+  .layout-btn:hover,.layout-btn.on{color:var(--orange);border-color:var(--orange);}
+  .layout-panel{position:absolute;top:44px;right:0;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px;min-width:220px;box-shadow:0 18px 34px -14px var(--shadow-col);}
+  .layout-panel[hidden]{display:none;}
+  .layout-label{margin:6px 10px 6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);}
+  .layout-divider{height:1px;background:var(--line);margin:6px 2px;}
+  .layout-field{padding:2px 10px 10px;}
+  .layout-field label{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:8px;}
+  .layout-field label span:last-child{color:var(--ink-soft);font-weight:700;font-variant-numeric:tabular-nums;}
+  .layout-field input[type=range]{width:100%;accent-color:var(--orange);}
+  .layout-opt{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;border-radius:9px;padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer;text-align:left;font-family:'Inter',sans-serif;}
+  .layout-opt:hover{background:var(--chip-bg);}
+  .layout-opt-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);flex-shrink:0;position:relative;}
+  .layout-opt.active{color:var(--ink);}
+  .layout-opt.active .layout-opt-dot{border-color:var(--orange);}
+  .layout-opt.active .layout-opt-dot::after{content:'';position:absolute;inset:2px;border-radius:50%;background:var(--orange);}
 
   /* Zoom da tela, igual ao dos apps da Oficina (Inventário Rotativo etc.):
      flutua no canto para não empurrar o conteúdo e continua ao alcance
@@ -398,6 +416,8 @@
 <div class="shell">
 
   <aside class="sidebar">
+    <video class="sidebar-bg" autoplay muted loop playsinline aria-hidden="true" src="brand/sidebar-fundo.mp4"></video>
+    <div class="sidebar-veil"></div>
     <div class="brand">
       <button class="brand-logo" id="brandLogo" type="button" aria-label="Oficina LDM">
         <img src="brand/Logo_LDM_icon.png" alt="">
@@ -498,10 +518,22 @@
         <p id="viewSubtitle">Dados, indicadores e operação do CD conectados em um único ambiente.</p>
       </div>
       <div class="topbar-actions">
-        <span class="cd-badge">CD CAJAMAR</span>
-        <button class="theme-switch" id="themeSwitch" type="button" aria-label="Alternar tema claro/escuro">
-          <span class="theme-knob" id="themeKnob"></span>
-        </button>
+        <div class="layout-wrap">
+          <button class="layout-btn" id="layoutBtn" type="button" aria-label="Ajustes de layout" title="Layout">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          </button>
+          <div class="layout-panel" id="layoutPanel" hidden>
+            <p class="layout-label">Layout</p>
+            <div class="layout-field">
+              <label for="veuRange"><span>Escuridão do véu</span><span id="veuValor">80%</span></label>
+              <input type="range" id="veuRange" min="40" max="95" step="1" value="80">
+            </div>
+            <div class="layout-divider"></div>
+            <p class="layout-label">Tema</p>
+            <button class="layout-opt" type="button" data-tema="light"><span class="layout-opt-dot"></span>Claro</button>
+            <button class="layout-opt" type="button" data-tema="dark"><span class="layout-opt-dot"></span>Escuro</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -703,7 +735,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="version.js"></script>
-<script src="versao-hub.js?v=9"></script>
+<script src="versao-hub.js?v=14"></script>
 <script src="vendor/supabase.js"></script>
 <script>
   (function(){
@@ -738,22 +770,50 @@
     document.addEventListener('visibilitychange', function(){ if(!document.hidden) checar(); });
   })();
 (function(){
-  var SUN = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
-  var MOON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  var btn = document.getElementById('themeSwitch');
-  var knob = document.getElementById('themeKnob');
+  var opts = document.querySelectorAll('.layout-opt[data-tema]');
+  if(!opts.length) return;
   function apply(dark){
     document.body.classList.toggle('theme-dark', dark);
-    btn.classList.toggle('on', dark);
-    knob.innerHTML = dark ? MOON : SUN;
+    opts.forEach(function(o){ o.classList.toggle('active', (o.dataset.tema === 'dark') === dark); });
   }
   var dark = false;
   try { dark = localStorage.getItem('ldm-theme') === 'dark'; } catch(e){}
   apply(dark);
-  btn.addEventListener('click', function(){
-    dark = !dark;
-    apply(dark);
-    try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
+  opts.forEach(function(o){
+    o.addEventListener('click', function(){
+      dark = o.dataset.tema === 'dark';
+      apply(dark);
+      try { localStorage.setItem('ldm-theme', dark ? 'dark' : 'light'); } catch(e){}
+    });
+  });
+})();
+(function(){
+  var btn = document.getElementById('layoutBtn');
+  var panel = document.getElementById('layoutPanel');
+  var range = document.getElementById('veuRange');
+  var valor = document.getElementById('veuValor');
+  var veil = document.querySelector('.sidebar-veil');
+  if(!btn || !panel || !range || !veil) return;
+  function aplicarVeu(pct){
+    var v = Math.max(0, Math.min(1, pct / 100));
+    veil.style.background = 'linear-gradient(180deg, rgba(6,10,40,' + Math.min(1, v * 0.92).toFixed(2) + '), rgba(6,10,40,' + Math.min(1, v + 0.1).toFixed(2) + '))';
+    valor.textContent = pct + '%';
+  }
+  var inicial = 80;
+  try { inicial = parseInt(localStorage.getItem('ldm-veu'), 10) || 80; } catch(e){}
+  range.value = inicial;
+  aplicarVeu(inicial);
+  range.addEventListener('input', function(){
+    aplicarVeu(Number(range.value));
+    try { localStorage.setItem('ldm-veu', range.value); } catch(e){}
+  });
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    panel.hidden = !panel.hidden;
+    btn.classList.toggle('on', !panel.hidden);
+  });
+  document.addEventListener('click', function(e){
+    if(!panel.hidden && !panel.contains(e.target) && e.target !== btn) { panel.hidden = true; btn.classList.remove('on'); }
   });
 })();
 (function(){
@@ -943,6 +1003,14 @@ document.getElementById('brandLogo').addEventListener('click', function(){
       desc:'Controle de vencimento dos itens em estoque — em desenvolvimento.',
       keywords:'validade vencimento vencidos lote',
       status:'Em produção', tv:''
+    },
+    {
+      key:'checkvolume', href:'./check-volume/', color:'#1D4ED8',
+      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M11 8v8M15 8v8M18 8v8"/></svg>',
+      name:'Check Volume',
+      desc:'Conferência de volumes de pedidos por bipagem EAN, identificação de faltas, sobras e sugestões de reposição.',
+      keywords:'check volume conferencia bipagem ean entrega faltas sobras scanner qry0180 qry0390',
+      status:'Disponível', tv:''
     },
     {
       key:'tarefasapp', href:'./tarefas/', color:'#A21CAF',

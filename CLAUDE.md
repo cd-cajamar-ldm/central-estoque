@@ -12,3 +12,6 @@
 - Todo app criado neste repositório deve nascer com: tela de login (copiar `multiplos-descasados/js/acesso.js` e `css/acesso.css`), `app_key` próprio no catálogo do hub (`index.html`) e liberação por pessoa em Configurações, com nível **Pode editar / Só visualizar** (`supabase-acessos/`).
 - Dados compartilhados entre pessoas ficam no Supabase (tabela própria, com RLS usando `acessos.pode_acessar('<app_key>')` para ler e `acessos.pode_editar('<app_key>')` para gravar) — nunca só no navegador. Modelo: `multiplos-descasados/js/nuvem.js` e `supabase-acessos/migrations/004`–`006`.
 - No nível "visualizar", esconder Importação/Configurações e não gravar nada (`window.LDM_SOMENTE_LEITURA`).
+
+## Aviso de atualização (todo app)
+- Todo app novo inclui `<script src="../vendor/atualizacao.js" defer></script>` no fim do `index.html`. Ele mostra a barra "Nova versão disponível — Atualizar agora" quando sai um deploy novo (compara o commit de `/version.js`). Não recarregar a página sozinho no `sw.js`/`index.html`: só o aviso.
