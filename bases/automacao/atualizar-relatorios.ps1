@@ -1,7 +1,7 @@
 ﻿<#
   ATUALIZAR RELATÓRIOS EXCEL — Central de Estoque (CD Cajamar)
   ------------------------------------------------------------
-  Abre cada .xlsx da pasta, clica "Atualizar tudo" (Power Query: Snowflake pelo
+  Copia cada .xlsx da pasta para o computador, abre, clica "Atualizar tudo" (Power Query: Snowflake pelo
   ODBC, fluxos de dados...), espera terminar, salva e fecha. Um arquivo de cada vez.
   Relatório novo na pasta entra sozinho na próxima rodada.
 
@@ -68,12 +68,20 @@ try {
   Excel { $excel.DisplayAlerts = $false }
   Excel { $excel.AskToUpdateLinks = $false }
 
+  # Cada arquivo é atualizado numa CÓPIA no computador (pasta temporária) e só
+  # depois volta para a pasta Bases. Abrir direto o arquivo sincronizado faz o
+  # Excel "registrar" no SharePoint que ele está aberto; se uma rodada trava, o
+  # SharePoint fica achando que continua aberto e as próximas não conseguem abrir.
+  $temp = Join-Path $env:TEMP 'CentralEstoque-relatorios'
+  New-Item -ItemType Directory -Force -Path $temp | Out-Null
+
   foreach ($arq in $arquivos) {
     $inicio = Get-Date
     $livro = $null
+    $copia = Join-Path $temp $arq.Name
     try {
-      $livro = Excel { $excel.Workbooks.Open($arq.FullName, 0, $false) }
-      if (Excel { $livro.ReadOnly }) { throw 'arquivo aberto por outra pessoa/programa (somente leitura)' }
+      Copy-Item -LiteralPath $arq.FullName -Destination $copia -Force
+      $livro = Excel { $excel.Workbooks.Open($copia, 0, $false) }
 
       # Atualização em segundo plano desligada: assim o "Atualizar tudo" só
       # devolve quando terminou de verdade, e o arquivo é salvo já com os dados novos.
@@ -83,11 +91,23 @@ try {
       }
       Excel { $livro.RefreshAll() }
       Excel { $excel.CalculateUntilAsyncQueriesDone() }
+      Excel { $livro.Save() }
+      Excel { $livro.Close($false) }
+      [void][Runtime.InteropServices.Marshal]::ReleaseComObject($livro)
+      $livro = $null
+
+      # Devolve para a pasta Bases. Se alguém estiver com o arquivo aberto, tenta
+      # por 1 minuto; se não der, fica para a próxima rodada.
+      $devolvido = $false
+      for ($t = 0; $t -lt 12 -and -not $devolvido; $t++) {
+        try { Copy-Item -LiteralPath $copia -Destination $arq.FullName -Force; $devolvido = $true }
+        catch { Start-Sleep -Seconds 5 }
+      }
+      if (-not $devolvido) { throw 'atualizou, mas não consegui devolver para a pasta (arquivo aberto por alguém?)' }
 
       if (((Get-Date) - $inicio).TotalMinutes -gt $MinutosMaximoPorArquivo) {
         Anotar ("AVISO " + $arq.Name + ": demorou mais de " + $MinutosMaximoPorArquivo + " min.")
       }
-      Excel { $livro.Save() }
       $ok++
       Anotar ("OK    " + $arq.Name + " (" + [int]((Get-Date) - $inicio).TotalSeconds + " s)")
     } catch {
@@ -95,6 +115,7 @@ try {
       Anotar ("ERRO  " + $arq.Name + ": " + $_.Exception.Message)
     } finally {
       if ($livro) { try { Excel { $livro.Close($false) } } catch {}; [void][Runtime.InteropServices.Marshal]::ReleaseComObject($livro) }
+      Remove-Item -LiteralPath $copia -Force -ErrorAction SilentlyContinue
     }
   }
 
