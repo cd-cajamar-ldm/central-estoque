@@ -24,7 +24,15 @@ $Pasta = (Resolve-Path $Pasta).Path
 
 $script = Join-Path $PSScriptRoot 'atualizar-relatorios.ps1'
 $argumentos = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script + '" -Pasta "' + $Pasta + '"'
-$acao = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argumentos
+# "conhost --headless" roda o PowerShell SEM abrir janela nenhuma. Só com
+# -WindowStyle Hidden a janela preta ainda pisca na tela (e pode roubar o que
+# a pessoa está digitando). Windows antigo sem esse recurso: volta ao jeito simples.
+$build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber
+if ($build -ge 18362) {
+  $acao = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument ('--headless powershell.exe ' + $argumentos)
+} else {
+  $acao = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argumentos
+}
 $gatilho = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
   -RepetitionInterval (New-TimeSpan -Minutes $Minutos) -RepetitionDuration (New-TimeSpan -Days 3650)
 $quem = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
