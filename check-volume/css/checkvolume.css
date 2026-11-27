@@ -212,3 +212,18 @@ html[data-theme="dark"] .cv-loc code{ color:#fff; }
 .cv-tab td, .cv-bp .c, .cv-falta-card, .cv-hd, .cv-chip, .cv-kp{ user-select:text; -webkit-user-select:text; }
 .cv-tab tr.clicavel td{ cursor:pointer; }
 .cv-tab tr.clicavel td:hover{ cursor:pointer; }
+
+/* ---- Dashboard em grade larga (usa toda a tela) ---- */
+.cv-kpis-d{ grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); }
+.cv-kpi small{ display:block; font-size:11px; color:var(--ink-soft); margin-top:2px; }
+.cv-dgrid{ grid-template-columns:repeat(4,minmax(0,1fr)); }
+.cv-dgrid .s2{ grid-column:span 2; }
+.cv-dgrid .cv-dc:first-child{ grid-column:span 2; }
+.cv-dc h4 span{ font-size:11px; font-weight:500; color:var(--ink-soft); margin-left:8px; }
+.cv-sc2{ overflow:auto; max-height:360px; }
+.cv-stk{ width:100%; max-width:26px; display:flex; flex-direction:column; justify-content:flex-end; border-radius:4px 4px 0 0; overflow:hidden; min-height:2px; }
+.cv-stk i{ display:block; width:100%; }
+.cv-leg-h{ display:flex; gap:16px; margin-top:10px; }
+.cv-dc{ min-height:210px; }
+@media (max-width:1500px){ .cv-dgrid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:860px){ .cv-dgrid{ grid-template-columns:1fr; } .cv-dgrid .s2, .cv-dgrid .cv-dc:first-child{ grid-column:auto; } }
