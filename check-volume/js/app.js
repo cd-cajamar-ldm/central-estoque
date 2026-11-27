@@ -6,12 +6,13 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 13; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 14; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
   entregas: ['Entregas', 'Entregas da QRY0180 importada.'],
   controle: ['Controle de Entregas', 'Divergências apontadas e ocorrências fora da conferência.'],
+  gestao: ['Gestão de divergências', 'Uma linha por entrega divergente, com classificação e tratativa.'],
   dashboard: ['Dashboard de divergências', 'Indicadores das ocorrências registradas.'],
   importacao: ['Importação', 'Bases do Check Volume.'],
   configuracoes: ['Configurações', 'Regras das sugestões de outros locais.']
@@ -25,7 +26,7 @@ const CV = {
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
   ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set(),
-  ctrl: [], conf: [], cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
+  ctrl: [], conf: [], trat: [], gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
 };
 
 /* ---------- utilitários ---------- */
@@ -142,6 +143,7 @@ async function carregar(){
     indexar();
     CV.ctrl = await ctrlLer('ctrl').catch(() => []);
     CV.conf = await ctrlLer('conf').catch(() => []);
+    CV.trat = await ctrlLer('trat').catch(() => []);
   } catch(e){
     CV.erro = 'Não consegui ler os dados: ' + (e.message || e) + (/app_dados|relation|does not exist/i.test(String(e.message)) ? ' — a tabela app_dados ainda não foi criada no banco (migração 008).' : '');
   }
@@ -241,7 +243,7 @@ function cvMenos(i){
 function cvFinalizar(){
   if(!CV.sess) return; CV.sess.fin = true; gravarSessao(); CV.aberto = new Set(); renderView();
   confRegistrar().catch(() => {});
-  ctrlDaConferencia().then(n => { if(n) toast(n + ' divergência(s) registrada(s) em Controle de Entregas.'); }).catch(e => toast('Não consegui registrar no Controle de Entregas: ' + ((e && e.message) || e), true));
+  ctrlDaConferencia().then(n => { if(n){ const t = totais(); toast('Divergência registrada na Gestão de divergências: ' + [t.falta ? 'falta ' + t.falta : '', t.sobra ? 'sobra ' + t.sobra : '', t.ean ? t.ean + ' EAN não identificado' : ''].filter(Boolean).join(' · ') + '.'); } }).catch(e => toast('Não consegui registrar no Controle de Entregas: ' + ((e && e.message) || e), true));
 }
 function cvReabrir(){ if(!CV.sess) return; CV.sess.fin = false; gravarSessao(); renderView(); setTimeout(focoBip, 0); }
 function cvZerar(){
@@ -527,8 +529,12 @@ async function cvSalvarCfg(){
 /* ---------- Controle de Entregas (divergências apontadas) ---------- */
 /* Cada ocorrência é uma linha própria em app_dados (chave 'ctrl', versão = id): várias pessoas
    registram ao mesmo tempo sem sobrescrever o trabalho umas das outras. */
-const TIPOS = ['Falta', 'Sobra', 'EAN não identificado', 'Avaria', 'Item não localizado', 'Outro'];
-const TIPO_COR = {'Falta': '#F59E0B', 'Sobra': '#7E22CE', 'EAN não identificado': '#C83812', 'Avaria': '#0E7490', 'Item não localizado': '#6B7280', 'Outro': '#001A72'};
+const TIPOS = ['Falta', 'Sobra', 'Inversão', 'EAN não identificado', 'Avaria', 'Item não localizado', 'Pedido correto', 'Outro'];
+const TIPO_COR = {'Falta': '#F59E0B', 'Sobra': '#7E22CE', 'Inversão': '#DB2777', 'EAN não identificado': '#C83812', 'Avaria': '#0E7490', 'Item não localizado': '#6B7280', 'Pedido correto': '#1F8A52', 'Outro': '#001A72'};
+/* Gestão por entrega: classificação da divergência e andamento da tratativa. */
+const CLASSES = ['A classificar', 'Falta', 'Sobra', 'Inversão', 'Avaria', 'Pedido correto', 'Outro'];
+const STATUS_TR = ['Aberta', 'Em tratativa', 'Aguardando retorno', 'Resolvida'];
+const STATUS_COR = {'Aberta': '#F59E0B', 'Em tratativa': '#0E7490', 'Aguardando retorno': '#7E22CE', 'Resolvida': '#1F8A52'};
 async function ctrlLer(chave){
   chave = chave || 'ctrl';
   const out = []; let a = 0;
@@ -547,7 +553,7 @@ async function ctrlSalvar(reg, chave){
   await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', chave).eq('versao', reg.id).eq('parte', 0);
   const { error } = await cvSupa.from(CV_TAB).insert({app: CV_APP, chave, versao: reg.id, parte: 0, dados: reg});
   if(error) throw error;
-  const lista = chave === 'conf' ? CV.conf : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
+  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
   if(i >= 0) lista[i] = reg; else lista.push(reg);
 }
 async function ctrlExcluir(id){
@@ -616,7 +622,7 @@ function viewControle(){
   }
   h += '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Data</th><th>Entrega</th><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Transportadora</th><th>Meca</th><th>Observação</th><th>Por</th><th>Status</th><th></th></tr></thead><tbody>' +
     (lista.length ? lista.slice(CV.cpag * POR, CV.cpag * POR + POR).map(c => '<tr><td>' + dtBR(c.ts) + '</td><td class="cv-mono"><b>' + esc(c.ent) + '</b></td><td class="cv-mono">' + esc(c.item || '') + '</td><td class="cv-cut" title="' + esc(c.d) + '">' + esc(c.d) + '</td>' +
-      '<td><span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span></td><td class="n"><b>' + fInt(c.q) + '</b></td><td class="cv-cut" title="' + esc(c.orig) + '">' + esc(c.orig || '') + '</td><td class="cv-cut">' + esc(c.t || '') + '</td><td class="cv-cut">' + esc(mecaNome(c.meca)) + '</td>' +
+      '<td>' + (ro ? '<span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span>' : '<select class="cv-in-s cv-tipo-s" style="border-color:' + (TIPO_COR[c.tipo] || '#001A72') + '" onchange="cvCTipo(\'' + esc(c.id).replace(/'/g, '') + '\',this.value)">' + TIPOS.map(t => '<option' + (t === c.tipo ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>') + '</td><td class="n"><b>' + fInt(c.q) + '</b></td><td class="cv-cut" title="' + esc(c.orig) + '">' + esc(c.orig || '') + '</td><td class="cv-cut">' + esc(c.t || '') + '</td><td class="cv-cut">' + esc(mecaNome(c.meca)) + '</td>' +
       '<td class="cv-cut" title="' + esc(c.obs) + '">' + esc(c.obs || '') + '</td><td class="cv-cut" title="' + esc(c.por) + '">' + esc((c.por || '').split('@')[0]) + '</td>' +
       '<td><span class="cv-pill ' + (c.st === 'atendida' ? 'cv-ok' : 'cv-falta') + '">' + (c.st === 'atendida' ? 'Atendida' : 'Aberta') + '</span></td><td class="n cv-act">' + (ro ? '' :
       '<button class="btn-link" onclick="cvCAtender(\'' + esc(c.id).replace(/'/g, '') + '\')">' + (c.st === 'atendida' ? 'Reabrir' : 'Atender') + '</button> <button class="btn-link" onclick="cvCObs(\'' + esc(c.id).replace(/'/g, '') + '\')">Obs</button> <button class="btn-danger-text" onclick="cvCExcluir(\'' + esc(c.id).replace(/'/g, '') + '\')">Excluir</button>') + '</td></tr>').join('')
@@ -635,6 +641,11 @@ async function cvCSalvarNovo(){
   const rows = CV.porEnt.get(ent) || [], r = item ? rows.find(x => x.i === item) : null;
   const reg = {id: 'M|' + Date.now() + '|' + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), por: CV.email, ent, item, d: r ? r.d : ((CV.itens[item] && CV.itens[item].d) || ''), tipo, q, orig: $('cnOrig').value.trim() || (r ? r.o : ''), t: rows[0] ? rows[0].t : '', meca: rows[0] ? (rows[0].op || '') : '', ca: rows[0] ? (rows[0].ca || '') : '', mo: rows[0] ? (rows[0].mo || '') : '', src: 'manual', st: 'aberta', obs: $('cnObs').value.trim()};
   try { await ctrlSalvar(reg); CV.cnovo = false; toast('Ocorrência registrada.'); } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+async function cvCTipo(id, tipo){
+  const c = achaCtrl(id); if(!c || c.tipo === tipo) return;
+  try { await ctrlSalvar(Object.assign({}, c, {tipo})); } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
 }
 async function cvCAtender(id){
@@ -662,6 +673,88 @@ function cvCExportar(){
   XLSX.writeFile(wb, 'controle-de-entregas.xlsx');
 }
 
+/* ---------- Gestão de divergências: uma linha por entrega divergente ---------- */
+const sq = v => String(v == null ? '' : v).replace(/'/g, '');
+function classeAuto(ocs){
+  const t = new Set(ocs.map(c => c.tipo));
+  const base = ['Falta', 'Sobra'].filter(x => t.has(x));
+  if(base.length === 1 && t.size === 1) return base[0];
+  if(t.size === 1) return Array.from(t)[0];
+  return 'A classificar';
+}
+/* Junta as ocorrências por entrega e as tratativas gravadas. */
+function entregasDiv(){
+  const m = new Map(), tr = new Map(CV.trat.map(t => [t.id, t]));
+  CV.ctrl.forEach(c => { let g = m.get(c.ent); if(!g) m.set(c.ent, g = {ent: c.ent, ocs: [], t: c.t || '', meca: c.meca || '', ts: c.ts}); g.ocs.push(c); if(c.ts < g.ts) g.ts = c.ts; if(!g.t && c.t) g.t = c.t; if(!g.meca && c.meca) g.meca = c.meca; });
+  return Array.from(m.values()).map(g => {
+    const t = tr.get(g.ent) || {};
+    g.tr = t; g.classe = t.classe || classeAuto(g.ocs);
+    g.st = t.st || (g.ocs.every(c => c.st === 'atendida') ? 'Resolvida' : 'Aberta');
+    g.q = g.ocs.reduce((a, c) => a + (c.q || 0), 0); g.itens = new Set(g.ocs.map(c => c.item)).size;
+    return g;
+  }).sort((a, b) => b.ts.localeCompare(a.ts));
+}
+function gFiltradas(){
+  const f = CV.gf, q = f.busca.trim().toLowerCase();
+  return entregasDiv().filter(g => (!f.st || (f.st === 'abertas' ? g.st !== 'Resolvida' : g.st === f.st)) && (!f.classe || g.classe === f.classe) &&
+    (!q || [g.ent, g.t, g.meca, g.classe, g.tr.resp, g.tr.trat].join(' ').toLowerCase().indexOf(q) >= 0));
+}
+function viewGestao(){
+  if(CV.carregando) return '<p class="field-hint">Carregando...</p>';
+  const ro = somenteLeitura(), todas = entregasDiv(), lista = gFiltradas();
+  const nAb = todas.filter(g => g.st !== 'Resolvida').length;
+  const chip = (v, t) => '<button class="chip' + (CV.gf.st === v ? ' active' : '') + '" onclick="cvGF(\'st\',\'' + v + '\')">' + t + '</button>';
+  let h = '<div class="filter-bar cv-fb">' + chip('', 'Todas · ' + todas.length) + chip('abertas', 'Em aberto · ' + nAb) + STATUS_TR.map(st => chip(st, st + ' · ' + todas.filter(g => g.st === st).length)).join('') +
+    '<select class="cv-in-s" onchange="cvGF(\'classe\',this.value)"><option value="">Todas as classificações</option>' + CLASSES.map(c => '<option' + (CV.gf.classe === c ? ' selected' : '') + '>' + c + '</option>').join('') + '</select>' +
+    '<input type="text" id="cvGBusca" class="cv-in-s" style="flex:1;min-width:180px" placeholder="Buscar entrega, transportadora, meca, responsável..." value="' + esc(CV.gf.busca) + '" oninput="cvGBusca(this.value)">' +
+    '<button class="btn btn-secondary btn-sm" onclick="cvGExportar()">Exportar</button></div>';
+  h += '<div class="table-wrap"><table class="cv-tab cv-compact cv-gtab"><thead><tr><th></th><th>Entrega</th><th>Data</th><th>Transportadora</th><th>Meca</th><th>Divergências</th><th class="n">Peças</th><th>Classificação</th><th>Status da tratativa</th><th>Responsável</th><th>Tratativa</th><th class="n">Idade</th></tr></thead><tbody>' +
+    (lista.length ? lista.map(g => {
+      const e = sq(g.ent), aberto = CV.gaberta.has(g.ent), cont = {};
+      g.ocs.forEach(c => { cont[c.tipo] = (cont[c.tipo] || 0) + (c.q || 0); });
+      const sel = (opts, atual, campo, cor) => ro ? '<span class="cv-pill" style="background:' + cor + '">' + esc(atual) + '</span>' : '<select class="cv-in-s cv-tipo-s" style="border-color:' + cor + '" onchange="cvGSet(\'' + e + '\',\'' + campo + '\',this.value)">' + opts.map(o => '<option' + (o === atual ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>';
+      const txt = (campo, v, rot) => ro ? esc(v || '') : '<span class="cv-edit" title="' + esc(v || 'Clique para editar') + '" onclick="cvGTexto(\'' + e + '\',\'' + campo + '\',\'' + rot + '\')">' + (v ? esc(v.length > 40 ? v.slice(0, 40) + '…' : v) : '<span class="field-hint">+ ' + rot.toLowerCase() + '</span>') + '</span>';
+      return '<tr class="' + (g.st === 'Resolvida' ? 'g-ok' : '') + '"><td class="n"><button class="btn-link" onclick="cvGAbre(\'' + e + '\')">' + (aberto ? '▾' : '▸') + '</button></td><td class="cv-mono"><b>' + esc(g.ent) + '</b></td><td>' + fData(g.ts.slice(0, 10)) + '</td><td class="cv-cut">' + esc(g.t) + '</td><td class="cv-cut">' + esc(mecaNome(g.meca)) + '</td>' +
+        '<td>' + Object.keys(cont).map(t => '<span class="cv-pill" style="background:' + (TIPO_COR[t] || '#001A72') + '" title="' + esc(t) + '">' + esc(t.replace('EAN não identificado', 'EAN')) + ' ' + cont[t] + '</span>').join(' ') + '</td><td class="n"><b>' + fInt(g.q) + '</b></td>' +
+        '<td>' + sel(CLASSES, g.classe, 'classe', TIPO_COR[g.classe] || '#6B7280') + '</td><td>' + sel(STATUS_TR, g.st, 'st', STATUS_COR[g.st]) + '</td><td class="cv-cut">' + txt('resp', g.tr.resp, 'Responsável') + '</td><td class="cv-cut" style="max-width:240px">' + txt('trat', g.tr.trat, 'Tratativa') + '</td><td class="n">' + (g.st === 'Resolvida' ? '—' : diasDesde(g.ts) + ' d') + '</td></tr>' +
+        (aberto ? '<tr class="cv-det"><td></td><td colspan="11"><table class="cv-tab cv-compact"><thead><tr><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Status</th></tr></thead><tbody>' + g.ocs.map(c => '<tr><td class="cv-mono">' + esc(c.item || '') + '</td><td>' + esc(c.d || '') + '</td><td><span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span></td><td class="n">' + fInt(c.q) + '</td><td>' + esc(c.orig || '') + '</td><td>' + (c.st === 'atendida' ? 'Atendida' : 'Aberta') + '</td></tr>').join('') + '</tbody></table></td></tr>' : '');
+    }).join('') : '<tr><td colspan="12" class="field-hint" style="padding:16px">Nenhuma entrega divergente. Elas aparecem aqui quando uma conferência é finalizada com divergência.</td></tr>') + '</tbody></table></div>';
+  return h;
+}
+function cvGF(k, v){ CV.gf[k] = v; renderView(); }
+let _cvGB; function cvGBusca(v){ CV.gf.busca = v; clearTimeout(_cvGB); _cvGB = setTimeout(() => { renderView(); const i = $('cvGBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
+function cvGAbre(e){ if(CV.gaberta.has(e)) CV.gaberta.delete(e); else CV.gaberta.add(e); renderView(); }
+/* Grava a tratativa da entrega (um registro por entrega, chave 'trat'). */
+async function gSalvar(ent, campos){
+  const antes = CV.trat.find(t => t.id === ent) || {};
+  await ctrlSalvar(Object.assign({}, antes, campos, {id: ent, ent, upd: new Date().toISOString(), por: CV.email}), 'trat');
+}
+async function cvGSet(ent, campo, valor){
+  const g = entregasDiv().find(x => x.ent === ent); if(!g) return;
+  try {
+    const eraResolvida = g.st === 'Resolvida';
+    await gSalvar(ent, campo === 'st' && valor === 'Resolvida' ? {st: valor, resolvida: new Date().toISOString()} : {[campo]: valor});
+    /* Resolver a entrega atende todas as ocorrências dela; reabrir devolve para aberta. */
+    if(campo === 'st' && (valor === 'Resolvida') !== eraResolvida){
+      for(const c of g.ocs) await ctrlSalvar(Object.assign({}, c, {st: valor === 'Resolvida' ? 'atendida' : 'aberta', at: valor === 'Resolvida' ? new Date().toISOString() : '', atpor: valor === 'Resolvida' ? CV.email : ''}));
+    }
+  } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+async function cvGTexto(ent, campo, rot){
+  const t = CV.trat.find(x => x.id === ent) || {};
+  const v = prompt(rot + ' da entrega ' + ent + ':', t[campo] || ''); if(v === null) return;
+  try { await gSalvar(ent, {[campo]: v.trim()}); } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+function cvGExportar(){
+  if(!window.XLSX) return toast('Biblioteca de Excel ainda carregando, tente de novo.', true);
+  const l = [['Entrega', 'Data', 'Transportadora', 'Meca', 'Classificação', 'Status da tratativa', 'Responsável', 'Tratativa', 'Itens', 'Peças', 'Divergências', 'Idade (dias)']];
+  gFiltradas().forEach(g => l.push([g.ent, fData(g.ts.slice(0, 10)), g.t, mecaNome(g.meca), g.classe, g.st, g.tr.resp || '', g.tr.trat || '', g.itens, g.q, g.ocs.map(c => c.tipo + ' ' + c.q).join(' · '), g.st === 'Resolvida' ? '' : diasDesde(g.ts)]));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, planilha(l, [12, 11, 22, 22, 16, 18, 20, 44, 7, 7, 40, 11]), 'Gestão de divergências');
+  XLSX.writeFile(wb, 'gestao-de-divergencias.xlsx');
+}
+
 /* ---------- Dashboard das divergências ---------- */
 function barrasH(lista, cor, max){
   const m = Math.max(1, ...lista.map(x => x[1]));
@@ -686,6 +779,7 @@ function viewDashboard(){
   if(CV.carregando) return '<p class="field-hint">Carregando...</p>';
   const f = CV.df, noPer = c => (!f.de || c.ts.slice(0, 10) >= f.de) && (!f.ate || c.ts.slice(0, 10) <= f.ate);
   const L = CV.ctrl.filter(noPer), C = CV.conf.filter(noPer);
+  const EG = entregasDiv().filter(g => noPer({ts: g.ts}));
   const preset = d => { const x = new Date(); x.setDate(x.getDate() - d); return x.toISOString().slice(0, 10); };
   const h0 = hojeISO();
   /* Conferências (base: toda conferência finalizada) */
@@ -725,12 +819,15 @@ function viewDashboard(){
       kp('Peças conferidas', fInt(pecasConf), '#0E7490') + kp('Tempo médio / entrega', tMed ? fMin(tMed) : '—', '#33488E') + kp('Ritmo', ppm ? fInt(ppm) + ' pç/min' : '—', '#7E22CE') +
       kp('Ocorrências', fInt(L.length), '#001A72', fInt(ents) + ' entrega(s)') + kp('Abertas', fInt(ab.length), '#F59E0B', velha ? 'mais antiga: ' + velha + ' dia(s)' : '') + kp('Atendidas', fInt(at.length), '#1F8A52', pct + '% do total') +
       kp('Peças faltantes', fInt(faltaQ), '#C83812', fInt(pecas) + ' em todas as divergências') + kp('Tempo p/ atender', at.length && tAt ? (tAt >= 48 ? (tAt / 24).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' dias' : tAt.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' h') : '—', '#0E7490') + kp('Itens distintos', fInt(new Set(L.filter(c => c.item).map(c => c.item)).size), '#7E22CE') +
+      kp('Entregas divergentes', fInt(EG.length), '#001A72', fInt(EG.filter(g => g.st !== 'Resolvida').length) + ' em aberto') + kp('Em tratativa', fInt(EG.filter(g => g.st === 'Em tratativa' || g.st === 'Aguardando retorno').length), '#0E7490') + kp('Entregas resolvidas', fInt(EG.filter(g => g.st === 'Resolvida').length), '#1F8A52', EG.length ? Math.round(EG.filter(g => g.st === 'Resolvida').length / EG.length * 100) + '% das divergentes' : '') +
     '</div>' +
     '<div class="cv-dgrid">' +
     '<div class="cv-card cv-dc s2"><h4>Ocorrências por dia</h4>' + colunas + '</div>' +
     '<div class="cv-card cv-dc s2"><h4>Conferências por dia</h4>' + colConf + '</div>' +
     '<div class="cv-card cv-dc"><h4>Por tipo</h4>' + barrasH(conta(L, c => c.tipo).map(x => [x[0], x[1], TIPO_COR[x[0]]]), '#001A72') + '</div>' +
     '<div class="cv-card cv-dc"><h4>Situação</h4><div class="cv-donut"><div class="cv-donut-r" style="background:conic-gradient(#1F8A52 0 ' + pct + '%,#F59E0B ' + pct + '% 100%)"><span>' + pct + '%</span></div><div class="cv-leg"><div><i style="background:#1F8A52"></i>Atendidas ' + fInt(at.length) + '</div><div><i style="background:#F59E0B"></i>Abertas ' + fInt(ab.length) + '</div></div></div></div>' +
+    '<div class="cv-card cv-dc"><h4>Entregas por classificação</h4>' + barrasH(conta(EG, g => g.classe).map(x => [x[0], x[1], TIPO_COR[x[0]] || '#6B7280']), '#001A72', 8) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Tratativa das entregas</h4>' + barrasH(STATUS_TR.map(st => [st, EG.filter(g => g.st === st).length, STATUS_COR[st]]), '#001A72', 4) + '</div>' +
     '<div class="cv-card cv-dc"><h4>Abertas por idade</h4>' + barrasH(aging, '#F59E0B', 5) + '</div>' +
     '<div class="cv-card cv-dc"><h4>Por transportadora</h4>' + barrasH(conta(L, c => c.t), '#001A72', 8) + '</div>' +
     '<div class="cv-card cv-dc s2"><h4>Mecas ofensores<span>quem separou as entregas com divergência</span></h4>' + tabelaRank(['Meca', 'Entregas', 'Com diverg.', 'Taxa', 'Peças'], linMeca, vz) + '</div>' +
@@ -870,7 +967,7 @@ function cvExportar(){
 }
 
 /* ---------- navegação / estado ---------- */
-const VIEWS = {conferir: viewConferir, entregas: viewEntregas, controle: viewControle, dashboard: viewDashboard, importacao: viewImportacao, configuracoes: viewConfig};
+const VIEWS = {conferir: viewConferir, entregas: viewEntregas, controle: viewControle, gestao: viewGestao, dashboard: viewDashboard, importacao: viewImportacao, configuracoes: viewConfig};
 function renderMsg(){ const el = $('cvMsg'); if(el) el.textContent = CV.ocupado ? '⏳ ' + CV.msg : ''; }
 function renderView(){
   if(CV.erro && !CV.ent.length && !CV.saldo.length && CV.tab !== 'importacao' && CV.tab !== 'configuracoes'){ $('viewRoot').innerHTML = vazio(); return; }
@@ -890,7 +987,7 @@ function renderView(){
   if(CV.tab === 'conferir' && $('cvKpis')) atualizar();
   if(sc) sc.scrollTop = y;
 }
-function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard') Promise.all([ctrlLer('ctrl'), ctrlLer('conf')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
+function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard' || t === 'gestao') Promise.all([ctrlLer('ctrl'), ctrlLer('conf'), ctrlLer('trat')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; CV.trat = r[2]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
 function cvPag(n){ CV.pag += n; renderView(); }
 let _cvBT; function cvBuscaEnt(v){ CV.busca = v; CV.pag = 0; clearTimeout(_cvBT); _cvBT = setTimeout(() => { renderView(); const i = $('cvBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
 function cvToggleSidebar(){ const el = $('sidebar'); if(matchMedia('(max-width:860px)').matches) el.classList.toggle('mobile-open'); else el.classList.toggle('collapsed'); }
