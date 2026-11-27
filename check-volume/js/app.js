@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 12; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 13; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -25,7 +25,7 @@ const CV = {
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
   ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set(),
-  ctrl: [], cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
+  ctrl: [], conf: [], cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
 };
 
 /* ---------- utilitários ---------- */
@@ -114,7 +114,7 @@ function dividir(linhas, limite){
    entrega e descrição por item — a QRY0180 completa passa de 40 MB. */
 function montarEnt(linhas, cabs, descs){
   const cab = new Map(cabs.map(x => [x[0], x])), ds = new Map(descs);
-  return linhas.map(r => { const c = cab.get(r[0]) || []; return {e: r[0], i: r[1], q: r[2], o: r[3], d: ds.get(r[1]) || '', t: c[1] || '', ev: c[2] || '', li: c[3] || '', ca: c[4] || '', vo: c[5] || 0, mo: c[6] || ''}; });
+  return linhas.map(r => { const c = cab.get(r[0]) || []; return {e: r[0], i: r[1], q: r[2], o: r[3], d: ds.get(r[1]) || '', t: c[1] || '', ev: c[2] || '', li: c[3] || '', ca: c[4] || '', vo: c[5] || 0, mo: c[6] || '', op: c[7] || ''}; });
 }
 /* ---------- índices ---------- */
 function indexar(){
@@ -140,7 +140,8 @@ async function carregar(){
     CV.eanRows = en2 ? en2.linhas : [];
     CV.meta = {ent: ent && ent.meta, est: es && es.meta, foto: ft && ft.meta, ean: en2 && en2.meta};
     indexar();
-    CV.ctrl = await ctrlLer().catch(() => []);
+    CV.ctrl = await ctrlLer('ctrl').catch(() => []);
+    CV.conf = await ctrlLer('conf').catch(() => []);
   } catch(e){
     CV.erro = 'Não consegui ler os dados: ' + (e.message || e) + (/app_dados|relation|does not exist/i.test(String(e.message)) ? ' — a tabela app_dados ainda não foi criada no banco (migração 008).' : '');
   }
@@ -239,6 +240,7 @@ function cvMenos(i){
 }
 function cvFinalizar(){
   if(!CV.sess) return; CV.sess.fin = true; gravarSessao(); CV.aberto = new Set(); renderView();
+  confRegistrar().catch(() => {});
   ctrlDaConferencia().then(n => { if(n) toast(n + ' divergência(s) registrada(s) em Controle de Entregas.'); }).catch(e => toast('Não consegui registrar no Controle de Entregas: ' + ((e && e.message) || e), true));
 }
 function cvReabrir(){ if(!CV.sess) return; CV.sess.fin = false; gravarSessao(); renderView(); setTimeout(focoBip, 0); }
@@ -287,12 +289,14 @@ function tipoClasse(clal){
   return '';
 }
 const tipoRot = s => ({pk: 'Picking', nao: 'Não picking'}[tipoClasse(s[3])] || 'Sem classe');
-/* Sugestões: só locais de picking (coleta). Se "incluir não picking" estiver ligado, eles entram depois do picking. */
+/* Sugestões: o próprio local da coleta vem primeiro quando ainda tem saldo (a peça pode estar lá); depois os
+   locais de picking. Se "incluir não picking" estiver ligado, eles entram depois do picking. */
+const ehOrigem = (x, s) => x.orig.some(o => normLoc(o) === normLoc(s[1]));
 function alternativas(x, falta, max){
-  const orig = x.orig.map(normLoc);
   const ig = new Set((CV.cfg.ignorar || []).map(s => s.toUpperCase())), rs = new Set((CV.cfg.restricoes || []).map(s => s.toUpperCase()));
-  const lista = (CV.saldoItem.get(x.i) || []).filter(s => !orig.includes(normLoc(s[1])) && !ig.has(normClasse(s[3])) && (!rs.size || rs.has(String(s[4]).toUpperCase())) && (tipoClasse(s[3]) === 'pk' || CV.cfg.incluirNao));
-  lista.sort((a, b) => ((tipoClasse(b[3]) === 'pk') - (tipoClasse(a[3]) === 'pk')) || ((b[2] >= falta) - (a[2] >= falta)) || b[2] - a[2]);
+  const lista = (CV.saldoItem.get(x.i) || []).filter(s => s[2] > 0 && (!rs.size || rs.has(String(s[4]).toUpperCase())) &&
+    (ehOrigem(x, s) || (!ig.has(normClasse(s[3])) && (tipoClasse(s[3]) === 'pk' || CV.cfg.incluirNao))));
+  lista.sort((a, b) => (ehOrigem(x, b) - ehOrigem(x, a)) || ((tipoClasse(b[3]) === 'pk') - (tipoClasse(a[3]) === 'pk')) || ((b[2] >= falta) - (a[2] >= falta)) || b[2] - a[2]);
   return lista.slice(0, max || CV.cfg.max || 5);
 }
 function saldoNaOrigem(x){
@@ -305,7 +309,7 @@ function blocoLocais(x){
   const so = saldoNaOrigem(x);
   return '<div class="cv-loc orig"><span class="rot">Coletado em</span>' + (x.orig.length ? x.orig.map(o => '<code>' + esc(o) + '</code>').join(' ') : '<span class="cv-vazio">origem não informada na QRY0180</span>') +
     (x.orig.length ? '<span class="sd">saldo disponível hoje na origem: <b>' + fInt(so) + '</b></span>' : '') + '</div>' +
-    (alts.length ? alts.map((s, n) => '<div class="cv-loc"><span class="rot">' + (n ? 'Alternativa' : 'Sugestão') + '</span><code>' + esc(s[1]) + '</code><span class="cv-tp ' + (tipoClasse(s[3]) === 'pk' ? 'pk' : '') + '" title="Classe ' + esc(s[3] || '—') + '">' + tipoRot(s) + '</span><span class="sd">saldo <b>' + fInt(s[2]) + '</b>' + (s[2] >= falta ? ' · cobre a falta' : ' · cobre parte') + '</span></div>').join('')
+    (alts.length ? alts.map((s, n) => '<div class="cv-loc"><span class="rot">' + (n ? 'Alternativa' : 'Sugestão') + '</span><code>' + esc(s[1]) + '</code><span class="cv-tp ' + (tipoClasse(s[3]) === 'pk' ? 'pk' : '') + '" title="Classe ' + esc(s[3] || '—') + '">' + tipoRot(s) + (ehOrigem(x, s) ? ' · local da coleta' : '') + '</span><span class="sd">saldo <b>' + fInt(s[2]) + '</b>' + (s[2] >= falta ? ' · cobre a falta' : ' · cobre parte') + '</span></div>').join('')
       : '<div class="cv-loc"><span class="rot">Alternativa</span><span class="cv-vazio">' + (CV.saldo.length ? (CV.cfg.incluirNao ? 'nenhum outro local com saldo disponível.' : 'nenhum outro local de picking com saldo disponível.') : 'importe a QRY0390 para ver outros locais com saldo.') + '</span></div>');
 }
 
@@ -525,10 +529,11 @@ async function cvSalvarCfg(){
    registram ao mesmo tempo sem sobrescrever o trabalho umas das outras. */
 const TIPOS = ['Falta', 'Sobra', 'EAN não identificado', 'Avaria', 'Item não localizado', 'Outro'];
 const TIPO_COR = {'Falta': '#F59E0B', 'Sobra': '#7E22CE', 'EAN não identificado': '#C83812', 'Avaria': '#0E7490', 'Item não localizado': '#6B7280', 'Outro': '#001A72'};
-async function ctrlLer(){
+async function ctrlLer(chave){
+  chave = chave || 'ctrl';
   const out = []; let a = 0;
   while(true){
-    const { data, error } = await cvSupa.from(CV_TAB).select('versao,dados').eq('app', CV_APP).eq('chave', 'ctrl').eq('parte', 0).order('versao').range(a, a + 999);
+    const { data, error } = await cvSupa.from(CV_TAB).select('versao,dados').eq('app', CV_APP).eq('chave', chave).eq('parte', 0).order('versao').range(a, a + 999);
     if(error) throw error;
     (data || []).forEach(r => { if(r.dados) out.push(r.dados); });
     if(!data || data.length < 1000) break;
@@ -536,19 +541,33 @@ async function ctrlLer(){
   }
   return out;
 }
-async function ctrlSalvar(reg){
+async function ctrlSalvar(reg, chave){
+  chave = chave || 'ctrl';
   if(somenteLeitura()) throw new Error('Seu acesso é só de visualização.');
-  await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', 'ctrl').eq('versao', reg.id).eq('parte', 0);
-  const { error } = await cvSupa.from(CV_TAB).insert({app: CV_APP, chave: 'ctrl', versao: reg.id, parte: 0, dados: reg});
+  await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', chave).eq('versao', reg.id).eq('parte', 0);
+  const { error } = await cvSupa.from(CV_TAB).insert({app: CV_APP, chave, versao: reg.id, parte: 0, dados: reg});
   if(error) throw error;
-  const i = CV.ctrl.findIndex(c => c.id === reg.id);
-  if(i >= 0) CV.ctrl[i] = reg; else CV.ctrl.push(reg);
+  const lista = chave === 'conf' ? CV.conf : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
+  if(i >= 0) lista[i] = reg; else lista.push(reg);
 }
 async function ctrlExcluir(id){
   if(somenteLeitura()) throw new Error('Seu acesso é só de visualização.');
   const { error } = await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', 'ctrl').eq('versao', id).eq('parte', 0);
   if(error) throw error;
   CV.ctrl = CV.ctrl.filter(c => c.id !== id);
+}
+/* Cada conferência finalizada vira um registro (chave 'conf', um por entrega): é a base da taxa de acerto,
+   do tempo de conferência e da comparação entre mecas e conferentes no Dashboard. */
+async function confRegistrar(){
+  if(somenteLeitura() || !CV.sess || !CV.porEnt.get(CV.num)) return;
+  const s = CV.sess, r0 = CV.porEnt.get(CV.num)[0], t = totais();
+  if(!s.log.length) return;                                 /* finalizou sem bipar nada: não conta */
+  const ts = s.log.map(l => l.t), ini = Math.min.apply(null, ts), fim = Math.max.apply(null, ts);
+  const antes = CV.conf.find(c => c.id === CV.num);
+  const reg = {id: CV.num, ts: new Date().toISOString(), por: CV.email, ent: CV.num, t: r0.t || '', meca: r0.op || '', ca: r0.ca || '', mo: r0.mo || '',
+    itens: t.itens, pecas: t.prev, bip: t.bip, falta: t.falta, sobra: t.sobra, ean: t.ean, div: !!(t.falta || t.sobra || t.ean), dur: Math.round((fim - ini) / 1000), leituras: s.log.length};
+  if(antes && antes.por && antes.por !== reg.por) reg.por = antes.por;
+  await ctrlSalvar(reg, 'conf');
 }
 /* Ao finalizar uma conferência, as divergências viram ocorrências (sem duplicar se finalizar de novo). */
 async function ctrlDaConferencia(){
@@ -565,11 +584,12 @@ async function ctrlDaConferencia(){
     const id = [CV.num, n.tipo === 'EAN não identificado' ? 'EAN' : n.tipo, n.item].join('|'); ids.add(id);
     const ant = CV.ctrl.find(c => c.id === id);
     if(ant && ant.q === n.q) continue;
-    await ctrlSalvar(Object.assign({}, ant || {}, {id, ts: ant ? ant.ts : agora, por: ant ? ant.por : CV.email, ent: CV.num, item: n.item, d: n.d, tipo: n.tipo, q: n.q, orig: n.orig, t: r0.t || '', src: 'conferencia', st: ant ? ant.st : 'aberta', obs: ant ? (ant.obs || '') : ''}));
+    await ctrlSalvar(Object.assign({}, ant || {}, {id, ts: ant ? ant.ts : agora, por: ant ? ant.por : CV.email, ent: CV.num, item: n.item, d: n.d, tipo: n.tipo, q: n.q, orig: n.orig, t: r0.t || '', meca: r0.op || '', ca: r0.ca || '', mo: r0.mo || '', src: 'conferencia', st: ant ? ant.st : 'aberta', obs: ant ? (ant.obs || '') : ''}));
   }
   for(const c of CV.ctrl.filter(c => c.ent === CV.num && c.src === 'conferencia' && c.st === 'aberta' && !ids.has(c.id))) await ctrlExcluir(c.id);
   return novos.length;
 }
+const mecaNome = m => String(m || '').replace(/^MECA_/i, '') || '—';
 const dtBR = iso => iso ? fData(iso.slice(0, 10)) + ' ' + iso.slice(11, 16) : '';
 const hojeISO = () => new Date().toISOString().slice(0, 10);
 function ctrlFiltradas(){
@@ -594,13 +614,13 @@ function viewControle(){
       '<div><span class="cv-lab">Local</span><input id="cnOrig" class="cv-in-s" placeholder="opcional"></div><div style="flex:1;min-width:200px"><span class="cv-lab">Observação</span><input id="cnObs" class="cv-in-s" style="width:100%"></div>' +
       '<button class="btn btn-orange btn-sm" onclick="cvCSalvarNovo()">Registrar</button><button class="btn btn-secondary btn-sm" onclick="cvCNovo()">Cancelar</button></div>';
   }
-  h += '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Data</th><th>Entrega</th><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Transportadora</th><th>Observação</th><th>Por</th><th>Status</th><th></th></tr></thead><tbody>' +
+  h += '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Data</th><th>Entrega</th><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Transportadora</th><th>Meca</th><th>Observação</th><th>Por</th><th>Status</th><th></th></tr></thead><tbody>' +
     (lista.length ? lista.slice(CV.cpag * POR, CV.cpag * POR + POR).map(c => '<tr><td>' + dtBR(c.ts) + '</td><td class="cv-mono"><b>' + esc(c.ent) + '</b></td><td class="cv-mono">' + esc(c.item || '') + '</td><td class="cv-cut" title="' + esc(c.d) + '">' + esc(c.d) + '</td>' +
-      '<td><span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span></td><td class="n"><b>' + fInt(c.q) + '</b></td><td class="cv-cut" title="' + esc(c.orig) + '">' + esc(c.orig || '') + '</td><td class="cv-cut">' + esc(c.t || '') + '</td>' +
+      '<td><span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span></td><td class="n"><b>' + fInt(c.q) + '</b></td><td class="cv-cut" title="' + esc(c.orig) + '">' + esc(c.orig || '') + '</td><td class="cv-cut">' + esc(c.t || '') + '</td><td class="cv-cut">' + esc(mecaNome(c.meca)) + '</td>' +
       '<td class="cv-cut" title="' + esc(c.obs) + '">' + esc(c.obs || '') + '</td><td class="cv-cut" title="' + esc(c.por) + '">' + esc((c.por || '').split('@')[0]) + '</td>' +
       '<td><span class="cv-pill ' + (c.st === 'atendida' ? 'cv-ok' : 'cv-falta') + '">' + (c.st === 'atendida' ? 'Atendida' : 'Aberta') + '</span></td><td class="n cv-act">' + (ro ? '' :
       '<button class="btn-link" onclick="cvCAtender(\'' + esc(c.id).replace(/'/g, '') + '\')">' + (c.st === 'atendida' ? 'Reabrir' : 'Atender') + '</button> <button class="btn-link" onclick="cvCObs(\'' + esc(c.id).replace(/'/g, '') + '\')">Obs</button> <button class="btn-danger-text" onclick="cvCExcluir(\'' + esc(c.id).replace(/'/g, '') + '\')">Excluir</button>') + '</td></tr>').join('')
-      : '<tr><td colspan="12" class="field-hint" style="padding:16px">Nenhuma ocorrência. As divergências aparecem aqui ao finalizar uma conferência.</td></tr>') + '</tbody></table></div>' +
+      : '<tr><td colspan="13" class="field-hint" style="padding:16px">Nenhuma ocorrência. As divergências aparecem aqui ao finalizar uma conferência.</td></tr>') + '</tbody></table></div>' +
     (pags > 1 ? '<div class="cv-pag"><button class="btn btn-secondary" onclick="cvCPag(-1)"' + (CV.cpag === 0 ? ' disabled' : '') + '>←</button><span>Página ' + (CV.cpag + 1) + ' de ' + pags + ' · ' + fInt(lista.length) + ' ocorrências</span><button class="btn btn-secondary" onclick="cvCPag(1)"' + (CV.cpag >= pags - 1 ? ' disabled' : '') + '>→</button></div>' : '');
   return h;
 }
@@ -613,7 +633,7 @@ async function cvCSalvarNovo(){
   const ent = String($('cnEnt').value).replace(/\D/g, ''), item = $('cnItem').value.trim(), tipo = $('cnTipo').value, q = Math.max(1, parseInt($('cnQtd').value, 10) || 1);
   if(!ent) return toast('Informe a entrega.', true);
   const rows = CV.porEnt.get(ent) || [], r = item ? rows.find(x => x.i === item) : null;
-  const reg = {id: 'M|' + Date.now() + '|' + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), por: CV.email, ent, item, d: r ? r.d : ((CV.itens[item] && CV.itens[item].d) || ''), tipo, q, orig: $('cnOrig').value.trim() || (r ? r.o : ''), t: rows[0] ? rows[0].t : '', src: 'manual', st: 'aberta', obs: $('cnObs').value.trim()};
+  const reg = {id: 'M|' + Date.now() + '|' + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), por: CV.email, ent, item, d: r ? r.d : ((CV.itens[item] && CV.itens[item].d) || ''), tipo, q, orig: $('cnOrig').value.trim() || (r ? r.o : ''), t: rows[0] ? rows[0].t : '', meca: rows[0] ? (rows[0].op || '') : '', ca: rows[0] ? (rows[0].ca || '') : '', mo: rows[0] ? (rows[0].mo || '') : '', src: 'manual', st: 'aberta', obs: $('cnObs').value.trim()};
   try { await ctrlSalvar(reg); CV.cnovo = false; toast('Ocorrência registrada.'); } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
 }
@@ -636,9 +656,9 @@ async function cvCExcluir(id){
 }
 function cvCExportar(){
   if(!window.XLSX) return toast('Biblioteca de Excel ainda carregando, tente de novo.', true);
-  const l = [['Data', 'Entrega', 'Item', 'Descrição', 'Tipo', 'Quantidade', 'Local', 'Transportadora', 'Observação', 'Registrado por', 'Origem', 'Status', 'Atendida em', 'Atendida por']];
-  ctrlFiltradas().forEach(c => l.push([dtBR(c.ts), c.ent, c.item || '', c.d || '', c.tipo, c.q, c.orig || '', c.t || '', c.obs || '', c.por || '', c.src === 'manual' ? 'Manual' : 'Conferência', c.st === 'atendida' ? 'Atendida' : 'Aberta', dtBR(c.at || ''), c.atpor || '']));
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, planilha(l, [17, 12, 11, 44, 20, 10, 18, 22, 30, 20, 12, 10, 17, 20]), 'Controle de Entregas');
+  const l = [['Data', 'Entrega', 'Item', 'Descrição', 'Tipo', 'Quantidade', 'Local', 'Transportadora', 'Meca', 'Observação', 'Registrado por', 'Origem', 'Status', 'Atendida em', 'Atendida por']];
+  ctrlFiltradas().forEach(c => l.push([dtBR(c.ts), c.ent, c.item || '', c.d || '', c.tipo, c.q, c.orig || '', c.t || '', mecaNome(c.meca), c.obs || '', c.por || '', c.src === 'manual' ? 'Manual' : 'Conferência', c.st === 'atendida' ? 'Atendida' : 'Aberta', dtBR(c.at || ''), c.atpor || '']));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, planilha(l, [17, 12, 11, 44, 20, 10, 18, 22, 22, 30, 20, 12, 10, 17, 20]), 'Controle de Entregas');
   XLSX.writeFile(wb, 'controle-de-entregas.xlsx');
 }
 
@@ -648,31 +668,80 @@ function barrasH(lista, cor, max){
   return lista.length ? '<div class="cv-bh">' + lista.slice(0, max || 8).map(x => '<div class="cv-bh-l" title="' + esc(x[0]) + ': ' + fInt(x[1]) + '"><span class="n">' + esc(x[0] || '—') + '</span><span class="b"><i style="width:' + (x[1] / m * 100) + '%;background:' + (x[2] || cor) + '"></i></span><b>' + fInt(x[1]) + '</b></div>').join('') + '</div>' : '<div class="field-hint">Sem dados no período.</div>';
 }
 function conta(lista, fn){ const m = new Map(); lista.forEach(c => { const k = fn(c) || '—'; m.set(k, (m.get(k) || 0) + 1); }); return Array.from(m.entries()).sort((a, b) => b[1] - a[1]); }
+/* Agrupa e soma: devolve [[chave, {n: ocorrências, q: peças, ents: Set de entregas}]] do maior para o menor. */
+function agrupa(lista, fn){
+  const m = new Map();
+  lista.forEach(c => { const k = fn(c) || '—'; let g = m.get(k); if(!g) m.set(k, g = {n: 0, q: 0, ents: new Set(), ab: 0}); g.n++; g.q += c.q || 0; g.ents.add(c.ent); if(c.st !== 'atendida') g.ab++; });
+  return Array.from(m.entries()).sort((a, b) => b[1].q - a[1].q || b[1].n - a[1].n);
+}
+const diasDesde = iso => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 864e5));
+const fMin = seg => seg >= 3600 ? (seg / 3600).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' h' : seg >= 60 ? Math.round(seg / 60) + ' min' : Math.round(seg) + ' s';
+const media = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+function ruaDe(loc){ const t = String(loc || '').trim().split(/\s+/); return t.length >= 2 ? t[0] + ' ' + t[1] : (t[0] || ''); }
+function tabelaRank(cab, linhas, vazio){
+  return '<div class="cv-sc2"><table class="cv-tab cv-compact"><thead><tr>' + cab.map((c, i) => '<th' + (i ? ' class="n"' : '') + '>' + c + '</th>').join('') + '</tr></thead><tbody>' +
+    (linhas.length ? linhas.map(l => '<tr>' + l.map((c, i) => '<td' + (i ? ' class="n"' : ' class="cv-cut" style="max-width:220px"') + '>' + c + '</td>').join('') + '</tr>').join('') : '<tr><td colspan="' + cab.length + '" class="field-hint" style="padding:12px">' + (vazio || 'Sem dados no período.') + '</td></tr>') + '</tbody></table></div>';
+}
 function viewDashboard(){
   if(CV.carregando) return '<p class="field-hint">Carregando...</p>';
-  const f = CV.df, L = CV.ctrl.filter(c => (!f.de || c.ts.slice(0, 10) >= f.de) && (!f.ate || c.ts.slice(0, 10) <= f.ate));
+  const f = CV.df, noPer = c => (!f.de || c.ts.slice(0, 10) >= f.de) && (!f.ate || c.ts.slice(0, 10) <= f.ate);
+  const L = CV.ctrl.filter(noPer), C = CV.conf.filter(noPer);
   const preset = d => { const x = new Date(); x.setDate(x.getDate() - d); return x.toISOString().slice(0, 10); };
-  const h0 = hojeISO(), at = L.filter(c => c.st === 'atendida').length, ab = L.length - at;
-  const pecas = L.reduce((a, c) => a + (c.q || 0), 0), ents = new Set(L.map(c => c.ent)).size;
-  const kp = (rot, v, cor) => '<div class="cv-kpi" style="--c:' + cor + '"><span>' + rot + '</span><b>' + v + '</b></div>';
-  // por dia (últimos 30 dias com a janela do filtro)
+  const h0 = hojeISO();
+  /* Conferências (base: toda conferência finalizada) */
+  const nConf = C.length, comDiv = C.filter(c => c.div).length, acur = nConf ? Math.round((nConf - comDiv) / nConf * 100) : null;
+  const pecasConf = C.reduce((a, c) => a + (c.pecas || 0), 0), tMed = media(C.filter(c => c.dur > 0).map(c => c.dur));
+  const ppm = (() => { const d = C.filter(c => c.dur > 0); const seg = d.reduce((a, c) => a + c.dur, 0); return seg ? Math.round(d.reduce((a, c) => a + (c.bip || 0), 0) / (seg / 60)) : 0; })();
+  /* Ocorrências */
+  const at = L.filter(c => c.st === 'atendida'), ab = L.filter(c => c.st !== 'atendida'), pct = L.length ? Math.round(at.length / L.length * 100) : 0;
+  const pecas = L.reduce((a, c) => a + (c.q || 0), 0), faltaQ = L.filter(c => c.tipo === 'Falta').reduce((a, c) => a + (c.q || 0), 0), ents = new Set(L.map(c => c.ent)).size;
+  const tAt = media(at.filter(c => c.at).map(c => (new Date(c.at) - new Date(c.ts)) / 36e5)), velha = ab.length ? Math.max.apply(null, ab.map(c => diasDesde(c.ts))) : 0;
+  const kp = (rot, v, cor, sub) => '<div class="cv-kpi" style="--c:' + cor + '"><span>' + rot + '</span><b>' + v + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>';
+  /* Série por dia */
   const dias = []; const ini = f.de || preset(29), fim = f.ate || h0;
   for(let d = new Date(ini + 'T12:00:00'), n = 0; d <= new Date(fim + 'T12:00:00') && n < 62; d.setDate(d.getDate() + 1), n++) dias.push(d.toISOString().slice(0, 10));
   const porDia = new Map(); L.forEach(c => { const k = c.ts.slice(0, 10); porDia.set(k, (porDia.get(k) || 0) + 1); });
   const mx = Math.max(1, ...dias.map(d => porDia.get(d) || 0));
   const colunas = '<div class="cv-col">' + dias.map(d => { const v = porDia.get(d) || 0; return '<div class="cv-col-i" title="' + fData(d) + ': ' + v + ' ocorrência(s)"><b>' + (v || '') + '</b><i style="height:' + (v / mx * 100) + '%"></i><span>' + d.slice(8) + '</span></div>'; }).join('') + '</div>';
-  const pct = L.length ? Math.round(at / L.length * 100) : 0;
-  return '<div class="filter-bar cv-fb"><button class="chip' + (!f.de && !f.ate ? ' active' : '') + '" onclick="cvDF(\'\',\'\')">Tudo</button><button class="chip" onclick="cvDF(\'' + preset(6) + '\',\'\')">7 dias</button><button class="chip" onclick="cvDF(\'' + preset(29) + '\',\'\')">30 dias</button>' +
+  const confDia = new Map(); C.forEach(c => { const k = c.ts.slice(0, 10), g = confDia.get(k) || {ok: 0, dv: 0}; if(c.div) g.dv++; else g.ok++; confDia.set(k, g); });
+  const mc = Math.max(1, ...dias.map(d => { const g = confDia.get(d); return g ? g.ok + g.dv : 0; }));
+  const colConf = '<div class="cv-col">' + dias.map(d => { const g = confDia.get(d) || {ok: 0, dv: 0}, t = g.ok + g.dv; return '<div class="cv-col-i" title="' + fData(d) + ': ' + t + ' conferência(s), ' + g.dv + ' com divergência"><b>' + (t || '') + '</b><div class="cv-stk" style="height:' + (t / mc * 100) + '%"><i style="height:' + (t ? g.dv / t * 100 : 0) + '%;background:#F59E0B"></i><i style="height:' + (t ? g.ok / t * 100 : 0) + '%;background:#1F8A52"></i></div><span>' + d.slice(8) + '</span></div>'; }).join('') + '</div>' +
+    '<div class="cv-leg cv-leg-h"><div><i style="background:#1F8A52"></i>Sem divergência</div><div><i style="background:#F59E0B"></i>Com divergência</div></div>';
+  /* Aging das ocorrências abertas */
+  const faixas = [['Hoje', 0, 0], ['1 dia', 1, 1], ['2 a 3 dias', 2, 3], ['4 a 7 dias', 4, 7], ['Mais de 7 dias', 8, 9999]];
+  const aging = faixas.map(fx => [fx[0], ab.filter(c => { const d = diasDesde(c.ts); return d >= fx[1] && d <= fx[2]; }).length, fx[1] >= 4 ? '#C83812' : fx[1] >= 2 ? '#F59E0B' : '#1F8A52']);
+  /* Rankings */
+  const gMeca = agrupa(L, c => mecaNome(c.meca)), cMeca = new Map(); C.forEach(c => { const k = mecaNome(c.meca), g = cMeca.get(k) || {n: 0, dv: 0}; g.n++; if(c.div) g.dv++; cMeca.set(k, g); });
+  const linMeca = gMeca.slice(0, 10).map(([k, g]) => { const cc = cMeca.get(k), dv = cc ? cc.dv : g.ents.size; return [esc(k), cc ? fInt(cc.n) : '—', fInt(dv), cc && cc.n ? Math.min(100, Math.round(dv / cc.n * 100)) + '%' : '—', fInt(g.q)]; });
+  const gItem = agrupa(L.filter(c => c.item), c => c.item + '|' + (c.d || '')), linItem = gItem.slice(0, 10).map(([k, g]) => { const t = k.split('|'); return [esc(t[0]) + ' · <span title="' + esc(t[1]) + '">' + esc(descCurta(t[1])) + '</span>', fInt(g.n), fInt(g.ents.size), fInt(g.q)]; });
+  const gEnt = agrupa(L, c => c.ent), linEnt = gEnt.slice(0, 10).map(([k, g]) => { const m = L.find(c => c.ent === k) || {}; return [esc(k) + ' · ' + esc((m.t || '').slice(0, 18)), esc(mecaNome(m.meca)), fInt(g.n), fInt(g.q), g.ab ? '<b style="color:var(--danger)">' + g.ab + '</b>' : '0']; });
+  const gConf = new Map(); C.forEach(c => { const k = (c.por || '—').split('@')[0], g = gConf.get(k) || {n: 0, dv: 0, t: [], pc: 0}; g.n++; if(c.div) g.dv++; if(c.dur > 0) g.t.push(c.dur); g.pc += c.pecas || 0; gConf.set(k, g); });
+  const linConf = Array.from(gConf.entries()).sort((a, b) => b[1].n - a[1].n).slice(0, 10).map(([k, g]) => [esc(k), fInt(g.n), fInt(g.pc), g.n ? Math.round(g.dv / g.n * 100) + '%' : '—', g.t.length ? fMin(media(g.t)) : '—']);
+  const vz = 'Sem dados no período.';
+  return '<div class="filter-bar cv-fb"><button class="chip' + (!f.de && !f.ate ? ' active' : '') + '" onclick="cvDF(\'\',\'\')">Tudo</button><button class="chip" onclick="cvDF(\'' + h0 + '\',\'\')">Hoje</button><button class="chip" onclick="cvDF(\'' + preset(6) + '\',\'\')">7 dias</button><button class="chip" onclick="cvDF(\'' + preset(29) + '\',\'\')">30 dias</button>' +
     '<input type="date" class="cv-in-s" value="' + f.de + '" onchange="cvDF(this.value,CV.df.ate)"><input type="date" class="cv-in-s" value="' + f.ate + '" onchange="cvDF(CV.df.de,this.value)"></div>' +
-    '<div class="cv-kpis">' + kp('Ocorrências', fInt(L.length), '#001A72') + kp('Abertas', fInt(ab), '#F59E0B') + kp('Atendidas', fInt(at), '#1F8A52') + kp('% atendidas', pct + '%', '#0E7490') + kp('Peças em divergência', fInt(pecas), '#C83812') + kp('Entregas afetadas', fInt(ents), '#7E22CE') + '</div>' +
-    '<div class="cv-dgrid"><div class="cv-card cv-dc"><h4>Ocorrências por dia</h4>' + colunas + '</div>' +
+    '<div class="cv-kpis cv-kpis-d">' +
+      kp('Entregas conferidas', fInt(nConf), '#001A72') + kp('Acuracidade', acur === null ? '—' : acur + '%', acur !== null && acur < 90 ? '#C83812' : '#1F8A52', 'entregas sem divergência') + kp('Entregas c/ divergência', fInt(comDiv), '#F59E0B', nConf ? Math.round(comDiv / nConf * 100) + '% das conferidas' : '') +
+      kp('Peças conferidas', fInt(pecasConf), '#0E7490') + kp('Tempo médio / entrega', tMed ? fMin(tMed) : '—', '#33488E') + kp('Ritmo', ppm ? fInt(ppm) + ' pç/min' : '—', '#7E22CE') +
+      kp('Ocorrências', fInt(L.length), '#001A72', fInt(ents) + ' entrega(s)') + kp('Abertas', fInt(ab.length), '#F59E0B', velha ? 'mais antiga: ' + velha + ' dia(s)' : '') + kp('Atendidas', fInt(at.length), '#1F8A52', pct + '% do total') +
+      kp('Peças faltantes', fInt(faltaQ), '#C83812', fInt(pecas) + ' em todas as divergências') + kp('Tempo p/ atender', at.length && tAt ? (tAt >= 48 ? (tAt / 24).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' dias' : tAt.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' h') : '—', '#0E7490') + kp('Itens distintos', fInt(new Set(L.filter(c => c.item).map(c => c.item)).size), '#7E22CE') +
+    '</div>' +
+    '<div class="cv-dgrid">' +
+    '<div class="cv-card cv-dc s2"><h4>Ocorrências por dia</h4>' + colunas + '</div>' +
+    '<div class="cv-card cv-dc s2"><h4>Conferências por dia</h4>' + colConf + '</div>' +
     '<div class="cv-card cv-dc"><h4>Por tipo</h4>' + barrasH(conta(L, c => c.tipo).map(x => [x[0], x[1], TIPO_COR[x[0]]]), '#001A72') + '</div>' +
-    '<div class="cv-card cv-dc"><h4>Situação</h4><div class="cv-donut"><div class="cv-donut-r" style="background:conic-gradient(#1F8A52 0 ' + pct + '%,#F59E0B ' + pct + '% 100%)"><span>' + pct + '%</span></div><div class="cv-leg"><div><i style="background:#1F8A52"></i>Atendidas ' + fInt(at) + '</div><div><i style="background:#F59E0B"></i>Abertas ' + fInt(ab) + '</div></div></div></div>' +
-    '<div class="cv-card cv-dc"><h4>Itens com mais divergências</h4>' + barrasH(conta(L.filter(c => c.item), c => c.item + ' · ' + (c.d || '').slice(0, 26)), '#FE5000', 8) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Situação</h4><div class="cv-donut"><div class="cv-donut-r" style="background:conic-gradient(#1F8A52 0 ' + pct + '%,#F59E0B ' + pct + '% 100%)"><span>' + pct + '%</span></div><div class="cv-leg"><div><i style="background:#1F8A52"></i>Atendidas ' + fInt(at.length) + '</div><div><i style="background:#F59E0B"></i>Abertas ' + fInt(ab.length) + '</div></div></div></div>' +
+    '<div class="cv-card cv-dc"><h4>Abertas por idade</h4>' + barrasH(aging, '#F59E0B', 5) + '</div>' +
     '<div class="cv-card cv-dc"><h4>Por transportadora</h4>' + barrasH(conta(L, c => c.t), '#001A72', 8) + '</div>' +
-    '<div class="cv-card cv-dc"><h4>Por local de origem</h4>' + barrasH(conta(L.filter(c => c.orig), c => c.orig.split(' / ')[0]), '#0E7490', 8) + '</div>' +
-    '<div class="cv-card cv-dc"><h4>Por usuário</h4>' + barrasH(conta(L, c => (c.por || '').split('@')[0]), '#7E22CE', 8) + '</div>' +
-    '<div class="cv-card cv-dc"><h4>Origem do registro</h4>' + barrasH(conta(L, c => c.src === 'manual' ? 'Manual' : 'Conferência'), '#33488E', 4) + '</div></div>';
+    '<div class="cv-card cv-dc s2"><h4>Mecas ofensores<span>quem separou as entregas com divergência</span></h4>' + tabelaRank(['Meca', 'Entregas', 'Com diverg.', 'Taxa', 'Peças'], linMeca, vz) + '</div>' +
+    '<div class="cv-card cv-dc s2"><h4>Itens ofensores<span>por peças em divergência</span></h4>' + tabelaRank(['Item', 'Ocorr.', 'Entregas', 'Peças'], linItem, vz) + '</div>' +
+    '<div class="cv-card cv-dc s2"><h4>Entregas com mais divergência</h4>' + tabelaRank(['Entrega · transportadora', 'Meca', 'Ocorr.', 'Peças', 'Abertas'], linEnt, vz) + '</div>' +
+    '<div class="cv-card cv-dc s2"><h4>Conferentes<span>quem conferiu as entregas</span></h4>' + tabelaRank(['Conferente', 'Entregas', 'Peças', '% c/ diverg.', 'Tempo médio'], linConf, vz) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Locais de origem</h4>' + barrasH(conta(L.filter(c => c.orig), c => c.orig.split(' / ')[0]), '#0E7490', 8) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Ruas ofensoras</h4>' + barrasH(conta(L.filter(c => c.orig), c => ruaDe(c.orig.split(' / ')[0])), '#33488E', 8) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Canal de venda</h4>' + barrasH(conta(L, c => c.ca), '#7E22CE', 6) + '</div>' +
+    '<div class="cv-card cv-dc"><h4>Modelo do pedido</h4>' + barrasH(conta(L, c => c.mo), '#FE5000', 6) + '</div>' +
+    '</div>';
 }
 function cvDF(de, ate){ CV.df = {de, ate}; renderView(); }
 
@@ -751,12 +820,14 @@ function cvAtender(){
   const s = CV.sess, nSug = 3;
   const faltas = CV.linhas.filter(x => (s.bips[x.i] || 0) < x.prev);
   const sobras = CV.linhas.filter(x => (s.bips[x.i] || 0) > x.prev);
-  const tp = a => tipoRot(a);
+  let xAtual = null;
+  const tp = a => tipoRot(a) + (xAtual && ehOrigem(xAtual, a) ? ' · local da coleta' : '');
   const cab1 = ['Entrega', 'Código', 'Descrição', 'EAN', 'Prevista', 'Bipada', 'Faltam', 'Local de coleta (origem)', 'Saldo hoje na origem'];
   for(let k = 1; k <= nSug; k++) cab1.push('Sugestão ' + k + ' · local', 'Tipo', 'Saldo');
   cab1.push('Observação');
   const l1 = [cab1], l2 = [['Entrega', 'Código', 'Descrição', 'Faltam', 'Prioridade', 'Local sugerido', 'Tipo', 'Saldo disponível', 'Cobre a falta?', 'Classe', 'Restrição']];
   faltas.forEach(x => {
+    xAtual = x;
     const b = s.bips[x.i] || 0, f = x.prev - b, alts = alternativas(x, f, Math.max(CV.cfg.max || 5, nSug));
     const lin = [CV.num, x.i, x.d, x.eans.join(' / '), x.prev, b, f, x.orig.join(' / '), saldoNaOrigem(x)];
     for(let k = 0; k < nSug; k++) lin.push(alts[k] ? alts[k][1] : '', alts[k] ? tp(alts[k]) : '', alts[k] ? alts[k][2] : '');
@@ -819,7 +890,7 @@ function renderView(){
   if(CV.tab === 'conferir' && $('cvKpis')) atualizar();
   if(sc) sc.scrollTop = y;
 }
-function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard') ctrlLer().then(l => { CV.ctrl = l; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
+function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard') Promise.all([ctrlLer('ctrl'), ctrlLer('conf')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
 function cvPag(n){ CV.pag += n; renderView(); }
 let _cvBT; function cvBuscaEnt(v){ CV.busca = v; CV.pag = 0; clearTimeout(_cvBT); _cvBT = setTimeout(() => { renderView(); const i = $('cvBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
 function cvToggleSidebar(){ const el = $('sidebar'); if(matchMedia('(max-width:860px)').matches) el.classList.toggle('mobile-open'); else el.classList.toggle('collapsed'); }
