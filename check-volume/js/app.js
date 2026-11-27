@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 22; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 23; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -1364,10 +1364,24 @@ function atdEstado(i){
   return {st: 'pend', ach};
 }
 function atdAbrir(ent, faltas, sobras, desc){
-  const A = CV.atdA = {ent, faltas, sobras, desc, m: {}, loc: faltas.map(atdLocais)};
+  const A = CV.atdA = {ent, faltas, sobras, desc, m: {}, loc: faltas.map(atdLocais), idx: 0, todos: false};
   let el = $('cvAtd'); if(!el){ el = document.createElement('div'); el.id = 'cvAtd'; el.className = 'atd'; document.body.appendChild(el); }
   document.body.classList.add('atd-aberto'); atdRender();
-  ctrlLerUm('atd', ent).then(r => { if(CV.atdA === A && r && r.itens){ A.m = r.itens; atdRender(); } }).catch(() => {});
+  ctrlLerUm('atd', ent).then(r => { if(CV.atdA === A && r && r.itens){ A.m = r.itens; A.idx = atdProx(-1); atdRender(); } }).catch(() => {});
+}
+/* Próximo item ainda pendente depois de 'de' (volta ao início se preciso); -1 quando não sobra nenhum. */
+function atdProx(de){
+  const A = CV.atdA, n = A.faltas.length;
+  for(let k = 1; k <= n; k++){ const i = (de + k + n) % n; if(atdEstado(i).st === 'pend') return i; }
+  return -1;
+}
+function atdIr(d){ const A = CV.atdA, n = A.faltas.length; if(!n) return; A.todos = false; A.idx = ((A.idx < 0 ? (d > 0 ? -1 : 0) : A.idx) + d + n) % n; atdRender(); }
+function atdTodos(){ const A = CV.atdA; A.todos = !A.todos; if(!A.todos && A.idx < 0 && atdProx(-1) >= 0) A.idx = atdProx(-1); atdRender(); }
+/* Resolveu o item da tela (achou ou não localizou): passa sozinho para o próximo pendente, até zerar a entrega. */
+function atdAvanca(i){
+  const A = CV.atdA; if(!A) return;
+  if(atdEstado(i).st === 'pend') return;
+  clearTimeout(A.tm); A.tm = setTimeout(() => { if(CV.atdA !== A || A.todos || A.idx !== i) return; A.idx = atdProx(i); atdRender(); }, 700);
 }
 function atdFechar(){ CV.atdA = null; const el = $('cvAtd'); if(el) el.remove(); document.body.classList.remove('atd-aberto'); }
 function atdRender(){
@@ -1392,7 +1406,8 @@ function atdRender(){
     (Object.keys(A.desc).length ? '<div class="atd-sec">EAN não identificado</div>' + Object.keys(A.desc).map(k => '<div class="atd-ex"><b>' + A.desc[k].n + '×</b> ' + esc(k) + '<small>' + esc(A.desc[k].nome || 'sem cadastro') + '</small></div>').join('') : '');
   el.innerHTML = '<div class="atd-top"><button type="button" class="atd-x" onclick="atdFechar()" aria-label="Fechar">✕</button><div><b>Atender entrega ' + esc(A.ent) + '</b><small>' + nOk + ' de ' + A.faltas.length + ' itens atendidos' + (nNao ? ' · ' + nNao + ' não localizado(s)' : '') + '</small></div></div>' +
     '<div class="atd-prog"><u style="width:' + (A.faltas.length ? (nOk + nNao) / A.faltas.length * 100 : 0) + '%"></u></div>' +
-    '<div class="atd-body">' + (cards || '<p class="field-hint" style="padding:16px">Sem itens faltantes nesta entrega.</p>') + extra + '</div>' +
+    (A.faltas.length ? '<div class="atd-nav"><button type="button" onclick="atdIr(-1)" aria-label="Item anterior">‹</button><div>' + (A.todos ? 'Todos os itens' : A.idx < 0 ? 'Entrega zerada' : 'Item <b>' + (A.idx + 1) + '</b> de ' + A.faltas.length) + '</div><button type="button" onclick="atdIr(1)" aria-label="Próximo item">›</button><button type="button" class="atd-tg" onclick="atdTodos()">' + (A.todos ? 'Um por vez' : 'Ver todos') + '</button></div>' : '') +
+    '<div class="atd-body">' + (!A.faltas.length ? '<p class="field-hint" style="padding:16px">Sem itens faltantes nesta entrega.</p>' : A.todos ? cards : A.idx < 0 ? '<div class="atd-fim"><b>✓ Todos os itens tratados</b><p>' + nOk + ' atendido(s)' + (nNao ? ' · ' + nNao + ' não localizado(s)' : '') + '.</p><p>Toque em <b>Concluir atendimento</b> para registrar na Gestão de divergências.</p></div>' : cards.split('</section>')[A.idx] + '</section>') + extra + '</div>' +
     '<div class="atd-foot"><button type="button" class="btn btn-secondary" onclick="atdLink()">Copiar link</button><button type="button" class="btn btn-secondary" onclick="atenderExcel(CV.atdA.ent, CV.atdA.faltas, CV.atdA.sobras, CV.atdA.desc)">Excel</button>' + (ro ? '' : '<button type="button" class="btn btn-orange" onclick="atdConcluir()">Concluir atendimento</button>') + '</div>';
   const b = el.querySelector('.atd-body'); if(b) b.scrollTop = y;
 }
@@ -1408,18 +1423,18 @@ function atdMarca(i, li, acao){
   if(acao === 'x') delete m[l.loc];
   else if(acao === 'no') m[l.loc] = {s: 'no', q: 0};
   else { const q = Math.max(1, parseInt(($('atq_' + i + '_' + li) || {}).value, 10) || 1); m[l.loc] = {s: 'ok', q}; delete m._nl; }
-  atdRender(); atdSalva(f.x.i);
+  atdRender(); atdSalva(f.x.i); atdAvanca(i);
 }
 function atdOutro(i, desfaz){
   const A = CV.atdA, f = A.faltas[i], m = A.m[f.x.i] = A.m[f.x.i] || {};
   if(desfaz) delete m._outro;
   else { const loc = (prompt('Em qual local você achou?') || '').trim().toUpperCase(); if(!loc) return; const q = Math.max(1, parseInt(prompt('Quantas peças achou?', String(Math.max(f.f - atdEstado(i).ach, 1))), 10) || 0); if(!q) return; m._outro = {s: 'ok', loc, q}; delete m._nl; }
-  atdRender(); atdSalva(f.x.i);
+  atdRender(); atdSalva(f.x.i); atdAvanca(i);
 }
 function atdNL(i){
   const A = CV.atdA, f = A.faltas[i], m = A.m[f.x.i] = A.m[f.x.i] || {};
   if(m._nl) delete m._nl; else m._nl = true;
-  atdRender(); atdSalva(f.x.i);
+  atdRender(); atdSalva(f.x.i); atdAvanca(i);
 }
 function atdLink(){
   const u = location.origin + location.pathname.replace(/[^/]*$/, '') + '?atender=' + encodeURIComponent(CV.atdA.ent);

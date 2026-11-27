@@ -318,3 +318,5 @@ body.atd-aberto{ overflow:hidden; }
   #cvKpis{ display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; overflow:visible; }
   #cvKpis .cv-k{ border:0; padding:6px; min-width:0; } #cvKpis .cv-pg{ grid-column:1 / -1; }
 }
+.atd-nav{ display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface); border-bottom:1px solid var(--line); } .atd-nav > div{ flex:1; text-align:center; font-size:14px; } .atd-nav button{ min-width:44px; min-height:44px; border-radius:10px; border:1px solid var(--line); background:var(--surface2); color:var(--ink); font-size:22px; cursor:pointer; } .atd-nav .atd-tg{ font-size:12px; font-weight:700; padding:0 10px; min-width:0; }
+.atd-fim{ text-align:center; background:var(--surface); border:1px solid var(--line); border-left:6px solid #1F8A52; border-radius:12px; padding:28px 16px; } .atd-fim b{ font-size:20px; color:#1F8A52; } .atd-fim p{ color:var(--ink-soft); font-size:14px; }
