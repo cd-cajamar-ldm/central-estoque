@@ -95,7 +95,9 @@
     var agora = new Date();
     var vez = horaDaVez(h.lista, agora);
     var sit;
-    if(e && e.status === 'erro') sit = 'erro';
+    // "Atualizando" só vale por 20 min: se o PC travou no meio, a linha não fica girando para sempre.
+    if(e && e.status === 'atualizando' && e.inicio && agora - new Date(e.inicio) < 20 * 60000) sit = 'atualizando';
+    else if(e && e.status === 'erro') sit = 'erro';
     else if(!vez) sit = 'sem-horario';
     else if(ultimaOk && ultimaOk >= vez.getTime()) sit = 'em-dia';
     else if(agora - vez < 30 * 60000) sit = 'na-fila';
@@ -271,7 +273,7 @@
         '<span class="alx-hr add" data-add="' + esc(ia.chave) + '" title="Adicionar horário">+</span>';
       var quando = ia.ultimaOk || (tem ? p.dadosDe : null);
       ultimaHtml = quando ? dataHora(quando) : '—';
-      var SIT = { 'em-dia': ['em-dia', 'Em dia'], 'na-fila': ['vazia', 'Na fila'], 'atrasada': ['atrasada', 'Atrasada'],
+      var SIT = { 'atualizando': ['atualizando', 'Atualizando…'], 'em-dia': ['em-dia', 'Em dia'], 'na-fila': ['vazia', 'Na fila'], 'atrasada': ['atrasada', 'Atrasada'],
                   'sem-horario': ['vazia', 'Sem horário'],
                   'erro': ['atrasada', 'Erro ' + (ia.e && ia.e.ultima ? hora(new Date(ia.e.ultima).getTime()) : '')] };
       var sx = SIT[ia.sit];
@@ -451,6 +453,24 @@
 
   /* Chamado pela navegação da Oficina ao abrir a aba. Na primeira vez lê a pasta
      sozinho se o navegador já liberou; depois, a cada 10 min com a aba aberta. */
+  setInterval(function(){
+    if(raiz.hidden || document.hidden || !estado.handle || estado.perm !== 'granted' || estado.lendo) return;
+    A.lerAutomacao(estado.handle).then(function(auto){
+      if(!auto) return;
+      var antes = JSON.stringify(estado.auto && estado.auto.estado);
+      estado.auto = auto;
+      if(!estado.sujo) estado.editados = JSON.parse(JSON.stringify(auto.relatorios || {}));
+      if(JSON.stringify(auto.estado) !== antes){
+        // Algum relatório terminou: busca os arquivos novos; senão só redesenha.
+        var terminou = Object.keys(auto.estado || {}).some(function(k){
+          var v = auto.estado[k], a = (JSON.parse(antes || '{}') || {})[k];
+          return a && a.status === 'atualizando' && v.status !== 'atualizando';
+        });
+        if(terminou) ler(); else { renderPasta(); renderChips(); renderTabela(); }
+      }
+    });
+  }, 30000);
+
   var ultimoAuto = 0;
   window.renderAlmoxarifado = function(){
     var primeira = !estado.iniciado;

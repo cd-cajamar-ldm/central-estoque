@@ -142,6 +142,15 @@ try {
     $inicio = Get-Date
     $livro = $null
     $copia = Join-Path $temp $arq.Name
+    # Avisa o Almoxarifado que este relatório está sendo atualizado agora.
+    $ant = $estado[$arq.BaseName]
+    $estado[$arq.BaseName] = @{
+      status = 'atualizando'; inicio = (Get-Date -Format 's'); mensagem = ''
+      ultima = $(if ($ant) { $ant.ultima } else { $null })
+      ultimaOk = $(if ($ant -and $ant.ultimaOk) { $ant.ultimaOk } else { $null })
+      linhas = $(if ($ant) { $ant.linhas } else { $null })
+    }
+    try { GravarJson $estadoArq $estado } catch {}
     try {
       Copy-Item -LiteralPath $arq.FullName -Destination $copia -Force
       $livro = Excel { $excel.Workbooks.Open($copia, 0, $false) }
