@@ -26,7 +26,7 @@
   var ORDEM_FONTES = ['snowflake', 'fluxo', 'manual', 'indefinida'];
   var SITUACAO = { 'em-dia': 'Em dia', 'atrasada': 'Atrasada', 'antiga': 'Antiga', 'vazia': 'Vazia' };
   // Nome curto do app na linha (o nome completo aparece ao abrir a query).
-  var CURTO = { inventario:'Inventário', transitorios:'Transitórios', multiplos:'Múltiplos', elevadores:'Equalização', estoque:'Gestão de Estoque', estoquemultiplos:'Estoque de Múltiplos' };
+  var CURTO = { inventario:'Inventário', transitorios:'Transitórios', multiplos:'Múltiplos', elevadores:'Equalização', estoque:'Gestão de Estoque', estoquemultiplos:'Estoque de Múltiplos', checkvolume:'Check Volume' };
   var RITMO = { auto: 'deveria chegar a cada 2 h', diario: 'a origem só atualiza 1x ao dia, de madrugada', manual: 'chega à mão' };
 
   function esc(s){
