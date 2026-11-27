@@ -223,7 +223,6 @@ try {
 } finally {
   if ($excel) {
     try { Excel { $excel.IgnoreRemoteRequests = $false } } catch {}
-    # Só fecha se não sobrou nenhuma planilha que não seja nossa aberta nele.
     try { Excel { $excel.Quit() } } catch {}
     [void][Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
   }
