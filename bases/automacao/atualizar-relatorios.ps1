@@ -8,14 +8,16 @@
   NÃO TEM SENHA AQUI. O login do Snowflake fica guardado pelo próprio Excel
   (na primeira vez que ele pedir, no seu computador).
 
-  Uso:  powershell -NoProfile -ExecutionPolicy Bypass -File atualizar-relatorios.ps1 -Pasta "C:\...\Excel"
+  Uso:  dois cliques em "1 - ATUALIZAR AGORA.cmd" (o script fica em Bases\_automacao)
   O registro de cada rodada fica em  <Pasta>\_registro\atualizacao.log
   e o horário da última rodada boa em <Pasta>\_registro\ultima-atualizacao.txt
 #>
 param(
-  [Parameter(Mandatory = $true)][string]$Pasta,
+  # Sem -Pasta: usa a pasta de cima (o script mora em Bases\_automacao).
+  [string]$Pasta = (Split-Path -Parent $PSScriptRoot),
   [int]$MinutosMaximoPorArquivo = 20
 )
+$Pasta = (Resolve-Path $Pasta).Path
 
 $ErrorActionPreference = 'Stop'
 $registro = Join-Path $Pasta '_registro'

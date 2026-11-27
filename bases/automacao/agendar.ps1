@@ -4,11 +4,11 @@
   que roda atualizar-relatorios.ps1 a cada N minutos, com você conectado (o Excel
   precisa da sua sessão; a tela pode ficar bloqueada). Não precisa de administrador.
 
-  Uso:  powershell -NoProfile -ExecutionPolicy Bypass -File agendar.ps1 -Pasta "C:\...\Excel" -Minutos 30
+  Uso:  dois cliques em "2 - LIGAR AUTOMATICO.cmd"
   Para tirar: abra o Agendador de Tarefas e apague a tarefa, ou rode com -Remover.
 #>
 param(
-  [string]$Pasta,
+  [string]$Pasta = (Split-Path -Parent $PSScriptRoot),
   [int]$Minutos = 30,
   [switch]$Remover
 )
@@ -19,7 +19,8 @@ if ($Remover) {
   Write-Host "Tarefa removida."
   exit 0
 }
-if (-not $Pasta -or -not (Test-Path $Pasta)) { throw "Informe -Pasta com o caminho da pasta dos Excel (ela precisa existir)." }
+if (-not (Test-Path $Pasta)) { throw "Pasta não encontrada: $Pasta" }
+$Pasta = (Resolve-Path $Pasta).Path
 
 $script = Join-Path $PSScriptRoot 'atualizar-relatorios.ps1'
 $argumentos = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script + '" -Pasta "' + $Pasta + '"'

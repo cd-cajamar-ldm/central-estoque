@@ -6,21 +6,15 @@ Cada relatório é um Excel (Power Query lendo o Snowflake pelo ODBC ou um fluxo
 
 ## Montar (uma vez, no computador que vai ficar ligado)
 
-1. Crie a pasta **`Base Relatórios Automaticos/Excel`** no SharePoint e deixe-a sincronizada no computador.
-2. Crie os relatórios no Excel (ex.: `QRY0390.xlsx`) e salve nessa pasta. Atualize cada um à mão **uma vez**, para o Excel guardar o login.
-3. Copie `atualizar-relatorios.ps1` e `agendar.ps1` para uma pasta do computador (ex.: `Documentos\Automacao`).
-4. **Teste à mão:** abra o PowerShell nessa pasta e rode:
-   ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\atualizar-relatorios.ps1 -Pasta "C:\caminho\da\pasta\Excel"
-   ```
-   Deve aparecer `OK    QRY0390.xlsx`.
-5. **Agende:**
-   ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\agendar.ps1 -Pasta "C:\caminho\da\pasta\Excel" -Minutos 30
-   ```
+1. Os relatórios em Excel ficam na pasta **Bases** sincronizada (`CD CAJAMAR - CONTROLE DE ESTOQUE - Bases`). Atualize cada um à mão **uma vez**, para o Excel guardar o login.
+2. Dentro da **Bases**, coloque a pasta **`_automacao`** com estes arquivos (o `.zip` já vem com ela: botão direito → **Extrair tudo** → escolher a pasta Bases).
+3. **Feche todos os Excel** e dê dois cliques em **`1 - ATUALIZAR AGORA.cmd`**. Deve aparecer `OK` para cada arquivo.
+4. Deu certo? Dois cliques em **`2 - LIGAR AUTOMATICO.cmd`**. Pronto: a cada 30 minutos, sozinho.
+
+Se o Windows avisar "O Windows protegeu o computador": **Mais informações → Executar assim mesmo**.
 
 ## No dia a dia
 - O computador precisa ficar **ligado e com você conectado** (a tela pode ficar bloqueada).
 - **Não deixe os relatórios abertos**: arquivo aberto não é atualizado (aparece `ERRO ... somente leitura` no registro).
-- O que aconteceu em cada rodada fica em `Excel/_registro/atualizacao.log`; o horário da última rodada boa, em `_registro/ultima-atualizacao.txt`.
-- Para parar: Agendador de Tarefas → apagar **Central de Estoque - Atualizar relatórios** (ou `agendar.ps1 -Remover`).
+- O que aconteceu em cada rodada fica em `Bases/_registro/atualizacao.log`; o horário da última rodada boa, em `_registro/ultima-atualizacao.txt`.
+- Para parar: Agendador de Tarefas → apagar **Central de Estoque - Atualizar relatórios** (ou dois cliques em `3 - DESLIGAR AUTOMATICO.cmd`).
