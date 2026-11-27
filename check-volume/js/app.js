@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 11; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 12; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -251,12 +251,17 @@ function cvNova(){ CV.num = ''; CV.sess = null; CV.linhas = []; CV.ult = null; r
 /* Leitor de código de barras: ele digita o EAN e (na maioria) manda Enter. Se não mandar,
    a leitura é registrada sozinha quando a digitação para (leitor digita tudo em milissegundos). */
 let _cvAuto;
+const TAM_EAN = [8, 12, 13, 14];
+let _cvT0 = 0;
 function cvAutoBip(inp){
   clearTimeout(_cvAuto);
   if(!CV.sess) return;
-  const v = inp.value.trim();
-  if(v.length < 8) return;
-  _cvAuto = setTimeout(() => { const x = inp.value.trim(); if(x.length >= 8){ inp.value = ''; bipar(x); } }, 150);
+  if(inp.value.length === 1) _cvT0 = Date.now();           /* começou a digitar */
+  const n = inp.value.trim().length;
+  if(TAM_EAN.indexOf(n) < 0) return;
+  /* O leitor digita o código inteiro em milissegundos; à mão é bem mais devagar — nesse caso só o Enter registra. */
+  if((Date.now() - _cvT0) / n > 40) return;
+  _cvAuto = setTimeout(() => { const x = inp.value.trim(); if(TAM_EAN.indexOf(x.length) >= 0){ inp.value = ''; bipar(x); } }, 80);
 }
 /* O campo do EAN volta a ter o foco sozinho, para o leitor sempre cair nele. */
 function cvRefoca(inp){
@@ -267,7 +272,10 @@ function cvRefoca(inp){
   }, 60);
 }
 function focoBip(){ const i = $('cvBip'); if(i) i.focus(); }
-function cvToggle(i){ if(CV.aberto.has(i)) CV.aberto.delete(i); else CV.aberto.add(i); atualizar(); }
+function cvToggle(i){
+  const sel = window.getSelection && String(window.getSelection() || '');
+  if(sel) return;                                          /* está selecionando texto para copiar: não abre a linha */
+  if(CV.aberto.has(i)) CV.aberto.delete(i); else CV.aberto.add(i); atualizar(); }
 
 /* ---------- onde achar a peça faltante ---------- */
 const normClasse = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim().split(/[\s·-]+/)[0];
@@ -420,7 +428,7 @@ function atualizar(){
     (log.length ? log.map((l, k) => { const kk = l.k || (l.i ? 'ok' : 'ean'); return '<tr><td>' + (s.log.length - k) + '</td><td>' + new Date(l.t).toLocaleTimeString('pt-BR') + '</td><td class="cv-mono">' + esc(l.e || '') + '</td><td>' + (l.i ? esc(nome(l.i)) : '<span class="field-hint">— não está na entrega —</span>') + '</td><td><span class="cv-pill ' + (kk === 'ok' ? 'cv-ok' : kk === 'sobra' ? 'cv-sobra' : 'cv-falta') + '">' + (kk === 'ok' ? 'Conferido' : kk === 'sobra' ? 'Sobra' : 'EAN não ident.') + '</span></td></tr>'; }).join('') : '<tr><td colspan="5" class="field-hint" style="padding:14px">Nenhuma leitura ainda.</td></tr>') + '</tbody></table></div></div>';
   const diverge = t.falta || t.sobra || t.ean;
   $('cvAcoes').innerHTML = '<div class="cv-acoes"><button class="btn btn-secondary" onclick="cvDesfazer()">↶ Desfazer</button><button class="btn btn-secondary" onclick="cvExportar()">Exportar</button>' + btnSom() + '<button class="btn btn-danger-text" onclick="cvZerar()">Zerar</button></div><div class="cv-acoes2">' +
-    '<button class="btn btn-orange cv-atender" onclick="cvAtender()"' + (s.fin && diverge ? '' : ' disabled title="' + (s.fin ? 'Entrega sem divergência' : 'Finalize a conferência para habilitar') + '"') + '>⚑ Atender entrega</button>' +
+    '<button class="btn btn-orange cv-atender" onclick="cvAtender()"' + (diverge ? '' : ' disabled title="Entrega sem divergência"') + '>⚑ Atender entrega</button>' +
     '<button class="cv-fin" onclick="cvFinalizar()">Finalizar conferência</button></div>';
   // tabela de itens
   const ordem = {falta: 0, sobra: 1, pend: 2, ok: 3};
@@ -765,6 +773,7 @@ function cvAtender(){
   XLSX.utils.book_append_sheet(wb, planilha(l2, [12, 11, 44, 8, 10, 18, 13, 12, 14, 9, 10]), 'Locais sugeridos');
   if(l3.length > 1) XLSX.utils.book_append_sheet(wb, planilha(l3, [12, 20, 18, 44, 11, 54]), 'Sobras e EAN');
   XLSX.writeFile(wb, 'atender-entrega-' + CV.num + '.xlsx');
+  setTimeout(focoBip, 0);
   toast('Excel gerado: ' + faltas.length + ' item(ns) para atender.');
 }
 
