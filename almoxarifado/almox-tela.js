@@ -402,7 +402,7 @@
         var padrao = (estado.auto && estado.auto.padrao) || ['06:00'];
         A.gravarHorarios(estado.handle, padrao, estado.editados || {}).then(function(){
           estado.sujo = false;
-          aviso('Horários salvos. O PC passa a usar na próxima conferência (até 15 min).');
+          aviso('Horários salvos. O PC passa a usar na próxima conferência (até 5 min).');
           return render();
         }).catch(function(e){ aviso('Não deu para salvar: ' + (e && e.message || e)); });
       }
@@ -450,6 +450,9 @@
           return a && a.status === 'atualizando' && v.status !== 'atualizando';
         });
         if(terminou) ler(); else { renderPasta(); renderChips(); renderTabela(); }
+      } else {
+        // Nada mudou no PC, mas o relógio andou: "Em dia" pode ter virado "Na fila".
+        renderPasta(); renderChips(); renderTabela();
       }
     });
   }, 30000);

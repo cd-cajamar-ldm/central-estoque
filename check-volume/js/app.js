@@ -6,15 +6,14 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 26; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 27; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
-  entregas: ['Entregas', 'Entregas da QRY0180 importada.'],
+  entregas: ['Entregas', 'Entregas da QRY0180.'],
   historico: ['Registro de conferências', 'Todas as entregas bipadas, com ou sem divergência.'],
   gestao: ['Gestão de divergências', 'Uma linha por entrega divergente, com classificação e tratativa.'],
   dashboard: ['Dashboard de divergências', 'Indicadores das ocorrências registradas.'],
-  importacao: ['Importação', 'Bases do Check Volume.'],
   configuracoes: ['Configurações', 'Regras das sugestões de outros locais.']
 };
 /* Picking × não picking por CLASSE do local (coluna CLAL) — as mesmas classes marcadas no Inventário Rotativo. */
@@ -231,7 +230,7 @@ async function abrirEntrega(n){
   const rows = CV.porEnt.get(ent);
   if(!rows){
     CV.num = ''; CV.sess = null; CV.linhas = [];
-    CV.ult = {tipo: 'ean', txt: (dig.length >= 20 ? 'Chave ' + dig.slice(0, 12) + '… não encontrada' : 'Entrega ' + dig + ' não encontrada') + ' na QRY0180 importada' + (CV.meta.ent && CV.meta.ent.importadoEm ? ' em ' + fData(CV.meta.ent.importadoEm.slice(0, 10)) : '') + '.' + (dig.length >= 20 && !CV.etqMap.size ? ' Importe a QRY0180 de novo para ler as chaves.' : '')};
+    CV.ult = {tipo: 'ean', txt: (dig.length >= 20 ? 'Chave ' + dig.slice(0, 12) + '… não encontrada' : 'Entrega ' + dig + ' não encontrada') + ' na QRY0180' + (CV.meta.ent && CV.meta.ent.importadoEm ? ' de ' + fData(CV.meta.ent.importadoEm.slice(0, 10)) : '') + '.' + (dig.length >= 20 && !CV.etqMap.size ? ' Aguarde a próxima atualização da QRY0180 para ler as chaves.' : '')};
     beep('erro'); renderView(); setTimeout(() => { const e = $('cvEnt'); if(e){ e.focus(); e.select(); } }, 0); return;
   }
   CV.abrindo = true;
@@ -430,7 +429,7 @@ function blocoLocais(x){
 function vazio(){ return '<div class="panel"><h3>Sem dados</h3><div class="panel-sub">' + esc(CV.erro) + '</div></div>'; }
 function chipEnt(){
   const m = CV.meta.ent;
-  return m && m.importadoEm ? 'QRY0180 de ' + fData(m.importadoEm.slice(0, 10)) + ' · ' + fInt(CV.porEnt.size) + ' entregas' : 'QRY0180 não importada';
+  return m && m.importadoEm ? 'QRY0180 de ' + fData(m.importadoEm.slice(0, 10)) + ' · ' + fInt(CV.porEnt.size) + ' entregas' : 'QRY0180 ainda não chegou';
 }
 const FOTO_BASE = 'https://img.lojadomecanico.com.br/IMAGENS/';
 const FOTO_SITE = 'https://img.lojadomecanico.com.br/256/';
@@ -550,7 +549,7 @@ function atualizar(){
   // tabela de itens
   const ordem = {falta: 0, sobra: 1, pend: 2, ok: 3};
   const ls = CV.linhas.slice().sort((a, b) => ordem[cvSituacao(a)] - ordem[cvSituacao(b)] || a.d.localeCompare(b.d));
-  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? (n => n ? n + ' de ' + CV.linhas.length + ' itens sem foto' : 'toque numa linha com pendência para ver onde achar')(CV.linhas.filter(x => !urlFoto(x.i)).length) : 'sem fotos: importe o cadastro em Importação') + '</s></h3><div class="cv-sc"><table class="cv-tab cv-compact cv-itens"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th>EAN</th><th class="n">Prev.</th><th class="n">Bip.</th><th class="n">Pend.</th><th>Status</th><th></th></tr></thead><tbody>' +
+  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? (n => n ? n + ' de ' + CV.linhas.length + ' itens sem foto' : 'toque numa linha com pendência para ver onde achar')(CV.linhas.filter(x => !urlFoto(x.i)).length) : 'sem fotos: a base Imagens ainda não chegou') + '</s></h3><div class="cv-sc"><table class="cv-tab cv-compact cv-itens"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th>EAN</th><th class="n">Prev.</th><th class="n">Bip.</th><th class="n">Pend.</th><th>Status</th><th></th></tr></thead><tbody>' +
     ls.map(x => {
       const b = s.bips[x.i] || 0, st = cvSituacao(x), pen = Math.max(x.prev - b, 0), ab = CV.aberto.has(x.i);
       return '<tr class="' + (pen ? 'clicavel ' : '') + (st === 'falta' ? 'r-falta' : st === 'sobra' ? 'r-sobra' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td>' + fotoHtml(x.i, 'cv-th') + '</td><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc" title="' + esc(x.d) + '">' + esc(descCurta(x.d)) + '</td><td class="cv-mono cv-eancol" title="' + esc(x.eans.join(' / ')) + '">' + (x.eans.length ? esc(x.eans[0]) + (x.eans.length > 1 ? ' +' + (x.eans.length - 1) : '') : '<span class="field-hint">não cadastrado</span>') + '</td>' +
@@ -590,13 +589,13 @@ function viewEntregas(){
     lista.slice(CV.pag * POR, CV.pag * POR + POR).map(o => { const st = statusEnt(o.e); return '<tr><td class="cv-mono"><b>' + esc(o.e) + '</b></td><td>' + esc(o.t) + '</td><td>' + esc(o.ev) + '</td><td>' + fData(o.li) + '</td><td class="n">' + o.itens + '</td><td class="n">' + fInt(o.pecas) + '</td><td>' + (st ? '<span class="cv-pill ' + (st === 'Finalizada' ? 'cv-ok' : 'cv-pend') + '">' + st + '</span>' : '<span class="field-hint">—</span>') + '</td><td class="n"><button class="btn btn-secondary btn-sm" onclick="abrirEntrega(\'' + esc(o.e) + '\')">Conferir</button></td></tr>'; }).join('') + '</tbody></table></div>' +
     (pags > 1 ? '<div class="cv-pag"><button class="btn btn-secondary" onclick="cvPag(-1)"' + (CV.pag === 0 ? ' disabled' : '') + '>←</button><span>Página ' + (CV.pag + 1) + ' de ' + pags + '</span><button class="btn btn-secondary" onclick="cvPag(1)"' + (CV.pag >= pags - 1 ? ' disabled' : '') + '>→</button></div>' : '');
 }
-function cardBase(ic, titulo, sub, m, det){
+/* Uma linha do quadro "Bases conectadas": de qual query veio e quando chegou. */
+function linhaBase(cod, nome, m, det){
   const ok = !!m;
-  return '<label class="cv-bs ' + (ok ? 'ok' : '') + '"><span class="cv-bs-ic">' + ic + '</span><span class="cv-bs-t"><b>' + titulo + '</b><small>' + sub + '</small></span>' +
-    '<span class="cv-bs-st">' + (ok ? '✓ ' + fData((m.importadoEm || '').slice(0, 10)) + ' · ' + det : 'Não importada') + '</span>' +
-    (ok && m.por ? '<span class="cv-bs-por">' + esc(m.por) + '</span>' : '<span class="cv-bs-por"></span>') +
-    '<span class="btn btn-orange cv-bs-btn">' + (ok ? 'Atualizar' : 'Importar') + '</span>' +
-    '<input type="file" accept=".xlsx,.xls" multiple hidden onchange="importar(Array.from(this.files)); this.value=\'\'"></label>';
+  const quando = ok && m.importadoEm ? fData(m.importadoEm.slice(0, 10)) + ' ' + new Date(m.importadoEm).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) : '';
+  return '<tr><td class="cv-mono"><b>' + cod + '</b></td><td>' + nome + '</td>' +
+    '<td>' + (ok ? '<span class="cv-pill cv-ok">Conectada</span>' : '<span class="cv-pill cv-pend">Aguardando</span>') + '</td>' +
+    '<td>' + (quando || '—') + '</td><td class="n">' + (ok ? det : '—') + '</td></tr>';
 }
 /* Quantos itens das entregas importadas têm foto no cadastro. */
 function coberturaFotos(){
@@ -606,20 +605,22 @@ function coberturaFotos(){
   CV._cobKey = CV.ent.length + '|' + (CV.fotoMap ? CV.fotoMap.size : 0);
   return (CV._cob = {t: it.size, c});
 }
-function viewImportacao(){
+function painelBases(){
   const e = CV.meta.ent, s = CV.meta.est, f = CV.meta.foto, n = CV.meta.ean;
-  return '<div class="cv-bases" id="cvDrop">' +
-    cardBase('📦', 'QRY0180', 'Entregas', e, e ? fInt(e.entregas) + ' entregas · ' + fInt(e.linhas) + ' linhas' : '') +
-    cardBase('🏬', 'QRY0390', 'Estoque', s, s ? fInt(s.itens) + ' itens · ' + fInt(s.locais) + ' saldos' : '') +
-    cardBase('▥', 'SIGEQ230', 'EANs por item', n, n ? fInt(n.eans) + ' EANs · ' + fInt(n.itens) + ' itens' : '') +
-    cardBase('🖼', 'Cadastro', 'Fotos dos itens', f, f ? fInt(f.itens) + ' itens com foto' + (CV.ent.length ? ' · ' + (cb => cb.t ? Math.round(cb.c / cb.t * 100) + '% dos itens das entregas' : '')(coberturaFotos()) : '') : '') +
-    '</div><div class="field-hint" style="margin-top:8px">Atualização automática: ao abrir o Check Volume, as bases mais novas da pasta <b>Bases</b> (Almoxarifado da Oficina) entram sozinhas.' +
-      (e && e.auto ? ' Última entrega automática: ' + fData((e.importadoEm || '').slice(0, 10)) + ' ' + new Date(e.importadoEm).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + '.' : '') + '</div>' +
+  return '<div class="panel"><h3>Bases conectadas</h3><div class="panel-sub">Chegam sozinhas das queries da pasta Bases (Almoxarifado da Oficina).</div>' +
+    '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Query</th><th>Base</th><th>Situação</th><th>Atualizada em</th><th class="n">Tamanho</th></tr></thead><tbody>' +
+    linhaBase('QRY0180', 'Pedidos', e, e ? fInt(e.entregas) + ' entregas' : '') +
+    linhaBase('QRY0390', 'Estoque', s, s ? fInt(s.locais) + ' saldos' : '') +
+    linhaBase('SIGEQ230', 'EANs por item', n, n ? fInt(n.eans) + ' EANs' : '') +
+    linhaBase('Imagens', 'Fotos dos itens', f, f ? fInt(f.itens) + ' itens' : '') +
+    '</tbody></table></div>' +
+    (CV.erroImp ? '<div class="cv-res div">⚠ ' + esc(CV.erroImp) + '</div>' : '') +
     '<div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div>' +
-    (CV.erroImp ? '<div class="cv-res div">⚠ ' + esc(CV.erroImp) + '</div>' : '');
+    '<details class="cv-gap"><summary class="field-hint" style="cursor:pointer">Emergência: importar um arquivo à mão</summary>' +
+    '<label class="btn btn-secondary btn-sm" style="margin-top:8px">Escolher arquivo<input type="file" accept=".xlsx,.xls" multiple hidden onchange="importar(Array.from(this.files)); this.value=\'\'"></label></details></div>';
 }
 function viewConfig(){
-  return '<div class="panel"><h3>Classes de local ignoradas nas sugestões</h3><div class="panel-sub">Coluna <code>CLAL</code> da QRY0390, separadas por vírgula. Locais dessas classes (ex.: reversa e avaria) não são sugeridos.</div><div class="filter-bar"><input type="text" id="cfgIg" value="' + esc(CV.cfg.ignorar.join(', ')) + '"></div></div>' +
+  return painelBases() + '<div class="panel cv-gap"><h3>Classes de local ignoradas nas sugestões</h3><div class="panel-sub">Coluna <code>CLAL</code> da QRY0390, separadas por vírgula. Locais dessas classes (ex.: reversa e avaria) não são sugeridos.</div><div class="filter-bar"><input type="text" id="cfgIg" value="' + esc(CV.cfg.ignorar.join(', ')) + '"></div></div>' +
     '<div class="panel cv-gap"><h3>Restrições aceitas</h3><div class="panel-sub">Coluna <code>RETRICAO</code> da QRY0390. Só saldo com essas restrições é sugerido (padrão <code>WN</code> = normal). Em branco = aceita todas.</div><div class="filter-bar"><input type="text" id="cfgRs" value="' + esc(CV.cfg.restricoes.join(', ')) + '"></div></div>' +
     '<div class="panel cv-gap"><h3>Classes de picking (locais de coleta)</h3><div class="panel-sub">Coluna <code>CLAL</code> da QRY0390, separadas por vírgula. Só locais dessas classes são sugeridos. Mesmas classes do Inventário Rotativo.</div><div class="filter-bar"><input type="text" id="cfgPk" value="' + esc((CV.cfg.clPicking || CL_PICKING).join(', ')) + '"></div></div>' +
     '<div class="panel cv-gap"><h3>Classes que não são picking</h3><div class="filter-bar"><input type="text" id="cfgNao" value="' + esc((CV.cfg.clNao || CL_NAO).join(', ')) + '"></div>' +
@@ -1489,11 +1490,12 @@ function cvExportar(){
 }
 
 /* ---------- navegação / estado ---------- */
-const VIEWS = {conferir: viewConferir, entregas: viewEntregas, historico: viewHistorico, gestao: viewGestao, dashboard: viewDashboard, importacao: viewImportacao, configuracoes: viewConfig};
+const VIEWS = {conferir: viewConferir, entregas: viewEntregas, historico: viewHistorico, gestao: viewGestao, dashboard: viewDashboard, configuracoes: viewConfig};
 function renderMsg(){ const el = $('cvMsg'); if(el) el.textContent = CV.ocupado ? '⏳ ' + CV.msg : ''; }
 function renderView(){
-  if(CV.erro && !CV.ent.length && !CV.saldo.length && CV.tab !== 'importacao' && CV.tab !== 'configuracoes'){ $('viewRoot').innerHTML = vazio(); return; }
-  if(somenteLeitura() && (CV.tab === 'importacao' || CV.tab === 'configuracoes')) CV.tab = 'conferir';
+  if(CV.erro && !CV.ent.length && !CV.saldo.length && CV.tab !== 'configuracoes'){ $('viewRoot').innerHTML = vazio(); return; }
+  if(somenteLeitura() && CV.tab === 'configuracoes') CV.tab = 'conferir';
+  if(!VIEWS[CV.tab]) CV.tab = 'conferir';
   const el = $('viewRoot'); if(!el) return;
   const sc = document.querySelector('.page-scroll'), y = sc ? sc.scrollTop : 0;
   el.innerHTML = VIEWS[CV.tab]();

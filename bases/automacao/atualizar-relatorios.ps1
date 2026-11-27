@@ -1,7 +1,7 @@
 ﻿<#
   ATUALIZAR RELATÓRIOS EXCEL — Central de Estoque (CD Cajamar)
   ------------------------------------------------------------
-  Roda a cada 15 min, mas só atualiza o relatório cujo horário (escolhido no
+  Roda a cada 5 min, mas só atualiza o relatório cujo horário (escolhido no
   Almoxarifado da Oficina, gravado em _automacao\horarios.json) já chegou.
   Copia cada .xlsx da pasta para o computador, abre, clica "Atualizar tudo" (Power Query: Snowflake pelo
   ODBC, fluxos de dados...), espera terminar, salva e fecha. Um arquivo de cada vez.

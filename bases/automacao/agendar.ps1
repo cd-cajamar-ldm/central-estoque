@@ -9,7 +9,7 @@
 #>
 param(
   [string]$Pasta = (Split-Path -Parent $PSScriptRoot),
-  [int]$Minutos = 15,
+  [int]$Minutos = 5,
   [switch]$Remover
 )
 $nome = 'Central de Estoque - Atualizar relatórios'
