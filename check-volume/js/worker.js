@@ -261,19 +261,21 @@ self.onmessage = async (e) => {
         transp: col('NOME_TRANSP'), evento: col('EVENTO_NOME'), lim: col('DT_LIMITE'), canal: col('CANAL'), vol: col('QT_VOL'), modelo: col('MODELO_PEDIDO'), oper: col('OPERADOR'), etiq: col('ETIQUETA_PICKING'), danfe: col('CHAVE_DANFE')
       };
       if(c.item < 0) throw new Error('QRY0180: coluna ID_ITEM não encontrada.');
-      const linhas = [], cabs = new Map(), descs = new Map(), chaves = new Map();
+      const linhas = [], cabs = new Map(), descs = new Map(), chaves = new Map(), ops = [], opIdx = new Map();
       for(let r = 1; r < aoa.length; r++){
         const L = aoa[r]; if(!L) continue;
         const ent = chave(L[cEnt]); if(!ent) continue;
         const item = chave(L[c.item]); if(!item) continue;
         const orig = txt(L[c.orig]) || txt(L[c.pick]) || txt(L[c.dest]);
-        linhas.push([ent, item, num(L[cQt]), orig]);
+        let oi = -1; const op = c.oper >= 0 ? txt(L[c.oper]) : '';   /* operador (meca) de cada linha, em dicionário */
+        if(op){ oi = opIdx.get(op); if(oi === undefined){ oi = ops.length; ops.push(op); opIdx.set(op, oi); } }
+        linhas.push([ent, item, num(L[cQt]), orig, oi]);
         if(!cabs.has(ent)) cabs.set(ent, [ent, txt(L[c.transp]), txt(L[c.evento]), dia(L[c.lim]), txt(L[c.canal]), num(L[c.vol]), txt(L[c.modelo]), c.oper >= 0 ? txt(L[c.oper]) : '']);
         for(const ci of [c.etiq, c.danfe]){ if(ci >= 0){ const k = chave(L[ci]); if(k && !chaves.has(k)) chaves.set(k, ent); } }   /* chave picking / chave da nota -> entrega */
         if(!descs.has(item)){ const d = txt(L[c.desc]); if(d) descs.set(item, d); }
         if(r % 50000 === 0) self.postMessage({tipo: 'prog', msg: 'Organizando ' + nome + ': ' + r.toLocaleString('pt-BR') + ' de ' + n.toLocaleString('pt-BR') + ' linhas...'});
       }
-      self.postMessage({tipo: 'ok', base: '180', nome, linhas: n, dados: {linhas, cabs: Array.from(cabs.values()), descs: Array.from(descs.entries()), chaves: Array.from(chaves.entries())}});
+      self.postMessage({tipo: 'ok', base: '180', nome, linhas: n, dados: {linhas, cabs: Array.from(cabs.values()), descs: Array.from(descs.entries()), chaves: Array.from(chaves.entries()), ops}});
     } else if(cFilho >= 0 && cDisp >= 0){ // QRY0390 — estoque (saldo por local) + EAN por item
       const c = {desc: col('NOME_ITEM_FILHO'), ean: col('EAN'), local: col('DESC_LOCAL'), clal: col('CLAL'), restr: col('RETRICAO', 'RESTRICAO')};
       if(c.local < 0) throw new Error('QRY0390: coluna DESC_LOCAL não encontrada.');
