@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 16; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 17; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -125,6 +125,8 @@ function indexar(){
   Object.keys(CV.itens).forEach(i => (CV.itens[i].e || []).forEach(e => { const k = normEan(e); if(k && !CV.eanMap.has(k)) CV.eanMap.set(k, i); }));
   CV.eansExtra = new Map();
   (CV.eanRows || []).forEach(r => { const k = normEan(r[1]); if(!k) return; let a = CV.eansExtra.get(r[0]); if(!a) CV.eansExtra.set(r[0], a = []); if(a.indexOf(r[1]) < 0) a.push(r[1]); if(!CV.eanMap.has(k)) CV.eanMap.set(k, r[0]); });
+  CV.etqUlt = new Map();                                   /* últimos 9 dígitos da chave (pré-volume) -> entrega */
+  CV.etqMap.forEach((e, k) => { if(k.length >= 29 && k.length < 44) CV.etqUlt.set(k.slice(-9), e); });
   CV.fotoMap = new Map();
   (CV.fotoRows || []).forEach(f => { CV.fotoMap.set(f[0], f[1]); const k = normEan(f[2]); if(k && !CV.eanMap.has(k)) CV.eanMap.set(k, f[0]); });
   CV.saldoItem = new Map();
@@ -170,12 +172,21 @@ function montarLinhas(rows){
   });
   return Array.from(m.values());
 }
+/* A etiqueta impressa tem 38 dígitos (20 + 9 zeros + 9 do pré-volume); a QRY0180 guarda 29 (sem os zeros do meio).
+   Os dois formatos viram a mesma chave. */
+function chaveCanon(d){ return d.length === 38 ? d.slice(0, 20) + d.slice(29) : d; }
+function entDaChave(dig){
+  const c = chaveCanon(dig);
+  if(CV.etqMap.has(c)) return CV.etqMap.get(c);
+  if(dig.length >= 29 && dig.length < 44) return CV.etqUlt.get(dig.slice(-9)) || '';   /* garantia: pelo pré-volume */
+  return '';
+}
 /* Aceita o número da entrega, a chave picking (etiqueta de picking) ou a chave da nota — as chaves viram a entrega. */
 function abrirEntrega(n){
   const bruto = String(n || '').trim(), dig = bruto.replace(/\D/g, '');
   if(!dig) return toast('Informe a entrega ou bipe a chave picking.', true);
   let ent = dig, viaChave = false;
-  if(!CV.porEnt.has(ent) && CV.etqMap.has(dig)){ ent = CV.etqMap.get(dig); viaChave = true; }
+  if(!CV.porEnt.has(ent)){ const e = entDaChave(dig); if(e){ ent = e; viaChave = true; } }
   const rows = CV.porEnt.get(ent);
   if(!rows){
     CV.num = ''; CV.sess = null; CV.linhas = [];
@@ -210,7 +221,7 @@ function bipar(codigo){
   if(!CV.sess){ toast('Informe a entrega primeiro.', true); const e = $('cvEnt'); if(e) e.focus(); return; }
   const cod = String(codigo || '').trim(); if(!cod) return;
   const k = normEan(cod);
-  if(k.length >= 20 && CV.etqMap.has(k)){ abrirEntrega(k); return; }   /* bipou a chave picking de outra entrega: troca de entrega */
+  if(k.length >= 20 && entDaChave(k)){ abrirEntrega(k); return; }   /* bipou a chave picking de outra entrega: troca de entrega */
   let item = k ? CV.eanMap.get(k) : null;
   let x = item ? CV.linhas.find(l => l.i === item) : null;
   if(!x) x = CV.linhas.find(l => l.i === cod || l.eans.some(e => normEan(e) === k && k)) || null; // digitou o código do item / EAN que só a 390 conhece
