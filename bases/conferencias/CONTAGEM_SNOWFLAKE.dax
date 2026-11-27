@@ -1,0 +1,11 @@
+// Conferência das tabelas que vêm do Snowflake (rodar na Exibição de consulta DAX).
+// Cada parte da QRY0390 precisa ficar abaixo de ~45 mil linhas (22 colunas x 45 mil
+// = ~1 milhão de células). Se passar, avise o Claude para dividir em mais partes.
+EVALUATE
+ROW(
+    "QRY0390 total", COUNTROWS('QRY0390'),
+    "QRY0390 parte 1", COUNTROWS(FILTER('QRY0390', MOD(COALESCE('QRY0390'[ID_ITEM_FILHO], 0), 3) = 0)),
+    "QRY0390 parte 2", COUNTROWS(FILTER('QRY0390', MOD(COALESCE('QRY0390'[ID_ITEM_FILHO], 0), 3) = 1)),
+    "QRY0390 parte 3", COUNTROWS(FILTER('QRY0390', MOD(COALESCE('QRY0390'[ID_ITEM_FILHO], 0), 3) = 2)),
+    "QRY0180 total", COUNTROWS('QRY0180')
+)
