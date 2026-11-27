@@ -104,3 +104,20 @@ body.theme-dark #view-almox{--alx-cod:#9FB1FF;
   .alx-mig{width:100%;}
   .alx-pasta-acoes{width:100%;}
 }
+
+/* horários da automação do PC */
+.alx-hrs{white-space:nowrap;}
+.alx-hr{display:inline-block;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:10px;font-weight:700;background:#E6EBF8;color:var(--alx-azul);border-radius:5px;padding:0 5px;margin-right:3px;line-height:15px;cursor:pointer;}
+.alx-hr:hover{background:var(--alx-at-bg);color:var(--alx-at-tx);}
+.alx-hr.padrao{opacity:.55;cursor:default;}
+.alx-hr.padrao:hover{background:#E6EBF8;color:var(--alx-azul);}
+.alx-hr.add{background:var(--alx-laranja);color:#fff;}
+.alx-hr.add:hover{background:#C83812;color:#fff;}
+body.theme-dark .alx-hr,body.theme-dark .alx-hr.padrao:hover{background:rgba(142,162,255,.18);color:#C7D2FF;}
+body.theme-dark .alx-hr.add{background:var(--alx-laranja);color:#fff;}
+.alx-ult-rot{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);}
+.alx-ult{display:block;font-size:20px;font-weight:800;color:var(--ink);margin-top:1px;}
+.alx-ult small{font-size:14px;font-weight:600;color:var(--ink-soft);}
+.alx-sujo{color:var(--alx-at-tx);}
+.alx-erro{color:var(--alx-at-tx);}
+.alx-usa{max-width:200px;overflow:hidden;text-overflow:ellipsis;}
