@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 22; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 23; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -613,7 +613,9 @@ function viewImportacao(){
     cardBase('🏬', 'QRY0390', 'Estoque', s, s ? fInt(s.itens) + ' itens · ' + fInt(s.locais) + ' saldos' : '') +
     cardBase('▥', 'SIGEQ230', 'EANs por item', n, n ? fInt(n.eans) + ' EANs · ' + fInt(n.itens) + ' itens' : '') +
     cardBase('🖼', 'Cadastro', 'Fotos dos itens', f, f ? fInt(f.itens) + ' itens com foto' + (CV.ent.length ? ' · ' + (cb => cb.t ? Math.round(cb.c / cb.t * 100) + '% dos itens das entregas' : '')(coberturaFotos()) : '') : '') +
-    '</div><div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div>' +
+    '</div><div class="field-hint" style="margin-top:8px">Atualização automática: ao abrir o Check Volume, as bases mais novas da pasta <b>Bases</b> (Almoxarifado da Oficina) entram sozinhas.' +
+      (e && e.auto ? ' Última entrega automática: ' + fData((e.importadoEm || '').slice(0, 10)) + ' ' + new Date(e.importadoEm).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + '.' : '') + '</div>' +
+    '<div class="cv-msg" id="cvMsg">' + (CV.ocupado ? '⏳ ' + esc(CV.msg) : '') + '</div>' +
     (CV.erroImp ? '<div class="cv-res div">⚠ ' + esc(CV.erroImp) + '</div>' : '');
 }
 function viewConfig(){
@@ -1199,7 +1201,8 @@ function lerArquivo(file){
     try { w.postMessage({nome: file.name, file}); } catch(err){ w.terminate(); no(new Error(file.name + ': não consegui abrir o arquivo. Se ele está no OneDrive com “Sincronização pendente”, espere o ícone ficar verde ou copie para a Área de Trabalho.')); }
   });
 }
-async function importar(files){
+async function importar(files, opts){
+  opts = opts || {};
   if(somenteLeitura()) return toast('Seu acesso é só de visualização.', true);
   if(CV.ocupado || !files.length) return;
   CV.ocupado = true; CV.msg = 'Iniciando...'; CV.erroImp = ''; renderView();
@@ -1209,7 +1212,7 @@ async function importar(files){
       const r = await lerArquivo(f);
       if(r.base === '180'){
         CV.msg = 'Gravando entregas na nuvem...'; renderMsg();
-        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, entregas: r.dados.cabs.length, itens: r.dados.descs.length};
+        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, fonteModificado: f.lastModified || null, auto: !!opts.auto, linhas: r.linhas, entregas: r.dados.cabs.length, itens: r.dados.descs.length};
         await nuvemGravar('ent_desc', null, {}, dividir(r.dados.descs, 400000));
         await nuvemGravar('ent_cab', null, {}, dividir(r.dados.cabs, 400000));
         await nuvemGravar('ent_etq', null, {}, dividir(r.dados.chaves, 400000));
@@ -1218,18 +1221,18 @@ async function importar(files){
         CV.ent = montarEnt(r.dados.linhas, r.dados.cabs, r.dados.descs, r.dados.ops); CV.meta.ent = meta;
       } else if(r.base === 'ean'){
         CV.msg = 'Gravando EANs na nuvem...'; renderMsg();
-        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, itens: new Set(r.dados.map(x => x[0])).size, eans: r.dados.length};
+        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, fonteModificado: f.lastModified || null, auto: !!opts.auto, linhas: r.linhas, itens: new Set(r.dados.map(x => x[0])).size, eans: r.dados.length};
         await nuvemGravar('eans', meta, {}, dividir(r.dados, 400000));
         CV.eanRows = r.dados; CV.meta.ean = meta;
       } else if(r.base === 'foto'){
         CV.msg = 'Gravando cadastro de fotos na nuvem...'; renderMsg();
-        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, itens: r.dados.length};
+        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, fonteModificado: f.lastModified || null, auto: !!opts.auto, linhas: r.linhas, itens: r.dados.length};
         await nuvemGravar('fotos', meta, {}, dividir(r.dados, 400000));
         CV.fotoRows = r.dados; CV.meta.foto = meta;
       } else {
         CV.msg = 'Gravando estoque na nuvem (pode levar alguns instantes)...'; renderMsg();
         const itens = Object.keys(r.dados.itens).map(i => [i, r.dados.itens[i].d, r.dados.itens[i].e]);
-        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, itens: itens.length, locais: r.dados.saldo.length};
+        const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, fonteModificado: f.lastModified || null, auto: !!opts.auto, linhas: r.linhas, itens: itens.length, locais: r.dados.saldo.length};
         await nuvemGravar('est_itens', null, {}, dividir(itens, 400000));
         await nuvemGravar('est_saldo', meta, {}, dividir(r.dados.saldo, 400000));
         CV.itens = r.dados.itens; CV.saldo = r.dados.saldo; CV.meta.est = meta;
@@ -1237,10 +1240,44 @@ async function importar(files){
     }
     indexar();
     if(CV.num && CV.porEnt.get(CV.num)) CV.linhas = montarLinhas(CV.porEnt.get(CV.num));
-    toast('Importação concluída.');
+    toast(opts.auto ? 'Bases atualizadas sozinhas pelo Almoxarifado.' : 'Importação concluída.');
   } catch(e){
     console.error(e); CV.erroImp = (e && e.message) || String(e); toast('Importação não concluída — veja o aviso em vermelho.', true);
   } finally { CV.ocupado = false; CV.msg = ''; renderView(); }
+}
+
+/* ---------- Atualização automática pelo Almoxarifado da Oficina ----------
+   O PC de atualização deixa os Excel (QRY0180, QRY0390, SIGEQ230) na pasta Bases do
+   SharePoint; o Almoxarifado guarda uma cópia neste navegador. Ao abrir o Check Volume
+   (e a cada 15 min aberto), se lá tiver um arquivo MAIS NOVO que o importado na nuvem,
+   ele importa sozinho — e a nuvem passa a valer para todo mundo. Só quem pode editar. */
+CV.autoFalhou = {};
+const CV_ALMOX = [{id: 'QRY0180', meta: 'ent'}, {id: 'QRY0390', meta: 'est'}, {id: 'SIGEQ230', meta: 'ean'}];
+async function cvAutoAlmox(){
+  const A = window.LDM_ALMOX;
+  if(!A || somenteLeitura() || CV.ocupado || CV.carregando) return;
+  try {
+    const h = await A.pastaSalva();
+    if(h && await A.permissao(h, false) === 'granted') await A.lerPasta(h);
+  } catch(e){ /* sem pasta neste navegador: usa o que o Almoxarifado já tiver */ }
+  const novos = [];
+  for(const b of CV_ALMOX){
+    try {
+      const p = await A.pacote(b.id);
+      const a = p.arquivos.filter(x => /\.xls[xm]?$/i.test(x.nome))[0];
+      if(!a) continue;
+      const m = CV.meta[b.meta];
+      const jaTem = m ? (m.fonteModificado || Date.parse(m.importadoEm) || 0) : 0;
+      if(a.modificado > jaTem && CV.autoFalhou[a.nome] !== a.modificado) novos.push(new File([a.blob], a.nome, {lastModified: a.modificado}));
+    } catch(e){}
+  }
+  /* Um de cada vez: se um arquivo não for reconhecido, os outros entram assim mesmo,
+     e o que falhou não é tentado de novo até chegar uma versão nova dele. */
+  for(const f of novos){
+    CV.erroImp = '';
+    await importar([f], {auto: true});
+    if(CV.erroImp) CV.autoFalhou[f.name] = f.lastModified;
+  }
 }
 
 /* ---------- Atender entrega: Excel com o que faltou, onde foi coletado e onde pegar ---------- */
@@ -1505,4 +1542,6 @@ async function cvInit(){
   renderView();
   atdPeloLink();
   setTimeout(() => { const i = $('cvEnt'); if(i) i.focus(); }, 0);
+  cvAutoAlmox();
+  setInterval(cvAutoAlmox, 15 * 60 * 1000);
 }
