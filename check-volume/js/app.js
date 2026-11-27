@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 9; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 11; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -16,8 +16,11 @@ const CV_TITULOS = {
   importacao: ['Importação', 'Bases do Check Volume.'],
   configuracoes: ['Configurações', 'Regras das sugestões de outros locais.']
 };
+/* Picking × não picking por CLASSE do local (coluna CLAL) — as mesmas classes marcadas no Inventário Rotativo. */
+const CL_PICKING = ['PPBA1', 'PPPC', 'MZN', 'MZN2', 'MZKT', 'BLO', 'DRV', 'GLP', 'RMOV', 'COF', 'ESC', 'MAC'];
+const CL_NAO = ['PPAL1', 'MZN01', 'GLP23', 'UMA', 'SUPRI', 'SUPR2', 'REV', 'AVA', 'INB', 'OUT', 'DENT', 'DSAI', 'CARGA', 'CROSS', 'C.E', 'PALET', 'ATI', 'TSF', 'CAN', 'PAR', 'DEV', 'TRANS', 'TRP'];
 const CV = {
-  ent: [], itens: {}, saldo: [], meta: {}, cfg: {ignorar: ['REV', 'AVA'], restricoes: ['WN'], max: 5, picking: ['PP']},
+  ent: [], itens: {}, saldo: [], meta: {}, cfg: {ignorar: [], restricoes: ['WN'], max: 5, clPicking: CL_PICKING, clNao: CL_NAO, incluirNao: false},
   fotos: new Map(),
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
@@ -267,13 +270,21 @@ function focoBip(){ const i = $('cvBip'); if(i) i.focus(); }
 function cvToggle(i){ if(CV.aberto.has(i)) CV.aberto.delete(i); else CV.aberto.add(i); atualizar(); }
 
 /* ---------- onde achar a peça faltante ---------- */
-const ehPicking = loc => (CV.cfg.picking && CV.cfg.picking.length ? CV.cfg.picking : ['PP']).some(p => normLoc(loc).indexOf(p) === 0);
-/* Sugestões: picking primeiro (os que cobrem a falta antes), depois o resto por saldo. */
+const normClasse = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim().split(/[\s·-]+/)[0];
+/* 'pk' = classe de picking (local de coleta), 'nao' = classe que não é picking, '' = classe desconhecida. */
+function tipoClasse(clal){
+  const c = normClasse(clal); if(!c) return '';
+  if((CV.cfg.clPicking || CL_PICKING).indexOf(c) >= 0) return 'pk';
+  if((CV.cfg.clNao || CL_NAO).indexOf(c) >= 0) return 'nao';
+  return '';
+}
+const tipoRot = s => ({pk: 'Picking', nao: 'Não picking'}[tipoClasse(s[3])] || 'Sem classe');
+/* Sugestões: só locais de picking (coleta). Se "incluir não picking" estiver ligado, eles entram depois do picking. */
 function alternativas(x, falta, max){
   const orig = x.orig.map(normLoc);
   const ig = new Set((CV.cfg.ignorar || []).map(s => s.toUpperCase())), rs = new Set((CV.cfg.restricoes || []).map(s => s.toUpperCase()));
-  const lista = (CV.saldoItem.get(x.i) || []).filter(s => !orig.includes(normLoc(s[1])) && !ig.has(String(s[3]).toUpperCase()) && (!rs.size || rs.has(String(s[4]).toUpperCase())));
-  lista.sort((a, b) => (ehPicking(b[1]) - ehPicking(a[1])) || ((b[2] >= falta) - (a[2] >= falta)) || b[2] - a[2]);
+  const lista = (CV.saldoItem.get(x.i) || []).filter(s => !orig.includes(normLoc(s[1])) && !ig.has(normClasse(s[3])) && (!rs.size || rs.has(String(s[4]).toUpperCase())) && (tipoClasse(s[3]) === 'pk' || CV.cfg.incluirNao));
+  lista.sort((a, b) => ((tipoClasse(b[3]) === 'pk') - (tipoClasse(a[3]) === 'pk')) || ((b[2] >= falta) - (a[2] >= falta)) || b[2] - a[2]);
   return lista.slice(0, max || CV.cfg.max || 5);
 }
 function saldoNaOrigem(x){
@@ -286,8 +297,8 @@ function blocoLocais(x){
   const so = saldoNaOrigem(x);
   return '<div class="cv-loc orig"><span class="rot">Coletado em</span>' + (x.orig.length ? x.orig.map(o => '<code>' + esc(o) + '</code>').join(' ') : '<span class="cv-vazio">origem não informada na QRY0180</span>') +
     (x.orig.length ? '<span class="sd">saldo disponível hoje na origem: <b>' + fInt(so) + '</b></span>' : '') + '</div>' +
-    (alts.length ? alts.map((s, n) => '<div class="cv-loc"><span class="rot">' + (n ? 'Alternativa' : 'Sugestão') + '</span><code>' + esc(s[1]) + '</code><span class="cv-tp ' + (ehPicking(s[1]) ? 'pk' : '') + '">' + (ehPicking(s[1]) ? 'Picking' : 'Armazenagem') + '</span><span class="sd">saldo <b>' + fInt(s[2]) + '</b>' + (s[2] >= falta ? ' · cobre a falta' : ' · cobre parte') + '</span></div>').join('')
-      : '<div class="cv-loc"><span class="rot">Alternativa</span><span class="cv-vazio">' + (CV.saldo.length ? 'nenhum outro local com saldo disponível.' : 'importe a QRY0390 para ver outros locais com saldo.') + '</span></div>');
+    (alts.length ? alts.map((s, n) => '<div class="cv-loc"><span class="rot">' + (n ? 'Alternativa' : 'Sugestão') + '</span><code>' + esc(s[1]) + '</code><span class="cv-tp ' + (tipoClasse(s[3]) === 'pk' ? 'pk' : '') + '" title="Classe ' + esc(s[3] || '—') + '">' + tipoRot(s) + '</span><span class="sd">saldo <b>' + fInt(s[2]) + '</b>' + (s[2] >= falta ? ' · cobre a falta' : ' · cobre parte') + '</span></div>').join('')
+      : '<div class="cv-loc"><span class="rot">Alternativa</span><span class="cv-vazio">' + (CV.saldo.length ? (CV.cfg.incluirNao ? 'nenhum outro local com saldo disponível.' : 'nenhum outro local de picking com saldo disponível.') : 'importe a QRY0390 para ver outros locais com saldo.') + '</span></div>');
 }
 
 /* ---------- telas ---------- */
@@ -378,7 +389,13 @@ function pintarVazio(){
   $('cvBipado').innerHTML = u && u.tipo === 'ean' ? '<div class="cv-card cv-bp ean"><div class="h">? ' + esc(u.txt) + '</div></div>' : '<div class="cv-card cv-bp vazio"><div class="h">Item bipado</div><div class="c"><div class="d" style="color:var(--ink-soft)">Digite ou bipe o número da entrega e tecle Enter.</div></div></div>';
   $('cvAnd').innerHTML = '<div class="cv-card cv-tb"><h3>⟳ Conferência em andamento<s>0 leituras</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>#</th><th>Hora</th><th>EAN</th><th>Descrição</th><th>Resultado</th></tr></thead><tbody><tr><td colspan="5" class="field-hint" style="padding:14px">Nenhuma leitura ainda.</td></tr></tbody></table></div></div>';
   $('cvAcoes').innerHTML = '<div class="cv-acoes">' + btnSom() + '</div><div class="cv-acoes2"><button class="btn btn-orange cv-atender" disabled title="Carregue uma entrega">⚑ Atender entrega</button><button class="cv-fin" disabled style="opacity:.45;cursor:not-allowed">Finalizar conferência</button></div>';
-  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + esc(chipEnt()) + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody><tr><td colspan="8" class="field-hint" style="padding:18px">Os itens da entrega aparecem aqui.</td></tr></tbody></table></div></div>';
+  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>Itens da entrega<s>' + esc(chipEnt()) + '</s></h3><div class="cv-sc"><table class="cv-tab cv-compact cv-itens"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th>EAN</th><th class="n">Prev.</th><th class="n">Bip.</th><th class="n">Pend.</th><th>Status</th><th></th></tr></thead><tbody><tr><td colspan="9" class="field-hint" style="padding:18px">Os itens da entrega aparecem aqui.</td></tr></tbody></table></div></div>';
+}
+/* Descrição curta na tabela: primeira e última palavra (o texto completo fica no balão ao passar o mouse). */
+function descCurta(d){
+  const t = String(d || '').trim(), w = t.split(/\s+/);
+  if(t.length <= 30 || w.length <= 2) return t;
+  return w[0] + ' … ' + w[w.length - 1].replace(/\.+$/, '');
 }
 function kpi(rot, v, cor, ic){ return '<div class="cv-k"><i style="background:' + cor + '">' + ic + '</i><div><small>' + rot + '</small><b>' + fInt(v) + '</b></div></div>'; }
 /* Atualiza só os pedaços que mudam a cada bipagem (o campo de leitura nunca perde o foco). */
@@ -408,13 +425,13 @@ function atualizar(){
   // tabela de itens
   const ordem = {falta: 0, sobra: 1, pend: 2, ok: 3};
   const ls = CV.linhas.slice().sort((a, b) => ordem[cvSituacao(a)] - ordem[cvSituacao(b)] || a.d.localeCompare(b.d));
-  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>▣ Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? (n => n ? n + ' de ' + CV.linhas.length + ' itens sem foto' : 'toque numa linha com pendência para ver onde achar')(CV.linhas.filter(x => !urlFoto(x.i)).length) : 'sem fotos: importe o cadastro em Importação') + '</s></h3><div class="cv-sc"><table class="cv-tab"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th class="n">Prevista</th><th class="n">Bipada</th><th class="n">Pendente</th><th>Status</th><th></th></tr></thead><tbody>' +
+  $('cvTabela').innerHTML = '<div class="cv-card cv-tb"><h3>Itens da entrega<s>' + (CV.fotoMap && CV.fotoMap.size ? (n => n ? n + ' de ' + CV.linhas.length + ' itens sem foto' : 'toque numa linha com pendência para ver onde achar')(CV.linhas.filter(x => !urlFoto(x.i)).length) : 'sem fotos: importe o cadastro em Importação') + '</s></h3><div class="cv-sc"><table class="cv-tab cv-compact cv-itens"><thead><tr><th>Foto</th><th>Código</th><th>Descrição</th><th>EAN</th><th class="n">Prev.</th><th class="n">Bip.</th><th class="n">Pend.</th><th>Status</th><th></th></tr></thead><tbody>' +
     ls.map(x => {
       const b = s.bips[x.i] || 0, st = cvSituacao(x), pen = Math.max(x.prev - b, 0), ab = CV.aberto.has(x.i);
-      return '<tr class="' + (pen ? 'clicavel ' : '') + (st === 'falta' ? 'r-falta' : st === 'sobra' ? 'r-sobra' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td>' + fotoHtml(x.i, 'cv-th') + '</td><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc">' + esc(x.d) + '<div class="field-hint">EAN ' + (x.eans.length ? esc(x.eans.slice(0, 3).join(' / ')) + (x.eans.length > 3 ? ' +' + (x.eans.length - 3) : '') : 'não cadastrado') + '</div></td>' +
+      return '<tr class="' + (pen ? 'clicavel ' : '') + (st === 'falta' ? 'r-falta' : st === 'sobra' ? 'r-sobra' : '') + '"' + (pen ? ' onclick="cvToggle(\'' + esc(x.i) + '\')"' : '') + '><td>' + fotoHtml(x.i, 'cv-th') + '</td><td class="cv-mono">' + esc(x.i) + '</td><td class="cv-desc" title="' + esc(x.d) + '">' + esc(descCurta(x.d)) + '</td><td class="cv-mono cv-eancol" title="' + esc(x.eans.join(' / ')) + '">' + (x.eans.length ? esc(x.eans[0]) + (x.eans.length > 1 ? ' +' + (x.eans.length - 1) : '') : '<span class="field-hint">não cadastrado</span>') + '</td>' +
         '<td class="n">' + fInt(x.prev) + '</td><td class="n"><b>' + fInt(b) + '</b></td><td class="n">' + fInt(pen) + (b > x.prev ? ' <span style="color:var(--danger)">(+' + fInt(b - x.prev) + ')</span>' : '') + '</td>' +
         '<td><span class="cv-pill cv-' + st + '">' + ROT[st] + '</span></td><td class="n">' + (b ? '<button class="btn-link" onclick="event.stopPropagation();cvMenos(\'' + esc(x.i) + '\')" title="Tirar uma bipagem">−1</button>' : '') + '</td></tr>' +
-        (pen && ab ? '<tr class="cv-det"><td colspan="8"><b>Faltam ' + fInt(pen) + '</b> — onde achar:' + blocoLocais(x) + '</td></tr>' : '');
+        (pen && ab ? '<tr class="cv-det"><td colspan="9"><b>Faltam ' + fInt(pen) + '</b> — onde achar:' + blocoLocais(x) + '</td></tr>' : '');
     }).join('') + '</tbody></table></div></div>';
   const dk = Object.keys(s.desc);
   $('cvDesc').innerHTML = dk.length ? '<div class="cv-sec-t">EAN não identificado<span>códigos bipados que não são desta entrega</span></div><div class="table-wrap"><table class="cv-tab"><thead><tr><th>EAN bipado</th><th>Observação</th><th class="n">Leituras</th></tr></thead><tbody>' +
@@ -425,9 +442,7 @@ function resultado(t){
   const ok = !t.falta && !t.sobra && !t.ean;
   const faltas = CV.linhas.filter(x => (CV.sess.bips[x.i] || 0) < x.prev);
   const sobras = CV.linhas.filter(x => (CV.sess.bips[x.i] || 0) > x.prev);
-  let h = '<div class="cv-sec-t" style="margin-top:6px">Resultado da conferência</div><div class="cv-res ' + (ok ? 'ok' : 'div') + '">' +
-    (ok ? '✓ Entrega conferida sem divergência.' : '⚠ Entrega com divergência — clique em “Atender entrega” para gerar o Excel com os locais.') +
-    '<small>' + t.ok + ' de ' + t.itens + ' itens sem divergência · ' + faltas.length + ' com falta · ' + sobras.length + ' com sobra · ' + fInt(t.ean) + ' leitura(s) de EAN não identificado.</small></div>';
+  let h = '';
   if(faltas.length) h += '<div class="cv-sec-t">Faltantes — onde buscar<span>origem da coleta e locais com saldo (picking primeiro)</span></div>' + faltas.map(x => {
     const f = x.prev - (CV.sess.bips[x.i] || 0);
     return '<div class="cv-falta-card"><span class="qtd">faltam ' + fInt(f) + '</span><h4>' + esc(x.i) + ' — ' + esc(x.d) + '</h4><div class="sub">Prevista ' + fInt(x.prev) + ' · bipada ' + fInt(CV.sess.bips[x.i] || 0) + '</div>' + blocoLocais(x) + '</div>';
@@ -479,15 +494,19 @@ function viewImportacao(){
 function viewConfig(){
   return '<div class="panel"><h3>Classes de local ignoradas nas sugestões</h3><div class="panel-sub">Coluna <code>CLAL</code> da QRY0390, separadas por vírgula. Locais dessas classes (ex.: reversa e avaria) não são sugeridos.</div><div class="filter-bar"><input type="text" id="cfgIg" value="' + esc(CV.cfg.ignorar.join(', ')) + '"></div></div>' +
     '<div class="panel cv-gap"><h3>Restrições aceitas</h3><div class="panel-sub">Coluna <code>RETRICAO</code> da QRY0390. Só saldo com essas restrições é sugerido (padrão <code>WN</code> = normal). Em branco = aceita todas.</div><div class="filter-bar"><input type="text" id="cfgRs" value="' + esc(CV.cfg.restricoes.join(', ')) + '"></div></div>' +
-    '<div class="panel cv-gap"><h3>Locais de picking (prioridade nas sugestões)</h3><div class="panel-sub">Início da descrição do local, separado por vírgula (padrão <code>PP</code>, que pega PPP 006 042 00 e PP 009 027 03). Locais de picking aparecem primeiro nas sugestões e no Excel.</div><div class="filter-bar"><input type="text" id="cfgPk" value="' + esc((CV.cfg.picking || ['PP']).join(', ')) + '"></div></div>' +
+    '<div class="panel cv-gap"><h3>Classes de picking (locais de coleta)</h3><div class="panel-sub">Coluna <code>CLAL</code> da QRY0390, separadas por vírgula. Só locais dessas classes são sugeridos. Mesmas classes do Inventário Rotativo.</div><div class="filter-bar"><input type="text" id="cfgPk" value="' + esc((CV.cfg.clPicking || CL_PICKING).join(', ')) + '"></div></div>' +
+    '<div class="panel cv-gap"><h3>Classes que não são picking</h3><div class="filter-bar"><input type="text" id="cfgNao" value="' + esc((CV.cfg.clNao || CL_NAO).join(', ')) + '"></div>' +
+    '<label class="cv-chk"><input type="checkbox" id="cfgInc"' + (CV.cfg.incluirNao ? ' checked' : '') + '> Sugerir também locais não picking (depois do picking)</label></div>' +
     '<div class="panel cv-gap"><h3>Quantidade de sugestões por item</h3><div class="filter-bar"><input type="number" min="1" max="20" id="cfgMax" value="' + (CV.cfg.max || 5) + '"></div></div>' +
     '<div class="cv-gap"><button class="btn btn-orange" onclick="cvSalvarCfg()">Salvar configurações</button></div>';
 }
 async function cvSalvarCfg(){
   CV.cfg.ignorar = String($('cfgIg').value).toUpperCase().split(/[,;\s]+/).filter(Boolean);
   CV.cfg.restricoes = String($('cfgRs').value).toUpperCase().split(/[,;\s]+/).filter(Boolean);
-  CV.cfg.picking = String($('cfgPk').value).toUpperCase().split(/[,;]+/).map(t => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  if(!CV.cfg.picking.length) CV.cfg.picking = ['PP'];
+  CV.cfg.clPicking = String($('cfgPk').value).toUpperCase().split(/[,;\s]+/).filter(Boolean);
+  if(!CV.cfg.clPicking.length) CV.cfg.clPicking = CL_PICKING.slice();
+  CV.cfg.clNao = String($('cfgNao').value).toUpperCase().split(/[,;\s]+/).filter(Boolean);
+  CV.cfg.incluirNao = !!$('cfgInc').checked;
   CV.cfg.max = Math.min(Math.max(parseInt($('cfgMax').value, 10) || 5, 1), 20);
   try { await nuvemGravar('cfg', null, {cfg: CV.cfg}, []); toast('Configurações salvas.'); } catch(e){ toast(e.message || String(e), true); }
   renderView();
@@ -724,7 +743,7 @@ function cvAtender(){
   const s = CV.sess, nSug = 3;
   const faltas = CV.linhas.filter(x => (s.bips[x.i] || 0) < x.prev);
   const sobras = CV.linhas.filter(x => (s.bips[x.i] || 0) > x.prev);
-  const tp = l => ehPicking(l) ? 'Picking' : 'Armazenagem';
+  const tp = a => tipoRot(a);
   const cab1 = ['Entrega', 'Código', 'Descrição', 'EAN', 'Prevista', 'Bipada', 'Faltam', 'Local de coleta (origem)', 'Saldo hoje na origem'];
   for(let k = 1; k <= nSug; k++) cab1.push('Sugestão ' + k + ' · local', 'Tipo', 'Saldo');
   cab1.push('Observação');
@@ -732,11 +751,11 @@ function cvAtender(){
   faltas.forEach(x => {
     const b = s.bips[x.i] || 0, f = x.prev - b, alts = alternativas(x, f, Math.max(CV.cfg.max || 5, nSug));
     const lin = [CV.num, x.i, x.d, x.eans.join(' / '), x.prev, b, f, x.orig.join(' / '), saldoNaOrigem(x)];
-    for(let k = 0; k < nSug; k++) lin.push(alts[k] ? alts[k][1] : '', alts[k] ? tp(alts[k][1]) : '', alts[k] ? alts[k][2] : '');
-    const temPk = alts.some(a => ehPicking(a[1]));
-    lin.push(alts.length ? (temPk ? '' : 'Sem saldo em picking — usar armazenagem e repor o picking') : 'Nenhum outro local com saldo disponível — verificar estoque/reposição');
+    for(let k = 0; k < nSug; k++) lin.push(alts[k] ? alts[k][1] : '', alts[k] ? tp(alts[k]) : '', alts[k] ? alts[k][2] : '');
+    const temPk = alts.some(a => tipoClasse(a[3]) === 'pk');
+    lin.push(alts.length ? (temPk ? '' : 'Sem saldo em picking — só locais não picking') : (CV.cfg.incluirNao ? 'Nenhum outro local com saldo disponível — verificar estoque/reposição' : 'Nenhum outro local de picking com saldo disponível'));
     l1.push(lin);
-    alts.forEach((a, k) => l2.push([CV.num, x.i, x.d, f, k + 1, a[1], tp(a[1]), a[2], a[2] >= f ? 'Sim' : 'Não, parcial', a[3], a[4]]));
+    alts.forEach((a, k) => l2.push([CV.num, x.i, x.d, f, k + 1, a[1], tp(a), a[2], a[2] >= f ? 'Sim' : 'Não, parcial', a[3], a[4]]));
   });
   const l3 = [['Entrega', 'Tipo', 'Código / EAN', 'Descrição', 'Quantidade', 'Observação']];
   sobras.forEach(x => l3.push([CV.num, 'Sobra', x.i, x.d, s.bips[x.i] - x.prev, 'Peças a mais do que o previsto — devolver ao local de origem ' + (x.orig[0] || '')]));
