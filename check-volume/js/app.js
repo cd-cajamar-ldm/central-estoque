@@ -6,12 +6,13 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 17; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 18; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
   entregas: ['Entregas', 'Entregas da QRY0180 importada.'],
   controle: ['Controle de Entregas', 'Divergências apontadas e ocorrências fora da conferência.'],
+  historico: ['Registro de conferências', 'Todas as entregas bipadas, com ou sem divergência.'],
   gestao: ['Gestão de divergências', 'Uma linha por entrega divergente, com classificação e tratativa.'],
   dashboard: ['Dashboard de divergências', 'Indicadores das ocorrências registradas.'],
   importacao: ['Importação', 'Bases do Check Volume.'],
@@ -26,7 +27,7 @@ const CV = {
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
   ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set(),
-  etqMap: new Map(), ctrl: [], conf: [], trat: [], gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
+  etqMap: new Map(), hf: {r: '', busca: '', de: '', ate: ''}, hpag: 0, finalizando: false, ctrl: [], conf: [], trat: [], gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
 };
 
 /* ---------- utilitários ---------- */
@@ -113,9 +114,10 @@ function dividir(linhas, limite){
 
 /* Entregas guardadas em formato compacto (fmt 2): linhas [entrega,item,qtd,origem], cabeçalho por
    entrega e descrição por item — a QRY0180 completa passa de 40 MB. */
-function montarEnt(linhas, cabs, descs){
+function montarEnt(linhas, cabs, descs, ops){
+  ops = ops || [];
   const cab = new Map(cabs.map(x => [x[0], x])), ds = new Map(descs);
-  return linhas.map(r => { const c = cab.get(r[0]) || []; return {e: r[0], i: r[1], q: r[2], o: r[3], d: ds.get(r[1]) || '', t: c[1] || '', ev: c[2] || '', li: c[3] || '', ca: c[4] || '', vo: c[5] || 0, mo: c[6] || '', op: c[7] || ''}; });
+  return linhas.map(r => { const c = cab.get(r[0]) || []; return {e: r[0], i: r[1], q: r[2], o: r[3], d: ds.get(r[1]) || '', t: c[1] || '', ev: c[2] || '', li: c[3] || '', ca: c[4] || '', vo: c[5] || 0, mo: c[6] || '', op: (r[4] >= 0 && ops[r[4]]) || (r.length < 5 ? c[7] || '' : '')}; });
 }
 /* ---------- índices ---------- */
 function indexar(){
@@ -136,7 +138,7 @@ async function carregar(){
   try {
     const [cfg, ent, ei, es, ft, ec, ed, en2, etq] = await Promise.all([nuvemLer('cfg'), nuvemLer('ent'), nuvemLer('est_itens'), nuvemLer('est_saldo'), nuvemLer('fotos'), nuvemLer('ent_cab'), nuvemLer('ent_desc'), nuvemLer('eans'), nuvemLer('ent_etq')]);
     if(cfg && cfg.dados && cfg.dados.cfg) Object.assign(CV.cfg, cfg.dados.cfg);
-    CV.ent = !ent ? [] : (ent.dados && ent.dados.fmt === 2 ? montarEnt(ent.linhas, ec ? ec.linhas : [], ed ? ed.linhas : []) : ent.linhas);
+    CV.ent = !ent ? [] : (ent.dados && ent.dados.fmt === 2 ? montarEnt(ent.linhas, ec ? ec.linhas : [], ed ? ed.linhas : [], ent.dados.ops) : ent.linhas);
     CV.itens = {}; (ei ? ei.linhas : []).forEach(x => { CV.itens[x[0]] = {d: x[1], e: x[2]}; });
     CV.saldo = es ? es.linhas : [];
     CV.fotoRows = ft ? ft.linhas : [];
@@ -218,6 +220,7 @@ function totais(){
 
 /* Bipagem: cruza o EAN com os itens da entrega. */
 function bipar(codigo){
+  if(CV.finalizando) return;
   if(!CV.sess){ toast('Informe a entrega primeiro.', true); const e = $('cvEnt'); if(e) e.focus(); return; }
   const cod = String(codigo || '').trim(); if(!cod) return;
   const k = normEan(cod);
@@ -257,10 +260,24 @@ function cvMenos(i){
   const p = CV.sess.log.map(l => l.i).lastIndexOf(i); if(p >= 0) CV.sess.log.splice(p, 1);
   gravarSessao(); atualizar();
 }
-function cvFinalizar(){
-  if(!CV.sess) return; CV.sess.fin = true; gravarSessao(); CV.aberto = new Set(); renderView();
-  confRegistrar().catch(() => {});
-  ctrlDaConferencia().then(n => { if(n){ const t = totais(); toast('Divergência registrada na Gestão de divergências: ' + [t.falta ? 'falta ' + t.falta : '', t.sobra ? 'sobra ' + t.sobra : '', t.ean ? t.ean + ' EAN não identificado' : ''].filter(Boolean).join(' · ') + '.'); } }).catch(e => toast('Não consegui registrar no Controle de Entregas: ' + ((e && e.message) || e), true));
+async function cvFinalizar(){
+  if(!CV.sess || CV.finalizando) return;
+  const t = totais(), num = CV.num;
+  const partes = [t.falta ? 'falta ' + t.falta : '', t.sobra ? 'sobra ' + t.sobra : '', t.ean ? t.ean + ' EAN não identificado' : ''].filter(Boolean).join(' · ');
+  /* Com divergência: oferece o Excel de Atender entrega antes de zerar (depois dá para gerar pela Gestão de divergências). */
+  if(partes && window.XLSX && confirm('Entrega ' + num + ' com divergência (' + partes + ').\n\nGerar o Excel de Atender entrega antes de zerar a tela?')) cvAtender();
+  CV.finalizando = true; CV.sess.fin = true; gravarSessao();
+  toast('Salvando a conferência...');
+  try {
+    await confRegistrar();
+    await ctrlDaConferencia();
+  } catch(e){
+    CV.finalizando = false; renderView();
+    return toast('Não consegui salvar a conferência (nada foi zerado, tente Finalizar de novo): ' + ((e && e.message) || e), true);
+  }
+  CV.finalizando = false;
+  cvNova();                                                  /* zera a tela para a próxima entrega */
+  toast('Entrega ' + num + ' finalizada' + (partes ? ' — divergência registrada: ' + partes : ' — sem divergência') + '.');
 }
 function cvReabrir(){ if(!CV.sess) return; CV.sess.fin = false; gravarSessao(); renderView(); setTimeout(focoBip, 0); }
 function cvZerar(){
@@ -596,7 +613,7 @@ async function confRegistrar(){
   if(!s.log.length) return;                                 /* finalizou sem bipar nada: não conta */
   const ts = s.log.map(l => l.t), ini = Math.min.apply(null, ts), fim = Math.max.apply(null, ts);
   const antes = CV.conf.find(c => c.id === CV.num);
-  const reg = {id: CV.num, ts: new Date().toISOString(), por: CV.email, ent: CV.num, t: r0.t || '', meca: r0.op || '', ca: r0.ca || '', mo: r0.mo || '',
+  const reg = {id: CV.num, ts: new Date().toISOString(), por: CV.email, ent: CV.num, t: r0.t || '', meca: mecaEntrega(CV.porEnt.get(CV.num)), ca: r0.ca || '', mo: r0.mo || '',
     itens: t.itens, pecas: t.prev, bip: t.bip, falta: t.falta, sobra: t.sobra, ean: t.ean, div: !!(t.falta || t.sobra || t.ean), dur: Math.round((fim - ini) / 1000), leituras: s.log.length};
   if(antes && antes.por && antes.por !== reg.por) reg.por = antes.por;
   await ctrlSalvar(reg, 'conf');
@@ -604,11 +621,11 @@ async function confRegistrar(){
 /* Ao finalizar uma conferência, as divergências viram ocorrências (sem duplicar se finalizar de novo). */
 async function ctrlDaConferencia(){
   if(somenteLeitura() || !CV.sess || !CV.porEnt.get(CV.num)) return 0;
-  const s = CV.sess, r0 = CV.porEnt.get(CV.num)[0], agora = new Date().toISOString(), novos = [];
+  const s = CV.sess, rows0 = CV.porEnt.get(CV.num), r0 = rows0[0], agora = new Date().toISOString(), novos = [];
   CV.linhas.forEach(x => {
     const b = s.bips[x.i] || 0;
-    if(b < x.prev) novos.push({tipo: 'Falta', item: x.i, d: x.d, q: x.prev - b, orig: x.orig.join(' / ')});
-    else if(b > x.prev) novos.push({tipo: 'Sobra', item: x.i, d: x.d, q: b - x.prev, orig: x.orig.join(' / ')});
+    if(b < x.prev) novos.push({tipo: 'Falta', item: x.i, d: x.d, q: x.prev - b, orig: x.orig.join(' / '), prev: x.prev, bip: b});
+    else if(b > x.prev) novos.push({tipo: 'Sobra', item: x.i, d: x.d, q: b - x.prev, orig: x.orig.join(' / '), prev: x.prev, bip: b});
   });
   Object.keys(s.desc).forEach(k => novos.push({tipo: 'EAN não identificado', item: k, d: s.desc[k].nome || '', q: s.desc[k].n, orig: ''}));
   const ids = new Set();
@@ -616,12 +633,25 @@ async function ctrlDaConferencia(){
     const id = [CV.num, n.tipo === 'EAN não identificado' ? 'EAN' : n.tipo, n.item].join('|'); ids.add(id);
     const ant = CV.ctrl.find(c => c.id === id);
     if(ant && ant.q === n.q) continue;
-    await ctrlSalvar(Object.assign({}, ant || {}, {id, ts: ant ? ant.ts : agora, por: ant ? ant.por : CV.email, ent: CV.num, item: n.item, d: n.d, tipo: n.tipo, q: n.q, orig: n.orig, t: r0.t || '', meca: r0.op || '', ca: r0.ca || '', mo: r0.mo || '', src: 'conferencia', st: ant ? ant.st : 'aberta', obs: ant ? (ant.obs || '') : ''}));
+    await ctrlSalvar(Object.assign({}, ant || {}, {id, ts: ant ? ant.ts : agora, por: ant ? ant.por : CV.email, ent: CV.num, item: n.item, d: n.d, tipo: n.tipo, q: n.q, orig: n.orig, t: r0.t || '', meca: (n.item && mecaDoItem(rows0, n.item)) || mecaEntrega(rows0), prev: n.prev, bip: n.bip, ca: r0.ca || '', mo: r0.mo || '', src: 'conferencia', st: ant ? ant.st : 'aberta', obs: ant ? (ant.obs || '') : ''}));
   }
   for(const c of CV.ctrl.filter(c => c.ent === CV.num && c.src === 'conferencia' && c.st === 'aberta' && !ids.has(c.id))) await ctrlExcluir(c.id);
   return novos.length;
 }
-const mecaNome = m => String(m || '').replace(/^MECA_/i, '') || '—';
+const mecaNome = m => String(m || '').replace(/^MECA_/i, '') || 'Sem meca';
+/* Meca = operador MECA_* da linha da QRY0180 (coluna OPERADOR). Usuários de sistema (ex.: NDD) não contam. */
+const ehMeca = o => /^MECA_/i.test(o || '');
+function mecaEntrega(rows){
+  const m = new Map(); (rows || []).forEach(r => { if(ehMeca(r.op)) m.set(r.op, (m.get(r.op) || 0) + 1); });
+  let best = '', n = 0; m.forEach((v, k) => { if(v > n){ n = v; best = k; } }); return best;
+}
+function mecaDoItem(rows, item){ const r = (rows || []).find(x => x.i === item && ehMeca(x.op)); return r ? r.op : ''; }
+/* Registros antigos sem meca: completa pela QRY0180 importada (item primeiro, depois a entrega). */
+function mecaDoReg(c){
+  if(ehMeca(c.meca)) return c.meca;
+  const rows = CV.porEnt.get(c.ent);
+  return (c.item && mecaDoItem(rows, c.item)) || mecaEntrega(rows) || '';
+}
 const dtBR = iso => iso ? fData(iso.slice(0, 10)) + ' ' + iso.slice(11, 16) : '';
 const hojeISO = () => new Date().toISOString().slice(0, 10);
 function ctrlFiltradas(){
@@ -648,7 +678,7 @@ function viewControle(){
   }
   h += '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Data</th><th>Entrega</th><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Transportadora</th><th>Meca</th><th>Observação</th><th>Por</th><th>Status</th><th></th></tr></thead><tbody>' +
     (lista.length ? lista.slice(CV.cpag * POR, CV.cpag * POR + POR).map(c => '<tr><td>' + dtBR(c.ts) + '</td><td class="cv-mono"><b>' + esc(c.ent) + '</b></td><td class="cv-mono">' + esc(c.item || '') + '</td><td class="cv-cut" title="' + esc(c.d) + '">' + esc(c.d) + '</td>' +
-      '<td>' + (ro ? '<span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span>' : '<select class="cv-in-s cv-tipo-s" style="border-color:' + (TIPO_COR[c.tipo] || '#001A72') + '" onchange="cvCTipo(\'' + esc(c.id).replace(/'/g, '') + '\',this.value)">' + TIPOS.map(t => '<option' + (t === c.tipo ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>') + '</td><td class="n"><b>' + fInt(c.q) + '</b></td><td class="cv-cut" title="' + esc(c.orig) + '">' + esc(c.orig || '') + '</td><td class="cv-cut">' + esc(c.t || '') + '</td><td class="cv-cut">' + esc(mecaNome(c.meca)) + '</td>' +
+      '<td>' + (ro ? '<span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span>' : '<select class="cv-in-s cv-tipo-s" style="border-color:' + (TIPO_COR[c.tipo] || '#001A72') + '" onchange="cvCTipo(\'' + esc(c.id).replace(/'/g, '') + '\',this.value)">' + TIPOS.map(t => '<option' + (t === c.tipo ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>') + '</td><td class="n"><b>' + fInt(c.q) + '</b></td><td class="cv-cut" title="' + esc(c.orig) + '">' + esc(c.orig || '') + '</td><td class="cv-cut">' + esc(c.t || '') + '</td><td class="cv-cut">' + esc(mecaNome(mecaDoReg(c))) + '</td>' +
       '<td class="cv-cut" title="' + esc(c.obs) + '">' + esc(c.obs || '') + '</td><td class="cv-cut" title="' + esc(c.por) + '">' + esc((c.por || '').split('@')[0]) + '</td>' +
       '<td><span class="cv-pill ' + (c.st === 'atendida' ? 'cv-ok' : 'cv-falta') + '">' + (c.st === 'atendida' ? 'Atendida' : 'Aberta') + '</span></td><td class="n cv-act">' + (ro ? '' :
       '<button class="btn-link" onclick="cvCAtender(\'' + esc(c.id).replace(/'/g, '') + '\')">' + (c.st === 'atendida' ? 'Reabrir' : 'Atender') + '</button> <button class="btn-link" onclick="cvCObs(\'' + esc(c.id).replace(/'/g, '') + '\')">Obs</button> <button class="btn-danger-text" onclick="cvCExcluir(\'' + esc(c.id).replace(/'/g, '') + '\')">Excluir</button>') + '</td></tr>').join('')
@@ -665,7 +695,7 @@ async function cvCSalvarNovo(){
   const ent = String($('cnEnt').value).replace(/\D/g, ''), item = $('cnItem').value.trim(), tipo = $('cnTipo').value, q = Math.max(1, parseInt($('cnQtd').value, 10) || 1);
   if(!ent) return toast('Informe a entrega.', true);
   const rows = CV.porEnt.get(ent) || [], r = item ? rows.find(x => x.i === item) : null;
-  const reg = {id: 'M|' + Date.now() + '|' + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), por: CV.email, ent, item, d: r ? r.d : ((CV.itens[item] && CV.itens[item].d) || ''), tipo, q, orig: $('cnOrig').value.trim() || (r ? r.o : ''), t: rows[0] ? rows[0].t : '', meca: rows[0] ? (rows[0].op || '') : '', ca: rows[0] ? (rows[0].ca || '') : '', mo: rows[0] ? (rows[0].mo || '') : '', src: 'manual', st: 'aberta', obs: $('cnObs').value.trim()};
+  const reg = {id: 'M|' + Date.now() + '|' + Math.random().toString(36).slice(2, 6), ts: new Date().toISOString(), por: CV.email, ent, item, d: r ? r.d : ((CV.itens[item] && CV.itens[item].d) || ''), tipo, q, orig: $('cnOrig').value.trim() || (r ? r.o : ''), t: rows[0] ? rows[0].t : '', meca: (item && mecaDoItem(rows, item)) || mecaEntrega(rows), ca: rows[0] ? (rows[0].ca || '') : '', mo: rows[0] ? (rows[0].mo || '') : '', src: 'manual', st: 'aberta', obs: $('cnObs').value.trim()};
   try { await ctrlSalvar(reg); CV.cnovo = false; toast('Ocorrência registrada.'); } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
 }
@@ -694,7 +724,7 @@ async function cvCExcluir(id){
 function cvCExportar(){
   if(!window.XLSX) return toast('Biblioteca de Excel ainda carregando, tente de novo.', true);
   const l = [['Data', 'Entrega', 'Item', 'Descrição', 'Tipo', 'Quantidade', 'Local', 'Transportadora', 'Meca', 'Observação', 'Registrado por', 'Origem', 'Status', 'Atendida em', 'Atendida por']];
-  ctrlFiltradas().forEach(c => l.push([dtBR(c.ts), c.ent, c.item || '', c.d || '', c.tipo, c.q, c.orig || '', c.t || '', mecaNome(c.meca), c.obs || '', c.por || '', c.src === 'manual' ? 'Manual' : 'Conferência', c.st === 'atendida' ? 'Atendida' : 'Aberta', dtBR(c.at || ''), c.atpor || '']));
+  ctrlFiltradas().forEach(c => l.push([dtBR(c.ts), c.ent, c.item || '', c.d || '', c.tipo, c.q, c.orig || '', c.t || '', mecaNome(mecaDoReg(c)), c.obs || '', c.por || '', c.src === 'manual' ? 'Manual' : 'Conferência', c.st === 'atendida' ? 'Atendida' : 'Aberta', dtBR(c.at || ''), c.atpor || '']));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, planilha(l, [17, 12, 11, 44, 20, 10, 18, 22, 22, 30, 20, 12, 10, 17, 20]), 'Controle de Entregas');
   XLSX.writeFile(wb, 'controle-de-entregas.xlsx');
 }
@@ -711,7 +741,7 @@ function classeAuto(ocs){
 /* Junta as ocorrências por entrega e as tratativas gravadas. */
 function entregasDiv(){
   const m = new Map(), tr = new Map(CV.trat.map(t => [t.id, t]));
-  CV.ctrl.forEach(c => { let g = m.get(c.ent); if(!g) m.set(c.ent, g = {ent: c.ent, ocs: [], t: c.t || '', meca: c.meca || '', ts: c.ts}); g.ocs.push(c); if(c.ts < g.ts) g.ts = c.ts; if(!g.t && c.t) g.t = c.t; if(!g.meca && c.meca) g.meca = c.meca; });
+  CV.ctrl.forEach(c => { let g = m.get(c.ent); if(!g) m.set(c.ent, g = {ent: c.ent, ocs: [], t: c.t || '', meca: mecaDoReg(c), ts: c.ts}); g.ocs.push(c); if(c.ts < g.ts) g.ts = c.ts; if(!g.t && c.t) g.t = c.t; if(!g.meca) g.meca = mecaDoReg(c); });
   return Array.from(m.values()).map(g => {
     const t = tr.get(g.ent) || {};
     g.tr = t; g.classe = t.classe || classeAuto(g.ocs);
@@ -740,7 +770,7 @@ function viewGestao(){
       g.ocs.forEach(c => { cont[c.tipo] = (cont[c.tipo] || 0) + (c.q || 0); });
       const sel = (opts, atual, campo, cor) => ro ? '<span class="cv-pill" style="background:' + cor + '">' + esc(atual) + '</span>' : '<select class="cv-in-s cv-tipo-s" style="border-color:' + cor + '" onchange="cvGSet(\'' + e + '\',\'' + campo + '\',this.value)">' + opts.map(o => '<option' + (o === atual ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>';
       const txt = (campo, v, rot) => ro ? esc(v || '') : '<span class="cv-edit" title="' + esc(v || 'Clique para editar') + '" onclick="cvGTexto(\'' + e + '\',\'' + campo + '\',\'' + rot + '\')">' + (v ? esc(v.length > 40 ? v.slice(0, 40) + '…' : v) : '<span class="field-hint">+ ' + rot.toLowerCase() + '</span>') + '</span>';
-      return '<tr class="' + (g.st === 'Resolvida' ? 'g-ok' : '') + '"><td class="n"><button class="btn-link" onclick="cvGAbre(\'' + e + '\')">' + (aberto ? '▾' : '▸') + '</button></td><td class="cv-mono"><b>' + esc(g.ent) + '</b></td><td>' + fData(g.ts.slice(0, 10)) + '</td><td class="cv-cut">' + esc(g.t) + '</td><td class="cv-cut">' + esc(mecaNome(g.meca)) + '</td>' +
+      return '<tr class="' + (g.st === 'Resolvida' ? 'g-ok' : '') + '"><td class="n" style="white-space:nowrap"><button class="btn-link" onclick="cvGAbre(\'' + e + '\')">' + (aberto ? '▾' : '▸') + '</button><button class="btn-link" title="Excel de Atender entrega" onclick="cvGAtender(\'' + e + '\')">⬇</button></td><td class="cv-mono"><b>' + esc(g.ent) + '</b></td><td>' + fData(g.ts.slice(0, 10)) + '</td><td class="cv-cut">' + esc(g.t) + '</td><td class="cv-cut">' + esc(mecaNome(g.meca)) + '</td>' +
         '<td>' + Object.keys(cont).map(t => '<span class="cv-pill" style="background:' + (TIPO_COR[t] || '#001A72') + '" title="' + esc(t) + '">' + esc(t.replace('EAN não identificado', 'EAN')) + ' ' + cont[t] + '</span>').join(' ') + '</td><td class="n"><b>' + fInt(g.q) + '</b></td>' +
         '<td>' + sel(CLASSES, g.classe, 'classe', TIPO_COR[g.classe] || '#6B7280') + '</td><td>' + sel(STATUS_TR, g.st, 'st', STATUS_COR[g.st]) + '</td><td class="cv-cut">' + txt('resp', g.tr.resp, 'Responsável') + '</td><td class="cv-cut" style="max-width:240px">' + txt('trat', g.tr.trat, 'Tratativa') + '</td><td class="n">' + (g.st === 'Resolvida' ? '—' : diasDesde(g.ts) + ' d') + '</td></tr>' +
         (aberto ? '<tr class="cv-det"><td></td><td colspan="11"><table class="cv-tab cv-compact"><thead><tr><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Status</th></tr></thead><tbody>' + g.ocs.map(c => '<tr><td class="cv-mono">' + esc(c.item || '') + '</td><td>' + esc(c.d || '') + '</td><td><span class="cv-pill" style="background:' + (TIPO_COR[c.tipo] || '#001A72') + '">' + esc(c.tipo) + '</span></td><td class="n">' + fInt(c.q) + '</td><td>' + esc(c.orig || '') + '</td><td>' + (c.st === 'atendida' ? 'Atendida' : 'Aberta') + '</td></tr>').join('') + '</tbody></table></td></tr>' : '');
@@ -779,6 +809,61 @@ function cvGExportar(){
   gFiltradas().forEach(g => l.push([g.ent, fData(g.ts.slice(0, 10)), g.t, mecaNome(g.meca), g.classe, g.st, g.tr.resp || '', g.tr.trat || '', g.itens, g.q, g.ocs.map(c => c.tipo + ' ' + c.q).join(' · '), g.st === 'Resolvida' ? '' : diasDesde(g.ts)]));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, planilha(l, [12, 11, 22, 22, 16, 18, 20, 44, 7, 7, 40, 11]), 'Gestão de divergências');
   XLSX.writeFile(wb, 'gestao-de-divergencias.xlsx');
+}
+
+/* ---------- Registro de conferências: toda entrega bipada, com ou sem divergência ---------- */
+/* Conferências ainda não finalizadas ficam no aparelho (localStorage): entram na lista como "Em andamento". */
+function sessoesAbertas(){
+  const out = [];
+  try {
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i); if(!k || k.indexOf('cv-sessao-') !== 0) continue;
+      const ent = k.slice(10), o = JSON.parse(localStorage.getItem(k) || 'null');
+      if(!o || o.fin || !o.log || !o.log.length) continue;
+      const rows = CV.porEnt.get(ent) || [], ts = o.log[o.log.length - 1].t;
+      out.push({id: ent, ts: new Date(ts).toISOString(), por: CV.email, ent, t: rows[0] ? rows[0].t : '', meca: mecaEntrega(rows), itens: new Set(rows.map(r => r.i)).size,
+        pecas: rows.reduce((a, r) => a + r.q, 0), bip: Object.keys(o.bips || {}).reduce((a, i) => a + o.bips[i], 0), andamento: true, leituras: o.log.length});
+    }
+  } catch(e){}
+  return out;
+}
+function hLista(){
+  const f = CV.hf, q = f.busca.trim().toLowerCase();
+  const ids = new Set(CV.conf.map(c => c.id));
+  const todas = CV.conf.concat(sessoesAbertas().filter(c => !ids.has(c.id)));
+  return todas.filter(c => (!f.r || (f.r === 'and' ? c.andamento : f.r === 'div' ? (!c.andamento && c.div) : (!c.andamento && !c.div))) && (!f.de || c.ts.slice(0, 10) >= f.de) && (!f.ate || c.ts.slice(0, 10) <= f.ate) &&
+    (!q || [c.ent, c.t, c.por, mecaNome(ehMeca(c.meca) ? c.meca : mecaEntrega(CV.porEnt.get(c.ent)))].join(' ').toLowerCase().indexOf(q) >= 0)).sort((a, b) => b.ts.localeCompare(a.ts));
+}
+function viewHistorico(){
+  if(CV.carregando) return '<p class="field-hint">Carregando...</p>';
+  const POR = 100, lista = hLista(), tudo = CV.conf.length + sessoesAbertas().filter(c => !CV.conf.some(x => x.id === c.id)).length;
+  const pags = Math.max(1, Math.ceil(lista.length / POR)); if(CV.hpag >= pags) CV.hpag = pags - 1;
+  const nDiv = CV.conf.filter(c => c.div).length, nAnd = tudo - CV.conf.length;
+  const chip = (v, t) => '<button class="chip' + (CV.hf.r === v ? ' active' : '') + '" onclick="cvHF(\'r\',\'' + v + '\')">' + t + '</button>';
+  const pecas = lista.reduce((a, c) => a + (c.bip || 0), 0);
+  return '<div class="filter-bar cv-fb">' + chip('', 'Todas · ' + tudo) + chip('ok', 'Sem divergência · ' + (CV.conf.length - nDiv)) + chip('div', 'Com divergência · ' + nDiv) + chip('and', 'Em andamento · ' + nAnd) +
+    '<input type="date" class="cv-in-s" value="' + CV.hf.de + '" onchange="cvHF(\'de\',this.value)" title="De"><input type="date" class="cv-in-s" value="' + CV.hf.ate + '" onchange="cvHF(\'ate\',this.value)" title="Até">' +
+    '<input type="text" id="cvHBusca" class="cv-in-s" style="flex:1;min-width:180px" placeholder="Buscar entrega, transportadora, conferente, meca..." value="' + esc(CV.hf.busca) + '" oninput="cvHBusca(this.value)">' +
+    '<button class="btn btn-secondary btn-sm" onclick="cvHExportar()">Exportar</button></div>' +
+    '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th>Data / hora</th><th>Entrega</th><th>Conferente</th><th>Meca</th><th>Transportadora</th><th class="n">Itens</th><th class="n">Previstas</th><th class="n">Bipadas</th><th class="n">Falta</th><th class="n">Sobra</th><th class="n">EAN n/id</th><th>Resultado</th><th class="n">Tempo</th><th></th></tr></thead><tbody>' +
+    (lista.length ? lista.slice(CV.hpag * POR, CV.hpag * POR + POR).map(c => '<tr><td>' + dtBR(c.ts) + '</td><td class="cv-mono"><b>' + esc(c.ent) + '</b></td><td class="cv-cut">' + esc((c.por || '').split('@')[0]) + '</td><td class="cv-cut">' + esc(mecaNome(ehMeca(c.meca) ? c.meca : mecaEntrega(CV.porEnt.get(c.ent)))) + '</td><td class="cv-cut">' + esc(c.t || '') + '</td>' +
+      '<td class="n">' + fInt(c.itens) + '</td><td class="n">' + fInt(c.pecas) + '</td><td class="n"><b>' + fInt(c.bip) + '</b></td>' +
+      (c.andamento ? '<td class="n">—</td><td class="n">—</td><td class="n">—</td><td><span class="cv-pill cv-pend">Em andamento</span></td><td class="n">—</td>' :
+      '<td class="n">' + (c.falta ? '<b style="color:#B45309">' + fInt(c.falta) + '</b>' : '0') + '</td><td class="n">' + (c.sobra ? '<b style="color:#7E22CE">' + fInt(c.sobra) + '</b>' : '0') + '</td><td class="n">' + (c.ean ? '<b style="color:var(--danger)">' + fInt(c.ean) + '</b>' : '0') + '</td><td><span class="cv-pill ' + (c.div ? 'cv-falta' : 'cv-ok') + '">' + (c.div ? 'Com divergência' : 'Sem divergência') + '</span></td><td class="n">' + (c.dur > 0 ? fMin(c.dur) : '—') + '</td>') +
+      '<td class="n"><button class="btn-link" onclick="abrirEntrega(\'' + sq(c.ent) + '\')">Abrir</button></td></tr>').join('')
+      : '<tr><td colspan="14" class="field-hint" style="padding:16px">Nenhuma conferência registrada. Cada entrega fica aqui ao clicar em Finalizar conferência.</td></tr>') + '</tbody></table></div>' +
+    '<div class="field-hint" style="margin-top:8px">' + fInt(lista.length) + ' conferência(s) · ' + fInt(pecas) + ' peças bipadas</div>' +
+    (pags > 1 ? '<div class="cv-pag"><button class="btn btn-secondary" onclick="cvHPag(-1)"' + (CV.hpag === 0 ? ' disabled' : '') + '>←</button><span>Página ' + (CV.hpag + 1) + ' de ' + pags + '</span><button class="btn btn-secondary" onclick="cvHPag(1)"' + (CV.hpag >= pags - 1 ? ' disabled' : '') + '>→</button></div>' : '');
+}
+function cvHF(k, v){ CV.hf[k] = v; CV.hpag = 0; renderView(); }
+function cvHPag(n){ CV.hpag += n; renderView(); }
+let _cvHB; function cvHBusca(v){ CV.hf.busca = v; CV.hpag = 0; clearTimeout(_cvHB); _cvHB = setTimeout(() => { renderView(); const i = $('cvHBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
+function cvHExportar(){
+  if(!window.XLSX) return toast('Biblioteca de Excel ainda carregando, tente de novo.', true);
+  const l = [['Data / hora', 'Entrega', 'Conferente', 'Meca', 'Transportadora', 'Itens', 'Peças previstas', 'Peças bipadas', 'Falta', 'Sobra', 'EAN não identificado', 'Resultado', 'Tempo (s)', 'Leituras']];
+  hLista().forEach(c => l.push([dtBR(c.ts), c.ent, (c.por || '').split('@')[0], mecaNome(ehMeca(c.meca) ? c.meca : mecaEntrega(CV.porEnt.get(c.ent))), c.t || '', c.itens, c.pecas, c.bip, c.andamento ? '' : c.falta, c.andamento ? '' : c.sobra, c.andamento ? '' : c.ean, c.andamento ? 'Em andamento' : c.div ? 'Com divergência' : 'Sem divergência', c.dur || '', c.leituras || '']));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, planilha(l, [17, 12, 18, 22, 22, 7, 10, 10, 7, 7, 12, 17, 9, 9]), 'Conferências');
+  XLSX.writeFile(wb, 'registro-de-conferencias.xlsx');
 }
 
 /* ---------- Dashboard das divergências ---------- */
@@ -831,10 +916,10 @@ function viewDashboard(){
   const faixas = [['Hoje', 0, 0], ['1 dia', 1, 1], ['2 a 3 dias', 2, 3], ['4 a 7 dias', 4, 7], ['Mais de 7 dias', 8, 9999]];
   const aging = faixas.map(fx => [fx[0], ab.filter(c => { const d = diasDesde(c.ts); return d >= fx[1] && d <= fx[2]; }).length, fx[1] >= 4 ? '#C83812' : fx[1] >= 2 ? '#F59E0B' : '#1F8A52']);
   /* Rankings */
-  const gMeca = agrupa(L, c => mecaNome(c.meca)), cMeca = new Map(); C.forEach(c => { const k = mecaNome(c.meca), g = cMeca.get(k) || {n: 0, dv: 0}; g.n++; if(c.div) g.dv++; cMeca.set(k, g); });
+  const gMeca = agrupa(L, c => mecaNome(mecaDoReg(c))), cMeca = new Map(); C.forEach(c => { const k = mecaNome(ehMeca(c.meca) ? c.meca : mecaEntrega(CV.porEnt.get(c.ent))), g = cMeca.get(k) || {n: 0, dv: 0}; g.n++; if(c.div) g.dv++; cMeca.set(k, g); });
   const linMeca = gMeca.slice(0, 10).map(([k, g]) => { const cc = cMeca.get(k), dv = cc ? cc.dv : g.ents.size; return [esc(k), cc ? fInt(cc.n) : '—', fInt(dv), cc && cc.n ? Math.min(100, Math.round(dv / cc.n * 100)) + '%' : '—', fInt(g.q)]; });
   const gItem = agrupa(L.filter(c => c.item), c => c.item + '|' + (c.d || '')), linItem = gItem.slice(0, 10).map(([k, g]) => { const t = k.split('|'); return [esc(t[0]) + ' · <span title="' + esc(t[1]) + '">' + esc(descCurta(t[1])) + '</span>', fInt(g.n), fInt(g.ents.size), fInt(g.q)]; });
-  const gEnt = agrupa(L, c => c.ent), linEnt = gEnt.slice(0, 10).map(([k, g]) => { const m = L.find(c => c.ent === k) || {}; return [esc(k) + ' · ' + esc((m.t || '').slice(0, 18)), esc(mecaNome(m.meca)), fInt(g.n), fInt(g.q), g.ab ? '<b style="color:var(--danger)">' + g.ab + '</b>' : '0']; });
+  const gEnt = agrupa(L, c => c.ent), linEnt = gEnt.slice(0, 10).map(([k, g]) => { const m = L.find(c => c.ent === k) || {}; return [esc(k) + ' · ' + esc((m.t || '').slice(0, 18)), esc(mecaNome(mecaDoReg(m))), fInt(g.n), fInt(g.q), g.ab ? '<b style="color:var(--danger)">' + g.ab + '</b>' : '0']; });
   const gConf = new Map(); C.forEach(c => { const k = (c.por || '—').split('@')[0], g = gConf.get(k) || {n: 0, dv: 0, t: [], pc: 0}; g.n++; if(c.div) g.dv++; if(c.dur > 0) g.t.push(c.dur); g.pc += c.pecas || 0; gConf.set(k, g); });
   const linConf = Array.from(gConf.entries()).sort((a, b) => b[1].n - a[1].n).slice(0, 10).map(([k, g]) => [esc(k), fInt(g.n), fInt(g.pc), g.n ? Math.round(g.dv / g.n * 100) + '%' : '—', g.t.length ? fMin(media(g.t)) : '—']);
   const vz = 'Sem dados no período.';
@@ -897,8 +982,8 @@ async function importar(files){
         await nuvemGravar('ent_cab', null, {}, dividir(r.dados.cabs, 400000));
         await nuvemGravar('ent_etq', null, {}, dividir(r.dados.chaves, 400000));
         CV.etqMap = new Map(r.dados.chaves);
-        await nuvemGravar('ent', meta, {fmt: 2}, dividir(r.dados.linhas, 400000));
-        CV.ent = montarEnt(r.dados.linhas, r.dados.cabs, r.dados.descs); CV.meta.ent = meta;
+        await nuvemGravar('ent', meta, {fmt: 2, ops: r.dados.ops}, dividir(r.dados.linhas, 400000));
+        CV.ent = montarEnt(r.dados.linhas, r.dados.cabs, r.dados.descs, r.dados.ops); CV.meta.ent = meta;
       } else if(r.base === 'ean'){
         CV.msg = 'Gravando EANs na nuvem...'; renderMsg();
         const meta = {importadoEm: new Date().toISOString(), por, arquivo: r.nome, linhas: r.linhas, itens: new Set(r.dados.map(x => x[0])).size, eans: r.dados.length};
@@ -939,38 +1024,54 @@ function planilha(aoa, larg){
   ws['!freeze'] = {xSplit: 0, ySplit: 1};
   return ws;
 }
-function cvAtender(){
+/* Monta o Excel de "Atender entrega". faltas: [{x:{i,d,eans,orig}, prev, b, f}], sobras: [{x, q}], desc: {ean: {n, nome}}. */
+function atenderExcel(num, faltas, sobras, desc){
   if(!window.XLSX) return toast('Biblioteca de Excel ainda carregando, tente de novo.', true);
-  if(!CV.sess) return;
-  const s = CV.sess, nSug = 3;
-  const faltas = CV.linhas.filter(x => (s.bips[x.i] || 0) < x.prev);
-  const sobras = CV.linhas.filter(x => (s.bips[x.i] || 0) > x.prev);
+  const nSug = 3;
   let xAtual = null;
   const tp = a => tipoRot(a) + (xAtual && ehOrigem(xAtual, a) ? ' · local da coleta' : '');
   const cab1 = ['Entrega', 'Código', 'Descrição', 'EAN', 'Prevista', 'Bipada', 'Faltam', 'Local de coleta (origem)', 'Saldo hoje na origem'];
   for(let k = 1; k <= nSug; k++) cab1.push('Sugestão ' + k + ' · local', 'Tipo', 'Saldo');
   cab1.push('Observação');
   const l1 = [cab1], l2 = [['Entrega', 'Código', 'Descrição', 'Faltam', 'Prioridade', 'Local sugerido', 'Tipo', 'Saldo disponível', 'Cobre a falta?', 'Classe', 'Restrição']];
-  faltas.forEach(x => {
+  faltas.forEach(({x, prev, b, f}) => {
     xAtual = x;
-    const b = s.bips[x.i] || 0, f = x.prev - b, alts = alternativas(x, f, Math.max(CV.cfg.max || 5, nSug));
-    const lin = [CV.num, x.i, x.d, x.eans.join(' / '), x.prev, b, f, x.orig.join(' / '), saldoNaOrigem(x)];
+    const alts = alternativas(x, f, Math.max(CV.cfg.max || 5, nSug));
+    const lin = [num, x.i, x.d, (x.eans || []).join(' / '), prev == null ? '' : prev, b == null ? '' : b, f, x.orig.join(' / '), saldoNaOrigem(x)];
     for(let k = 0; k < nSug; k++) lin.push(alts[k] ? alts[k][1] : '', alts[k] ? tp(alts[k]) : '', alts[k] ? alts[k][2] : '');
     const temPk = alts.some(a => tipoClasse(a[3]) === 'pk');
     lin.push(alts.length ? (temPk ? '' : 'Sem saldo em picking — só locais não picking') : (CV.cfg.incluirNao ? 'Nenhum outro local com saldo disponível — verificar estoque/reposição' : 'Nenhum outro local de picking com saldo disponível'));
     l1.push(lin);
-    alts.forEach((a, k) => l2.push([CV.num, x.i, x.d, f, k + 1, a[1], tp(a), a[2], a[2] >= f ? 'Sim' : 'Não, parcial', a[3], a[4]]));
+    alts.forEach((a, k) => l2.push([num, x.i, x.d, f, k + 1, a[1], tp(a), a[2], a[2] >= f ? 'Sim' : 'Não, parcial', a[3], a[4]]));
   });
   const l3 = [['Entrega', 'Tipo', 'Código / EAN', 'Descrição', 'Quantidade', 'Observação']];
-  sobras.forEach(x => l3.push([CV.num, 'Sobra', x.i, x.d, s.bips[x.i] - x.prev, 'Peças a mais do que o previsto — devolver ao local de origem ' + (x.orig[0] || '')]));
-  Object.keys(s.desc).forEach(k => l3.push([CV.num, 'EAN não identificado', k, s.desc[k].nome || '', s.desc[k].n, s.desc[k].nome ? 'EAN de outro produto' : 'EAN sem cadastro na QRY0390']));
+  sobras.forEach(({x, q}) => l3.push([num, 'Sobra', x.i, x.d, q, 'Peças a mais do que o previsto — devolver ao local de origem ' + (x.orig[0] || '')]));
+  Object.keys(desc || {}).forEach(k => l3.push([num, 'EAN não identificado', k, desc[k].nome || '', desc[k].n, desc[k].nome ? 'EAN de outro produto' : 'EAN sem cadastro na QRY0390']));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, planilha(l1, [12, 11, 44, 16, 9, 8, 8, 24, 12, 18, 12, 9, 18, 12, 9, 18, 12, 9, 40]), 'Atender entrega');
   XLSX.utils.book_append_sheet(wb, planilha(l2, [12, 11, 44, 8, 10, 18, 13, 12, 14, 9, 10]), 'Locais sugeridos');
   if(l3.length > 1) XLSX.utils.book_append_sheet(wb, planilha(l3, [12, 20, 18, 44, 11, 54]), 'Sobras e EAN');
-  XLSX.writeFile(wb, 'atender-entrega-' + CV.num + '.xlsx');
-  setTimeout(focoBip, 0);
+  XLSX.writeFile(wb, 'atender-entrega-' + num + '.xlsx');
   toast('Excel gerado: ' + faltas.length + ' item(ns) para atender.');
+}
+function cvAtender(){
+  if(!CV.sess) return;
+  const s = CV.sess;
+  const faltas = CV.linhas.filter(x => (s.bips[x.i] || 0) < x.prev).map(x => ({x, prev: x.prev, b: s.bips[x.i] || 0, f: x.prev - (s.bips[x.i] || 0)}));
+  const sobras = CV.linhas.filter(x => (s.bips[x.i] || 0) > x.prev).map(x => ({x, q: s.bips[x.i] - x.prev}));
+  atenderExcel(CV.num, faltas, sobras, s.desc);
+  setTimeout(focoBip, 0);
+}
+const eansDoItem = i => Array.from(new Set(((CV.itens[i] && CV.itens[i].e) || []).concat(CV.eansExtra.get(i) || [])));
+/* Excel de Atender entrega a partir das ocorrências já gravadas (Gestão de divergências). */
+function cvGAtender(ent){
+  const ocs = CV.ctrl.filter(c => c.ent === ent), desc = {};
+  const mk = c => ({i: c.item, d: c.d, eans: eansDoItem(c.item), orig: c.orig ? c.orig.split(' / ') : []});
+  const faltas = ocs.filter(c => c.tipo === 'Falta').map(c => ({x: mk(c), prev: c.prev, b: c.bip, f: c.q}));
+  const sobras = ocs.filter(c => c.tipo === 'Sobra').map(c => ({x: mk(c), q: c.q}));
+  ocs.filter(c => c.tipo === 'EAN não identificado').forEach(c => { desc[c.item] = {n: c.q, nome: c.d}; });
+  if(!faltas.length && !sobras.length && !Object.keys(desc).length) return toast('Essa entrega não tem falta, sobra ou EAN não identificado.', true);
+  atenderExcel(ent, faltas, sobras, desc);
 }
 
 /* ---------- exportar ---------- */
@@ -995,7 +1096,7 @@ function cvExportar(){
 }
 
 /* ---------- navegação / estado ---------- */
-const VIEWS = {conferir: viewConferir, entregas: viewEntregas, controle: viewControle, gestao: viewGestao, dashboard: viewDashboard, importacao: viewImportacao, configuracoes: viewConfig};
+const VIEWS = {conferir: viewConferir, entregas: viewEntregas, controle: viewControle, historico: viewHistorico, gestao: viewGestao, dashboard: viewDashboard, importacao: viewImportacao, configuracoes: viewConfig};
 function renderMsg(){ const el = $('cvMsg'); if(el) el.textContent = CV.ocupado ? '⏳ ' + CV.msg : ''; }
 function renderView(){
   if(CV.erro && !CV.ent.length && !CV.saldo.length && CV.tab !== 'importacao' && CV.tab !== 'configuracoes'){ $('viewRoot').innerHTML = vazio(); return; }
@@ -1015,7 +1116,7 @@ function renderView(){
   if(CV.tab === 'conferir' && $('cvKpis')) atualizar();
   if(sc) sc.scrollTop = y;
 }
-function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard' || t === 'gestao') Promise.all([ctrlLer('ctrl'), ctrlLer('conf'), ctrlLer('trat')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; CV.trat = r[2]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
+function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'controle' || t === 'dashboard' || t === 'gestao' || t === 'historico') Promise.all([ctrlLer('ctrl'), ctrlLer('conf'), ctrlLer('trat')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; CV.trat = r[2]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
 function cvPag(n){ CV.pag += n; renderView(); }
 let _cvBT; function cvBuscaEnt(v){ CV.busca = v; CV.pag = 0; clearTimeout(_cvBT); _cvBT = setTimeout(() => { renderView(); const i = $('cvBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
 function cvToggleSidebar(){ const el = $('sidebar'); if(matchMedia('(max-width:860px)').matches) el.classList.toggle('mobile-open'); else el.classList.toggle('collapsed'); }
