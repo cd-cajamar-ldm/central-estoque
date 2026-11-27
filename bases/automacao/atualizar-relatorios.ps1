@@ -161,6 +161,19 @@ try {
 
       # Atualização em segundo plano desligada: assim o "Atualizar tudo" só
       # devolve quando terminou de verdade, e o arquivo é salvo já com os dados novos.
+      # Planilha feita à mão (sem consulta para atualizar): não mexe nem salva,
+      # senão a data do arquivo muda a cada rodada e os apps importam de novo à toa.
+      if ((Excel { $livro.Connections.Count }) -eq 0) {
+        Excel { $livro.Close($false) }
+        [void][Runtime.InteropServices.Marshal]::ReleaseComObject($livro)
+        $livro = $null
+        $quando = (Get-Date -Format 's')
+        $estado[$arq.BaseName] = @{ ultima = $quando; ultimaOk = $quando; status = 'ok'; mensagem = 'planilha manual (sem consulta)'; linhas = $(if ($ant) { $ant.linhas } else { $null }); segundos = 0 }
+        GravarJson $estadoArq $estado
+        $ok++
+        Anotar ("OK    " + $arq.Name + " (manual, sem consulta: não mexido)")
+        continue
+      }
       foreach ($c in (Excel { @($livro.Connections) })) {
         try { Excel { $c.OLEDBConnection.BackgroundQuery = $false } } catch {}
         try { Excel { $c.ODBCConnection.BackgroundQuery = $false } } catch {}

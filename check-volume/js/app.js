@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 25; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 26; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -1247,12 +1247,12 @@ async function importar(files, opts){
 }
 
 /* ---------- Atualização automática pelo Almoxarifado da Oficina ----------
-   O PC de atualização deixa os Excel (QRY0180, QRY0390, SIGEQ230) na pasta Bases do
+   O PC de atualização deixa os Excel (QRY0180, QRY0390, SIGEQ230, FOTOS) na pasta Bases do
    SharePoint; o Almoxarifado guarda uma cópia neste navegador. Ao abrir o Check Volume
    (e a cada 15 min aberto), se lá tiver um arquivo MAIS NOVO que o importado na nuvem,
    ele importa sozinho — e a nuvem passa a valer para todo mundo. Só quem pode editar. */
 CV.autoFalhou = {};
-const CV_ALMOX = [{id: 'QRY0180', meta: 'ent'}, {id: 'QRY0390', meta: 'est'}, {id: 'SIGEQ230', meta: 'ean'}];
+const CV_ALMOX = [{id: 'QRY0180', meta: 'ent'}, {id: 'QRY0390', meta: 'est'}, {id: 'SIGEQ230', meta: 'ean'}, {id: 'FOTOS', meta: 'foto'}];
 async function cvAutoAlmox(){
   const A = window.LDM_ALMOX;
   if(!A || somenteLeitura() || CV.ocupado || CV.carregando) return;
