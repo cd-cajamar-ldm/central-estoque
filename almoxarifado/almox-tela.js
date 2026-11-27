@@ -121,7 +121,7 @@
 
   /* ---------------- esqueleto ---------------- */
   raiz.innerHTML =
-    '<div class="alx-topo"><div class="alx-pasta" id="alxPasta"></div><div class="alx-mig" id="alxMig"></div></div>' +
+    '<div class="alx-topo"><div class="alx-pasta" id="alxPasta"></div></div>' +
     '<div class="alx-filtros" id="alxFiltros">' +
       '<input type="search" class="alx-busca" id="alxBusca" placeholder="Buscar query ou app…" autocomplete="off">' +
       '<div class="alx-chips" id="alxChips"></div>' +
@@ -136,7 +136,6 @@
     '<p class="alx-nota" id="alxNota"></p>' +
     '<input type="file" id="alxArquivo" multiple hidden accept=".csv,.txt,.xlsx,.xlsm,.xls">';
   var elPasta = document.getElementById('alxPasta');
-  var elMig = document.getElementById('alxMig');
   var elChips = document.getElementById('alxChips');
   var elBusca = document.getElementById('alxBusca');
   var elCorpo = document.getElementById('alxCorpo');
@@ -178,10 +177,11 @@
       titulo = '<span class="alx-ult-rot">Últ. atualização</span>' +
         (d ? '<span class="alx-ult">' + hora(ult) + ' <small>' + dois(d.getDate()) + '/' + dois(d.getMonth() + 1) + '/' + d.getFullYear() + '</small></span>' : '<span class="alx-ult">—</span>');
       var auto = estado.auto;
-      texto = 'Pasta ' + esc(estado.handle.name) +
-        (auto && auto.instalada ? ' · automação do PC instalada' : ' · <strong>automação do PC não encontrada</strong> (pasta _automacao)') +
-        (prox ? ' · próxima: <strong>' + hora(prox.d.getTime()) + '</strong> (' + esc(prox.q) + ')' : '') +
-        (estado.sujo ? ' · <strong class="alx-sujo">horários alterados, falta salvar</strong>' : '');
+      var partes = [];
+      if(prox) partes.push('Próxima: <strong>' + hora(prox.d.getTime()) + '</strong> (' + esc(prox.q) + ')');
+      if(auto && !auto.instalada) partes.push('<strong>automação do PC não encontrada</strong>');
+      if(estado.sujo) partes.push('<strong class="alx-sujo">horários alterados, falta salvar</strong>');
+      texto = partes.join(' · ');
       botoes = (estado.sujo ? '<button type="button" class="btn-primary" data-acao="salvar">Salvar horários</button>' : '') +
                '<button type="button" class="' + (estado.sujo ? 'btn-secondary' : 'btn-primary') + '" data-acao="ler">Buscar novidades</button>' +
                '<button type="button" class="btn-secondary" data-acao="conectar">Trocar pasta</button>';
@@ -193,26 +193,10 @@
       '<div class="alx-pasta-acoes">' + botoes + '</div>';
   }
 
-  /* ---------------- migração para o Snowflake ---------------- */
   function contarFontes(){
     var c = { snowflake: 0, fluxo: 0, manual: 0, indefinida: 0 };
     estado.pacs.forEach(function(p){ c[p.prateleira.fonte] = (c[p.prateleira.fonte] || 0) + 1; });
     return c;
-  }
-  function renderMigracao(){
-    var c = contarFontes();
-    var total = estado.pacs.length || 1;
-    var barras = ORDEM_FONTES.filter(function(f){ return c[f]; }).map(function(f){
-      return '<i class="' + FONTE[f].css + '" style="width:' + (c[f] / total * 100) + '%"></i>';
-    }).join('');
-    var leg = ORDEM_FONTES.filter(function(f){ return c[f]; }).map(function(f){
-      return '<span class="' + FONTE[f].css + '">' + FONTE[f].rotulo + ' ' + c[f] + '</span>';
-    }).join('');
-    elMig.innerHTML =
-      '<h3>Migração para o Snowflake</h3>' +
-      '<div class="alx-mig-n"><b>' + c.snowflake + '</b> de ' + estado.pacs.length + ' queries já vêm do Snowflake</div>' +
-      '<div class="alx-barra">' + barras + '</div>' +
-      '<div class="alx-leg">' + leg + '</div>';
   }
 
   /* ---------------- filtros ---------------- */
@@ -336,7 +320,6 @@
       // Só o que existe na pasta: o cadastro sem arquivo não vira linha vazia.
       estado.pacs = pacs.filter(function(p){ return p.arquivos.length || p.deFora.length; });
       renderPasta();
-      renderMigracao();
       renderChips();
       renderTabela();
     }).catch(function(e){
