@@ -59,6 +59,12 @@
     { id:'QRY0843', nome:'Contagens do inventário', fonte:'manual', ritmo:'manual',
       codigo:/QRY0*843(?!\d)/i,
       apps:['inventario'] },
+    { id:'QRY0180', nome:'', fonte:'snowflake', ritmo:'auto',
+      codigo:/QRY0*180(?!\d)/i,
+      apps:[] },
+    { id:'SIGEQ230', nome:'Cadastro de itens', fonte:'fluxo', ritmo:'diario',
+      codigo:/SIGEQ0*230(?!\d)/i,
+      apps:[] },
     { id:'QRY0114', nome:'Divergências de endereço', fonte:'fluxo', ritmo:'auto',
       codigo:/QRY0*114(?!\d)/i,
       apps:['estoque','transitorios'] },
@@ -87,8 +93,9 @@
     for(i = 0; i < CADASTRO.length; i++) if(CADASTRO[i].apelido && CADASTRO[i].apelido.test(base)) return CADASTRO[i].id;
     var m = /(?:^|[^A-Za-z])([A-Za-z]{2,8})[\s_-]*0*(\d{1,5})(?!\d)/.exec(base.replace(/parte\s*[_-]?\s*\d+/i, ''));
     if(m){
-      var num = m[2]; while(num.length < 4) num = '0' + num;
-      return m[1].toUpperCase() + num;
+      var pref = m[1].toUpperCase(), num = m[2];
+      if(pref === 'QRY') while(num.length < 4) num = '0' + num;
+      return pref + num;
     }
     var limpo = base.replace(EXTENSOES, '').replace(/[\s_-]*parte\s*[_-]?\s*\d+/i, '').trim();
     return limpo.slice(0, 40) || null;
@@ -100,6 +107,13 @@
   }
   /* A ficha de uma query: a do cadastro, ou uma ficha "nova" para a que só
      apareceu na pasta. */
+  function fonteDoNome(nome){
+    var n = String(nome || '').replace(EXTENSOES, '');
+    if(/(^|[\s_-])snow(flake)?$/i.test(n)) return 'snowflake';
+    if(/(^|[\s_-])fluxo$/i.test(n)) return 'fluxo';
+    if(/(^|[\s_-])manual$/i.test(n)) return 'manual';
+    return null;
+  }
   function ficha(id){
     return POR_ID[id] || { id: id, nome: '', fonte: 'indefinida', ritmo: 'auto', apps: [], nova: true };
   }
@@ -296,7 +310,14 @@
       ? escolhidos.reduce(function(s, a){ return s + a.linhas; }, 0) : null;
     return {
       id: id,
-      prateleira: ficha(id),
+      // O sufixo no nome do arquivo ("- Snow", "- Fluxo") manda na origem.
+      prateleira: (function(){
+        var f = ficha(id), fn = null;
+        escolhidos.forEach(function(a){ fn = fn || fonteDoNome(a.nome); });
+        if(!fn) return f;
+        var c = {}; for(var k in f) c[k] = f[k];
+        c.fonte = fn; return c;
+      })(),
       arquivos: escolhidos,
       deFora: daPrat.filter(function(a){ return !usados[a.nome]; }), // versões antigas que sobraram
       dadosDe: datas.length ? Math.min.apply(null, datas) : null,   // a parte mais antiga manda
@@ -338,7 +359,50 @@
   };
   function aoAtualizar(fn){ ouvintes.push(fn); }
 
+  /* ---------------- automação do PC (pasta Bases) ----------------
+     _automacao/horarios.json  → quando cada Excel deve ser atualizado (editado aqui)
+     _registro/estado.json     → o que o script do PC fez com cada um (só leitura) */
+  function lerJsonDaPasta(handle, sub, nome){
+    return handle.getDirectoryHandle(sub).then(function(d){ return d.getFileHandle(nome); })
+      .then(function(f){ return f.getFile(); }).then(function(f){ return f.text(); })
+      .then(function(t){ return JSON.parse(t.replace(/^\uFEFF/, '')); })
+      .catch(function(){ return null; });
+  }
+  function lerAutomacao(handle){
+    if(!handle) return Promise.resolve(null);
+    return Promise.all([
+      lerJsonDaPasta(handle, '_automacao', 'horarios.json'),
+      lerJsonDaPasta(handle, '_registro', 'estado.json'),
+      handle.getDirectoryHandle('_automacao').then(function(){ return true; }).catch(function(){ return false; })
+    ]).then(function(r){
+      var h = r[0] || {};
+      return {
+        instalada: r[2],
+        padrao: Array.isArray(h.padrao) ? h.padrao : ['06:00'],
+        relatorios: h.relatorios || {},
+        estado: r[1] || {}
+      };
+    });
+  }
+  function gravarHorarios(handle, padrao, relatorios){
+    var opts = { mode: 'readwrite' };
+    return handle.queryPermission(opts).then(function(st){
+      return st === 'granted' ? st : handle.requestPermission(opts);
+    }).then(function(st){
+      if(st !== 'granted') throw new Error('o navegador não liberou gravar na pasta');
+      return handle.getDirectoryHandle('_automacao', { create: true });
+    }).then(function(d){ return d.getFileHandle('horarios.json', { create: true }); })
+      .then(function(f){ return f.createWritable(); })
+      .then(function(w){
+        var txt = JSON.stringify({ padrao: padrao, relatorios: relatorios }, null, 2) + '\n';
+        return w.write(txt).then(function(){ return w.close(); });
+      });
+  }
+
   window.LDM_ALMOX = {
+    lerAutomacao: lerAutomacao,
+    gravarHorarios: gravarHorarios,
+    fonteDoNome: fonteDoNome,
     CADASTRO: CADASTRO,
     ficha: ficha,
     classificar: classificar,

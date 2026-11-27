@@ -1,6 +1,8 @@
 ﻿<#
   ATUALIZAR RELATÓRIOS EXCEL — Central de Estoque (CD Cajamar)
   ------------------------------------------------------------
+  Roda a cada 15 min, mas só atualiza o relatório cujo horário (escolhido no
+  Almoxarifado da Oficina, gravado em _automacao\horarios.json) já chegou.
   Copia cada .xlsx da pasta para o computador, abre, clica "Atualizar tudo" (Power Query: Snowflake pelo
   ODBC, fluxos de dados...), espera terminar, salva e fecha. Um arquivo de cada vez.
   Relatório novo na pasta entra sozinho na próxima rodada.
@@ -18,7 +20,9 @@ param(
   [int]$MinutosMaximoPorArquivo = 20,
   # -Visivel: mostra o Excel trabalhando (usado no "ATUALIZAR AGORA", para ver se
   # alguma janelinha do Excel está esperando resposta).
-  [switch]$Visivel
+  [switch]$Visivel,
+  # -Forcar: atualiza todos agora, sem olhar os horários (usado no "ATUALIZAR AGORA").
+  [switch]$Forcar
 )
 $Pasta = (Resolve-Path $Pasta).Path
 
@@ -26,6 +30,50 @@ $ErrorActionPreference = 'Stop'
 $registro = Join-Path $Pasta '_registro'
 New-Item -ItemType Directory -Force -Path $registro | Out-Null
 $log = Join-Path $registro 'atualizacao.log'
+$estadoArq = Join-Path $registro 'estado.json'
+$horariosArq = Join-Path $PSScriptRoot 'horarios.json'
+
+# JSON -> tabela (o PowerShell 5 devolve objetos; o resto do script usa tabelas).
+function ParaTabela($obj) {
+  $t = @{}
+  if ($obj) { foreach ($p in $obj.PSObject.Properties) { $t[$p.Name] = $p.Value } }
+  return $t
+}
+function LerJson([string]$arquivo) {
+  if (-not (Test-Path -LiteralPath $arquivo)) { return $null }
+  try { return (Get-Content -LiteralPath $arquivo -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+function GravarJson([string]$arquivo, $valor) {
+  $json = $valor | ConvertTo-Json -Depth 6
+  [IO.File]::WriteAllText($arquivo, $json, (New-Object Text.UTF8Encoding($false)))
+}
+
+# Horários de cada relatório (editados no Almoxarifado da Oficina):
+# { "padrao": ["06:00"], "relatorios": { "QRY0390 - Snow": ["06:00","08:00"] } }
+$cfg = LerJson $horariosArq
+$padrao = @('06:00')
+if ($cfg -and $cfg.padrao) { $padrao = @($cfg.padrao) }
+$porRelatorio = ParaTabela ($(if ($cfg) { $cfg.relatorios } else { $null }))
+
+# O que aconteceu com cada relatório (o Almoxarifado lê daqui a "Última" e a "Situação").
+$estado = ParaTabela (LerJson $estadoArq)
+
+# O horário marcado mais recente que já passou (hoje; se nenhum passou ainda, o último de ontem).
+function HorarioDaVez($lista, [datetime]$agora) {
+  $hoje = $agora.Date
+  $passados = @()
+  $todos = @()
+  foreach ($h in $lista) {
+    $ts = [timespan]::Zero
+    if (-not [timespan]::TryParse([string]$h, [ref]$ts)) { continue }
+    $todos += $ts
+    if ($hoje.Add($ts) -le $agora) { $passados += $hoje.Add($ts) }
+  }
+  if ($passados.Count) { return ($passados | Sort-Object | Select-Object -Last 1) }
+  if ($todos.Count) { return $hoje.AddDays(-1).Add(($todos | Sort-Object | Select-Object -Last 1)) }
+  return $null
+}
+
 function Anotar([string]$texto) {
   $linha = (Get-Date -Format 'dd/MM/yyyy HH:mm:ss') + '  ' + $texto
   Add-Content -Path $log -Value $linha -Encoding UTF8
@@ -61,7 +109,22 @@ try {
     Where-Object { $_.Name -notlike '~$*' } | Sort-Object Name
   if (-not $arquivos) { Anotar 'Nenhum .xlsx na pasta.'; exit 0 }
 
-  Anotar ("Início da rodada: " + $arquivos.Count + " arquivo(s).")
+  $agora = Get-Date
+  if (-not $Forcar) {
+    $arquivos = @($arquivos | Where-Object {
+      $nome = $_.BaseName
+      $lista = if ($porRelatorio.ContainsKey($nome)) { @($porRelatorio[$nome]) } else { $padrao }
+      $vez = HorarioDaVez $lista $agora
+      if (-not $vez) { return $false }
+      $e = $estado[$nome]
+      $ultimaOk = if ($e -and $e.ultimaOk) { [datetime]$e.ultimaOk } else { [datetime]::MinValue }
+      return ($ultimaOk -lt $vez)
+    })
+    # Nada na hora: nem abre o Excel.
+    if (-not $arquivos) { exit 0 }
+  }
+
+  Anotar ("Início da rodada: " + $arquivos.Count + " arquivo(s)" + $(if ($Forcar) { ' (forçada)' } else { '' }) + ".")
   $excel = New-Object -ComObject Excel.Application
   Start-Sleep -Seconds 3
   Excel { $excel.Visible = [bool]$Visivel }
@@ -91,6 +154,12 @@ try {
       }
       Excel { $livro.RefreshAll() }
       Excel { $excel.CalculateUntilAsyncQueriesDone() }
+      $linhas = $null
+      try {
+        $plan = Excel { $livro.Worksheets.Item(1) }
+        if ((Excel { $plan.ListObjects.Count }) -gt 0) { $linhas = Excel { $plan.ListObjects.Item(1).ListRows.Count } }
+        else { $linhas = (Excel { $plan.UsedRange.Rows.Count }) - 1 }
+      } catch {}
       Excel { $livro.Save() }
       Excel { $livro.Close($false) }
       [void][Runtime.InteropServices.Marshal]::ReleaseComObject($livro)
@@ -109,9 +178,20 @@ try {
         Anotar ("AVISO " + $arq.Name + ": demorou mais de " + $MinutosMaximoPorArquivo + " min.")
       }
       $ok++
-      Anotar ("OK    " + $arq.Name + " (" + [int]((Get-Date) - $inicio).TotalSeconds + " s)")
+      $seg = [int]((Get-Date) - $inicio).TotalSeconds
+      $quando = (Get-Date -Format 's')
+      $estado[$arq.BaseName] = @{ ultima = $quando; ultimaOk = $quando; status = 'ok'; mensagem = ''; linhas = $linhas; segundos = $seg }
+      GravarJson $estadoArq $estado
+      Anotar ("OK    " + $arq.Name + " (" + $seg + " s)")
     } catch {
       $falhas++
+      $anterior = $estado[$arq.BaseName]
+      $estado[$arq.BaseName] = @{
+        ultima = (Get-Date -Format 's'); status = 'erro'; mensagem = $_.Exception.Message
+        ultimaOk = $(if ($anterior -and $anterior.ultimaOk) { $anterior.ultimaOk } else { $null })
+        linhas = $(if ($anterior) { $anterior.linhas } else { $null })
+      }
+      GravarJson $estadoArq $estado
       Anotar ("ERRO  " + $arq.Name + ": " + $_.Exception.Message)
     } finally {
       if ($livro) { try { Excel { $livro.Close($false) } } catch {}; [void][Runtime.InteropServices.Marshal]::ReleaseComObject($livro) }
