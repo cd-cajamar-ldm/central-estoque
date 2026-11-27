@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 20; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 21; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -26,7 +26,7 @@ const CV = {
   porEnt: new Map(), eanMap: new Map(), saldoItem: new Map(),
   tab: 'conferir', num: '', sess: null, linhas: [], desc: new Set(), pag: 0, busca: '',
   ocupado: false, msg: '', carregando: true, erro: '', ult: null, aberto: new Set(),
-  and: [], abrindo: false, etqMap: new Map(), hf: {r: '', busca: '', de: '', ate: ''}, hpag: 0, finalizando: false, ctrl: [], conf: [], trat: [], gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, dx: {per: '30', de: '', ate: '', met: 'n', f: {}, vista: 'graf', sm: {k: 'q', d: -1}}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
+  and: [], abrindo: false, etqMap: new Map(), hf: {r: '', busca: '', de: '', ate: ''}, hpag: 0, finalizando: false, ctrl: [], conf: [], trat: [], atd: [], atdA: null, gf: {st: '', classe: '', busca: ''}, gaberta: new Set(), cf: {st: '', tipo: '', busca: '', de: '', ate: ''}, df: {de: '', ate: ''}, dx: {per: '30', de: '', ate: '', met: 'n', f: {}, vista: 'graf', sm: {k: 'q', d: -1}}, cpag: 0, cnovo: false, email: '', eanRows: [], eansExtra: new Map()
 };
 
 /* ---------- utilitários ---------- */
@@ -331,7 +331,7 @@ async function cvFinalizar(){
   }
   const partes = [t.falta ? 'falta ' + t.falta : '', t.sobra ? 'sobra ' + t.sobra : '', t.ean ? t.ean + ' EAN não identificado' : ''].filter(Boolean).join(' · ');
   /* Com divergência: oferece o Excel de Atender entrega antes de zerar (depois dá para gerar pela Gestão de divergências). */
-  if(partes && window.XLSX && confirm('Entrega ' + num + ' com divergência (' + partes + ').\n\nGerar o Excel de Atender entrega antes de zerar a tela?')) cvAtender();
+  if(partes && confirm('Entrega ' + num + ' com divergência (' + partes + ').\n\nAbrir o Atender entrega (conferência dos locais) antes de zerar a tela?')) cvAtender();
   CV.finalizando = true; CV.sess.fin = true; gravarSessao();
   toast('Salvando a conferência...');
   try {
@@ -664,7 +664,7 @@ async function ctrlSalvar(reg, chave){
   await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', chave).eq('versao', reg.id).eq('parte', 0);
   const { error } = await cvSupa.from(CV_TAB).insert({app: CV_APP, chave, versao: reg.id, parte: 0, dados: reg});
   if(error){ const e = new Error(error.message || 'erro ao gravar'); e.code = error.code; e.conflito = error.code === '23505' || /duplicate|unique/i.test(error.message || ''); throw e; }
-  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
+  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : chave === 'atd' ? CV.atd : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
   if(i >= 0) lista[i] = reg; else lista.push(reg);
 }
 async function ctrlExcluir(id, chave){
@@ -682,7 +682,7 @@ async function ctrlLerUm(chave, id){
 }
 /* Altera só os campos pedidos sobre a versão MAIS RECENTE da nuvem: não apaga o que outra pessoa mudou nesse meio tempo. */
 async function ctrlAtualiza(chave, id, campos){
-  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : CV.ctrl;
+  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : chave === 'atd' ? CV.atd : CV.ctrl;
   const conteudo = Object.keys(campos).filter(k => k !== 'upd' && k !== 'por' && k !== 'ent');   /* horário e autor da gravação sempre diferem entre duas pessoas */
   for(let t = 0; t < 4; t++){
     let ult = null;
@@ -825,7 +825,7 @@ function viewGestao(){
       g.ocs.forEach(c => { cont[c.tipo] = (cont[c.tipo] || 0) + (c.q || 0); });
       const sel = (opts, atual, campo, cor) => ro ? '<span class="cv-pill" style="background:' + cor + '">' + esc(atual) + '</span>' : '<select class="cv-in-s cv-tipo-s" style="border-color:' + cor + '" onchange="cvGSet(\'' + e + '\',\'' + campo + '\',this.value)">' + opts.map(o => '<option' + (o === atual ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>';
       const txt = (campo, v, rot) => ro ? esc(v || '') : '<span class="cv-edit" title="' + esc(v || 'Clique para editar') + '" onclick="cvGTexto(\'' + e + '\',\'' + campo + '\',\'' + rot + '\')">' + (v ? esc(v.length > 40 ? v.slice(0, 40) + '…' : v) : '<span class="field-hint">+ ' + rot.toLowerCase() + '</span>') + '</span>';
-      return '<tr class="' + (g.st === 'Resolvida' ? 'g-ok' : '') + '"><td class="n" style="white-space:nowrap"><button class="btn-link" onclick="cvGAbre(\'' + e + '\')">' + (aberto ? '▾' : '▸') + '</button><button class="btn-link" title="Excel de Atender entrega" onclick="cvGAtender(\'' + e + '\')">⬇</button></td><td class="cv-mono"><b>' + esc(g.ent) + '</b></td><td>' + fData(g.ts.slice(0, 10)) + '</td><td class="cv-cut">' + esc(g.t) + '</td><td class="cv-cut">' + esc(mecaNome(g.meca)) + '</td>' +
+      return '<tr class="' + (g.st === 'Resolvida' ? 'g-ok' : '') + '"><td class="n" style="white-space:nowrap"><button class="btn-link" onclick="cvGAbre(\'' + e + '\')">' + (aberto ? '▾' : '▸') + '</button><button class="btn-link" title="Atender entrega (celular)" onclick="cvGAtender(\'' + e + '\')">📱</button></td><td class="cv-mono"><b>' + esc(g.ent) + '</b></td><td>' + fData(g.ts.slice(0, 10)) + '</td><td class="cv-cut">' + esc(g.t) + '</td><td class="cv-cut">' + esc(mecaNome(g.meca)) + '</td>' +
         '<td class="n">' + (g.itens > 1 ? '<b>' + g.itens + '</b>' : g.itens) + '</td><td>' + Object.keys(cont).map(t => '<span class="cv-pill" style="background:' + (TIPO_COR[t] || '#001A72') + '" title="' + esc(t) + '">' + esc(t.replace('EAN não identificado', 'EAN')) + ' ' + cont[t] + '</span>').join(' ') + '</td><td class="n"><b>' + fInt(g.q) + '</b></td>' +
         '<td>' + sel(CLASSES, g.classe, 'classe', TIPO_COR[g.classe] || '#6B7280') + '</td><td>' + sel(STATUS_TR, g.st, 'st', STATUS_COR[g.st]) + '</td><td class="cv-cut">' + txt('resp', g.tr.resp, 'Responsável') + '</td><td class="cv-cut" style="max-width:240px">' + txt('trat', g.tr.trat, 'Tratativa') + '</td><td class="n">' + (g.st === 'Resolvida' ? '—' : diasDesde(g.ts) + ' d') + '</td></tr>' +
         (aberto ? '<tr class="cv-det"><td></td><td colspan="12"><table class="cv-tab cv-compact"><thead><tr><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Observação</th><th>Status</th><th></th></tr></thead><tbody>' + g.ocs.map(c => { const id = sq(c.id); return '<tr><td class="cv-mono">' + esc(c.item || '') + '</td><td class="cv-cut" title="' + esc(c.d || '') + '">' + esc(c.d || '') + '</td>' +
@@ -1291,19 +1291,126 @@ function cvAtender(){
   const s = CV.sess;
   const faltas = CV.linhas.filter(x => (s.bips[x.i] || 0) < x.prev).map(x => ({x, prev: x.prev, b: s.bips[x.i] || 0, f: x.prev - (s.bips[x.i] || 0)}));
   const sobras = CV.linhas.filter(x => (s.bips[x.i] || 0) > x.prev).map(x => ({x, q: s.bips[x.i] - x.prev}));
-  atenderExcel(CV.num, faltas, sobras, s.desc);
-  setTimeout(focoBip, 0);
+  atdAbrir(CV.num, faltas, sobras, JSON.parse(JSON.stringify(s.desc || {})));
 }
 const eansDoItem = i => Array.from(new Set(((CV.itens[i] && CV.itens[i].e) || []).concat(CV.eansExtra.get(i) || [])));
-/* Excel de Atender entrega a partir das ocorrências já gravadas (Gestão de divergências). */
-function cvGAtender(ent){
+/* Dados do atendimento a partir das ocorrências já gravadas (Gestão de divergências ou link). */
+function atdDados(ent){
   const ocs = CV.ctrl.filter(c => c.ent === ent), desc = {};
   const mk = c => ({i: c.item, d: c.d, eans: eansDoItem(c.item), orig: c.orig ? c.orig.split(' / ') : []});
-  const faltas = ocs.filter(c => c.tipo === 'Falta').map(c => ({x: mk(c), prev: c.prev, b: c.bip, f: c.q}));
+  const faltas = ocs.filter(c => c.tipo === 'Falta' || c.tipo === 'Item não localizado').map(c => ({x: mk(c), prev: c.prev, b: c.bip, f: c.q}));
   const sobras = ocs.filter(c => c.tipo === 'Sobra').map(c => ({x: mk(c), q: c.q}));
   ocs.filter(c => c.tipo === 'EAN não identificado').forEach(c => { desc[c.item] = {n: c.q, nome: c.d}; });
-  if(!faltas.length && !sobras.length && !Object.keys(desc).length) return toast('Essa entrega não tem falta, sobra ou EAN não identificado.', true);
-  atenderExcel(ent, faltas, sobras, desc);
+  return {faltas, sobras, desc};
+}
+function cvGAtender(ent){
+  const d = atdDados(ent);
+  if(!d.faltas.length && !d.sobras.length && !Object.keys(d.desc).length) return toast('Essa entrega não tem falta, sobra ou EAN não identificado.', true);
+  atdAbrir(ent, d.faltas, d.sobras, d.desc);
+}
+
+/* ---------- Atendimento no celular: conferir, local por local, onde a peça está ---------- */
+/* Cada item mostra a origem da coleta e os locais sugeridos; a pessoa marca "Achei" (com a quantidade) ou "Não tem".
+   O andamento é gravado na nuvem (chave 'atd', um registro por entrega): qualquer aparelho abre e continua. */
+function atdLocais(f){
+  const x = f.x, falta = f.f, alts = alternativas(x, falta, 6), out = [], vis = new Set();
+  const add = (loc, saldo, rot, cobre) => { const k = normLoc(loc); if(vis.has(k)) return; vis.add(k); out.push({loc, saldo, rot, cobre}); };
+  x.orig.forEach(o => { if(!alts.some(s => normLoc(s[1]) === normLoc(o))) add(o, (CV.saldoItem.get(x.i) || []).filter(s => normLoc(s[1]) === normLoc(o)).reduce((a, s) => a + s[2], 0), 'Local da coleta', false); });
+  alts.forEach(s => add(s[1], s[2], ehOrigem(x, s) ? 'Local da coleta' : tipoRot(s), s[2] >= falta));
+  return out;
+}
+function atdEstado(i){
+  const A = CV.atdA, f = A.faltas[i], m = A.m[f.x.i] || {}, locs = A.loc[i];
+  const ach = locs.reduce((a, l) => a + (m[l.loc] && m[l.loc].s === 'ok' ? m[l.loc].q : 0), 0) + (m._outro && m._outro.s === 'ok' ? m._outro.q : 0);
+  if(ach >= f.f) return {st: 'ok', ach};
+  if(m._nl || (locs.length && locs.every(l => m[l.loc] && m[l.loc].s === 'no'))) return {st: 'nao', ach};
+  return {st: 'pend', ach};
+}
+function atdAbrir(ent, faltas, sobras, desc){
+  const A = CV.atdA = {ent, faltas, sobras, desc, m: {}, loc: faltas.map(atdLocais)};
+  let el = $('cvAtd'); if(!el){ el = document.createElement('div'); el.id = 'cvAtd'; el.className = 'atd'; document.body.appendChild(el); }
+  document.body.classList.add('atd-aberto'); atdRender();
+  ctrlLerUm('atd', ent).then(r => { if(CV.atdA === A && r && r.itens){ A.m = r.itens; atdRender(); } }).catch(() => {});
+}
+function atdFechar(){ CV.atdA = null; const el = $('cvAtd'); if(el) el.remove(); document.body.classList.remove('atd-aberto'); }
+function atdRender(){
+  const A = CV.atdA, el = $('cvAtd'); if(!A || !el) return;
+  const ro = somenteLeitura(), sts = A.faltas.map((_, i) => atdEstado(i)), nOk = sts.filter(s => s.st === 'ok').length, nNao = sts.filter(s => s.st === 'nao').length;
+  const y = el.querySelector('.atd-body') ? el.querySelector('.atd-body').scrollTop : 0;
+  const ROT = {ok: '✓ Atendido', nao: '✗ Não localizado', pend: 'Pendente'};
+  const cards = A.faltas.map((f, i) => {
+    const x = f.x, m = A.m[x.i] || {}, e = sts[i], falta = Math.max(f.f - e.ach, 0), ik = i;
+    const locs = A.loc[i].map((l, li) => {
+      const r = m[l.loc], sd = '<small>' + esc(l.rot) + ' · saldo <b>' + fInt(l.saldo) + '</b>' + (l.cobre ? ' · cobre' : '') + '</small>';
+      if(r) return '<div class="atd-loc ' + (r.s === 'ok' ? 'ok' : 'no') + '"><div><code>' + esc(l.loc) + '</code>' + sd + '</div><div class="atd-r"><b>' + (r.s === 'ok' ? '✓ Achei ' + fInt(r.q) : '✗ Não tem') + '</b>' + (ro ? '' : '<button type="button" class="atd-lk" onclick="atdMarca(' + ik + ',' + li + ',\'x\')">desfazer</button>') + '</div></div>';
+      const q0 = Math.max(1, Math.min(falta || 1, l.saldo || falta || 1));
+      return '<div class="atd-loc"><div><code>' + esc(l.loc) + '</code>' + sd + '</div>' + (ro ? '' : '<div class="atd-r"><input type="number" inputmode="numeric" min="1" id="atq_' + ik + '_' + li + '" value="' + q0 + '" aria-label="Quantidade achada"><button type="button" class="atd-b ok" onclick="atdMarca(' + ik + ',' + li + ',\'ok\')">✓ Achei</button><button type="button" class="atd-b no" onclick="atdMarca(' + ik + ',' + li + ',\'no\')">✗ Não tem</button></div>') + '</div>';
+    }).join('') || '<div class="atd-loc"><div class="field-hint">' + (CV.saldo.length ? 'Nenhum local com saldo no sistema.' : 'Importe a QRY0390 para ver locais.') + '</div></div>';
+    const o = m._outro;
+    const outro = o ? '<div class="atd-loc ok"><div><code>' + esc(o.loc) + '</code><small>Outro local</small></div><div class="atd-r"><b>✓ Achei ' + fInt(o.q) + '</b>' + (ro ? '' : '<button type="button" class="atd-lk" onclick="atdOutro(' + ik + ',true)">desfazer</button>') + '</div></div>' : (ro || e.st === 'ok' ? '' : '<div class="atd-loc"><div><small>Achou em outro local?</small></div><div class="atd-r"><button type="button" class="atd-b" onclick="atdOutro(' + ik + ')">+ Outro local</button></div></div>');
+    return '<section class="atd-card ' + e.st + '"><header>' + fotoHtml(x.i, 'atd-foto') + '<div><div class="atd-cod">' + esc(x.i) + '</div><div class="atd-d">' + esc(x.d) + '</div><div class="atd-f">Faltam <b>' + fInt(f.f) + '</b>' + (e.ach ? ' · achadas <b>' + fInt(e.ach) + '</b>' : '') + '</div></div><span class="atd-st ' + e.st + '">' + ROT[e.st] + '</span></header>' + locs + outro +
+      (ro || e.st === 'ok' ? '' : '<button type="button" class="atd-nl' + (m._nl ? ' on' : '') + '" onclick="atdNL(' + ik + ')">' + (m._nl ? '✗ Marcado como não localizado — desfazer' : 'Não localizei em nenhum local') + '</button>') + '</section>';
+  }).join('');
+  const extra = (A.sobras.length ? '<div class="atd-sec">Sobras — devolver ao local de origem</div>' + A.sobras.map(s => '<div class="atd-ex"><b>+' + fInt(s.q) + '</b> ' + esc(s.x.i) + ' · ' + esc(descCurta(s.x.d)) + '<small>origem ' + esc(s.x.orig[0] || '—') + '</small></div>').join('') : '') +
+    (Object.keys(A.desc).length ? '<div class="atd-sec">EAN não identificado</div>' + Object.keys(A.desc).map(k => '<div class="atd-ex"><b>' + A.desc[k].n + '×</b> ' + esc(k) + '<small>' + esc(A.desc[k].nome || 'sem cadastro') + '</small></div>').join('') : '');
+  el.innerHTML = '<div class="atd-top"><button type="button" class="atd-x" onclick="atdFechar()" aria-label="Fechar">✕</button><div><b>Atender entrega ' + esc(A.ent) + '</b><small>' + nOk + ' de ' + A.faltas.length + ' itens atendidos' + (nNao ? ' · ' + nNao + ' não localizado(s)' : '') + '</small></div></div>' +
+    '<div class="atd-prog"><u style="width:' + (A.faltas.length ? (nOk + nNao) / A.faltas.length * 100 : 0) + '%"></u></div>' +
+    '<div class="atd-body">' + (cards || '<p class="field-hint" style="padding:16px">Sem itens faltantes nesta entrega.</p>') + extra + '</div>' +
+    '<div class="atd-foot"><button type="button" class="btn btn-secondary" onclick="atdLink()">Copiar link</button><button type="button" class="btn btn-secondary" onclick="atenderExcel(CV.atdA.ent, CV.atdA.faltas, CV.atdA.sobras, CV.atdA.desc)">Excel</button>' + (ro ? '' : '<button type="button" class="btn btn-orange" onclick="atdConcluir()">Concluir atendimento</button>') + '</div>';
+  const b = el.querySelector('.atd-body'); if(b) b.scrollTop = y;
+}
+async function atdSalva(item){
+  const A = CV.atdA; if(!A || somenteLeitura()) return;
+  try {
+    const ult = await ctrlLerUm('atd', A.ent).catch(() => null), itens = Object.assign({}, (ult && ult.itens) || {}, {[item]: A.m[item] || {}});
+    await ctrlAtualiza('atd', A.ent, {itens, upd: new Date().toISOString(), por: CV.email});
+  } catch(e){ toast('Não foi possível gravar na nuvem: ' + ((e && e.message) || e), true); }
+}
+function atdMarca(i, li, acao){
+  const A = CV.atdA, f = A.faltas[i], l = A.loc[i][li], m = A.m[f.x.i] = A.m[f.x.i] || {};
+  if(acao === 'x') delete m[l.loc];
+  else if(acao === 'no') m[l.loc] = {s: 'no', q: 0};
+  else { const q = Math.max(1, parseInt(($('atq_' + i + '_' + li) || {}).value, 10) || 1); m[l.loc] = {s: 'ok', q}; delete m._nl; }
+  atdRender(); atdSalva(f.x.i);
+}
+function atdOutro(i, desfaz){
+  const A = CV.atdA, f = A.faltas[i], m = A.m[f.x.i] = A.m[f.x.i] || {};
+  if(desfaz) delete m._outro;
+  else { const loc = (prompt('Em qual local você achou?') || '').trim().toUpperCase(); if(!loc) return; const q = Math.max(1, parseInt(prompt('Quantas peças achou?', String(Math.max(f.f - atdEstado(i).ach, 1))), 10) || 0); if(!q) return; m._outro = {s: 'ok', loc, q}; delete m._nl; }
+  atdRender(); atdSalva(f.x.i);
+}
+function atdNL(i){
+  const A = CV.atdA, f = A.faltas[i], m = A.m[f.x.i] = A.m[f.x.i] || {};
+  if(m._nl) delete m._nl; else m._nl = true;
+  atdRender(); atdSalva(f.x.i);
+}
+function atdLink(){
+  const u = location.origin + location.pathname.replace(/[^/]*$/, '') + '?atender=' + encodeURIComponent(CV.atdA.ent);
+  (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => toast('Link copiado — abra no celular.'), () => prompt('Copie o link:', u));
+}
+/* Concluir: o que foi achado vira "Atendida" na Gestão; o que não foi achado vira "Item não localizado". */
+async function atdConcluir(){
+  const A = CV.atdA; if(!A) return;
+  const sts = A.faltas.map((_, i) => atdEstado(i)), pend = sts.filter(s => s.st === 'pend').length;
+  if(pend && !confirm(pend + ' item(ns) ainda sem resposta. Concluir mesmo assim? Eles continuam abertos.')) return;
+  try {
+    for(let i = 0; i < A.faltas.length; i++){
+      const it = A.faltas[i].x.i, m = A.m[it] || {}, e = sts[i], id = [A.ent, 'Falta', it].join('|'), c = CV.ctrl.find(r => r.ent === A.ent && r.item === it && (r.tipo === 'Falta' || r.tipo === 'Item não localizado'));
+      if(!c || e.st === 'pend') continue;
+      const locs = A.loc[i].filter(l => m[l.loc] && m[l.loc].s === 'ok').map(l => l.loc + ' (' + m[l.loc].q + ')').concat(m._outro ? [m._outro.loc + ' (' + m._outro.q + ')'] : []);
+      if(e.st === 'ok') await ctrlAtualiza('ctrl', c.id, {st: 'atendida', at: new Date().toISOString(), atpor: CV.email, obs: 'Achado em ' + locs.join(', ')});
+      else await ctrlAtualiza('ctrl', c.id, {tipo: 'Item não localizado', obs: 'Não localizado nos locais sugeridos'});
+    }
+    await ctrlAtualiza('atd', A.ent, {itens: A.m, done: new Date().toISOString(), upd: new Date().toISOString(), por: CV.email});
+    toast('Atendimento concluído.'); atdFechar(); if(CV.tab === 'gestao' || CV.tab === 'dashboard') renderView();
+  } catch(e){ toast((e && e.message) || String(e), true); }
+}
+async function atdPeloLink(){
+  const ent = new URLSearchParams(location.search).get('atender'); if(!ent) return;
+  try { CV.ctrl = await ctrlLer('ctrl'); } catch(e){}
+  const d = atdDados(ent);
+  if(!d.faltas.length && !d.sobras.length) return toast('Entrega ' + ent + ' sem itens para atender (finalize a conferência primeiro).', true);
+  atdAbrir(ent, d.faltas, d.sobras, d.desc);
 }
 
 /* ---------- exportar ---------- */
@@ -1381,5 +1488,6 @@ async function cvInit(){
   await carregar();
   CV.carregando = false;
   renderView();
+  atdPeloLink();
   setTimeout(() => { const i = $('cvEnt'); if(i) i.focus(); }, 0);
 }
