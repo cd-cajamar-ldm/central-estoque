@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 32; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 33; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -1070,6 +1070,19 @@ async function cvLiberar(ent){
   try { await ctrlExcluir(ent, 'and'); toast('Entrega ' + ent + ' liberada.'); } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
 }
+/* Lixeira no Registro de conferências: pergunta antes e apaga a entrega de tudo
+   (conferência, ocorrências, tratativa, atendimento e andamento). */
+async function cvHExcluir(ent){
+  const temDiv = CV.ctrl.some(c => c.ent === ent);
+  if(!confirm('Apagar a entrega ' + ent + '?\n\nSai do Registro de conferências' + (temDiv ? ', da Gestão de divergências' : '') + ' e do Dashboard. Não dá para desfazer.')) return;
+  try {
+    await excluirEntregaTudo(ent);
+    if(CV.and.some(a => a.id === ent)) await ctrlExcluir(ent, 'and');
+    try { localStorage.removeItem(sessKey(ent)); } catch(e){}
+    toast('Entrega ' + ent + ' apagada.');
+  } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
 function hLista(){
   const f = CV.hf, q = f.busca.trim().toLowerCase();
   const todas = CV.conf.concat(sessoesAbertas());
@@ -1092,7 +1105,7 @@ function viewHistorico(){
       '<td class="n">' + fInt(c.itens) + '</td><td class="n">' + fInt(c.pecas) + '</td><td class="n"><b>' + fInt(c.bip) + '</b></td>' +
       (c.andamento ? '<td class="n">—</td><td class="n">—</td><td class="n">—</td><td><span class="cv-pill cv-pend">Em andamento</span></td><td class="n" title="última leitura">há ' + fMin(c.parada * 60) + '</td>' :
       '<td class="n">' + (c.falta ? '<b style="color:#B45309">' + fInt(c.falta) + '</b>' : '0') + '</td><td class="n">' + (c.sobra ? '<b style="color:#7E22CE">' + fInt(c.sobra) + '</b>' : '0') + '</td><td class="n">' + (c.ean ? '<b style="color:var(--danger)">' + fInt(c.ean) + '</b>' : '0') + '</td><td><span class="cv-pill ' + (c.div ? 'cv-falta' : 'cv-ok') + '">' + (c.div ? 'Com divergência' : 'Sem divergência') + '</span></td><td class="n">' + (c.dur > 0 ? fMin(c.dur) : '—') + '</td>') +
-      '<td class="n" style="white-space:nowrap"><button class="btn-link" onclick="abrirEntrega(\'' + sq(c.ent) + '\')">Abrir</button>' + (c.nuvem && !somenteLeitura() ? ' <button class="btn-danger-text" onclick="cvLiberar(\'' + sq(c.ent) + '\')">Liberar</button>' : '') + '</td></tr>').join('')
+      '<td class="n" style="white-space:nowrap"><button class="btn-link" onclick="abrirEntrega(\'' + sq(c.ent) + '\')">Abrir</button>' + (c.nuvem && !somenteLeitura() ? ' <button class="btn-danger-text" onclick="cvLiberar(\'' + sq(c.ent) + '\')">Liberar</button>' : '') + (somenteLeitura() ? '' : ' <button class="btn-link" title="Apagar esta entrega" onclick="cvHExcluir(\'' + sq(c.ent) + '\')">🗑</button>') + '</td></tr>').join('')
       : '<tr><td colspan="14" class="field-hint" style="padding:16px">Nenhuma conferência registrada. Cada entrega fica aqui ao clicar em Finalizar conferência.</td></tr>') + '</tbody></table></div>' +
     '<div class="field-hint" style="margin-top:8px">' + fInt(lista.length) + ' conferência(s) · ' + fInt(pecas) + ' peças bipadas</div>' +
     (pags > 1 ? '<div class="cv-pag"><button class="btn btn-secondary" onclick="cvHPag(-1)"' + (CV.hpag === 0 ? ' disabled' : '') + '>←</button><span>Página ' + (CV.hpag + 1) + ' de ' + pags + '</span><button class="btn btn-secondary" onclick="cvHPag(1)"' + (CV.hpag >= pags - 1 ? ' disabled' : '') + '>→</button></div>' : '');
