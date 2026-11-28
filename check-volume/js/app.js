@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 28; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 29; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -386,6 +386,21 @@ function cvRefoca(inp){
   }, 60);
 }
 function focoBip(){ const i = $('cvBip'); if(i) i.focus(); }
+/* Foto ampliada: clique em qualquer foto (tabela, item bipado, atendimento) abre grande.
+   Em captura, para o clique na foto não abrir/fechar a linha da tabela por baixo. */
+function cvZoomFecha(){ const z = $('cvZoom'); if(z) z.remove(); focoBip(); }
+document.addEventListener('click', e => {
+  const img = e.target.closest && e.target.closest('img[data-foto]');
+  if(!img) return;
+  e.preventDefault(); e.stopPropagation();
+  const i = img.dataset.foto, x = (CV.linhas || []).find(l => l.i === i);
+  const z = document.createElement('div');
+  z.className = 'cv-zoom'; z.id = 'cvZoom';
+  z.innerHTML = '<button class="x" aria-label="Fechar">✕</button><figure><img src="' + esc(img.src) + '" alt="" referrerpolicy="no-referrer"><figcaption>' + esc(i) + (x && x.d ? ' · ' + esc(x.d) : '') + '</figcaption></figure>';
+  z.addEventListener('click', cvZoomFecha);
+  document.body.appendChild(z);
+}, true);
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && $('cvZoom')) cvZoomFecha(); });
 function cvToggle(i){
   const sel = window.getSelection && String(window.getSelection() || '');
   if(sel) return;                                          /* está selecionando texto para copiar: não abre a linha */
