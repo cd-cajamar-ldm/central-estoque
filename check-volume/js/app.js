@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 27; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 28; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -675,7 +675,40 @@ async function ctrlExcluir(id, chave){
   if(somenteLeitura()) throw new Error('Seu acesso é só de visualização.');
   const { error } = await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', chave).eq('versao', id).eq('parte', 0);
   if(error) throw error;
-  if(chave === 'and') CV.and = CV.and.filter(c => c.id !== id); else CV.ctrl = CV.ctrl.filter(c => c.id !== id);
+  const tira = l => l.filter(c => c.id !== id);
+  if(chave === 'and') CV.and = tira(CV.and); else if(chave === 'conf') CV.conf = tira(CV.conf);
+  else if(chave === 'trat') CV.trat = tira(CV.trat); else if(chave === 'atd') CV.atd = tira(CV.atd || []); else CV.ctrl = tira(CV.ctrl);
+}
+/* Tira uma entrega de tudo: ocorrências, tratativa, atendimento e o registro da conferência
+   (sai da Gestão, do Registro e do Dashboard). Usado para apagar entregas de teste. */
+async function excluirEntregaTudo(ent){
+  for(const c of CV.ctrl.filter(c => c.ent === ent)) await ctrlExcluir(c.id);
+  if(CV.trat.some(t => t.id === ent)) await ctrlExcluir(ent, 'trat');
+  if((CV.atd || []).some(t => t.id === ent)) await ctrlExcluir(ent, 'atd');
+  if(CV.conf.some(c => c.id === ent)) await ctrlExcluir(ent, 'conf');
+}
+async function cvGExcluir(ent){
+  const n = CV.ctrl.filter(c => c.ent === ent).length;
+  if(!confirm('Excluir a entrega ' + ent + ' das divergências?\n\nApaga ' + n + ' ocorrência(s), a tratativa e o registro da conferência (sai também do Registro e do Dashboard). Não dá para desfazer.')) return;
+  try { await excluirEntregaTudo(ent); toast('Entrega ' + ent + ' excluída.'); } catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+/* Apaga de uma vez as entregas registradas ANTES de hoje (os testes). */
+async function cvGExcluirTestes(){
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const antes = ts => ts && new Date(ts) < hoje;
+  const ents = new Set();
+  CV.ctrl.forEach(c => { if(antes(c.ts)) ents.add(c.ent); });
+  CV.conf.forEach(c => { if(antes(c.ts)) ents.add(c.ent || c.id); });
+  /* Entrega que também tem registro de hoje fica (é real). */
+  CV.ctrl.forEach(c => { if(!antes(c.ts)) ents.delete(c.ent); });
+  CV.conf.forEach(c => { if(!antes(c.ts)) ents.delete(c.ent || c.id); });
+  if(!ents.size) return toast('Nenhuma entrega anterior a hoje para apagar.');
+  if(!confirm('Apagar ' + ents.size + ' entrega(s) registradas ANTES de hoje (testes)?\n\nSaem da Gestão de divergências, do Registro de conferências e do Dashboard. As de hoje ficam. Não dá para desfazer.')) return;
+  let feitas = 0;
+  try { for(const ent of ents){ await excluirEntregaTudo(ent); feitas++; } toast(feitas + ' entrega(s) de teste apagada(s).'); }
+  catch(e){ toast('Parei em ' + feitas + ' de ' + ents.size + ': ' + ((e && e.message) || e), true); }
+  renderView();
 }
 /* Lê um registro direto da nuvem (a cópia da tela pode estar velha se outra pessoa mexeu). */
 async function ctrlLerUm(chave, id){
@@ -815,7 +848,8 @@ function viewGestao(){
   let h = '<div class="filter-bar cv-fb">' + chip('', 'Todas · ' + todas.length) + chip('abertas', 'Em aberto · ' + nAb) + STATUS_TR.map(st => chip(st, st + ' · ' + todas.filter(g => g.st === st).length)).join('') +
     '<select class="cv-in-s" onchange="cvGF(\'classe\',this.value)"><option value="">Todas as classificações</option>' + CLASSES.map(c => '<option' + (CV.gf.classe === c ? ' selected' : '') + '>' + c + '</option>').join('') + '</select>' +
     '<input type="text" id="cvGBusca" class="cv-in-s" style="flex:1;min-width:180px" placeholder="Buscar entrega, transportadora, meca, responsável..." value="' + esc(CV.gf.busca) + '" oninput="cvGBusca(this.value)">' +
-    (ro ? '' : '<button class="btn btn-orange btn-sm" onclick="cvCNovo()">+ Nova ocorrência</button>') + '<button class="btn btn-secondary btn-sm" onclick="cvGExportar()">Exportar</button></div>';
+    (ro ? '' : '<button class="btn btn-orange btn-sm" onclick="cvCNovo()">+ Nova ocorrência</button>') + '<button class="btn btn-secondary btn-sm" onclick="cvGExportar()">Exportar</button>' +
+    (ro ? '' : '<button class="btn-danger-text" title="Apaga as entregas registradas antes de hoje" onclick="cvGExcluirTestes()">Apagar testes (antes de hoje)</button>') + '</div>';
   if(CV.cnovo && !ro){
     h += '<div class="cv-card cv-novo"><div><span class="cv-lab">Entrega</span><input id="cnEnt" class="cv-in-s" inputmode="numeric"></div><div><span class="cv-lab">Item (código)</span><input id="cnItem" class="cv-in-s" placeholder="opcional"></div>' +
       '<div><span class="cv-lab">Tipo</span><select id="cnTipo" class="cv-in-s">' + TIPOS.map(t => '<option' + (t === 'Avaria' ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div><div><span class="cv-lab">Qtd</span><input id="cnQtd" type="number" min="1" value="1" class="cv-in-s" style="width:70px"></div>' +
@@ -828,7 +862,7 @@ function viewGestao(){
       g.ocs.forEach(c => { cont[c.tipo] = (cont[c.tipo] || 0) + (c.q || 0); });
       const sel = (opts, atual, campo, cor) => ro ? '<span class="cv-pill" style="background:' + cor + '">' + esc(atual) + '</span>' : '<select class="cv-in-s cv-tipo-s" style="border-color:' + cor + '" onchange="cvGSet(\'' + e + '\',\'' + campo + '\',this.value)">' + opts.map(o => '<option' + (o === atual ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>';
       const txt = (campo, v, rot) => ro ? esc(v || '') : '<span class="cv-edit" title="' + esc(v || 'Clique para editar') + '" onclick="cvGTexto(\'' + e + '\',\'' + campo + '\',\'' + rot + '\')">' + (v ? esc(v.length > 40 ? v.slice(0, 40) + '…' : v) : '<span class="field-hint">+ ' + rot.toLowerCase() + '</span>') + '</span>';
-      return '<tr class="' + (g.st === 'Resolvida' ? 'g-ok' : '') + '"><td class="n" style="white-space:nowrap"><button class="btn-link" onclick="cvGAbre(\'' + e + '\')">' + (aberto ? '▾' : '▸') + '</button><button class="btn-link" title="Atender entrega (celular)" onclick="cvGAtender(\'' + e + '\')">📱</button></td><td class="cv-mono"><b>' + esc(g.ent) + '</b></td><td>' + fData(g.ts.slice(0, 10)) + '</td><td class="cv-cut">' + esc(g.t) + '</td><td class="cv-cut">' + esc(mecaNome(g.meca)) + '</td>' +
+      return '<tr class="' + (g.st === 'Resolvida' ? 'g-ok' : '') + '"><td class="n" style="white-space:nowrap"><button class="btn-link" onclick="cvGAbre(\'' + e + '\')">' + (aberto ? '▾' : '▸') + '</button><button class="btn-link" title="Atender entrega (celular)" onclick="cvGAtender(\'' + e + '\')">📱</button>' + (ro ? '' : '<button class="btn-link" title="Excluir esta entrega das divergências" onclick="cvGExcluir(\'' + e + '\')">🗑</button>') + '</td><td class="cv-mono"><b>' + esc(g.ent) + '</b></td><td>' + fData(g.ts.slice(0, 10)) + '</td><td class="cv-cut">' + esc(g.t) + '</td><td class="cv-cut">' + esc(mecaNome(g.meca)) + '</td>' +
         '<td class="n">' + (g.itens > 1 ? '<b>' + g.itens + '</b>' : g.itens) + '</td><td>' + Object.keys(cont).map(t => '<span class="cv-pill" style="background:' + (TIPO_COR[t] || '#001A72') + '" title="' + esc(t) + '">' + esc(t.replace('EAN não identificado', 'EAN')) + ' ' + cont[t] + '</span>').join(' ') + '</td><td class="n"><b>' + fInt(g.q) + '</b></td>' +
         '<td>' + sel(CLASSES, g.classe, 'classe', TIPO_COR[g.classe] || '#6B7280') + '</td><td>' + sel(STATUS_TR, g.st, 'st', STATUS_COR[g.st]) + '</td><td class="cv-cut">' + txt('resp', g.tr.resp, 'Responsável') + '</td><td class="cv-cut" style="max-width:240px">' + txt('trat', g.tr.trat, 'Tratativa') + '</td><td class="n">' + (g.st === 'Resolvida' ? '—' : diasDesde(g.ts) + ' d') + '</td></tr>' +
         (aberto ? '<tr class="cv-det"><td></td><td colspan="12"><table class="cv-tab cv-compact"><thead><tr><th>Item</th><th>Descrição</th><th>Tipo</th><th class="n">Qtd</th><th>Local</th><th>Observação</th><th>Status</th><th></th></tr></thead><tbody>' + g.ocs.map(c => { const id = sq(c.id); return '<tr><td class="cv-mono">' + esc(c.item || '') + '</td><td class="cv-cut" title="' + esc(c.d || '') + '">' + esc(c.d || '') + '</td>' +
