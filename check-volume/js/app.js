@@ -6,13 +6,14 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 30; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 31; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
   entregas: ['Entregas', 'Entregas da QRY0180.'],
   historico: ['Registro de conferências', 'Todas as entregas bipadas, com ou sem divergência.'],
   gestao: ['Gestão de divergências', 'Uma linha por entrega divergente, com classificação e tratativa.'],
+  soltos: ['Itens sem entrega', 'Bipe as peças soltas (ex.: fim de picking) e veja de quais entregas podem ser.'],
   dashboard: ['Dashboard de divergências', 'Indicadores das ocorrências registradas.'],
   configuracoes: ['Configurações', 'Regras das sugestões de outros locais.']
 };
@@ -120,6 +121,8 @@ function montarEnt(linhas, cabs, descs, ops){
 /* ---------- índices ---------- */
 function indexar(){
   CV.porEnt = new Map();
+  CV.porItem = new Map();
+  CV.ent.forEach(r => { let a = CV.porItem.get(r.i); if(!a) CV.porItem.set(r.i, a = []); a.push(r); });
   CV.ent.forEach(r => { let a = CV.porEnt.get(r.e); if(!a) CV.porEnt.set(r.e, a = []); a.push(r); });
   CV.eanMap = new Map();
   Object.keys(CV.itens).forEach(i => (CV.itens[i].e || []).forEach(e => { const k = normEan(e); if(k && !CV.eanMap.has(k)) CV.eanMap.set(k, i); }));
@@ -148,6 +151,7 @@ async function carregar(){
     CV.conf = await ctrlLer('conf').catch(() => []);
     CV.trat = await ctrlLer('trat').catch(() => []);
     CV.and = await ctrlLer('and').catch(() => []);
+    CV.solto = await ctrlLer('solto').catch(() => []);
   } catch(e){
     CV.erro = 'Não consegui ler os dados: ' + (e.message || e) + (/app_dados|relation|does not exist/i.test(String(e.message)) ? ' — a tabela app_dados ainda não foi criada no banco (migração 008).' : '');
   }
@@ -682,7 +686,7 @@ async function ctrlSalvar(reg, chave){
   await cvSupa.from(CV_TAB).delete().eq('app', CV_APP).eq('chave', chave).eq('versao', reg.id).eq('parte', 0);
   const { error } = await cvSupa.from(CV_TAB).insert({app: CV_APP, chave, versao: reg.id, parte: 0, dados: reg});
   if(error){ const e = new Error(error.message || 'erro ao gravar'); e.code = error.code; e.conflito = error.code === '23505' || /duplicate|unique/i.test(error.message || ''); throw e; }
-  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : chave === 'atd' ? CV.atd : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
+  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : chave === 'atd' ? CV.atd : chave === 'solto' ? (CV.solto = CV.solto || []) : CV.ctrl, i = lista.findIndex(c => c.id === reg.id);
   if(i >= 0) lista[i] = reg; else lista.push(reg);
 }
 async function ctrlExcluir(id, chave){
@@ -692,7 +696,8 @@ async function ctrlExcluir(id, chave){
   if(error) throw error;
   const tira = l => l.filter(c => c.id !== id);
   if(chave === 'and') CV.and = tira(CV.and); else if(chave === 'conf') CV.conf = tira(CV.conf);
-  else if(chave === 'trat') CV.trat = tira(CV.trat); else if(chave === 'atd') CV.atd = tira(CV.atd || []); else CV.ctrl = tira(CV.ctrl);
+  else if(chave === 'trat') CV.trat = tira(CV.trat); else if(chave === 'atd') CV.atd = tira(CV.atd || []);
+  else if(chave === 'solto') CV.solto = tira(CV.solto || []); else CV.ctrl = tira(CV.ctrl);
 }
 /* Tira uma entrega de tudo: ocorrências, tratativa, atendimento e o registro da conferência
    (sai da Gestão, do Registro e do Dashboard). Usado para apagar entregas de teste. */
@@ -733,7 +738,7 @@ async function ctrlLerUm(chave, id){
 }
 /* Altera só os campos pedidos sobre a versão MAIS RECENTE da nuvem: não apaga o que outra pessoa mudou nesse meio tempo. */
 async function ctrlAtualiza(chave, id, campos){
-  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : chave === 'atd' ? CV.atd : CV.ctrl;
+  const lista = chave === 'conf' ? CV.conf : chave === 'trat' ? CV.trat : chave === 'and' ? CV.and : chave === 'atd' ? CV.atd : chave === 'solto' ? (CV.solto || []) : CV.ctrl;
   const conteudo = Object.keys(campos).filter(k => k !== 'upd' && k !== 'por' && k !== 'ent');   /* horário e autor da gravação sempre diferem entre duas pessoas */
   for(let t = 0; t < 4; t++){
     let ult = null;
@@ -829,6 +834,120 @@ async function cvCExcluir(id){
   try { await ctrlExcluir(id); } catch(e){ toast((e && e.message) || String(e), true); }
   renderView();
 }
+
+/* ---------- Itens sem entrega (peças soltas, ex.: fim de picking) ----------
+   Cada peça bipada vira um registro na nuvem (chave 'solto'). Mesma peça ainda em aberto soma
+   a quantidade. Para cada uma, a QRY0180 mostra as entregas que têm esse item, filtradas pelo
+   status da entrega (EVENTO_NOME; começa em FIM DE PICKING). Entrega com falta registrada
+   desse item e entrega que tem VÁRIAS peças da lista em aberto sobem para o topo. */
+const SOLTO_ST = ['Aberto', 'Vinculado', 'Devolvido ao endereço', 'Outro'];
+const SOLTO_COR = {'Aberto': '#F59E0B', 'Vinculado': '#1F8A52', 'Devolvido ao endereço': '#0E7490', 'Outro': '#6B7280'};
+CV.sf = {st: 'Aberto', busca: '', ev: null};
+CV.sAberto = new Set();
+function soltoEvs(){
+  const s = new Set(); CV.ent.forEach(r => { if(r.ev) s.add(r.ev); });
+  return Array.from(s).sort();
+}
+function soltoEvPadrao(){
+  if(CV.sf.ev) return CV.sf.ev;
+  const fp = soltoEvs().filter(e => /fim/i.test(e) && /pick/i.test(e));
+  return (CV.sf.ev = new Set(fp.length ? fp : []));   /* vazio = todos */
+}
+/* Entregas candidatas de um item, com pontuação: falta registrada > várias peças da lista > resto. */
+function soltoCands(item, abertos){
+  const evs = soltoEvPadrao(), todas = evs.size === 0;
+  const porEnt = new Map();
+  (CV.porItem.get(item) || []).forEach(r => {
+    if(!todas && !evs.has(r.ev)) return;
+    let c = porEnt.get(r.e); if(!c) porEnt.set(r.e, c = {e: r.e, q: 0, ev: r.ev, t: r.t, op: r.op || ''}); c.q += r.q;
+  });
+  const faltas = new Set(CV.ctrl.filter(c => c.item === item && c.tipo === 'Falta' && c.st !== 'atendida').map(c => c.ent));
+  return Array.from(porEnt.values()).map(c => {
+    c.falta = faltas.has(c.e);
+    c.outros = abertos.filter(x => x.item !== item && (CV.porItem.get(x.item) || []).some(r => r.e === c.e)).length;
+    c.pts = (c.falta ? 1000 : 0) + c.outros * 10;
+    return c;
+  }).sort((a, b) => b.pts - a.pts || a.e.localeCompare(b.e));
+}
+function soltoItemDeBip(v){
+  const t = String(v || '').trim(); if(!t) return null;
+  const i = CV.eanMap.get(normEan(t));
+  if(i) return {item: i, ean: t};
+  if(CV.porItem.has(t) || CV.itens[t]) return {item: t, ean: ''};
+  return {item: '', ean: t};
+}
+async function cvSBipar(){
+  const el = $('cvSBip'); if(!el) return;
+  const v = el.value; el.value = '';
+  if(somenteLeitura()) return toast('Seu acesso é só de visualização.', true);
+  const r = soltoItemDeBip(v); if(!r) return;
+  const d = r.item ? ((CV.itens[r.item] && CV.itens[r.item].d) || ((CV.porItem.get(r.item) || [])[0] || {}).d || '') : 'EAN não identificado';
+  beep(r.item ? 'ok' : 'erro');
+  const ant = (CV.solto || []).find(x => x.st === 'Aberto' && (r.item ? x.item === r.item : x.ean === r.ean));
+  const agora = new Date().toISOString();
+  const reg = ant ? Object.assign({}, ant, {q: (ant.q || 0) + 1, upd: agora})
+                  : {id: 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: agora, upd: agora, por: CV.email, item: r.item, ean: r.ean, d, q: 1, st: 'Aberto', ent: '', obs: ''};
+  try { await ctrlSalvar(reg, 'solto'); } catch(e){ toast((e && e.message) || String(e), true); }
+  CV.sUlt = reg.id;
+  renderView(); setTimeout(() => { const i = $('cvSBip'); if(i) i.focus(); }, 0);
+}
+async function cvSSet(id, campos){
+  try { await ctrlAtualiza('solto', id, Object.assign({upd: new Date().toISOString(), por: CV.email}, campos)); }
+  catch(e){ toast((e && e.message) || String(e), true); }
+  renderView();
+}
+function cvSSt(id, st){ cvSSet(id, st === 'Vinculado' ? {st} : {st, ent: st === 'Aberto' ? '' : ((CV.solto.find(x => x.id === id) || {}).ent || '')}); }
+function cvSVincular(id, ent){ cvSSet(id, {st: 'Vinculado', ent}); toast('Peça vinculada à entrega ' + ent + '.'); }
+function cvSObs(id){ const x = (CV.solto || []).find(s => s.id === id); if(!x) return; const v = prompt('Observação:', x.obs || ''); if(v === null) return; cvSSet(id, {obs: v.trim()}); }
+function cvSQtd(id){ const x = (CV.solto || []).find(s => s.id === id); if(!x) return; const v = parseInt(prompt('Quantidade:', x.q || 1), 10); if(!(v > 0)) return; cvSSet(id, {q: v}); }
+async function cvSExcluir(id){ if(!confirm('Excluir esta peça da lista?')) return; try { await ctrlExcluir(id, 'solto'); } catch(e){ toast((e && e.message) || String(e), true); } renderView(); }
+function cvSF(k, v){ CV.sf[k] = v; renderView(); }
+function cvSEv(ev){ const s = soltoEvPadrao(); if(ev === '*') s.clear(); else if(s.has(ev)) s.delete(ev); else s.add(ev); renderView(); }
+function cvSAbre(id){ if(CV.sAberto.has(id)) CV.sAberto.delete(id); else CV.sAberto.add(id); renderView(); }
+function viewSoltos(){
+  if(CV.carregando) return '<p class="field-hint">Carregando...</p>';
+  const ro = somenteLeitura(), todos = (CV.solto || []).slice().sort((a, b) => (b.upd || b.ts).localeCompare(a.upd || a.ts));
+  const abertos = todos.filter(x => x.st === 'Aberto');
+  const q = CV.sf.busca.trim().toLowerCase();
+  const lista = todos.filter(x => (!CV.sf.st || x.st === CV.sf.st) && (!q || [x.item, x.d, x.ean, x.ent, x.obs, x.por].join(' ').toLowerCase().indexOf(q) >= 0));
+  const evs = soltoEvs(), sel = soltoEvPadrao();
+  const chip = (v, t) => '<button class="chip' + (CV.sf.st === v ? ' active' : '') + '" onclick="cvSF(\'st\',\'' + v + '\')">' + t + '</button>';
+  let h = '';
+  if(!ro) h += '<div class="panel"><h3>Bipar peça solta</h3><div class="panel-sub">Bipe as peças uma atrás da outra. A mesma peça em aberto soma a quantidade.</div>' +
+    '<div class="filter-bar"><input id="cvSBip" class="cv-in-s" style="flex:1;min-width:220px;font-size:18px;padding:10px 12px" placeholder="Bipe o EAN ou digite o código do item" autocomplete="off" inputmode="numeric" onkeydown="if(event.key===\'Enter\')cvSBipar()"></div></div>';
+  /* Entregas com mais peças da lista em aberto */
+  const cont = new Map();
+  abertos.filter(x => x.item).forEach(x => soltoCands(x.item, abertos).forEach(c => { let o = cont.get(c.e); if(!o) cont.set(c.e, o = {e: c.e, n: 0, ev: c.ev, t: c.t, falta: false}); o.n++; o.falta = o.falta || c.falta; }));
+  const rank = Array.from(cont.values()).filter(o => o.n > 1 || o.falta).sort((a, b) => b.n - a.n || (b.falta - a.falta)).slice(0, 8);
+  h += '<div class="panel cv-gap"><h3>Status da entrega</h3><div class="panel-sub">Só entram as entregas nesses status (da QRY0180). Nenhum marcado = todos.</div><div class="filter-bar cv-fb">' +
+    '<button class="chip' + (!sel.size ? ' active' : '') + '" onclick="cvSEv(\'*\')">Todos</button>' +
+    evs.map(e => '<button class="chip' + (sel.has(e) ? ' active' : '') + '" onclick="cvSEv(\'' + sq(e) + '\')">' + esc(e) + '</button>').join('') + '</div>' +
+    (rank.length ? '<div class="cv-gap"><b>Entregas mais prováveis</b> <span class="field-hint">(têm várias peças da lista em aberto, ou falta registrada)</span><div class="filter-bar">' +
+      rank.map(o => '<span class="cv-pill" style="background:' + (o.falta ? '#C2410C' : '#001A72') + '">' + esc(o.e) + ' · ' + o.n + ' peça' + (o.n > 1 ? 's' : '') + (o.falta ? ' · falta' : '') + '</span>').join(' ') + '</div></div>' : '') + '</div>';
+  h += '<div class="filter-bar cv-fb cv-gap">' + chip('', 'Todos · ' + todos.length) + SOLTO_ST.map(st => chip(st, st + ' · ' + todos.filter(x => x.st === st).length)).join('') +
+    '<input type="text" class="cv-in-s" style="flex:1;min-width:180px" placeholder="Buscar item, entrega, observação..." value="' + esc(CV.sf.busca) + '" oninput="CV.sf.busca=this.value;clearTimeout(CV._sbt);CV._sbt=setTimeout(renderView,300)"></div>';
+  h += '<div class="table-wrap"><table class="cv-tab cv-compact"><thead><tr><th></th><th>Foto</th><th>Item</th><th>Descrição</th><th class="n">Qtd</th><th>Entregas possíveis</th><th>Status</th><th>Entrega</th><th>Bipado</th><th></th></tr></thead><tbody>' +
+    (lista.length ? lista.map(x => {
+      const id = sq(x.id), cands = x.item ? soltoCands(x.item, abertos) : [], ab = CV.sAberto.has(x.id), ult = CV.sUlt === x.id;
+      const top = cands.slice(0, 3).map(c => '<span class="cv-pill" style="background:' + (c.falta ? '#C2410C' : c.outros ? '#001A72' : '#6B7280') + '" title="' + esc(c.ev + ' · ' + c.t) + '">' + esc(c.e) + '</span>').join(' ') + (cands.length > 3 ? ' <span class="field-hint">+' + (cands.length - 3) + '</span>' : '');
+      const stSel = ro ? '<span class="cv-pill" style="background:' + SOLTO_COR[x.st] + '">' + esc(x.st) + '</span>' : '<select class="cv-in-s cv-tipo-s" style="border-color:' + SOLTO_COR[x.st] + '" onchange="cvSSt(\'' + id + '\',this.value)">' + SOLTO_ST.map(o => '<option' + (o === x.st ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>';
+      return '<tr' + (ult ? ' style="background:rgba(254,80,0,.08)"' : '') + '><td><button class="btn-link" onclick="cvSAbre(\'' + id + '\')">' + (ab ? '▾' : '▸') + '</button></td><td>' + (x.item ? fotoHtml(x.item, 'cv-th') : '') + '</td>' +
+        '<td class="cv-mono"><b>' + esc(x.item || x.ean) + '</b></td><td class="cv-cut" title="' + esc(x.d) + '">' + esc(descCurta(x.d || '')) + '</td>' +
+        '<td class="n">' + (ro ? fInt(x.q) : '<span class="cv-edit" onclick="cvSQtd(\'' + id + '\')">' + fInt(x.q) + '</span>') + '</td>' +
+        '<td>' + (x.item ? (cands.length ? top : '<span class="field-hint">nenhuma nesse status</span>') : '<span class="field-hint">EAN sem cadastro</span>') + '</td>' +
+        '<td>' + stSel + '</td><td class="cv-mono">' + esc(x.ent || '') + '</td>' +
+        '<td>' + fData((x.ts || '').slice(0, 10)) + ' ' + new Date(x.ts).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + (x.por ? '<br><span class="field-hint">' + esc(nomeDe(x.por)) + '</span>' : '') + '</td>' +
+        '<td class="n cv-act">' + (ro ? '' : '<button class="btn-link" onclick="cvSObs(\'' + id + '\')">Obs</button> <button class="btn-danger-text" onclick="cvSExcluir(\'' + id + '\')">Excluir</button>') + '</td></tr>' +
+        (ab ? '<tr class="cv-det"><td></td><td colspan="9">' + (x.obs ? '<div class="field-hint" style="margin-bottom:6px">Obs.: ' + esc(x.obs) + '</div>' : '') +
+          (cands.length ? '<table class="cv-tab cv-compact"><thead><tr><th>Entrega</th><th>Status</th><th>Transportadora</th><th class="n">Qtd do item</th><th>Por quê</th><th></th></tr></thead><tbody>' +
+            cands.map(c => '<tr><td class="cv-mono"><b>' + esc(c.e) + '</b></td><td>' + esc(c.ev) + '</td><td>' + esc(c.t) + '</td><td class="n">' + fInt(c.q) + '</td><td>' +
+              [c.falta ? '<span class="cv-pill" style="background:#C2410C">falta registrada</span>' : '', c.outros ? '<span class="cv-pill" style="background:#001A72">+' + c.outros + ' peça(s) da lista</span>' : ''].join(' ') + '</td><td class="n">' +
+              (ro ? '' : '<button class="btn btn-secondary btn-sm" onclick="cvSVincular(\'' + id + '\',\'' + sq(c.e) + '\')">Vincular</button>') + '</td></tr>').join('') + '</tbody></table>'
+            : '<span class="field-hint">Nenhuma entrega com esse item nos status marcados.</span>') + '</td></tr>' : '');
+    }).join('') : '<tr><td colspan="10" class="field-hint" style="padding:16px">Nenhuma peça' + (CV.sf.st ? ' com status ' + esc(CV.sf.st) : '') + '.</td></tr>') + '</tbody></table></div>';
+  return h;
+}
+
 /* ---------- Gestão de divergências: uma linha por entrega divergente ---------- */
 const sq = v => String(v == null ? '' : v).replace(/'/g, '');
 function classeAuto(ocs){
@@ -1558,7 +1677,7 @@ function cvExportar(){
 }
 
 /* ---------- navegação / estado ---------- */
-const VIEWS = {conferir: viewConferir, entregas: viewEntregas, historico: viewHistorico, gestao: viewGestao, dashboard: viewDashboard, configuracoes: viewConfig};
+const VIEWS = {conferir: viewConferir, entregas: viewEntregas, historico: viewHistorico, gestao: viewGestao, soltos: viewSoltos, dashboard: viewDashboard, configuracoes: viewConfig};
 function renderMsg(){ const el = $('cvMsg'); if(el) el.textContent = CV.ocupado ? '⏳ ' + CV.msg : ''; }
 function renderView(){
   if(CV.erro && !CV.ent.length && !CV.saldo.length && CV.tab !== 'configuracoes'){ $('viewRoot').innerHTML = vazio(); return; }
@@ -1579,7 +1698,7 @@ function renderView(){
   if(CV.tab === 'conferir' && $('cvKpis')) atualizar();
   if(sc) sc.scrollTop = y;
 }
-function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'dashboard' || t === 'gestao' || t === 'historico') Promise.all([ctrlLer('ctrl'), ctrlLer('conf'), ctrlLer('trat'), ctrlLer('and')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; CV.trat = r[2]; CV.and = r[3]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); }
+function cvTab(t){ CV.tab = t; CV.pag = 0; CV.cpag = 0; renderView(); if(t === 'dashboard' || t === 'gestao' || t === 'historico') Promise.all([ctrlLer('ctrl'), ctrlLer('conf'), ctrlLer('trat'), ctrlLer('and')]).then(r => { CV.ctrl = r[0]; CV.conf = r[1]; CV.trat = r[2]; CV.and = r[3]; if(CV.tab === t) renderView(); }).catch(() => {}); cvCloseSidebarMobile(); if(t === 'conferir') setTimeout(() => { const i = $('cvBip') || $('cvEnt'); if(i) i.focus(); }, 0); if(t === 'soltos') setTimeout(() => { const i = $('cvSBip'); if(i) i.focus(); }, 0); }
 function cvPag(n){ CV.pag += n; renderView(); }
 let _cvBT; function cvBuscaEnt(v){ CV.busca = v; CV.pag = 0; clearTimeout(_cvBT); _cvBT = setTimeout(() => { renderView(); const i = $('cvBusca'); if(i){ i.focus(); i.setSelectionRange(v.length, v.length); } }, 250); }
 function cvToggleSidebar(){ const el = $('sidebar'); if(matchMedia('(max-width:860px)').matches) el.classList.toggle('mobile-open'); else el.classList.toggle('collapsed'); }
