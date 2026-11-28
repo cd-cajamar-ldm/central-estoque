@@ -27,3 +27,8 @@
   item pai (`item_vol_multiplo`) e, se o pai não tiver preço, o do próprio componente. Sem preço vale R$ 0 e entra no
   diagnóstico "Itens sem preço" (exceto os N). Sem a SIGEQ278 o app volta a usar o PRECO da QRY0100. A ZBIQ0051 precisa ter a
   coluna `in_interface`; sem ela o app avisa e trata o item como comum. Código: `mkValor()` em `js/app.js`.
+- **Ociosidade e filtros** (aba Produtividade): período (hoje, ontem, 7/30 dias, mês, mês passado, ano, tudo, de–até), agrupar por
+  dia/semana/mês/ano e comparar o dia com o dia anterior, a média do mesmo dia da semana (30 d) ou o melhor dia. "Horas sem
+  produção" usa o horário de trabalho `WORK_H` (8h–12h e 14h–18h); horas depois do último registro importado não contam como
+  paradas. A hora de criação do RG vem da QRY0100 (campo `h`; o minuto do arquivo é defeituoso) — RGs importados antes dessa
+  versão não têm hora e pedem nova importação. Dashboard "Operadores": se a QRY0100 vier sem operador, mostra quem moveu (QRY0110).

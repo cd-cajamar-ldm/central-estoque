@@ -486,3 +486,27 @@ tr.rgx-click{ cursor:pointer; }
 
 button.rv-tile-btn{ border:0; border-right:1px solid var(--line); background:none; font:inherit; text-align:left; cursor:pointer; color:inherit; }
 button.rv-tile-btn:hover{ background:var(--surface2); }
+
+/* filtros e ociosidade */
+.rgx-pbar{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+.rgx-pl{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.rgx-pl .lb{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-right:4px; }
+.pl{ border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:5px 12px; font:600 12px 'Inter',sans-serif; color:var(--ink-soft); cursor:pointer; }
+.pl:hover{ border-color:var(--orange); color:var(--orange); }
+.pl.on{ background:var(--rv-blue); border-color:var(--rv-blue); color:#fff; }
+.rgx-pl input[type=date]{ border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:9px; padding:4px 8px; font:600 12px 'Inter',sans-serif; width:auto; }
+.rgx-dnome{ font-weight:700; font-size:13px; color:var(--ink); margin-left:6px; text-transform:capitalize; }
+.rgx-dl{ font-size:11px; font-weight:800; }
+.rgx-dl.up,.rgx-up{ color:#1F8A52; } .rgx-dl.dn,.rgx-dn{ color:#C83812; }
+.rgx-ph-g{ height:230px; }
+.rgx-ph-b{ position:relative; }
+.rgx-ph-b u{ position:absolute; left:-2px; right:-2px; border-top:2px dashed #001A72; opacity:.6; pointer-events:none; }
+.rgx-ph-c.par b{ color:#C83812; }
+.rgx-ph-c.par .rgx-ph-b i{ background:repeating-linear-gradient(45deg,#f3c2b5,#f3c2b5 4px,#fde6df 4px,#fde6df 8px); }
+.rgx-hm{ border-collapse:separate; border-spacing:3px; width:100%; font-size:11px; }
+.rgx-hm th{ font-weight:600; color:var(--ink-soft); font-size:10.5px; padding:2px; text-align:center; }
+.rgx-hm th em{ font-style:normal; opacity:.7; }
+.rgx-hm td{ height:26px; border-radius:5px; text-align:center; color:#fff; font-weight:700; }
+.rgx-hm td.l{ background:none; color:var(--ink); text-align:left; font-weight:700; width:44px; }
+.rgx-hm td.z{ background:#eceef5; color:#9aa0b3; font-weight:600; }
+.rgx-hm td.p{ background:#fde6df; color:#C83812; }

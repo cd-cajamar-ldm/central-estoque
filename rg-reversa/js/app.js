@@ -39,7 +39,7 @@ var S = {
   rgs:[], est:null, mult:null, preco:null, hist:[], mov:[], tab:'painel', D:null, ocupado:'', user:'', stamps:{}, nuvem:{ estado:'', msg:'' },
   movs:null, movsBusy:false, movsErro:'',
   mistos:null, mistosBusy:false, mistosErro:'', mistosAuto:false, fMisQ:'', fMisFx:-1,
-  pPer:30, colMov:null, colBusy:false, colErro:'',
+  pAt:'30d', pDe:'', pAte:'', pGrp:'dia', pCmp:'media', pDia:null, pSer:'rg', colMov:null, colBusy:false, colErro:'',
   fm:{ de:'', ate:'', st:'pend', q:'' }, lim:{}, sort:{},
   col:null,
   classe:'', ritmo:null, anima:true, q:'', fClassif:'', fOper:'', cobModo:'sem', cobQ:'', cobLocal:'', cobFaixa:''
@@ -144,6 +144,8 @@ function leArquivo(file){
     fr.readAsArrayBuffer(file);
   });
 }
+/* hora (0–23) em que o RG foi criado; o minuto da QRY0100 vem com defeito, a hora não. null se o arquivo só tem a data. */
+function horaDe(v){ var t=parseData(v); if(t==null) return null; var d=new Date(t); return (d.getHours()===0 && d.getMinutes()===0 && d.getSeconds()===0) ? null : d.getHours(); }
 function montaRgs(a){
   var c=function(n){ return a.h.indexOf(n); };
   var ix={ dt:c('data criacao'), filial:c('filial geracao'), oper:c('operador'), tipo:c('tipo de geracao'), rg:c('numero rg'),
@@ -156,7 +158,7 @@ function montaRgs(a){
     out.push({
       rg:rg,
       /* Só o dia: na QRY0100 o horário vem com defeito (o minuto repete a hora). */
-      dt:soDia(parseData(g(l,ix.dt))),
+      dt:soDia(parseData(g(l,ix.dt))), h:horaDe(g(l,ix.dt)),
       filial:cod(g(l,ix.filial)), oper:String(g(l,ix.oper)||'').trim(), tipo:String(g(l,ix.tipo)||'').trim(),
       item:cod(g(l,ix.item)), ean:cod(g(l,ix.ean)), preco:num(g(l,ix.preco)),
       entrega:cod(g(l,ix.entrega)), inst:cod(g(l,ix.inst)), nr:cod(g(l,ix.nr)),
@@ -740,8 +742,24 @@ function ritmoDiario(){
     return '<div class="rgx-dia"'+tip(dataBR(x[0]),int(x[1])+' RGs')+'><b>'+int(x[1])+'</b><i style="height:'+(x[1]/max*78).toFixed(1)+'%"></i><span>'+dataBR(x[0]).slice(0,5)+'</span></div>';
   }).join('')+'</div>';
 }
+/* Operadores: quando a QRY0100 não traz quem criou o RG, mostra quem MOVEU os RGs (QRY0110); sem nenhum dos dois, avisa. */
+function rankingSemOperador(){
+  var D=S.D;
+  if(S.mov.length){
+    var corte=hoje0()-29*864e5, mp=new Map();
+    S.mov.forEach(function(m){ if(m.t<corte) return; var o=mp.get(m.op); if(!o){ o={ op:m.op, n:0, dias:new Set() }; mp.set(m.op,o); } o.n++; o.dias.add(soDia(m.t)); });
+    var L=Array.from(mp.values()).sort(function(a,b){ return b.n-a.n; }), tot=L.reduce(function(t,o){ return t+o.n; },0)||1, max=L.length?L[0].n:1;
+    if(L.length) return '<div class="rgx-mt-nota" style="margin:0 0 10px">A QRY0100 não traz quem criou o RG. Aqui: quem <b>moveu</b> os RGs nos últimos 30 dias (QRY0110).</div><div class="rgx-rank">'+L.slice(0,6).map(function(o,i){
+      var nome=operNome(o.op), ini=nome.slice(0,2).toUpperCase();
+      return '<div class="rgx-rank-l"'+tip(nome,int(o.n)+' movimentações em '+int(o.dias.size)+' dia(s)',int(o.n/o.dias.size)+' por dia')+'><span class="rgx-av p'+(i+1)+'">'+esc(ini)+'</span><span class="rgx-rank-n"><b>'+esc(nome)+'</b><i><u style="width:'+(o.n/max*100).toFixed(1)+'%"></u></i></span><span class="rgx-rank-v"><b>'+int(o.n)+'</b><em>'+int(o.n/o.dias.size)+'/dia · '+pct(o.n,tot)+'</em></span></div>';
+    }).join('')+'</div>';
+  }
+  return '<div class="rgx-ok">A QRY0100 não traz o operador. Importe a QRY0110 para ver quem moveu os RGs.</div>';
+}
 function ranking(){
-  var D=S.D, max=D.ops.length?D.ops[0].n:1, tot=D.rgs.length||1;
+  var D=S.D;
+  if(!D.ops.some(function(o){ return o.oper; })) return rankingSemOperador();
+  var max=D.ops.length?D.ops[0].n:1, tot=D.rgs.length||1;
   return '<div class="rgx-rank">'+D.ops.slice(0,6).map(function(o,i){
     var nome=operNome(o.oper), ini=nome.slice(0,2).toUpperCase();
     return '<button type="button" class="rgx-rank-l" data-act="oper" data-o="'+esc(o.oper)+'"'+tip(nome,int(o.n)+' RGs em '+int(o.nd)+' dia(s)',int(o.media)+' por dia',reais(o.valor))+'><span class="rgx-av p'+(i+1)+'">'+esc(ini)+'</span><span class="rgx-rank-n"><b>'+esc(nome)+'</b><i><u style="width:'+(o.n/max*100).toFixed(1)+'%"></u></i></span><span class="rgx-rank-v"><b>'+int(o.n)+'</b><em>'+int(o.media)+'/dia · '+pct(o.n,tot)+'</em></span></button>';
@@ -1132,10 +1150,10 @@ function evolucaoMisto(M){
 var CORES_OP=['#FE5000','#001A72','#1F8A52','#E0A100','#7D93E8','#8E99A8','#C83812'];
 var PAUSA=600000; /* intervalo maior que 10 min entre duas bipagens conta como pausa */
 function mediana(a){ if(!a.length) return null; var b=a.slice().sort(function(x,y){ return x-y; }), m=Math.floor(b.length/2); return b.length%2?b[m]:(b[m-1]+b[m])/2; }
-function rotPer(){ return S.pPer ? 'Últimos '+S.pPer+' dias' : 'Todo o período'; }
+function rotPer(){ return rangePer().rot; }
 function produtividade(){
-  var corte=S.pPer ? hoje0()-(S.pPer-1)*864e5 : 0;
-  var M=S.mov.filter(function(m){ return m.t>=corte; });
+  var RP=rangePer(), corte=RP.de, fim=addDias(RP.ate,1);
+  var M=S.mov.filter(function(m){ return m.t>=corte && m.t<fim; });
   var R={ M:M, n:M.length };
   /* origem da triagem = origem mais usada */
   var co=new Map(); S.mov.forEach(function(m){ co.set(m.o,(co.get(m.o)||0)+1); });
@@ -1196,7 +1214,7 @@ function carregaColetor(){
   if(S.colBusy) return;
   var sb=window.rgSupa; if(!sb){ S.colMov=[]; return; }
   S.colBusy=true; S.colErro='';
-  var corte=S.pPer ? new Date(hoje0()-(S.pPer-1)*864e5).toISOString() : '2000-01-01T00:00:00Z';
+  var corte=new Date(rangePer().de).toISOString();
   sb.from('rg_movimentacoes').select('rg,local_origem,local_destino,operador,criado_em').gte('criado_em',corte).order('criado_em',{ascending:false}).limit(20000).then(function(r){
     if(r.error) throw r.error;
     S.colMov=r.data||[];
@@ -1235,11 +1253,200 @@ function pBarrasHora(R){
   for(var i=ini;i<=fim;i++) h+='<div class="rgx-ph-c"'+tip(d2(i)+'h',int(R.horas[i])+' movimentações')+'><b>'+(R.horas[i]?int(R.horas[i]):'')+'</b><div class="rgx-ph-b"><i style="height:'+(R.horas[i]/max*100).toFixed(1)+'%;'+(i===pico?'background:#FE5000':'')+'"></i></div><span>'+d2(i)+'</span></div>';
   return h+'</div>';
 }
+/* ---------- Filtros de período, comparação e ociosidade (criação de RG e movimentação) ---------- */
+var WORK_H=[8,9,10,11,14,15,16,17]; /* horas de trabalho: 8h–12h e 14h–18h */
+var DIAS_SEM=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+var MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function addDias(t,n){ var d=new Date(t); return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n).getTime(); }
+function isoDia(t){ var d=new Date(t); return d.getFullYear()+'-'+d2(d.getMonth()+1)+'-'+d2(d.getDate()); }
+function deIso(v){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||''); return m ? new Date(+m[1],+m[2]-1,+m[3]).getTime() : null; }
+function rangePer(){
+  var h=hoje0(), a=S.pAt, d=new Date(h), de, ate=h, rot;
+  if(a==='hoje'){ de=h; rot='Hoje'; }
+  else if(a==='ontem'){ de=ate=addDias(h,-1); rot='Ontem'; }
+  else if(a==='7d'){ de=addDias(h,-6); rot='Últimos 7 dias'; }
+  else if(a==='mes'){ de=new Date(d.getFullYear(),d.getMonth(),1).getTime(); rot='Este mês'; }
+  else if(a==='mesant'){ de=new Date(d.getFullYear(),d.getMonth()-1,1).getTime(); ate=new Date(d.getFullYear(),d.getMonth(),0).getTime(); rot='Mês passado'; }
+  else if(a==='ano'){ de=new Date(d.getFullYear(),0,1).getTime(); rot='Este ano'; }
+  else if(a==='tudo'){ de=0; rot='Todo o período'; }
+  else if(a==='custom'){ de=deIso(S.pDe)||addDias(h,-29); ate=deIso(S.pAte)||h; if(ate<de){ var x=de; de=ate; ate=x; } rot=dataBR(de)+' a '+dataBR(ate); }
+  else { de=addDias(h,-29); rot='Últimos 30 dias'; }
+  var n=de? Math.round((ate-de)/864e5)+1 : 0, ad=null, aa=null;
+  if(de){
+    if(a==='mes'){ ad=new Date(d.getFullYear(),d.getMonth()-1,1).getTime(); aa=Math.min(new Date(d.getFullYear(),d.getMonth(),0).getTime(), addDias(ad,n-1)); }
+    else if(a==='ano'){ ad=new Date(d.getFullYear()-1,0,1).getTime(); aa=addDias(ad,n-1); }
+    else { aa=addDias(de,-1); ad=addDias(aa,-(n-1)); }
+  }
+  return { de:de, ate:ate, ad:ad, aa:aa, n:n, rot:rot };
+}
+function grupoIni(t,g){
+  var d=new Date(t);
+  if(g==='ano') return new Date(d.getFullYear(),0,1).getTime();
+  if(g==='mes') return new Date(d.getFullYear(),d.getMonth(),1).getTime();
+  if(g==='semana') return new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7)).getTime();
+  return soDia(t);
+}
+function grupoProx(t,g){ var d=new Date(t); return g==='ano' ? new Date(d.getFullYear()+1,0,1).getTime() : g==='mes' ? new Date(d.getFullYear(),d.getMonth()+1,1).getTime() : g==='semana' ? addDias(t,7) : addDias(t,1); }
+function grupoRot(k,g){ var d=new Date(k); return g==='ano' ? ''+d.getFullYear() : g==='mes' ? MESES[d.getMonth()]+'/'+String(d.getFullYear()).slice(2) : g==='semana' ? 'sem '+dm(k) : dm(k); }
+function grupoNome(g){ return {dia:'dia',semana:'semana',mes:'mês',ano:'ano'}[g]||'dia'; }
+/* itens: [{ t: dia (ms), h: hora|null, op }] → mapa dia → { n, hrs[24], semH, ops } */
+function itensRg(){ return S.D.rgs.filter(function(r){ return r.dt; }).map(function(r){ return { t:r.dt, h:r.h==null?null:r.h, op:r.oper||'' }; }); }
+function itensMov(){ return S.mov.map(function(m){ return { t:soDia(m.t), h:new Date(m.t).getHours(), op:m.op||'' }; }); }
+function agrupaDia(itens){
+  var mp=new Map();
+  itens.forEach(function(it){
+    var o=mp.get(it.t); if(!o){ o={ d:it.t, n:0, hrs:new Array(24).fill(0), semH:0, ops:new Map() }; mp.set(it.t,o); }
+    o.n++; if(it.h==null) o.semH++; else o.hrs[it.h]++;
+    var k=it.op||''; var po=o.ops.get(k); if(!po){ po={ op:k, n:0, hrs:new Array(24).fill(0) }; o.ops.set(k,po); } po.n++; if(it.h!=null) po.hrs[it.h]++;
+  });
+  return mp;
+}
+function totalEm(itens,de,ate){ var f=addDias(ate,1), n=0; itens.forEach(function(it){ if(it.t>=de && it.t<f) n++; }); return n; }
+function seriePorGrupo(itens,r,g){
+  var cont=new Map(), f=addDias(r.ate,1);
+  itens.forEach(function(it){ if(it.t<r.de || it.t>=f) return; var k=grupoIni(it.t,g); cont.set(k,(cont.get(k)||0)+1); });
+  var ini=r.de? grupoIni(r.de,g) : (cont.size?Math.min.apply(null,Array.from(cont.keys())):null);
+  if(ini==null) return [];
+  var out=[], k=ini, lim=grupoIni(r.ate,g), guard=0;
+  while(k<=lim && guard++<4000){
+    var d=new Date(k), util=(g!=='dia') || (d.getDay()>0 && d.getDay()<6);
+    if(cont.has(k) || util) out.push({ k:k, n:cont.get(k)||0 });
+    k=grupoProx(k,g);
+  }
+  return out;
+}
+function deltaTxt(a,b,rot){
+  if(b==null || !b) return '<span class="rgx-dl">sem base de comparação</span>';
+  var p=(a-b)/b*100, up=p>=0;
+  return '<span class="rgx-dl '+(up?'up':'dn')+'">'+(up?'▲ ':'▼ ')+pct(Math.abs(a-b),b,0)+(up?' acima':' abaixo')+' · '+esc(rot)+' ('+int(b)+')</span>';
+}
+/* análise de um dia: horas sem produção, capacidade usada, comparação e equipe */
+function analiseDia(mp,dia,fim){
+  var cur=mp.get(dia)||{ d:dia, n:0, hrs:new Array(24).fill(0), semH:0, ops:new Map() };
+  var dias=Array.from(mp.values());
+  var ant=dias.filter(function(x){ return x.d<dia && x.n>0; }).sort(function(a,b){ return b.d-a.d; })[0]||null;
+  var dow=new Date(dia).getDay(), lim=addDias(dia,-30);
+  var mesmos=dias.filter(function(x){ return x.d<dia && x.d>=lim && new Date(x.d).getDay()===dow && x.n>0; });
+  var melhor=dias.filter(function(x){ return x.d!==dia; }).sort(function(a,b){ return b.n-a.n; })[0]||null;
+  var A={ cur:cur, ant:ant, mesmos:mesmos, melhor:melhor };
+  A.baseAnt=ant?ant.n:null;
+  A.baseMedia=mesmos.length ? mesmos.reduce(function(t,x){ return t+x.n; },0)/mesmos.length : null;
+  A.baseMelhor=melhor?melhor.n:null;
+  var hrsMedia=new Array(24).fill(0); mesmos.forEach(function(x){ for(var i=0;i<24;i++) hrsMedia[i]+=x.hrs[i]/mesmos.length; });
+  A.hrsBase = S.pCmp==='ant' ? (ant?ant.hrs:null) : S.pCmp==='melhor' ? (melhor?melhor.hrs:null) : (mesmos.length?hrsMedia:null);
+  A.base = S.pCmp==='ant' ? A.baseAnt : S.pCmp==='melhor' ? A.baseMelhor : A.baseMedia;
+  A.baseRot = S.pCmp==='ant' ? 'dia anterior' : S.pCmp==='melhor' ? 'melhor dia' : 'média de '+DIAS_SEM[dow]+'s';
+  var agora=new Date(), eHoje=dia===hoje0();
+  /* horas depois do último registro importado não contam como paradas (os dados ainda não chegaram) */
+  var ate=23; if(eHoje) ate=Math.min(ate,agora.getHours()); if(fim && fim.dia===dia) ate=Math.min(ate,fim.hora);
+  A.ate=ate; A.parcial=ate<17;
+  A.horas=WORK_H.filter(function(h){ return h<=ate; });
+  A.paradas=A.horas.filter(function(h){ return cur.hrs[h]===0; });
+  A.ativas=WORK_H.filter(function(h){ return cur.hrs[h]>0; }).length;
+  A.porHora=A.ativas ? (cur.n-cur.semH)/A.ativas : 0;
+  A.cap=A.baseMelhor ? cur.n/Math.max(A.baseMelhor,cur.n) : null;
+  A.semHora = cur.n>0 && cur.semH===cur.n;
+  /* equipe */
+  A.equipe=Array.from(cur.ops.values()).map(function(po){
+    var outros=dias.filter(function(x){ return x.d!==dia && x.d>=lim && x.ops.has(po.op) && x.ops.get(po.op).n>0; });
+    var media=outros.length ? outros.reduce(function(t,x){ return t+x.ops.get(po.op).n; },0)/outros.length : null;
+    var at=WORK_H.filter(function(h){ return po.hrs[h]>0; }).length;
+    return { op:po.op, n:po.n, ativas:at, porHora:at?po.n/at:0, media:media };
+  }).sort(function(a,b){ return b.n-a.n; });
+  return A;
+}
+function pHorasGraf(A){
+  var cur=A.cur, mx=Math.max(1,Math.max.apply(null,cur.hrs), A.hrsBase?Math.max.apply(null,A.hrsBase.slice(6,20)):0);
+  var pico=Math.max.apply(null,WORK_H.map(function(h){ return cur.hrs[h]; })), h='<div class="rgx-ph rgx-ph-g">';
+  for(var i=7;i<=18;i++){
+    var trab=WORK_H.indexOf(i)>=0, v=cur.hrs[i], parada=trab && A.horas.indexOf(i)>=0 && v===0, base=A.hrsBase?A.hrsBase[i]:null;
+    h+='<div class="rgx-ph-c'+(parada?' par':'')+'"'+tip(d2(i)+'h',int(v)+(v===1?' registro':' registros'),trab?(parada?'Hora parada':'Hora de trabalho'):'Fora do horário',base!=null?'Referência: '+int(Math.round(base)):'')+'><b>'+(trab?int(v):(v?int(v):''))+'</b><div class="rgx-ph-b"><i style="height:'+(parada?100:(v/mx*100)).toFixed(1)+'%;'+(!trab?'background:#dfe3ee;':(v===pico && v>0)?'background:#FE5000;':'')+'"></i>'+(base!=null && trab?'<u style="bottom:'+(base/mx*100).toFixed(1)+'%"></u>':'')+'</div><span>'+d2(i)+'</span></div>';
+  }
+  return h+'</div><div class="cmp-legend" style="margin-top:10px;flex-wrap:wrap"><span><span class="cmp-dot" style="background:#7D93E8"></span>Produziu</span><span><span class="cmp-dot" style="background:#FE5000"></span>Pico</span><span><span class="cmp-dot" style="background:#f3c2b5"></span>Hora parada</span>'+(A.hrsBase?'<span><span class="dx-meta-leg" style="border-color:#001A72"></span>'+esc(A.baseRot)+'</span>':'')+'</div>';
+}
+function pCalor(mp,ser){
+  var dias=Array.from(mp.values()).filter(function(x){ return x.n>0; }).sort(function(a,b){ return b.d-a.d; }).slice(0,10).reverse();
+  if(!dias.length) return '<div class="rgx-ok">Sem dados</div>';
+  var mx=1; dias.forEach(function(d){ WORK_H.forEach(function(h){ if(d.hrs[h]>mx) mx=d.hrs[h]; }); });
+  var t='<div class="rgx-tb-wrap" style="border:0"><table class="rgx-hm"><tr><th></th>'+dias.map(function(d){ return '<th>'+dm(d.d)+'<br><em>'+DIAS_SEM[new Date(d.d).getDay()].slice(0,3)+'</em></th>'; }).join('')+'</tr>';
+  for(var h=7;h<=18;h++){
+    var trab=WORK_H.indexOf(h)>=0;
+    t+='<tr><td class="l">'+d2(h)+'h</td>'+dias.map(function(d){
+      var v=d.hrs[h];
+      if(!trab) return '<td class="z"'+tip(dataBR(d.d)+' · '+d2(h)+'h',int(v)+' registros')+'>'+(v?int(v):'')+'</td>';
+      if(!v) return '<td class="p"'+tip(dataBR(d.d)+' · '+d2(h)+'h','Hora parada')+'>0</td>';
+      return '<td style="background:rgba(0,26,114,'+Math.min(1,.2+v/mx*.8).toFixed(2)+')"'+tip(dataBR(d.d)+' · '+d2(h)+'h',int(v)+' registros')+'>'+int(v)+'</td>';
+    }).join('')+'</tr>';
+  }
+  return t+'</table></div>';
+}
+/* tudo da parte "Ociosidade" e "Tendência" da aba Produtividade */
+function blocoOciosidade(){
+  var RP=rangePer(), g=S.pGrp, ser=S.pSer;
+  var itR=S.D.rgs.length?itensRg():[], itM=itensMov(), temH=itR.some(function(x){ return x.h!=null; });
+  var itens=ser==='rg' ? itR : itM, mp=agrupaDia(itens);
+  var ultimo=Array.from(mp.keys()).sort(function(a,b){ return b-a; })[0];
+  var dia = S.pDia!=null ? S.pDia : (ultimo!=null ? ultimo : hoje0());
+  var fim=null;
+  if(ser==='mov' && S.mov.length){ var lm=S.mov[S.mov.length-1].t; fim={ dia:soDia(lm), hora:new Date(lm).getHours() }; }
+  else if(ser==='rg' && itR.length){ var ld=Math.max.apply(null,itR.map(function(x){ return x.t; })); var hs=itR.filter(function(x){ return x.t===ld && x.h!=null; }).map(function(x){ return x.h; }); fim={ dia:ld, hora:hs.length?Math.max.apply(null,hs):23 }; }
+  var A=analiseDia(mp,dia,fim), nome=ser==='rg'?'RGs criados':'Movimentações';
+  var btn=function(act,att,v,rot,on){ return '<button type="button" class="pl'+(on?' on':'')+'" data-act="'+act+'" data-'+att+'="'+v+'">'+rot+'</button>'; };
+  var PRE=[['hoje','Hoje'],['ontem','Ontem'],['7d','7 dias'],['30d','30 dias'],['mes','Este mês'],['mesant','Mês passado'],['ano','Este ano'],['tudo','Tudo'],['custom','De–até']];
+  var barra='<div class="rgx-pbar"><div class="rgx-pl"><span class="lb">Período</span>'+PRE.map(function(x){ return btn('p-at','v',x[0],x[1],S.pAt===x[0]); }).join('')+
+    (S.pAt==='custom'?'<input type="date" id="pDe" value="'+isoDia(RP.de)+'"><input type="date" id="pAte" value="'+isoDia(RP.ate)+'">':'')+'</div>'+
+    '<div class="rgx-pl"><span class="lb">Agrupar</span>'+[['dia','Dia'],['semana','Semana'],['mes','Mês'],['ano','Ano']].map(function(x){ return btn('p-grp','v',x[0],x[1],g===x[0]); }).join('')+
+    '<span class="lb" style="margin-left:14px">Comparar o dia com</span>'+[['ant','Dia anterior'],['media','Média do dia da semana'],['melhor','Melhor dia']].map(function(x){ return btn('p-cmp','v',x[0],x[1],S.pCmp===x[0]); }).join('')+'</div></div>';
+  /* --- dia analisado --- */
+  var seletor='<div class="rgx-pl" style="margin:0 0 12px"><span class="lb">Dia analisado</span><button type="button" class="pl" data-act="p-dia" data-d="-1">◀</button><input type="date" id="pDia" value="'+isoDia(dia)+'"><button type="button" class="pl" data-act="p-dia" data-d="1">▶</button>'+
+    '<span class="rgx-dnome">'+DIAS_SEM[new Date(dia).getDay()]+', '+dataBR(dia)+'</span><span class="lb" style="margin-left:14px">Ver</span>'+btn('p-ser','v','rg','Criação de RG',ser==='rg')+btn('p-ser','v','mov','Movimentação',ser==='mov')+'</div>';
+  var semHora = ser==='rg' && !temH;
+  var parTxt=semHora ? '—' : int(A.paradas.length)+' de '+int(A.horas.length);
+  var tilesDia='<div class="rv-faixa">'+
+    tile(nome+' no dia', int(A.cur.n), '', '')+
+    tile('Comparação', A.base!=null?(A.cur.n>=A.base?'▲ ':'▼ ')+pct(Math.abs(A.cur.n-A.base),A.base,0):'—', A.base!=null?esc(A.baseRot)+' ('+int(A.base)+')':'sem base de comparação', A.base==null?'':(A.cur.n>=A.base?'good':'bad'))+
+    tile('Horas sem produção', parTxt, semHora?'reimporte a QRY0100 para ver a hora':(A.horas.length?pct(A.paradas.length,A.horas.length,0)+' do horário parado':'—'), !semHora && A.paradas.length?'bad':'good', 'Horário de trabalho: 8h–12h e 14h–18h')+
+    tile('Capacidade usada', A.cap!=null?pct(A.cur.n,Math.max(A.baseMelhor||0,A.cur.n),0):'—', A.baseMelhor?'do melhor dia ('+int(A.baseMelhor)+')':'sem base', '')+
+    tile('Por hora trabalhada', semHora?'—':int(A.porHora), 'nas horas em que produziu', '')+
+    tile('Fila da triagem', int(S._filaAtual||0), 'esperando armazenar', S._filaAtual?'blue':'good', 'RGs criados que ainda estão na triagem')+
+    '</div>';
+  var graf = semHora ? '<div class="rv-aviso"><strong>Hora do RG:</strong> a QRY0100 já importada não guardou a hora da criação. Importe a QRY0100 de novo (ela atualiza os RGs) para ver por hora.</div>' : (A.cur.n? pHorasGraf(A) : '<div class="rgx-ok">Nenhum registro neste dia</div>');
+  var temOp=A.equipe.some(function(e){ return e.op; });
+  var equipe;
+  if(!A.equipe.length) equipe='<div class="rgx-ok">Ninguém registrou neste dia</div>';
+  else if(!temOp) equipe='<div class="rv-aviso"><strong>Sem operador:</strong> a QRY0100 não traz quem criou cada RG. Veja quem moveu na opção "Movimentação".</div>';
+  else equipe='<div class="rgx-tb-wrap"><table class="rgx-tb"><thead><tr><th>Pessoa</th><th class="rgx-num">'+(ser==='rg'?'RGs':'Mov.')+'</th><th class="rgx-num">Horas ativas</th><th class="rgx-num">Por hora</th><th class="rgx-num">vs própria média</th></tr></thead><tbody>'+
+    A.equipe.map(function(e){ var d=e.media?(e.n-e.media)/e.media:null; return '<tr><td><b>'+esc(operNome(e.op))+'</b></td><td class="rgx-num">'+int(e.n)+'</td><td class="rgx-num">'+int(e.ativas)+' h</td><td class="rgx-num">'+int(e.porHora)+'</td><td class="rgx-num '+(d==null?'':d>=0?'rgx-up':'rgx-dn')+'" style="font-weight:800">'+(d==null?'—':(d>=0?'▲ ':'▼ ')+Math.abs(Math.round(d*100))+'%')+'</td></tr>'; }).join('')+'</tbody></table></div>';
+  var h3=function(tit){ return '<div class="dx-panel-h"><h3>'+tit+'</h3></div>'; };
+  var diaHtml='<div class="panel" style="margin-top:14px">'+h3('Ociosidade do dia · '+nome.toLowerCase())+seletor+tilesDia+
+    (A.parcial && A.cur.n ? '<div class="rgx-mt-nota" style="margin-top:8px">Dia incompleto: os dados vão até as '+d2(A.ate)+'h. As horas depois disso não contam como paradas e a comparação é do dia inteiro.</div>' : '')+
+    '<div class="rgx-g rgx-g-d" style="margin-top:14px"><div class="panel" style="box-shadow:none;border:1px solid var(--line)">'+h3('Por hora')+graf+'</div><div class="panel" style="box-shadow:none;border:1px solid var(--line)">'+h3('Equipe no dia')+equipe+'<div class="rgx-mt-nota" style="margin-top:8px">Parado com fila grande = ociosidade de verdade. Parado sem fila = falta de serviço.</div></div></div></div>';
+  /* --- tendência no período --- */
+  var tend=function(itens,rot,cor){
+    var sr=seriePorGrupo(itens,RP,g), tot=sr.reduce(function(t,x){ return t+x.n; },0);
+    var ant=(RP.ad!=null)?totalEm(itens,RP.ad,RP.aa):null;
+    var pts=sr.map(function(x){ return { l:grupoRot(x.k,g), y:x.n, t:grupoRot(x.k,g)+'\n'+int(x.n)+' '+rot.toLowerCase() }; });
+    return { tot:tot, ant:ant, sr:sr, graf:barChart(pts,cor), dias:RP.n||sr.length };
+  };
+  var TR=tend(itR,'RGs criados'), TM=tend(itM,'Movimentações');
+  var dias=function(T){ return T.sr.length?T.tot/Math.max(1,(g==='dia'?T.sr.length:(RP.n||T.sr.length))):0; };
+  var tilesTend='<div class="rv-faixa" style="margin-top:14px">'+
+    tile('RGs criados', int(TR.tot), RP.rot, '')+
+    tile('Criação vs período anterior', TR.ant?((TR.tot>=TR.ant?'▲ ':'▼ ')+pct(Math.abs(TR.tot-TR.ant),TR.ant,0)):'—', TR.ant!=null?'antes: '+int(TR.ant):'sem período anterior', TR.ant?(TR.tot>=TR.ant?'good':'bad'):'')+
+    tile('Movimentações', int(TM.tot), RP.rot, '')+
+    tile('Movimentação vs período anterior', TM.ant?((TM.tot>=TM.ant?'▲ ':'▼ ')+pct(Math.abs(TM.tot-TM.ant),TM.ant,0)):'—', TM.ant!=null?'antes: '+int(TM.ant):'sem período anterior', TM.ant?(TM.tot>=TM.ant?'good':'bad'):'')+
+    '</div>';
+  var tendHtml=tilesTend+'<div class="rgx-g rgx-g-d" style="margin-top:14px"><div class="panel">'+h3('RGs criados por '+grupoNome(g))+(TR.sr.length?TR.graf:'<div class="rgx-ok">Sem RGs no período</div>')+'</div><div class="panel">'+h3('Movimentações por '+grupoNome(g))+(TM.sr.length?TM.graf:'<div class="rgx-ok">Sem movimentações no período</div>')+'</div></div>';
+  var calor='<div class="panel" style="margin-top:14px">'+h3('Mapa de calor · horas × dias · '+nome.toLowerCase())+(semHora?'<div class="rv-aviso"><strong>Hora do RG:</strong> importe a QRY0100 de novo para ver a criação por hora.</div>':pCalor(mp,ser))+'</div>';
+  return barra+diaHtml+tendHtml+calor;
+}
+
 function vProd(){
   if(!S.mov.length) return '<div class="panel rgx-vazio"><div class="rgx-vazio-ic">🔀</div><h3>'+(leitura()?'Ainda não há movimentações importadas':'Falta importar a QRY0110')+'</h3><button class="btn btn-orange so-editor" data-act="tab" data-tab="importacao">Importar relatórios</button></div>';
   if(!S.est && !S.rgs.length) return semDados('a QRY0100 e a QRY0390');
   if(S.colMov==null && !S.colBusy) setTimeout(carregaColetor,0);
   var R=produtividade(), C=confereColetor(R);
+  S._filaAtual=R.fila;
   var h3=function(tit,extra){ return '<div class="dx-panel-h"><h3>'+tit+'</h3>'+(extra||'')+'</div>'; };
   var tiles='<div class="rv-faixa">'+
     tile('Movimentações', int(R.n), rotPer(), '')+
@@ -1285,8 +1492,7 @@ function vProd(){
       ],C.pend) : '<div class="rgx-ok">Tudo o que foi bipado já aparece na QRY0110</div>')+
       '<div class="rgx-mt-nota">Só conta bipagem anterior ao último movimento importado ('+dataHoraBR(R.ultima)+'). Importe a QRY0110 de novo para conferir as mais novas.</div>';
   }
-  var sel='<select data-f="pPer">'+[[7,'Últimos 7 dias'],[14,'Últimos 14 dias'],[30,'Últimos 30 dias'],[0,'Todo o período']].map(function(x){ return '<option value="'+x[0]+'"'+(S.pPer===x[0]?' selected':'')+'>'+x[1]+'</option>'; }).join('')+'</select>';
-  return '<div class="filter-bar" style="margin-bottom:12px">'+sel+'<span class="rgx-mt-nota" style="margin:0 0 0 6px">Movimentações até '+dataHoraBR(R.ultima)+'</span></div>'+tiles+
+  return '<div class="rgx-mt-nota" style="margin:0 0 4px">Movimentações até '+dataHoraBR(R.ultima)+' · período: <b>'+esc(rotPer())+'</b></div>'+blocoOciosidade()+tiles+
     '<div class="rgx-g rgx-g-d"><div class="panel">'+h3('Movimentações por dia')+pBarrasDia(R)+'</div><div class="panel">'+h3('Horário de pico')+pBarrasHora(R)+'</div></div>'+
     '<div class="panel" style="margin-top:14px">'+h3('Ranking da equipe')+rank+'</div>'+
     '<div class="rgx-g rgx-g-d" style="margin-top:14px"><div class="panel">'+h3('Fila da triagem')+fila+'</div><div class="panel">'+h3('Do RG criado até armazenado')+lead+'</div></div>'+
@@ -1543,6 +1749,11 @@ function acao(el, ev){
     if(!sp.length) return toast('Todos os itens têm preço.', true);
     return exporta('RG_Reversa_Itens_sem_preco',['Item','Descrição','Classe','Unidades em estoque','RGs abertos'],sp.map(function(x){ return [x.item,x.desc,x.classe,x.un,x.rgs]; }));
   }
+  if(a==='p-at'){ S.pAt=el.dataset.v; S.colMov=null; return render(); }
+  if(a==='p-grp'){ S.pGrp=el.dataset.v; return render(); }
+  if(a==='p-cmp'){ S.pCmp=el.dataset.v; return render(); }
+  if(a==='p-ser'){ S.pSer=el.dataset.v; return render(); }
+  if(a==='p-dia'){ var ba=S.pDia!=null?S.pDia:hoje0(); if(S.pDia==null){ var us=(S.pSer==='rg'&&S.rgs.length?itensRg():itensMov()).map(function(x){ return x.t; }); ba=us.length?Math.max.apply(null,us):hoje0(); } S.pDia=addDias(ba,+el.dataset.d); return render(); }
   if(a==='exporta-rgs') return exportaRgs();
   if(a==='exporta-cov') return exporta('RG_Reversa_Estoque_x_RG', CAB_COV, linhasCov(covFiltrada()));
   if(a==='escolher'){ if(leitura()) return toast('Seu acesso não permite importar relatórios.', true); $('fileInput').click(); return; }
@@ -1568,7 +1779,9 @@ function inicia(){
   document.addEventListener('change', function(ev){
     var t=ev.target;
     if(t.id==='fileInput'){ importar(t.files); t.value=''; return; }
-    if(t.dataset && t.dataset.f){ S[t.dataset.f]=(t.dataset.f==='pPer'?+t.value:t.value); S.lim.cov=0; S.lim.rgs=0; if(t.dataset.f==='pPer') S.colMov=null; return render(); }
+    if(t.id==='pDe' || t.id==='pAte'){ if(t.value){ S[t.id==='pDe'?'pDe':'pAte']=t.value; S.colMov=null; render(); } return; }
+    if(t.id==='pDia'){ var dv=deIso(t.value); if(dv!=null){ S.pDia=dv; render(); } return; }
+    if(t.dataset && t.dataset.f){ S[t.dataset.f]=t.value; S.lim.cov=0; S.lim.rgs=0; return render(); }
     if(t.dataset && t.dataset.mv && t.dataset.mv!=='q'){ S.fm[t.dataset.mv]=t.value; S.lim.mv=0; S.movs=null; render(); }
   });
   var espera, colTimer;
