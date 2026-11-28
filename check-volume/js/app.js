@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 29; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 30; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -1447,9 +1447,16 @@ function atdRender(){
       if(r) return '<div class="atd-loc ' + (r.s === 'ok' ? 'ok' : 'no') + '"><div><code>' + esc(l.loc) + '</code>' + sd + '</div><div class="atd-r"><b>' + (r.s === 'ok' ? '✓ Achei ' + fInt(r.q) : '✗ Não tem') + '</b>' + (ro ? '' : '<button type="button" class="atd-lk" onclick="atdMarca(' + ik + ',' + li + ',\'x\')">desfazer</button>') + '</div></div>';
       const q0 = Math.max(1, Math.min(falta || 1, l.saldo || falta || 1));
       return '<div class="atd-loc"><div><code>' + esc(l.loc) + '</code>' + sd + '</div>' + (ro ? '' : '<div class="atd-r"><input type="number" inputmode="numeric" min="1" id="atq_' + ik + '_' + li + '" value="' + q0 + '" aria-label="Quantidade achada"><button type="button" class="atd-b ok" onclick="atdMarca(' + ik + ',' + li + ',\'ok\')">✓ Achei</button><button type="button" class="atd-b no" onclick="atdMarca(' + ik + ',' + li + ',\'no\')">✗ Não tem</button></div>') + '</div>';
-    }).join('') || '<div class="atd-loc"><div class="field-hint">' + (CV.saldo.length ? 'Nenhum local com saldo no sistema.' : 'Importe a QRY0390 para ver locais.') + '</div></div>';
+    }).join('') || '<div class="atd-loc"><div class="field-hint">' + (CV.saldo.length ? 'Nenhum local com saldo no sistema.' : 'A QRY0390 ainda não chegou.') + '</div></div>';
     const o = m._outro;
-    const outro = o ? '<div class="atd-loc ok"><div><code>' + esc(o.loc) + '</code><small>Outro local</small></div><div class="atd-r"><b>✓ Achei ' + fInt(o.q) + '</b>' + (ro ? '' : '<button type="button" class="atd-lk" onclick="atdOutro(' + ik + ',true)">desfazer</button>') + '</div></div>' : (ro || e.st === 'ok' ? '' : '<div class="atd-loc"><div><small>Achou em outro local?</small></div><div class="atd-r"><button type="button" class="atd-b" onclick="atdOutro(' + ik + ')">+ Outro local</button></div></div>');
+    const outroForm = !ro && !o && A.outroForm === ik
+      ? '<div class="atd-loc atd-of"><div class="atd-of-t">Onde você achou?</div>' +
+        '<div class="atd-of-chips">' + ATD_LOCAIS_RAPIDOS.map(n => '<button type="button" class="atd-lr" onclick="atdOutroChip(' + ik + ',\'' + n + '\')">' + n + '</button>').join('') + '</div>' +
+        '<div class="atd-of-l"><input type="text" id="atdOL_' + ik + '" placeholder="ou digite o endereço (ex.: MZB 011 005 29)" autocomplete="off" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key===\'Enter\')atdOutroOk(' + ik + ')">' +
+        '<input type="number" inputmode="numeric" min="1" id="atdOQ_' + ik + '" value="' + Math.max(falta, 1) + '" aria-label="Quantidade achada"></div>' +
+        '<div class="atd-r"><button type="button" class="atd-b" onclick="atdOutroCancela()">Cancelar</button><button type="button" class="atd-b ok" onclick="atdOutroOk(' + ik + ')">✓ Achei</button></div></div>'
+      : '';
+    const outro = outroForm || (o ? '<div class="atd-loc ok"><div><code>' + esc(o.loc) + '</code><small>Outro local</small></div><div class="atd-r"><b>✓ Achei ' + fInt(o.q) + '</b>' + (ro ? '' : '<button type="button" class="atd-lk" onclick="atdOutro(' + ik + ',true)">desfazer</button>') + '</div></div>' : (ro || e.st === 'ok' ? '' : '<div class="atd-loc"><div><small>Achou em outro local?</small></div><div class="atd-r"><button type="button" class="atd-b" onclick="atdOutro(' + ik + ')">+ Outro local</button></div></div>'));
     return '<section class="atd-card ' + e.st + '"><header>' + fotoHtml(x.i, 'atd-foto') + '<div><div class="atd-cod">' + esc(x.i) + '</div><div class="atd-d">' + esc(x.d) + '</div><div class="atd-f">Faltam <b>' + fInt(f.f) + '</b>' + (e.ach ? ' · achadas <b>' + fInt(e.ach) + '</b>' : '') + '</div></div><span class="atd-st ' + e.st + '">' + ROT[e.st] + '</span></header>' + locs + outro +
       (ro || e.st === 'ok' ? '' : '<button type="button" class="atd-nl' + (m._nl ? ' on' : '') + '" onclick="atdNL(' + ik + ')">' + (m._nl ? '✗ Marcado como não localizado — desfazer' : 'Não localizei em nenhum local') + '</button>') + '</section>';
   }).join('');
@@ -1480,7 +1487,19 @@ function atdMarca(i, li, acao){
 function atdOutro(i, desfaz){
   const A = CV.atdA, f = A.faltas[i], m = A.m[f.x.i] = A.m[f.x.i] || {};
   if(desfaz) delete m._outro;
-  else { const loc = (prompt('Em qual local você achou?') || '').trim().toUpperCase(); if(!loc) return; const q = Math.max(1, parseInt(prompt('Quantas peças achou?', String(Math.max(f.f - atdEstado(i).ach, 1))), 10) || 0); if(!q) return; m._outro = {s: 'ok', loc, q}; delete m._nl; }
+  else { A.outroForm = i; atdRender(); setTimeout(() => { const el = $('atdOL_' + i); if(el) el.focus(); }, 0); return; }
+  atdRender(); atdSalva(f.x.i); atdAvanca(i);
+}
+/* Lugares comuns fora do endereço do sistema: um toque preenche o campo. */
+const ATD_LOCAIS_RAPIDOS = ['SOBRAS', 'AVARIA', 'DEVOLUÇÃO', 'DOCA', 'EXPEDIÇÃO'];
+function atdOutroChip(i, nome){ const el = $('atdOL_' + i); if(el){ el.value = nome; el.focus(); } }
+function atdOutroCancela(){ if(CV.atdA){ CV.atdA.outroForm = null; atdRender(); } }
+function atdOutroOk(i){
+  const A = CV.atdA, f = A.faltas[i], m = A.m[f.x.i] = A.m[f.x.i] || {};
+  const loc = (($('atdOL_' + i) || {}).value || '').trim().toUpperCase();
+  const q = Math.max(1, parseInt(($('atdOQ_' + i) || {}).value, 10) || 0);
+  if(!loc) { toast('Escolha um lugar ou digite o endereço.', true); return; }
+  m._outro = {s: 'ok', loc, q}; delete m._nl; A.outroForm = null;
   atdRender(); atdSalva(f.x.i); atdAvanca(i);
 }
 function atdNL(i){
