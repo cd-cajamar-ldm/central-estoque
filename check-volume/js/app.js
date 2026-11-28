@@ -6,7 +6,7 @@
    O andamento da conferência de cada entrega fica neste navegador
    (localStorage) — é rascunho de quem está bipando.
    ============================================================ */
-const CV_VERSAO = 31; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
+const CV_VERSAO = 32; // subir a cada alteração (aparece no rodapé do menu; trocar também o ?v= no index.html e o CACHE_VERSION do sw.js)
 const CV_TAB = 'app_dados', CV_APP = 'checkvolume';
 const CV_TITULOS = {
   conferir: ['Conferir entrega', 'Informe a entrega e bipe os EANs das peças.'],
@@ -400,9 +400,15 @@ document.addEventListener('click', e => {
   const i = img.dataset.foto, x = (CV.linhas || []).find(l => l.i === i);
   const z = document.createElement('div');
   z.className = 'cv-zoom'; z.id = 'cvZoom';
-  z.innerHTML = '<button class="x" aria-label="Fechar">✕</button><figure><img src="' + esc(img.src) + '" alt="" referrerpolicy="no-referrer"><figcaption>' + esc(i) + (x && x.d ? ' · ' + esc(x.d) : '') + '</figcaption></figure>';
+  const grande = fotoTam(urlFoto(i) || img.src, 'IMAGENS').replace('/IMAGENS/IMAGENS/', '/IMAGENS/');
+  z.innerHTML = '<button class="x" aria-label="Fechar">✕</button><figure><img src="' + esc(img.src) + '" data-grande="' + esc(grande) + '" alt="" referrerpolicy="no-referrer"><figcaption>' + esc(i) + (x && x.d ? ' · ' + esc(x.d) : '') + '</figcaption></figure>';
   z.addEventListener('click', cvZoomFecha);
   document.body.appendChild(z);
+  /* Mostra na hora a que já está carregada e troca pela grande quando ela chegar. */
+  const zi = z.querySelector('figure img'), alta = new Image();
+  alta.referrerPolicy = 'no-referrer';
+  alta.onload = () => { zi.src = alta.src; };
+  alta.src = zi.dataset.grande;
 }, true);
 document.addEventListener('keydown', e => { if(e.key === 'Escape' && $('cvZoom')) cvZoomFecha(); });
 function cvToggle(i){
@@ -458,8 +464,12 @@ function urlFoto(i){
   const f = fotoSiteGet(i);
   return f ? FOTO_SITE + f : '';
 }
+/* O servidor de imagens da loja tem a mesma foto em vários tamanhos (/256/, /512/, /1000/;
+   /IMAGENS/ = 1000 px). Miniatura usa a pequena; a foto do item usa 512; o zoom usa a maior. */
+function fotoTam(u, tam){ return u ? u.replace(/\/(256|512|600|800|1000)\//, '/' + tam + '/') : u; }
 function fotoHtml(i, cls){
-  const u = urlFoto(i);
+  let u = urlFoto(i);
+  if(cls === 'cv-foto' || cls === 'atd-foto') u = fotoTam(u, 512);
   const ph = '<span class="' + cls + ' cv-semfoto" data-foto="' + esc(i) + '" title="Sem foto">▣</span>';
   if(!u) return ph;
   return '<img class="' + cls + '" data-foto="' + esc(i) + '" loading="lazy" referrerpolicy="no-referrer" src="' + esc(u) + '" alt="" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' cv-semfoto\\\'>▣</span>\'">';
